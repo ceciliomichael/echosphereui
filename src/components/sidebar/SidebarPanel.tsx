@@ -18,7 +18,7 @@ export function SidebarPanel({
   onToggleSidebar,
 }: SidebarPanelProps) {
   return (
-    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-[22px] md:px-5 md:pt-[26px]">
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-3 md:px-5">
       <div className="flex items-center justify-between gap-3 pb-4">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <button

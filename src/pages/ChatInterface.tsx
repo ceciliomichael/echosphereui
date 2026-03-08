@@ -44,7 +44,16 @@ export function ChatInterface() {
   }, [])
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div
+      className="relative flex h-screen overflow-hidden bg-background"
+      style={{ paddingTop: 'env(titlebar-area-height, 0px)' }}
+    >
+      <div
+        className="app-drag-region pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center px-3 text-sm font-medium text-foreground/75"
+        style={{ height: 'env(titlebar-area-height, 0px)' }}
+      >
+        <span className="select-none">EchoSphere</span>
+      </div>
       <ResizableSidebarPanel
         isSidebarOpen={isSidebarOpen}
         sidebar={
@@ -59,8 +68,9 @@ export function ChatInterface() {
       >
         <main
           className={[
-            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-border bg-surface shadow-soft transition-[margin] duration-300 ease-out',
-            isSidebarOpen ? 'my-2 mr-2 md:my-3 md:mr-3' : 'm-2 md:m-3',
+            'flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-surface shadow-soft transition-[border-radius] duration-300 ease-out',
+            isSidebarOpen ? 'rounded-l-[28px] rounded-r-none' : 'rounded-none',
+            'm-0',
           ].join(' ')}
         >
           <ChatHeader

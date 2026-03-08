@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, type BrowserWindowConstructorOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import type { AppendConversationMessagesInput, AppSettings, ReplaceConversationMessagesInput } from '../src/types/chat'
@@ -40,13 +40,25 @@ let win: BrowserWindow | null
 const WINDOW_BACKGROUND_COLOR = '#EEF4EE'
 
 function createWindow() {
-  win = new BrowserWindow({
+  const windowOptions: BrowserWindowConstructorOptions = {
     autoHideMenuBar: true,
     backgroundColor: WINDOW_BACKGROUND_COLOR,
+    title: 'EchoSphere',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
-  })
+  }
+
+  if (process.platform === 'win32' || process.platform === 'linux') {
+    windowOptions.titleBarStyle = 'hidden'
+    windowOptions.titleBarOverlay = {
+      color: WINDOW_BACKGROUND_COLOR,
+      symbolColor: '#101011',
+      height: 36,
+    }
+  }
+
+  win = new BrowserWindow(windowOptions)
 
   win.setMenuBarVisibility(false)
 
