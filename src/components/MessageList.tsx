@@ -37,7 +37,7 @@ export function MessageList({
     <div className="scroll-stable flex-1 w-full overflow-y-auto">
       <div className="chat-column mx-auto space-y-4 px-4 pb-6 pt-6">
         {messages.map((msg) => (
-          <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+          <div key={msg.id} className={msg.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
             {msg.role === 'user' ? (
               editingMessageId === msg.id ? (
                 <div className="-mx-4 w-[calc(100%+2rem)]">
@@ -53,7 +53,9 @@ export function MessageList({
                   />
                 </div>
               ) : (
-                <UserMessage content={msg.content} onEdit={onEditUserMessage ? () => onEditUserMessage(msg.id) : undefined} />
+                <div className="-mx-4 w-[calc(100%+2rem)]">
+                  <UserMessage content={msg.content} onEdit={onEditUserMessage ? () => onEditUserMessage(msg.id) : undefined} />
+                </div>
               )
             ) : (
               <AssistantMessage content={msg.content} />

@@ -8,7 +8,7 @@ import type {
 import { getConversationTitle } from './chatHistoryViewModels'
 
 const TEST_ASSISTANT_REPLY =
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+  'mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'
 
 export interface ChatHistorySnapshot {
   conversationSummaries: ConversationSummary[]

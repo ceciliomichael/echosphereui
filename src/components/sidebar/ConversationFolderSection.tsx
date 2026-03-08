@@ -94,7 +94,9 @@ export function ConversationFolderSection({
         <div className="min-h-0 overflow-hidden">
           <div className="space-y-2 px-1 pb-0.5 pl-10 pr-10 pt-0.5">
             {group.conversations.length === 0 ? (
-              <p className="text-xs text-subtle-foreground">No threads in this folder yet.</p>
+              <div className="w-full px-4 py-1.5">
+                <p className="text-xs text-subtle-foreground">No threads in this folder yet.</p>
+              </div>
             ) : (
               <div className="space-y-1.5">
                 {group.conversations.map((conversation) => (
