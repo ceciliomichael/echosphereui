@@ -37,10 +37,12 @@ app.commandLine.appendSwitch(
 )
 
 let win: BrowserWindow | null
+const WINDOW_BACKGROUND_COLOR = '#EEF4EE'
 
 function createWindow() {
   win = new BrowserWindow({
     autoHideMenuBar: true,
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },

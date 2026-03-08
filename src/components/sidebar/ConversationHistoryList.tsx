@@ -1,5 +1,5 @@
 import { Check, Trash2 } from 'lucide-react'
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { ConversationPreview } from '../../types/chat'
 
 interface ConversationHistoryListProps {
@@ -20,10 +20,35 @@ function HistoryListItem({
   onDeleteConversation,
 }: HistoryListItemProps) {
   const [isDeleteConfirming, setIsDeleteConfirming] = useState(false)
+  const deleteButtonRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     setIsDeleteConfirming(false)
   }, [conversation.id])
+
+  useEffect(() => {
+    if (!isDeleteConfirming) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const targetNode = event.target as Node | null
+      if (!targetNode) {
+        return
+      }
+
+      if (deleteButtonRef.current?.contains(targetNode)) {
+        return
+      }
+
+      setIsDeleteConfirming(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [isDeleteConfirming])
 
   function handleDeleteClick(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
@@ -60,6 +85,7 @@ function HistoryListItem({
       </button>
 
       <button
+        ref={deleteButtonRef}
         type="button"
         onClick={handleDeleteClick}
         className={[

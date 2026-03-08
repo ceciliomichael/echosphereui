@@ -18,6 +18,7 @@ export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: Resi
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const sidebarWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH)
   const visibleSidebarWidth = isSidebarOpen ? sidebarWidth : 0
+  const shouldRenderSidebarContent = isSidebarOpen
 
   function updateSidebarWidth(nextWidth: number) {
     sidebarWidthRef.current = nextWidth
@@ -121,7 +122,7 @@ export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: Resi
         aria-hidden={!isSidebarOpen}
       >
         <div className="h-full min-w-0 flex-1" style={{ width: `${sidebarWidth}px` }}>
-          {sidebar}
+          {shouldRenderSidebarContent ? sidebar : null}
         </div>
       </div>
 

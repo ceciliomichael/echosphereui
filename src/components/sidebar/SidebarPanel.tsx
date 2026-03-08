@@ -18,29 +18,29 @@ export function SidebarPanel({
   onToggleSidebar,
 }: SidebarPanelProps) {
   return (
-    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 py-5">
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-[22px] md:px-5 md:pt-[26px]">
       <div className="flex items-center justify-between gap-3 pb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
             aria-label="Collapse sidebar"
           >
-            <PanelLeft size={16} strokeWidth={2.2} />
+            <PanelLeft size={18} strokeWidth={2.2} />
           </button>
-          <div>
-            <p className="text-sm font-semibold text-foreground">History</p>
-            <p className="text-xs text-subtle-foreground">Recent conversations</p>
+          <div className="min-w-0">
+            <p className="truncate whitespace-nowrap text-sm font-semibold text-foreground">History</p>
+            <p className="truncate whitespace-nowrap text-xs text-subtle-foreground">Recent conversations</p>
           </div>
         </div>
         <button
           type="button"
           onClick={onNewConversation}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
           aria-label="Create conversation"
         >
-          <MessageSquarePlus size={16} strokeWidth={2.2} />
+          <MessageSquarePlus size={18} strokeWidth={2.2} />
         </button>
       </div>
 
