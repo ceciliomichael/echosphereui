@@ -98,17 +98,6 @@ export function useChatMessages() {
     }
   }
 
-  async function openFolderPath(folderPath: string) {
-    clearError()
-
-    try {
-      await window.echosphereHistory.openFolderPath(folderPath)
-    } catch (caughtError) {
-      console.error(caughtError)
-      setError('Unable to open that folder.')
-    }
-  }
-
   function selectFolder(folderId: string | null) {
     clearError()
     resetDraft(folderId)
@@ -235,7 +224,6 @@ export function useChatMessages() {
     conversationGroups,
     createConversation,
     createFolder,
-    openFolderPath,
     error,
     selectedFolderName,
     isLoading,

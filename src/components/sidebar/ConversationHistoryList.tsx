@@ -5,7 +5,6 @@ import { ConversationFolderSection } from './ConversationFolderSection'
 interface ConversationHistoryListProps {
   conversationGroups: ConversationGroupPreview[]
   onCreateConversation: (folderId?: string | null) => void
-  onOpenFolderPath: (folderPath: string) => void
   onSelectConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
@@ -14,7 +13,6 @@ interface ConversationHistoryListProps {
 export function ConversationHistoryList({
   conversationGroups,
   onCreateConversation,
-  onOpenFolderPath,
   onSelectConversation,
   onDeleteConversation,
   onSelectFolder,
@@ -30,7 +28,7 @@ export function ConversationHistoryList({
   }
 
   return (
-    <div className="space-y-4 pb-1">
+    <div className="space-y-2.5 pb-1">
       {conversationGroups.map((group) => {
         const stateKey = group.folder.id ?? 'unfiled'
 
@@ -40,7 +38,6 @@ export function ConversationHistoryList({
             group={group}
             isCollapsed={Boolean(collapsedFolderState[stateKey])}
             onCreateConversation={onCreateConversation}
-            onOpenFolderPath={onOpenFolderPath}
             onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
             onSelectFolder={onSelectFolder}
             onSelectConversation={onSelectConversation}

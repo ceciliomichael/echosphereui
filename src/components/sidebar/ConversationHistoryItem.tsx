@@ -56,7 +56,7 @@ export function ConversationHistoryItem({
   return (
     <div
       className={[
-        'group flex items-center gap-2 rounded-xl px-2 py-1 transition-colors',
+        'group flex w-full items-center gap-2 rounded-xl px-2 py-0.5 transition-colors',
         isDeleteConfirming
           ? 'bg-red-50'
           : conversation.isActive
@@ -68,7 +68,7 @@ export function ConversationHistoryItem({
         type="button"
         onClick={() => onSelectConversation(conversation.id)}
         className={[
-          'min-w-0 flex-1 rounded-lg px-2 py-2 text-left transition-colors',
+          'min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left transition-colors',
           conversation.isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >

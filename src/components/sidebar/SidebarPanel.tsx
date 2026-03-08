@@ -7,7 +7,6 @@ interface SidebarPanelProps {
   conversationGroups: ConversationGroupPreview[]
   onCreateFolder: () => Promise<void>
   onCreateConversation: (folderId?: string | null) => void
-  onOpenFolderPath: (folderPath: string) => void
   onDeleteConversation: (conversationId: string) => void
   onOpenSettings: () => void
   onSelectConversation: (conversationId: string) => void
@@ -19,7 +18,6 @@ export function SidebarPanel({
   conversationGroups,
   onCreateFolder,
   onCreateConversation,
-  onOpenFolderPath,
   onDeleteConversation,
   onOpenSettings,
   onSelectConversation,
@@ -72,7 +70,6 @@ export function SidebarPanel({
         <ConversationHistoryList
           conversationGroups={conversationGroups}
           onCreateConversation={onCreateConversation}
-          onOpenFolderPath={onOpenFolderPath}
           onDeleteConversation={onDeleteConversation}
           onSelectConversation={onSelectConversation}
           onSelectFolder={onSelectFolder}

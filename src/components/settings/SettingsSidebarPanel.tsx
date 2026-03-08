@@ -1,0 +1,84 @@
+import { ArrowLeft, PanelLeft, Settings2 } from 'lucide-react'
+import { Tooltip } from '../Tooltip'
+import { SETTINGS_ITEMS, type SettingsItemId } from './settingsItems'
+
+interface SettingsSidebarPanelProps {
+  activeItemId: SettingsItemId
+  onBackToApp: () => void
+  onSelectItem: (itemId: SettingsItemId) => void
+  onToggleSidebar: () => void
+}
+
+export function SettingsSidebarPanel({
+  activeItemId,
+  onBackToApp,
+  onSelectItem,
+  onToggleSidebar,
+}: SettingsSidebarPanelProps) {
+  const actionButtonClassName =
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-sidebar-muted'
+
+  return (
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-3 md:px-5">
+      <div className="pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <Tooltip content="Collapse sidebar" side="right">
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className={actionButtonClassName}
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeft size={18} strokeWidth={2.2} />
+            </button>
+          </Tooltip>
+        </div>
+
+        <button
+          type="button"
+          onClick={onBackToApp}
+          className="mt-4 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-sidebar-muted"
+        >
+          <ArrowLeft size={18} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
+          <span>Back to app</span>
+        </button>
+
+        <div className="mt-5">
+          <div className="flex items-center gap-2 px-1">
+            <Settings2 size={16} strokeWidth={2.2} className="text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">Settings</p>
+          </div>
+
+          <nav className="mt-3 space-y-2" aria-label="Settings navigation">
+            {SETTINGS_ITEMS.map((item) => {
+              const isActive = item.id === activeItemId
+
+              return (
+                <div
+                  key={item.id}
+                  className={[
+                    'group flex items-center gap-2 rounded-xl px-2 py-1 transition-colors',
+                    isActive ? 'bg-surface shadow-sm' : 'hover:bg-sidebar-muted/90',
+                  ].join(' ')}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelectItem(item.id)}
+                    className={[
+                      'min-w-0 flex-1 rounded-lg px-2 py-2 text-left transition-colors',
+                      isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                    ].join(' ')}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <span className="block truncate text-sm font-medium text-inherit">{item.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
+                  </button>
+                </div>
+              )
+            })}
+          </nav>
+        </div>
+      </div>
+    </aside>
+  )
+}
