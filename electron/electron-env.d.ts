@@ -24,4 +24,6 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
+  echosphereHistory: import('../src/types/chat').EchosphereHistoryApi
+  echosphereSettings: import('../src/types/chat').EchosphereSettingsApi
 }

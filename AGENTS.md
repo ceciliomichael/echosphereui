@@ -220,6 +220,21 @@ Before considering a task complete, verify all of the following:
 - Absolute elements: inset values must be responsive (inset-4 md:inset-8)
 - Test at 320px width - nothing should cause horizontal scroll
 </design_rules>
+
+<design_system>
+## Current Product UI Preferences
+- Prefer light, neutral interfaces with white or near-white surfaces, dark text, and soft gray borders.
+- Use a flat visual language by default; if shadows are needed, keep them subtle, tight, and restrained.
+- Favor balanced sizing and spacing over oversized or sparse layouts.
+- Prefer rounded corners in the `rounded-xl` to `rounded-2xl` range for primary interactive surfaces.
+- Maintain reusable Tailwind v4 design tokens in `src/index.css` using `@theme` for shared colors, typography, shadows, and other project-wide primitives.
+- Prefer OKLCH for theme color tokens so palette updates stay consistent and easier to tune over time.
+- Keep visual systems consistent across primary surfaces, supporting panels, and secondary UI.
+- Use accent colors deliberately rather than letting them dominate the default interface.
+- Prioritize clean alignment, even internal spacing, and predictable edge rhythm in inputs, cards, and panels.
+- Preserve a calm, production-grade aesthetic with minimal decorative effects and strong readability.
+</design_system>
+
 </preferred_styling_everytime>
 
 <SYSTEM_INSTRUCTIONS_DIRECTIVE>

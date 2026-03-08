@@ -1,9 +1,16 @@
-import { app, BrowserWindow } from 'electron'
-import { createRequire } from 'node:module'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-
-const require = createRequire(import.meta.url)
+import type { AppendConversationMessagesInput, AppSettings, ReplaceConversationMessagesInput } from '../src/types/chat'
+import {
+  appendStoredMessages,
+  createStoredConversation,
+  deleteStoredConversation,
+  getStoredConversation,
+  listStoredConversations,
+  replaceStoredMessages,
+} from './historyStore'
+import { getStoredSettings, updateStoredSettings } from './settingsStore'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -24,15 +31,22 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+app.commandLine.appendSwitch(
+  'disable-features',
+  'OverlayScrollbar,OverlayScrollbars,FluentOverlayScrollbar,FluentScrollbars',
+)
+
 let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  win.setMenuBarVisibility(false)
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
@@ -45,6 +59,25 @@ function createWindow() {
     // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
+}
+
+function registerHistoryHandlers() {
+  ipcMain.handle('history:list', async () => listStoredConversations())
+  ipcMain.handle('history:get', async (_event, conversationId: string) => getStoredConversation(conversationId))
+  ipcMain.handle('history:create', async () => createStoredConversation())
+  ipcMain.handle('history:appendMessages', async (_event, input: AppendConversationMessagesInput) =>
+    appendStoredMessages(input),
+  )
+  ipcMain.handle('history:replaceMessages', async (_event, input: ReplaceConversationMessagesInput) =>
+    replaceStoredMessages(input),
+  )
+  ipcMain.handle('history:delete', async (_event, conversationId: string) =>
+    deleteStoredConversation(conversationId),
+  )
+  ipcMain.handle('settings:get', async () => getStoredSettings())
+  ipcMain.handle('settings:update', async (_event, input: Partial<AppSettings>) =>
+    updateStoredSettings(input),
+  )
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -65,4 +98,7 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  registerHistoryHandlers()
+  createWindow()
+})

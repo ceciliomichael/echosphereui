@@ -1,36 +1,110 @@
 @import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Google Sans Flex', sans-serif;
+
+  --color-background: oklch(0.953 0.012 145);
+  --color-foreground: oklch(0.19 0.004 264);
+  --color-muted-foreground: oklch(0.48 0.01 264);
+  --color-subtle-foreground: oklch(0.7 0.008 264);
+
+  --color-surface: oklch(1 0 0);
+  --color-surface-muted: oklch(0.965 0.008 145);
+  --color-sidebar: oklch(0.938 0.016 145);
+  --color-sidebar-muted: oklch(0.91 0.012 145);
+
+  --color-border: oklch(0.885 0.01 145);
+  --color-border-muted: oklch(0.915 0.008 145);
+
+  --color-action: oklch(0.22 0.004 264);
+  --color-action-hover: oklch(0.16 0.004 264);
+  --color-disabled: oklch(0.95 0.004 264);
+  --color-disabled-foreground: oklch(0.72 0.008 264);
+
+  --shadow-soft: 0 10px 30px oklch(0.19 0.004 264 / 0.06);
+}
+
 @layer base {
   :root {
-    font-family: 'Google Sans Flex', sans-serif;
+    font-family: var(--font-sans);
   }
 
   body {
     min-height: 100vh;
-    background-color: #fcfcfd;
-    color: #111111;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
     font-family: inherit;
+  }
+
+  /* Remove default focus outline and add custom focus styles */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
 
   #root {
     min-height: 100vh;
   }
 
-  /* Thin scrollbar style */
-  ::-webkit-scrollbar {
+  *::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
-  /* Firefox scrollbar */
-  * {
-    scrollbar-width: thin;
+  *::-webkit-scrollbar-track {
+    background: transparent;
   }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 2px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-foreground);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
 }
 
 @layer components {
+  .app-shell {
+    max-width: 1440px;
+  }
+
   .chat-shell {
-    max-width: 40%;
-    min-width: 320px;
+    min-width: 0;
+  }
+
+  .chat-column {
+    width: min(720px, calc(100% - 2rem));
+    min-width: 0;
+  }
+
+  .chat-input-shell {
+    width: min(720px, calc(100% - 2rem));
+    min-width: 0;
+  }
+
+  .scroll-stable {
+    scrollbar-gutter: stable both-edges;
+  }
+
+  .sidebar-surface {
+    background-color: var(--color-sidebar);
+  }
+
+  .sidebar-muted-surface {
+    background-color: var(--color-sidebar-muted);
+  }
+
+  @media (min-width: 1024px) {
+    .chat-shell {
+      max-width: min(40vw, 760px);
+    }
   }
 }
