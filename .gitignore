@@ -7,21 +7,43 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Runtime and diagnostics
+pids
+*.pid
+*.seed
+*.pid.lock
+*.stackdump
+*.tsbuildinfo
+.eslintcache
+coverage
+
+# Dependency directories
 node_modules
+
+# Build and packaging outputs
 dist
 dist-ssr
+dist-electron
+release
+out
+
+# Local environment and machine-specific config
+.env
+.env.*
+!.env.example
 *.local
+
+# Tooling caches
+.vite
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-release/
-dist-electron/
