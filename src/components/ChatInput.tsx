@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import { ArrowUp } from 'lucide-react'
-import { chatSurfaceClassName } from '../lib/chatStyles'
+import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
 
 interface ChatInputProps {
@@ -96,7 +96,7 @@ export function ChatInput({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className={`${chatSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-4'}`}>
+      <div className={`${chatInputSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-4'}`}>
         {isEditing && !isInline ? (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-action/25 bg-action/10 px-3 py-2 text-xs text-foreground">
             <span>Editing message</span>
