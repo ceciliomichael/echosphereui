@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'Google Sans Flex', sans-serif;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: #fcfcfd;
+    color: #111111;
+    font-family: inherit;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Thin scrollbar style */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  .chat-shell {
+    max-width: 40%;
+    min-width: 320px;
+  }
+}
