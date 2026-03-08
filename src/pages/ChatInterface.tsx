@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
@@ -36,6 +36,11 @@ export function ChatInterface() {
     selectFolder,
     startEditingMessage,
   } = useChatMessages()
+  const createConversationRef = useRef(createConversation)
+
+  useEffect(() => {
+    createConversationRef.current = createConversation
+  }, [createConversation])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -53,13 +58,13 @@ export function ChatInterface() {
 
       if (key === 'n') {
         event.preventDefault()
-        void createConversation()
+        void createConversationRef.current()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [createConversation])
+  }, [])
 
   return (
     <div

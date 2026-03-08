@@ -1,0 +1,28 @@
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { app } from 'electron'
+
+const HISTORY_ROOT_SEGMENTS = ['.echosphere', 'history'] as const
+
+export const MESSAGE_LOG_FILE_NAME = 'messages.jsonl'
+export const FOLDERS_FILE_NAME = 'folders.json'
+
+export function getHistoryDirectoryPath() {
+  return path.join(app.getPath('home'), ...HISTORY_ROOT_SEGMENTS)
+}
+
+export function getConversationFilePath(conversationId: string) {
+  return path.join(getHistoryDirectoryPath(), `${conversationId}.json`)
+}
+
+export function getMessageLogPath() {
+  return path.join(getHistoryDirectoryPath(), MESSAGE_LOG_FILE_NAME)
+}
+
+export function getFoldersFilePath() {
+  return path.join(getHistoryDirectoryPath(), FOLDERS_FILE_NAME)
+}
+
+export async function ensureHistoryDirectory() {
+  await fs.mkdir(getHistoryDirectoryPath(), { recursive: true })
+}
