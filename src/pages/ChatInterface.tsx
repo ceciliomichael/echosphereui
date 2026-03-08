@@ -3,18 +3,21 @@ import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
+import { SettingsDialog } from '../components/settings/SettingsDialog'
 import { ResizableSidebarPanel } from '../components/sidebar/ResizableSidebarPanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { useChatMessages } from '../hooks/useChatMessages'
 
 export function ChatInterface() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const {
     activeConversationTitle,
     cancelEditingMessage,
+    conversationGroups,
+    createFolder,
     editComposerFocusSignal,
     editComposerValue,
-    conversations,
     createConversation,
     deleteConversation,
     editingMessageId,
@@ -23,11 +26,14 @@ export function ChatInterface() {
     isSending,
     mainComposerValue,
     messages,
+    openFolderPath,
+    selectedFolderName,
     setEditComposerValue,
     setMainComposerValue,
     selectConversation,
     sendEditedMessage,
     sendNewMessage,
+    selectFolder,
     startEditingMessage,
   } = useChatMessages()
 
@@ -70,10 +76,14 @@ export function ChatInterface() {
         isSidebarOpen={isSidebarOpen}
         sidebar={
           <SidebarPanel
-            conversations={conversations}
+            conversationGroups={conversationGroups}
+            onCreateFolder={createFolder}
+            onCreateConversation={createConversation}
+            onOpenFolderPath={openFolderPath}
             onDeleteConversation={deleteConversation}
-            onNewConversation={createConversation}
+            onOpenSettings={() => setIsSettingsOpen(true)}
             onSelectConversation={selectConversation}
+            onSelectFolder={selectFolder}
             onToggleSidebar={() => setIsSidebarOpen(false)}
           />
         }
@@ -104,7 +114,7 @@ export function ChatInterface() {
                   Loading conversations...
                 </div>
               ) : messages.length === 0 ? (
-                <EmptyState />
+                <EmptyState folderName={selectedFolderName} />
               ) : (
                 <MessageList
                   messages={messages}
@@ -133,6 +143,8 @@ export function ChatInterface() {
           </div>
         </main>
       </ResizableSidebarPanel>
+
+      {isSettingsOpen ? <SettingsDialog onClose={() => setIsSettingsOpen(false)} /> : null}
     </div>
   )
 }

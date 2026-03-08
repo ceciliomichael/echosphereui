@@ -2,6 +2,8 @@ import { ipcRenderer, contextBridge } from 'electron'
 import type {
   AppendConversationMessagesInput,
   AppSettings,
+  CreateConversationFolderInput,
+  CreateConversationInput,
   EchosphereHistoryApi,
   EchosphereSettingsApi,
   ReplaceConversationMessagesInput,
@@ -32,8 +34,12 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 const historyApi: EchosphereHistoryApi = {
   listConversations: () => ipcRenderer.invoke('history:list'),
+  listFolders: () => ipcRenderer.invoke('history:listFolders'),
   getConversation: (conversationId: string) => ipcRenderer.invoke('history:get', conversationId),
-  createConversation: () => ipcRenderer.invoke('history:create'),
+  createConversation: (input?: CreateConversationInput) => ipcRenderer.invoke('history:create', input),
+  createFolder: (input: CreateConversationFolderInput) => ipcRenderer.invoke('history:createFolder', input),
+  pickFolder: () => ipcRenderer.invoke('history:pickFolder'),
+  openFolderPath: (folderPath: string) => ipcRenderer.invoke('history:openFolderPath', folderPath),
   appendMessages: (input: AppendConversationMessagesInput) => ipcRenderer.invoke('history:appendMessages', input),
   replaceMessages: (input: ReplaceConversationMessagesInput) =>
     ipcRenderer.invoke('history:replaceMessages', input),

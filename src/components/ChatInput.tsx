@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
 import { ArrowUp } from 'lucide-react'
 import { chatSurfaceClassName } from '../lib/chatStyles'
+import { Tooltip } from './Tooltip'
 
 interface ChatInputProps {
   value: string
@@ -118,20 +119,22 @@ export function ChatInput({
         </div>
 
         <div className={isInline ? 'mt-2 flex items-center justify-end' : 'mt-3 flex items-center justify-end'}>
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            aria-label={isEditing ? 'Send edited message' : 'Send message'}
-            className={[
-              'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
-              canSend
-                ? 'cursor-pointer bg-action text-white hover:scale-[1.03] hover:bg-action-hover active:scale-95'
-                : 'cursor-not-allowed bg-disabled text-disabled-foreground',
-            ].join(' ')}
-          >
-            <ArrowUp size={16} strokeWidth={2.5} />
-          </button>
+          <Tooltip content={isEditing ? 'Send edited message' : 'Send message'}>
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              aria-label={isEditing ? 'Send edited message' : 'Send message'}
+              className={[
+                'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
+                canSend
+                  ? 'cursor-pointer bg-action text-white hover:scale-[1.03] hover:bg-action-hover active:scale-95'
+                  : 'cursor-not-allowed bg-disabled text-disabled-foreground',
+              ].join(' ')}
+            >
+              <ArrowUp size={16} strokeWidth={2.5} />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>

@@ -1,13 +1,21 @@
-import { app, BrowserWindow, ipcMain, type BrowserWindowConstructorOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, type BrowserWindowConstructorOptions, type OpenDialogOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import type { AppendConversationMessagesInput, AppSettings, ReplaceConversationMessagesInput } from '../src/types/chat'
+import type {
+  AppendConversationMessagesInput,
+  AppSettings,
+  CreateConversationFolderInput,
+  CreateConversationInput,
+  ReplaceConversationMessagesInput,
+} from '../src/types/chat'
 import {
   appendStoredMessages,
+  createStoredFolder,
   createStoredConversation,
   deleteStoredConversation,
   getStoredConversation,
   listStoredConversations,
+  listStoredFolders,
   replaceStoredMessages,
 } from './historyStore'
 import { getStoredSettings, updateStoredSettings } from './settingsStore'
@@ -38,12 +46,33 @@ app.commandLine.appendSwitch(
 
 let win: BrowserWindow | null
 const WINDOW_BACKGROUND_COLOR = '#EEF4EE'
+const MIN_WINDOW_WIDTH = 960
+const MIN_WINDOW_HEIGHT = 680
+
+function getInitialWindowBounds() {
+  const { workArea } = screen.getPrimaryDisplay()
+
+  return {
+    x: workArea.x,
+    y: workArea.y,
+    width: workArea.width,
+    height: workArea.height,
+  }
+}
 
 function createWindow() {
+  const initialBounds = getInitialWindowBounds()
   const windowOptions: BrowserWindowConstructorOptions = {
     autoHideMenuBar: true,
     backgroundColor: WINDOW_BACKGROUND_COLOR,
+    height: initialBounds.height,
+    minHeight: MIN_WINDOW_HEIGHT,
+    minWidth: MIN_WINDOW_WIDTH,
+    show: false,
     title: 'EchoSphere',
+    width: initialBounds.width,
+    x: initialBounds.x,
+    y: initialBounds.y,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -61,6 +90,17 @@ function createWindow() {
   win = new BrowserWindow(windowOptions)
 
   win.setMenuBarVisibility(false)
+  win.once('ready-to-show', () => {
+    if (!win) {
+      return
+    }
+
+    if (!win.isMaximized()) {
+      win.maximize()
+    }
+
+    win.show()
+  })
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
@@ -77,8 +117,34 @@ function createWindow() {
 
 function registerHistoryHandlers() {
   ipcMain.handle('history:list', async () => listStoredConversations())
+  ipcMain.handle('history:listFolders', async () => listStoredFolders())
   ipcMain.handle('history:get', async (_event, conversationId: string) => getStoredConversation(conversationId))
-  ipcMain.handle('history:create', async () => createStoredConversation())
+  ipcMain.handle('history:create', async (_event, input?: CreateConversationInput) => createStoredConversation(input))
+  ipcMain.handle('history:createFolder', async (_event, input: CreateConversationFolderInput) =>
+    createStoredFolder(input),
+  )
+  ipcMain.handle('history:pickFolder', async () => {
+    const dialogOptions: OpenDialogOptions = {
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select folder',
+    }
+    const result = win
+      ? await dialog.showOpenDialog(win, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    const selectedPath = result.filePaths[0]
+    return createStoredFolder({
+      name: path.basename(selectedPath),
+      path: selectedPath,
+    })
+  })
+  ipcMain.handle('history:openFolderPath', async (_event, folderPath: string) => {
+    await shell.openPath(folderPath)
+  })
   ipcMain.handle('history:appendMessages', async (_event, input: AppendConversationMessagesInput) =>
     appendStoredMessages(input),
   )

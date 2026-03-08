@@ -1,9 +1,29 @@
 import { useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { ConversationPreview, ConversationRecord, ConversationSummary, Message } from '../types/chat'
+import type {
+  ConversationFolderSummary,
+  ConversationGroupPreview,
+  ConversationPreview,
+  ConversationRecord,
+  ConversationSummary,
+  Message,
+} from '../types/chat'
 
 const TEST_ASSISTANT_REPLY =
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+
+const UNFILED_FOLDER_NAME = 'Unfiled'
+
+function getSelectedFolderName(
+  folderSummaries: ConversationFolderSummary[],
+  selectedFolderId: string | null,
+) {
+  if (selectedFolderId === null) {
+    return UNFILED_FOLDER_NAME
+  }
+
+  return folderSummaries.find((folder) => folder.id === selectedFolderId)?.name ?? UNFILED_FOLDER_NAME
+}
 
 function formatUpdatedAtLabel(timestamp: number) {
   const differenceMs = timestamp - Date.now()
@@ -42,13 +62,61 @@ function mapConversationPreview(summary: ConversationSummary, activeConversation
     title: summary.title,
     preview: summary.preview,
     updatedAtLabel: formatUpdatedAtLabel(summary.updatedAt),
+    folderId: summary.folderId,
     isActive: summary.id === activeConversationId,
   }
 }
 
+function buildConversationGroups(
+  folderSummaries: ConversationFolderSummary[],
+  conversationSummaries: ConversationSummary[],
+  activeConversationId: string | null,
+  selectedFolderId: string | null,
+): ConversationGroupPreview[] {
+  const groupedConversations = new Map<string | null, ConversationPreview[]>()
+  groupedConversations.set(null, [])
+
+  for (const folder of folderSummaries) {
+    groupedConversations.set(folder.id, [])
+  }
+
+  for (const conversation of conversationSummaries) {
+    const preview = mapConversationPreview(conversation, activeConversationId)
+    const targetFolderId =
+      conversation.folderId !== null && groupedConversations.has(conversation.folderId) ? conversation.folderId : null
+
+    groupedConversations.get(targetFolderId)?.push(preview)
+  }
+
+  return [
+    {
+      folder: {
+        id: null,
+        name: UNFILED_FOLDER_NAME,
+        path: null,
+        conversationCount: groupedConversations.get(null)?.length ?? 0,
+        isSelected: selectedFolderId === null,
+      },
+      conversations: groupedConversations.get(null) ?? [],
+    },
+    ...folderSummaries.map((folder) => ({
+      folder: {
+        id: folder.id,
+        name: folder.name,
+        path: folder.path,
+        conversationCount: groupedConversations.get(folder.id)?.length ?? 0,
+        isSelected: selectedFolderId === folder.id,
+      },
+      conversations: groupedConversations.get(folder.id) ?? [],
+    })),
+  ]
+}
+
 export function useChatMessages() {
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([])
+  const [folderSummaries, setFolderSummaries] = useState<ConversationFolderSummary[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [mainComposerValue, setMainComposerValue] = useState('')
   const [editComposerValue, setEditComposerValue] = useState('')
@@ -58,25 +126,60 @@ export function useChatMessages() {
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  function resetDraft(nextFolderId: string | null) {
+    setEditingMessageId(null)
+    setMainComposerValue('')
+    setEditComposerValue('')
+    setActiveConversationId(null)
+    setSelectedFolderId(nextFolderId)
+    setMessages([])
+  }
+
+  async function refreshSidebarData(nextActiveConversationId: string | null, nextSelectedFolderId: string | null) {
+    const [summaries, folders] = await Promise.all([
+      window.echosphereHistory.listConversations(),
+      window.echosphereHistory.listFolders(),
+    ])
+
+    setConversationSummaries(summaries)
+    setFolderSummaries(folders)
+    setActiveConversationId(nextActiveConversationId)
+
+    if (nextActiveConversationId !== null) {
+      const activeConversation = summaries.find((conversation) => conversation.id === nextActiveConversationId)
+      setSelectedFolderId(activeConversation?.folderId ?? null)
+      return
+    }
+
+    const hasSelectedFolder =
+      nextSelectedFolderId === null || folders.some((folder) => folder.id === nextSelectedFolderId)
+    setSelectedFolderId(hasSelectedFolder ? nextSelectedFolderId : null)
+  }
+
   useEffect(() => {
     let isMounted = true
 
     async function initializeConversations() {
       try {
-        const summaries = await window.echosphereHistory.listConversations()
+        const [summaries, folders] = await Promise.all([
+          window.echosphereHistory.listConversations(),
+          window.echosphereHistory.listFolders(),
+        ])
 
         if (!isMounted) {
           return
         }
 
+        setConversationSummaries(summaries)
+        setFolderSummaries(folders)
+
         if (summaries.length === 0) {
-          setConversationSummaries([])
+          setSelectedFolderId(null)
           setActiveConversationId(null)
           setMessages([])
           return
         }
 
-        setConversationSummaries(summaries)
         const firstConversation = await window.echosphereHistory.getConversation(summaries[0].id)
 
         if (!isMounted || !firstConversation) {
@@ -84,6 +187,7 @@ export function useChatMessages() {
         }
 
         setActiveConversationId(firstConversation.id)
+        setSelectedFolderId(firstConversation.folderId)
         setMessages(firstConversation.messages)
       } catch (caughtError) {
         console.error(caughtError)
@@ -104,22 +208,43 @@ export function useChatMessages() {
     }
   }, [])
 
-  async function refreshConversationSummaries(nextActiveConversationId: string | null) {
-    const summaries = await window.echosphereHistory.listConversations()
-    setConversationSummaries(summaries)
+  function createConversation(folderId = selectedFolderId) {
+    setError(null)
+    resetDraft(folderId)
+  }
 
-    if (nextActiveConversationId !== null) {
-      setActiveConversationId(nextActiveConversationId)
+  async function createFolder() {
+    setError(null)
+
+    try {
+      const folder = await window.echosphereHistory.pickFolder()
+      if (!folder) {
+        return
+      }
+
+      resetDraft(folder.id)
+      await refreshSidebarData(null, folder.id)
+    } catch (caughtError) {
+      console.error(caughtError)
+      setError('Unable to create that folder.')
+      throw caughtError
     }
   }
 
-  async function createConversation() {
+  async function openFolderPath(folderPath: string) {
     setError(null)
-    setEditingMessageId(null)
-    setMainComposerValue('')
-    setEditComposerValue('')
-    setActiveConversationId(null)
-    setMessages([])
+
+    try {
+      await window.echosphereHistory.openFolderPath(folderPath)
+    } catch (caughtError) {
+      console.error(caughtError)
+      setError('Unable to open that folder.')
+    }
+  }
+
+  function selectFolder(folderId: string | null) {
+    setError(null)
+    resetDraft(folderId)
   }
 
   async function selectConversation(conversationId: string) {
@@ -140,8 +265,9 @@ export function useChatMessages() {
       }
 
       setActiveConversationId(conversation.id)
+      setSelectedFolderId(conversation.folderId)
       setMessages(conversation.messages)
-      await refreshConversationSummaries(conversation.id)
+      await refreshSidebarData(conversation.id, conversation.folderId)
     } catch (caughtError) {
       console.error(caughtError)
       setError('Unable to switch conversations.')
@@ -224,7 +350,7 @@ export function useChatMessages() {
         if (conversationId) {
           currentConversation = await window.echosphereHistory.getConversation(conversationId)
         } else {
-          const createdConversation = await window.echosphereHistory.createConversation()
+          const createdConversation = await window.echosphereHistory.createConversation({ folderId: selectedFolderId })
           conversationId = createdConversation.id
           currentConversation = createdConversation
         }
@@ -238,13 +364,16 @@ export function useChatMessages() {
       }
 
       setMessages(savedConversation.messages)
+      setSelectedFolderId(savedConversation.folderId)
+
       if (targetEditMessageId !== null) {
         setEditingMessageId(null)
         setEditComposerValue('')
       } else {
         setMainComposerValue('')
       }
-      await refreshConversationSummaries(savedConversation.id)
+
+      await refreshSidebarData(savedConversation.id, savedConversation.folderId)
     } catch (caughtError) {
       console.error(caughtError)
       setError('Unable to save your message.')
@@ -281,6 +410,9 @@ export function useChatMessages() {
 
   async function deleteConversation(conversationId: string) {
     setError(null)
+    const deletedConversationFolderId =
+      conversationSummaries.find((conversation) => conversation.id === conversationId)?.folderId ?? null
+
     if (conversationId === activeConversationId) {
       setEditingMessageId(null)
       setMainComposerValue('')
@@ -289,19 +421,23 @@ export function useChatMessages() {
 
     try {
       await window.echosphereHistory.deleteConversation(conversationId)
-      const remainingSummaries = await window.echosphereHistory.listConversations()
+      const [remainingSummaries, folders] = await Promise.all([
+        window.echosphereHistory.listConversations(),
+        window.echosphereHistory.listFolders(),
+      ])
+
+      setConversationSummaries(remainingSummaries)
+      setFolderSummaries(folders)
 
       if (remainingSummaries.length === 0) {
-        setConversationSummaries([])
         setActiveConversationId(null)
+        setSelectedFolderId(deletedConversationFolderId)
         setMessages([])
         setEditingMessageId(null)
         setMainComposerValue('')
         setEditComposerValue('')
         return
       }
-
-      setConversationSummaries(remainingSummaries)
 
       if (conversationId !== activeConversationId) {
         return
@@ -314,6 +450,7 @@ export function useChatMessages() {
       }
 
       setActiveConversationId(nextConversation.id)
+      setSelectedFolderId(nextConversation.folderId)
       setMessages(nextConversation.messages)
     } catch (caughtError) {
       console.error(caughtError)
@@ -323,12 +460,18 @@ export function useChatMessages() {
 
   return {
     activeConversationTitle:
-      conversationSummaries.find((conversation) => conversation.id === activeConversationId)?.title ?? 'New chat',
-    conversations: conversationSummaries.map((conversation) =>
-      mapConversationPreview(conversation, activeConversationId),
+      conversationSummaries.find((conversation) => conversation.id === activeConversationId)?.title ?? 'New thread',
+    conversationGroups: buildConversationGroups(
+      folderSummaries,
+      conversationSummaries,
+      activeConversationId,
+      selectedFolderId,
     ),
     createConversation,
+    createFolder,
+    openFolderPath,
     error,
+    selectedFolderName: getSelectedFolderName(folderSummaries, selectedFolderId),
     isLoading,
     isSending,
     mainComposerValue,
@@ -343,6 +486,7 @@ export function useChatMessages() {
     startEditingMessage,
     deleteConversation,
     selectConversation,
+    selectFolder,
     sendNewMessage,
     sendEditedMessage,
   }
