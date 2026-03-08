@@ -33,15 +33,27 @@ export function ChatInterface() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'b') {
+      if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+
+      if (key === 'b') {
         event.preventDefault()
         setIsSidebarOpen((currentValue) => !currentValue)
+        return
+      }
+
+      if (key === 'n') {
+        event.preventDefault()
+        void createConversation()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [createConversation])
 
   return (
     <div

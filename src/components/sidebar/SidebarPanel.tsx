@@ -17,6 +17,9 @@ export function SidebarPanel({
   onSelectConversation,
   onToggleSidebar,
 }: SidebarPanelProps) {
+  const actionButtonClassName =
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-surface-muted'
+
   return (
     <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-3 md:px-5">
       <div className="flex items-center justify-between gap-3 pb-4">
@@ -24,7 +27,7 @@ export function SidebarPanel({
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
+            className={actionButtonClassName}
             aria-label="Collapse sidebar"
           >
             <PanelLeft size={18} strokeWidth={2.2} />
@@ -37,7 +40,7 @@ export function SidebarPanel({
         <button
           type="button"
           onClick={onNewConversation}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors hover:bg-white"
+          className={actionButtonClassName}
           aria-label="Create conversation"
         >
           <MessageSquarePlus size={18} strokeWidth={2.2} />
