@@ -27,10 +27,10 @@ import {
   listStoredConversations,
   listStoredFolders,
   replaceStoredMessages,
-} from './historyStore'
-import { getStoredSettings, updateStoredSettings } from './settingsStore'
-import { serializeInitialSettingsArg } from './settingsBootstrap'
-import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './windowTheme'
+} from './history/store'
+import { getStoredSettings, updateStoredSettings } from './settings/store'
+import { serializeInitialSettingsArg } from './settings/bootstrap'
+import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure

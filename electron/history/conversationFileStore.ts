@@ -1,11 +1,11 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { ConversationRecord, Message } from '../src/types/chat'
+import type { ConversationRecord, Message } from '../../src/types/chat'
 import {
   buildConversationSummary,
   createMessageLogPayload,
   normalizeConversationRecord,
-} from './historyDocuments'
+} from './documents'
 import {
   ensureHistoryDirectory,
   FOLDERS_FILE_NAME,
@@ -13,7 +13,7 @@ import {
   getHistoryDirectoryPath,
   getMessageLogPath,
   MESSAGE_LOG_FILE_NAME,
-} from './historyStoragePaths'
+} from './paths'
 
 async function readConversationFileByPath(filePath: string) {
   const raw = await fs.readFile(filePath, 'utf8')

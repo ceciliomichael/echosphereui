@@ -1,4 +1,4 @@
-import type { ConversationFolderRecord, ConversationRecord, ConversationSummary, Message } from '../src/types/chat'
+import type { ConversationFolderRecord, ConversationRecord, ConversationSummary, Message } from '../../src/types/chat'
 
 export interface MessageLogEntry {
   conversationId: string

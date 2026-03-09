@@ -5,7 +5,7 @@ import type {
   CreateConversationFolderInput,
   ReplaceConversationMessagesInput,
   CreateConversationInput,
-} from '../src/types/chat'
+} from '../../src/types/chat'
 import {
   appendMessagesToLog,
   deleteConversationFile,
@@ -13,7 +13,7 @@ import {
   readConversationFile,
   writeConversationFile,
 } from './conversationFileStore'
-import { ensureStoredFolderExists, readFolderStore, toFolderSummaries, writeFolderStore } from './historyFolderStore'
+import { ensureStoredFolderExists, readFolderStore, toFolderSummaries, writeFolderStore } from './folderStore'
 
 export async function listStoredConversations() {
   return listConversationSummaries()

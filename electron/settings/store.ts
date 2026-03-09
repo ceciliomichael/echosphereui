@@ -1,9 +1,9 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { AppSettings } from '../src/types/chat'
-import { DEFAULT_APP_SETTINGS } from '../src/lib/defaultAppSettings'
-import { isAppAppearance, isAppLanguage } from '../src/lib/appSettings'
+import type { AppSettings } from '../../src/types/chat'
+import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
+import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const SETTINGS_FILE_NAME = 'settings.json'

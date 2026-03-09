@@ -1,5 +1,5 @@
 import { nativeTheme, type BrowserWindow, type TitleBarOverlay } from 'electron'
-import type { AppAppearance } from '../src/lib/appSettings'
+import type { AppAppearance } from '../../src/lib/appSettings'
 
 type ResolvedWindowTheme = 'light' | 'dark'
 

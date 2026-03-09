@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
-import type { ConversationFolderRecord, ConversationFolderSummary } from '../src/types/chat'
-import { parseFolderStore, serializeFolderStore } from './historyDocuments'
-import { ensureHistoryDirectory, getFoldersFilePath } from './historyStoragePaths'
+import type { ConversationFolderRecord, ConversationFolderSummary } from '../../src/types/chat'
+import { parseFolderStore, serializeFolderStore } from './documents'
+import { ensureHistoryDirectory, getFoldersFilePath } from './paths'
 
 export async function readFolderStore() {
   try {

@@ -1,6 +1,6 @@
-import { DEFAULT_APP_SETTINGS } from '../src/lib/defaultAppSettings'
-import { isAppAppearance, isAppLanguage } from '../src/lib/appSettings'
-import type { AppSettings } from '../src/types/chat'
+import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
+import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import type { AppSettings } from '../../src/types/chat'
 
 const INITIAL_SETTINGS_ARG_PREFIX = '--echosphere-initial-settings='
 

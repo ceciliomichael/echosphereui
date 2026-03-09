@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
-import { parseInitialSettingsArg } from './settingsBootstrap'
+import { parseInitialSettingsArg } from './settings/bootstrap'
 import type {
   AppendConversationMessagesInput,
   AppSettings,
