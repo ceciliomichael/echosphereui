@@ -219,6 +219,9 @@ Before considering a task complete, verify all of the following:
 - No negative margins that extend beyond viewport
 - Absolute elements: inset values must be responsive (inset-4 md:inset-8)
 - Test at 320px width - nothing should cause horizontal scroll
+
+## ULTIMATE RULE
+- Do not use flexbox for everything, stop using boxes everytime, give it a mix and match of flat, and box, think better think beyond to produce ultimate UX,UI
 </design_rules>
 
 <design_system>

@@ -5,8 +5,8 @@ import { ConversationHistoryList } from './ConversationHistoryList'
 
 interface SidebarPanelProps {
   conversationGroups: ConversationGroupPreview[]
-  onCreateFolder: () => Promise<void>
   onCreateConversation: (folderId?: string | null) => void
+  onCreateFolder: () => Promise<void>
   onDeleteConversation: (conversationId: string) => void
   onOpenSettings: () => void
   onSelectConversation: (conversationId: string) => void
@@ -25,12 +25,12 @@ export function SidebarPanel({
   onToggleSidebar,
 }: SidebarPanelProps) {
   const actionButtonClassName =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-sidebar-muted'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
   const footerButtonClassName =
-    'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-sidebar-muted'
+    'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
 
   return (
-    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-3 md:px-5">
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] px-4 pb-5 pt-3 md:px-5">
       <div className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <Tooltip content="Collapse sidebar" side="right">

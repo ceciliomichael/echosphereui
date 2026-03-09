@@ -4,14 +4,15 @@ import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
 
 interface ChatInputProps {
+  disabled?: boolean
+  focusSignal?: number
+  isEditing?: boolean
+  onCancelEdit?: () => void
+  onSend: () => void
   value: string
   onValueChange: (value: string) => void
-  onSend: () => void
-  onCancelEdit?: () => void
-  isEditing?: boolean
+  sendOnEnter?: boolean
   variant?: 'composer' | 'inline'
-  focusSignal?: number
-  disabled?: boolean
 }
 
 export function ChatInput({
@@ -20,6 +21,7 @@ export function ChatInput({
   onSend,
   onCancelEdit,
   isEditing = false,
+  sendOnEnter = true,
   variant = 'composer',
   focusSignal,
   disabled = false,
@@ -36,7 +38,12 @@ export function ChatInput({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (sendOnEnter && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+
+    if (!sendOnEnter && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       handleSend()
     }
@@ -128,7 +135,7 @@ export function ChatInput({
               className={[
                 'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
                 canSend
-                  ? 'cursor-pointer bg-action text-white hover:scale-[1.03] hover:bg-action-hover active:scale-95'
+                  ? 'chat-send-button-enabled cursor-pointer hover:scale-[1.03] active:scale-95'
                   : 'cursor-not-allowed bg-disabled text-disabled-foreground',
               ].join(' ')}
             >

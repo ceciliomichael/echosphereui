@@ -7,10 +7,10 @@ interface ConversationFolderSectionProps {
   group: ConversationGroupPreview
   isCollapsed: boolean
   onCreateConversation: (folderId?: string | null) => void
-  onToggleCollapsed: () => void
+  onDeleteConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
   onSelectConversation: (conversationId: string) => void
-  onDeleteConversation: (conversationId: string) => void
+  onToggleCollapsed: () => void
 }
 
 export function ConversationFolderSection({
@@ -31,7 +31,7 @@ export function ConversationFolderSection({
           <button
             type="button"
             onClick={onToggleCollapsed}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-subtle-foreground transition-colors hover:bg-sidebar-muted hover:text-foreground"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-subtle-foreground transition-colors hover:bg-[var(--sidebar-hover-surface)] hover:text-foreground"
             aria-label={isCollapsed ? `Expand ${group.folder.name}` : `Collapse ${group.folder.name}`}
           >
             {isCollapsed ? (
@@ -46,7 +46,9 @@ export function ConversationFolderSection({
           onClick={() => onSelectFolder(group.folder.id)}
           className={[
             'flex h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl border px-3 text-left transition-colors',
-            group.folder.isSelected ? 'border-border bg-surface shadow-sm' : 'border-transparent bg-background/45 hover:border-border/60 hover:bg-sidebar-muted',
+            group.folder.isSelected
+              ? 'border-border bg-[var(--sidebar-raised-surface)] shadow-sm'
+              : 'border-transparent bg-[var(--sidebar-muted-surface-mix)] hover:border-border/60 hover:bg-[var(--sidebar-hover-surface)]',
           ].join(' ')}
         >
           <span className="flex min-w-0 items-center gap-2">

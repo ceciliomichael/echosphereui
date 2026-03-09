@@ -5,15 +5,16 @@ import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
 
 interface MessageListProps {
-  messages: Message[]
-  editingMessageId?: string | null
-  onEditUserMessage?: (messageId: string) => void
   composerValue: string
-  onComposerValueChange: (value: string) => void
-  onSendEditedMessage: () => void
-  onCancelEditingMessage: () => void
   composerFocusSignal?: number
+  editingMessageId?: string | null
   isSending?: boolean
+  messages: Message[]
+  onCancelEditingMessage: () => void
+  onComposerValueChange: (value: string) => void
+  onEditUserMessage?: (messageId: string) => void
+  onSendEditedMessage: () => void
+  sendMessageOnEnter: boolean
 }
 
 export function MessageList({
@@ -26,6 +27,7 @@ export function MessageList({
   onCancelEditingMessage,
   composerFocusSignal,
   isSending = false,
+  sendMessageOnEnter,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -47,6 +49,7 @@ export function MessageList({
                     onSend={onSendEditedMessage}
                     onCancelEdit={onCancelEditingMessage}
                     isEditing
+                    sendOnEnter={sendMessageOnEnter}
                     variant="inline"
                     focusSignal={composerFocusSignal}
                     disabled={isSending}

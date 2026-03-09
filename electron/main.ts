@@ -1,4 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, screen, shell, type BrowserWindowConstructorOptions, type OpenDialogOptions } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  screen,
+  shell,
+  type BrowserWindowConstructorOptions,
+  type OpenDialogOptions,
+} from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import type {
@@ -19,6 +29,8 @@ import {
   replaceStoredMessages,
 } from './historyStore'
 import { getStoredSettings, updateStoredSettings } from './settingsStore'
+import { serializeInitialSettingsArg } from './settingsBootstrap'
+import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './windowTheme'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -45,7 +57,6 @@ app.commandLine.appendSwitch(
 )
 
 let win: BrowserWindow | null
-const WINDOW_BACKGROUND_COLOR = '#EEF4EE'
 const MIN_WINDOW_WIDTH = 960
 const MIN_WINDOW_HEIGHT = 680
 
@@ -60,11 +71,14 @@ function getInitialWindowBounds() {
   }
 }
 
-function createWindow() {
+async function createWindow() {
   const initialBounds = getInitialWindowBounds()
+  const initialSettings = await getStoredSettings().catch(() => null)
+  const initialAppearance = initialSettings?.appearance ?? 'system'
+  syncNativeThemeSource(initialAppearance)
   const windowOptions: BrowserWindowConstructorOptions = {
     autoHideMenuBar: true,
-    backgroundColor: WINDOW_BACKGROUND_COLOR,
+    backgroundColor: getWindowBackgroundColor(initialAppearance),
     height: initialBounds.height,
     minHeight: MIN_WINDOW_HEIGHT,
     minWidth: MIN_WINDOW_WIDTH,
@@ -74,20 +88,18 @@ function createWindow() {
     x: initialBounds.x,
     y: initialBounds.y,
     webPreferences: {
+      additionalArguments: initialSettings ? [serializeInitialSettingsArg(initialSettings)] : [],
       preload: path.join(__dirname, 'preload.mjs'),
     },
   }
 
   if (process.platform === 'win32' || process.platform === 'linux') {
     windowOptions.titleBarStyle = 'hidden'
-    windowOptions.titleBarOverlay = {
-      color: WINDOW_BACKGROUND_COLOR,
-      symbolColor: '#101011',
-      height: 36,
-    }
+    windowOptions.titleBarOverlay = getTitleBarOverlay(initialAppearance)
   }
 
   win = new BrowserWindow(windowOptions)
+  applyWindowTheme(win, initialAppearance)
 
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => {
@@ -150,9 +162,15 @@ function registerHistoryHandlers() {
     deleteStoredConversation(conversationId),
   )
   ipcMain.handle('settings:get', async () => getStoredSettings())
-  ipcMain.handle('settings:update', async (_event, input: Partial<AppSettings>) =>
-    updateStoredSettings(input),
-  )
+  ipcMain.handle('settings:update', async (_event, input: Partial<AppSettings>) => {
+    const nextSettings = await updateStoredSettings(input)
+
+    if (win) {
+      applyWindowTheme(win, nextSettings.appearance)
+    }
+
+    return nextSettings
+  })
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -175,5 +193,23 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   registerHistoryHandlers()
-  createWindow()
+  void createWindow()
+
+  nativeTheme.on('updated', () => {
+    const currentWindow = win
+
+    if (!currentWindow) {
+      return
+    }
+
+    void getStoredSettings()
+      .then((settings) => {
+        if (settings.appearance === 'system') {
+          applyWindowTheme(currentWindow, settings.appearance)
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to sync native theme', error)
+      })
+  })
 })

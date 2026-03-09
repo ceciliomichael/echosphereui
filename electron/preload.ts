@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
+import { parseInitialSettingsArg } from './settingsBootstrap'
 import type {
   AppendConversationMessagesInput,
   AppSettings,
@@ -47,6 +48,7 @@ const historyApi: EchosphereHistoryApi = {
 }
 
 const settingsApi: EchosphereSettingsApi = {
+  getInitialSettings: () => parseInitialSettingsArg(process.argv),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   updateSettings: (input: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', input),
 }

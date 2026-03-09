@@ -1,3 +1,5 @@
+import type { AppAppearance, AppLanguage } from '../lib/appSettings'
+
 export type MessageRole = 'user' | 'assistant'
 
 export interface Message {
@@ -85,6 +87,9 @@ export interface ReplaceConversationMessagesInput {
 }
 
 export interface AppSettings {
+  appearance: AppAppearance
+  language: AppLanguage
+  sendMessageOnEnter: boolean
   sidebarWidth: number
 }
 
@@ -102,6 +107,7 @@ export interface EchosphereHistoryApi {
 }
 
 export interface EchosphereSettingsApi {
+  getInitialSettings: () => AppSettings
   getSettings: () => Promise<AppSettings>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings>
 }

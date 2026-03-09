@@ -157,7 +157,7 @@ export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
               ref={tooltipRef}
               id={tooltipId}
               role="tooltip"
-              className="pointer-events-none fixed z-50 max-w-[min(18rem,calc(100vw-24px))] rounded-xl bg-foreground px-3 py-2 text-xs font-medium text-white shadow-soft transition-opacity duration-150 ease-out"
+              className="pointer-events-none fixed z-50 max-w-[min(18rem,calc(100vw-24px))] rounded-xl border border-tooltip-border bg-tooltip-surface px-3 py-2 text-xs font-medium text-tooltip-foreground shadow-soft transition-opacity duration-150 ease-out"
               style={tooltipStyle}
             >
               {content}

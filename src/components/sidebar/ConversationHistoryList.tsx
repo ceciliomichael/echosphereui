@@ -5,8 +5,8 @@ import { ConversationFolderSection } from './ConversationFolderSection'
 interface ConversationHistoryListProps {
   conversationGroups: ConversationGroupPreview[]
   onCreateConversation: (folderId?: string | null) => void
-  onSelectConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
+  onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
 }
 

@@ -1,65 +1,47 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { AppSettings } from '../../types/chat'
-import {
-  DEFAULT_SIDEBAR_WIDTH,
-  getMaxSidebarWidth,
-  MIN_SIDEBAR_WIDTH,
-} from '../../lib/sidebarSizing'
+import { clampSidebarWidth } from '../../lib/sidebarSizing'
 
 interface ResizableSidebarPanelProps {
   isSidebarOpen: boolean
+  onSidebarWidthChange: (sidebarWidth: number) => void
   sidebar: ReactNode
+  sidebarWidth: number
   children: ReactNode
 }
 
-export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: ResizableSidebarPanelProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+export function ResizableSidebarPanel({
+  isSidebarOpen,
+  onSidebarWidthChange,
+  sidebar,
+  sidebarWidth,
+  children,
+}: ResizableSidebarPanelProps) {
+  const [renderedSidebarWidth, setRenderedSidebarWidth] = useState(() =>
+    typeof window === 'undefined' ? sidebarWidth : clampSidebarWidth(sidebarWidth, window.innerWidth),
+  )
   const [isResizing, setIsResizing] = useState(false)
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
-  const sidebarWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH)
-  const visibleSidebarWidth = isSidebarOpen ? sidebarWidth : 0
+  const sidebarWidthRef = useRef(renderedSidebarWidth)
+  const visibleSidebarWidth = isSidebarOpen ? renderedSidebarWidth : 0
   const shouldRenderSidebarContent = isSidebarOpen
 
-  function updateSidebarWidth(nextWidth: number) {
+  function updateRenderedSidebarWidth(nextWidth: number) {
     sidebarWidthRef.current = nextWidth
-    setSidebarWidth(nextWidth)
+    setRenderedSidebarWidth(nextWidth)
   }
 
   useEffect(() => {
-    let isMounted = true
-
-    async function loadStoredSidebarWidth() {
-      try {
-        const settings = await window.echosphereSettings.getSettings()
-        if (!isMounted) {
-          return
-        }
-
-        updateSidebarWidth(
-          Math.min(Math.max(settings.sidebarWidth, MIN_SIDEBAR_WIDTH), getMaxSidebarWidth(window.innerWidth)),
-        )
-      } catch (error) {
-        console.error('Failed to load sidebar settings', error)
-      }
-    }
-
-    void loadStoredSidebarWidth()
-
     function handleWindowResize() {
-      updateSidebarWidth(
-        Math.min(
-          Math.max(sidebarWidthRef.current, MIN_SIDEBAR_WIDTH),
-          getMaxSidebarWidth(window.innerWidth),
-        ),
-      )
+      const widthToClamp = dragStateRef.current ? sidebarWidthRef.current : sidebarWidth
+      updateRenderedSidebarWidth(clampSidebarWidth(widthToClamp, window.innerWidth))
     }
 
+    handleWindowResize()
     window.addEventListener('resize', handleWindowResize)
     return () => {
-      isMounted = false
       window.removeEventListener('resize', handleWindowResize)
     }
-  }, [])
+  }, [sidebarWidth])
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -67,23 +49,21 @@ export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: Resi
       if (!dragState) return
 
       const nextWidth = dragState.startWidth + (event.clientX - dragState.startX)
-      const clampedWidth = Math.min(
-        Math.max(nextWidth, MIN_SIDEBAR_WIDTH),
-        getMaxSidebarWidth(window.innerWidth),
-      )
-      updateSidebarWidth(clampedWidth)
+      updateRenderedSidebarWidth(clampSidebarWidth(nextWidth, window.innerWidth))
     }
 
     function handlePointerUp(event: PointerEvent) {
       if (dragStateRef.current?.pointerId !== event.pointerId) return
 
-      const finalWidth = sidebarWidthRef.current
+      const finalWidth = clampSidebarWidth(sidebarWidthRef.current, window.innerWidth)
       dragStateRef.current = null
       setIsResizing(false)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
 
-      void window.echosphereSettings.updateSettings({ sidebarWidth: finalWidth } satisfies Partial<AppSettings>)
+      if (finalWidth !== sidebarWidth) {
+        onSidebarWidthChange(finalWidth)
+      }
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -96,13 +76,13 @@ export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: Resi
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [])
+  }, [onSidebarWidthChange, sidebarWidth])
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     dragStateRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startWidth: sidebarWidth,
+      startWidth: renderedSidebarWidth,
     }
 
     setIsResizing(true)
@@ -121,7 +101,7 @@ export function ResizableSidebarPanel({ isSidebarOpen, sidebar, children }: Resi
         style={{ width: `${visibleSidebarWidth}px` }}
         aria-hidden={!isSidebarOpen}
       >
-        <div className="h-full min-w-0 flex-1" style={{ width: `${sidebarWidth}px` }}>
+        <div className="h-full min-w-0 flex-1" style={{ width: `${renderedSidebarWidth}px` }}>
           {shouldRenderSidebarContent ? sidebar : null}
         </div>
       </div>

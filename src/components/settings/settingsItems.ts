@@ -1,8 +1,8 @@
 export const SETTINGS_ITEMS = [
   {
     id: 'settings-item1',
-    label: 'settings-item1',
-    description: 'Reserved for the first settings surface.',
+    label: 'General',
+    description: 'Language and application-wide preferences.',
   },
   {
     id: 'settings-item2',

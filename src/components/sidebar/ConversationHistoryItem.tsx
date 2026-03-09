@@ -5,8 +5,8 @@ import { Tooltip } from '../Tooltip'
 
 interface ConversationHistoryItemProps {
   conversation: ConversationPreview
-  onSelectConversation: (conversationId: string) => void
   onDeleteConversation: (conversationId: string) => void
+  onSelectConversation: (conversationId: string) => void
 }
 
 export function ConversationHistoryItem({
@@ -56,12 +56,12 @@ export function ConversationHistoryItem({
   return (
     <div
       className={[
-        'group flex w-full items-center gap-2 rounded-xl px-2 py-0.5 transition-colors',
+        'group flex w-full items-center gap-2 rounded-xl border border-transparent px-2 py-0.5 transition-[background-color,border-color,box-shadow]',
         isDeleteConfirming
-          ? 'bg-red-50'
+          ? 'border-danger-border bg-danger-surface'
           : conversation.isActive
-            ? 'bg-surface shadow-sm'
-            : 'hover:bg-sidebar-muted/90',
+            ? 'border-[var(--sidebar-item-active-border)] bg-[var(--sidebar-item-active-surface)]'
+            : 'hover:bg-[var(--sidebar-hover-surface)]',
       ].join(' ')}
     >
       <button
@@ -72,29 +72,40 @@ export function ConversationHistoryItem({
           conversation.isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
         ].join(' ')}
       >
-        <span className="block truncate text-sm font-medium text-inherit">{conversation.title}</span>
+        <span className="block min-w-0 truncate text-sm font-medium text-inherit">{conversation.title}</span>
       </button>
 
-      <Tooltip content={isDeleteConfirming ? 'Click again to delete thread' : 'Delete thread'} side="right">
-        <button
-          ref={deleteButtonRef}
-          type="button"
-          onClick={handleDeleteClick}
-          className={[
-            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full origin-center transform-gpu transition-[color,opacity,transform] duration-150 ease-out',
-            isDeleteConfirming
-              ? 'text-red-700 opacity-100 hover:scale-110 hover:text-red-800'
-              : 'text-subtle-foreground opacity-0 hover:scale-110 hover:text-foreground group-hover:opacity-100',
-          ].join(' ')}
-          aria-label={isDeleteConfirming ? `Confirm delete thread ${conversation.title}` : `Delete thread ${conversation.title}`}
-        >
-          {isDeleteConfirming ? (
-            <Check size={15} strokeWidth={2.4} className="block" />
-          ) : (
-            <Trash2 size={15} strokeWidth={2} className="block" />
-          )}
-        </button>
-      </Tooltip>
+      <div
+        onClick={() => onSelectConversation(conversation.id)}
+        className="flex h-8 w-[96px] shrink-0 cursor-pointer items-center justify-end"
+      >
+        {!isDeleteConfirming ? (
+          <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-subtle-foreground group-hover:hidden">
+            {conversation.updatedAtLabel}
+          </span>
+        ) : null}
+
+        <Tooltip content={isDeleteConfirming ? 'Click again to delete thread' : 'Delete thread'} side="right">
+          <button
+            ref={deleteButtonRef}
+            type="button"
+            onClick={handleDeleteClick}
+            className={[
+              'h-8 w-8 items-center justify-center rounded-full origin-center transform-gpu transition-[color,opacity,transform] duration-150 ease-out',
+              isDeleteConfirming
+                ? 'flex text-danger-foreground hover:scale-110 hover:text-danger-foreground-hover'
+                : 'hidden text-subtle-foreground hover:scale-110 hover:text-foreground group-hover:flex',
+            ].join(' ')}
+            aria-label={isDeleteConfirming ? `Confirm delete thread ${conversation.title}` : `Delete thread ${conversation.title}`}
+          >
+            {isDeleteConfirming ? (
+              <Check size={15} strokeWidth={2.4} className="block" />
+            ) : (
+              <Trash2 size={15} strokeWidth={2} className="block" />
+            )}
+          </button>
+        </Tooltip>
+      </div>
     </div>
   )
 }

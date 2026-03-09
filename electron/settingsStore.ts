@@ -2,13 +2,11 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 import type { AppSettings } from '../src/types/chat'
-import { DEFAULT_SIDEBAR_WIDTH } from '../src/lib/sidebarSizing'
+import { DEFAULT_APP_SETTINGS } from '../src/lib/defaultAppSettings'
+import { isAppAppearance, isAppLanguage } from '../src/lib/appSettings'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const SETTINGS_FILE_NAME = 'settings.json'
-const DEFAULT_SETTINGS: AppSettings = {
-  sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
-}
 
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
@@ -30,10 +28,19 @@ async function writeSettingsFile(settings: AppSettings) {
 function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSettings {
   const sidebarWidth =
     typeof input?.sidebarWidth === 'number' && Number.isFinite(input.sidebarWidth)
-      ? Math.max(DEFAULT_SETTINGS.sidebarWidth, input.sidebarWidth)
-      : DEFAULT_SETTINGS.sidebarWidth
+      ? Math.max(DEFAULT_APP_SETTINGS.sidebarWidth, input.sidebarWidth)
+      : DEFAULT_APP_SETTINGS.sidebarWidth
+  const appearance = isAppAppearance(input?.appearance) ? input.appearance : DEFAULT_APP_SETTINGS.appearance
+  const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
+  const sendMessageOnEnter =
+    typeof input?.sendMessageOnEnter === 'boolean'
+      ? input.sendMessageOnEnter
+      : DEFAULT_APP_SETTINGS.sendMessageOnEnter
 
   return {
+    appearance,
+    language,
+    sendMessageOnEnter,
     sidebarWidth,
   }
 }
@@ -45,8 +52,8 @@ export async function getStoredSettings() {
     return sanitizeSettings(JSON.parse(raw) as Partial<AppSettings>)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      await writeSettingsFile(DEFAULT_SETTINGS)
-      return DEFAULT_SETTINGS
+      await writeSettingsFile(DEFAULT_APP_SETTINGS)
+      return DEFAULT_APP_SETTINGS
     }
 
     console.error('Failed to load app settings', error)
@@ -55,7 +62,7 @@ export async function getStoredSettings() {
 }
 
 export async function updateStoredSettings(input: Partial<AppSettings>) {
-  const currentSettings = await getStoredSettings().catch(() => DEFAULT_SETTINGS)
+  const currentSettings = await getStoredSettings().catch(() => DEFAULT_APP_SETTINGS)
   const nextSettings = sanitizeSettings({
     ...currentSettings,
     ...input,

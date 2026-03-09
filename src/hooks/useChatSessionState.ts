@@ -8,8 +8,9 @@ import {
   upsertConversationSummary,
 } from './chatHistoryViewModels'
 import type { ChatHistorySnapshot } from './chatHistoryWorkflows'
+import type { AppLanguage } from '../lib/appSettings'
 
-export function useChatSessionState() {
+export function useChatSessionState(language: AppLanguage) {
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([])
   const [folderSummaries, setFolderSummaries] = useState<ConversationFolderSummary[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
@@ -85,6 +86,7 @@ export function useChatSessionState() {
       conversationSummaries,
       activeConversationId,
       selectedFolderId,
+      language,
     ),
     error,
     getDeletionContext,

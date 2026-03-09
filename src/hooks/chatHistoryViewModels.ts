@@ -1,3 +1,4 @@
+import type { AppLanguage } from '../lib/appSettings'
 import type {
   ConversationFolderSummary,
   ConversationGroupPreview,
@@ -6,10 +7,32 @@ import type {
   ConversationSummary,
 } from '../types/chat'
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-const shortDateFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
+const relativeTimeFormatterCache = new Map<AppLanguage, Intl.RelativeTimeFormat>()
+const shortDateFormatterCache = new Map<AppLanguage, Intl.DateTimeFormat>()
 
 export const UNFILED_FOLDER_NAME = 'Unfiled'
+
+function getRelativeTimeFormatter(language: AppLanguage) {
+  const cachedFormatter = relativeTimeFormatterCache.get(language)
+  if (cachedFormatter) {
+    return cachedFormatter
+  }
+
+  const nextFormatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
+  relativeTimeFormatterCache.set(language, nextFormatter)
+  return nextFormatter
+}
+
+function getShortDateFormatter(language: AppLanguage) {
+  const cachedFormatter = shortDateFormatterCache.get(language)
+  if (cachedFormatter) {
+    return cachedFormatter
+  }
+
+  const nextFormatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
+  shortDateFormatterCache.set(language, nextFormatter)
+  return nextFormatter
+}
 
 export function getSelectedFolderName(
   folderSummaries: ConversationFolderSummary[],
@@ -22,12 +45,13 @@ export function getSelectedFolderName(
   return folderSummaries.find((folder) => folder.id === selectedFolderId)?.name ?? UNFILED_FOLDER_NAME
 }
 
-function formatUpdatedAtLabel(timestamp: number) {
+function formatUpdatedAtLabel(timestamp: number, language: AppLanguage) {
+  const relativeTimeFormatter = getRelativeTimeFormatter(language)
   const differenceMs = timestamp - Date.now()
   const differenceMinutes = Math.round(differenceMs / 60000)
 
   if (Math.abs(differenceMinutes) < 1) {
-    return 'Now'
+    return relativeTimeFormatter.format(0, 'minute')
   }
 
   if (Math.abs(differenceMinutes) < 60) {
@@ -44,7 +68,7 @@ function formatUpdatedAtLabel(timestamp: number) {
     return relativeTimeFormatter.format(differenceDays, 'day')
   }
 
-  return shortDateFormatter.format(timestamp)
+  return getShortDateFormatter(language).format(timestamp)
 }
 
 export function getConversationTitle(seed: string) {
@@ -53,12 +77,16 @@ export function getConversationTitle(seed: string) {
   return conciseTitle.length > 48 ? `${conciseTitle.slice(0, 45)}...` : conciseTitle
 }
 
-function mapConversationPreview(summary: ConversationSummary, activeConversationId: string | null): ConversationPreview {
+function mapConversationPreview(
+  summary: ConversationSummary,
+  activeConversationId: string | null,
+  language: AppLanguage,
+): ConversationPreview {
   return {
     id: summary.id,
     title: summary.title,
     preview: summary.preview,
-    updatedAtLabel: formatUpdatedAtLabel(summary.updatedAt),
+    updatedAtLabel: formatUpdatedAtLabel(summary.updatedAt, language),
     folderId: summary.folderId,
     isActive: summary.id === activeConversationId,
   }
@@ -69,6 +97,7 @@ export function buildConversationGroups(
   conversationSummaries: ConversationSummary[],
   activeConversationId: string | null,
   selectedFolderId: string | null,
+  language: AppLanguage,
 ): ConversationGroupPreview[] {
   const groupedConversations = new Map<string | null, ConversationPreview[]>()
   groupedConversations.set(null, [])
@@ -78,7 +107,7 @@ export function buildConversationGroups(
   }
 
   for (const conversation of conversationSummaries) {
-    const preview = mapConversationPreview(conversation, activeConversationId)
+    const preview = mapConversationPreview(conversation, activeConversationId, language)
     const targetFolderId =
       conversation.folderId !== null && groupedConversations.has(conversation.folderId) ? conversation.folderId : null
 

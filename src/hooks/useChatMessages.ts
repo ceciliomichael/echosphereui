@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 import { loadInitialChatHistory, persistConversationTurn } from './chatHistoryWorkflows'
 import { useChatComposerState } from './useChatComposerState'
 import { useChatSessionState } from './useChatSessionState'
+import type { AppLanguage } from '../lib/appSettings'
 
-export function useChatMessages() {
+export function useChatMessages(language: AppLanguage) {
   const {
     activeConversationId,
     activeConversationTitle,
@@ -25,7 +26,7 @@ export function useChatMessages() {
     setError,
     setIsLoading,
     setIsSending,
-  } = useChatSessionState()
+  } = useChatSessionState(language)
   const {
     mainComposerValue,
     setMainComposerValue,

@@ -8,12 +8,23 @@ import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { useChatMessages } from '../hooks/useChatMessages'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
+import type { AppLanguage } from '../lib/appSettings'
 
 interface ChatInterfaceProps {
+  language: AppLanguage
   onOpenSettings: () => void
+  onSidebarWidthChange: (sidebarWidth: number) => void
+  sendMessageOnEnter: boolean
+  sidebarWidth: number
 }
 
-export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
+export function ChatInterface({
+  language,
+  onOpenSettings,
+  onSidebarWidthChange,
+  sendMessageOnEnter,
+  sidebarWidth,
+}: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const {
     activeConversationTitle,
@@ -38,7 +49,7 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
     sendNewMessage,
     selectFolder,
     startEditingMessage,
-  } = useChatMessages()
+  } = useChatMessages(language)
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
@@ -47,6 +58,7 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
   return (
     <AppWorkspaceShell
       isSidebarOpen={isSidebarOpen}
+      onSidebarWidthChange={onSidebarWidthChange}
       sidebar={
         <SidebarPanel
           conversationGroups={conversationGroups}
@@ -59,8 +71,9 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
           onToggleSidebar={() => setIsSidebarOpen(false)}
         />
       }
+      sidebarWidth={sidebarWidth}
     >
-      <WorkspacePanel isSidebarOpen={isSidebarOpen}>
+      <WorkspacePanel isSidebarOpen={isSidebarOpen} showRightBorder={false}>
         <ChatHeader
           title={activeConversationTitle}
           isSidebarOpen={isSidebarOpen}
@@ -70,7 +83,7 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-hidden">
           <div className="flex min-h-0 w-full flex-1 flex-col">
             {error ? (
-              <div className="chat-input-shell mx-auto rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="chat-input-shell mx-auto rounded-2xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
                 {error}
               </div>
             ) : null}
@@ -92,6 +105,7 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
                 onCancelEditingMessage={cancelEditingMessage}
                 composerFocusSignal={editComposerFocusSignal}
                 isSending={isSending}
+                sendMessageOnEnter={sendMessageOnEnter}
               />
             )}
           </div>
@@ -103,6 +117,7 @@ export function ChatInterface({ onOpenSettings }: ChatInterfaceProps) {
               value={mainComposerValue}
               onValueChange={setMainComposerValue}
               onSend={sendNewMessage}
+              sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
             />
           </div>

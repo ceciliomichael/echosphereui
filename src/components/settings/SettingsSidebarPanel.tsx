@@ -16,10 +16,10 @@ export function SettingsSidebarPanel({
   onToggleSidebar,
 }: SettingsSidebarPanelProps) {
   const actionButtonClassName =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-sidebar-muted'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
 
   return (
-    <aside className="flex h-full min-w-0 flex-1 flex-col bg-background px-4 pb-5 pt-3 md:px-5">
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] px-4 pb-5 pt-3 md:px-5">
       <div className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <Tooltip content="Collapse sidebar" side="right">
@@ -37,7 +37,7 @@ export function SettingsSidebarPanel({
         <button
           type="button"
           onClick={onBackToApp}
-          className="mt-4 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-sidebar-muted"
+          className="mt-4 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]"
         >
           <ArrowLeft size={18} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
           <span>Back to app</span>
@@ -58,7 +58,7 @@ export function SettingsSidebarPanel({
                   key={item.id}
                   className={[
                     'group flex items-center gap-2 rounded-xl px-2 py-1 transition-colors',
-                    isActive ? 'bg-surface shadow-sm' : 'hover:bg-sidebar-muted/90',
+                    isActive ? 'bg-[var(--sidebar-raised-surface)] shadow-sm' : 'hover:bg-[var(--sidebar-hover-surface)]',
                   ].join(' ')}
                 >
                   <button
