@@ -238,7 +238,7 @@ Before considering a task complete, verify all of the following:
 - Preserve a calm, production-grade aesthetic with minimal decorative effects and strong readability.
 
 ## Project Color Usage Rules
-- Prefer neutral grayscale surfaces for base UI and interactive states; reserve brand purple for explicit accent roles (primary CTA, selected navigation, highlight moments).
+- Prefer neutral grayscale surfaces for base UI and interactive states;
 - In dark mode, never use near-black hover/active states for controls; use clearly separable neutral grays so state changes remain visible.
 - For segmented and dropdown controls, use tokenized state surfaces from `src/index.css` rather than hardcoded Tailwind color classes.
 - Keep light mode interaction states subtle and neutral (`background`/`surface-muted` family) unless a component is intentionally accent-driven.

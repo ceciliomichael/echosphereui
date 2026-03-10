@@ -5,7 +5,7 @@ export type ResolvedTheme = 'light' | 'dark'
 export const THEME_STORAGE_KEY = 'echosphere:appearance'
 export const SYSTEM_DARK_MODE_QUERY = '(prefers-color-scheme: dark)'
 export const LIGHT_THEME_COLOR = '#EEF4EE'
-export const DARK_THEME_COLOR = '#181818'
+export const DARK_THEME_COLOR = '#171717'
 
 export function getCachedAppearancePreference(): AppAppearance {
   if (typeof window === 'undefined') {

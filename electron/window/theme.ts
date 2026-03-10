@@ -21,9 +21,9 @@ const LIGHT_WINDOW_THEME: WindowThemePalette = {
 }
 
 const DARK_WINDOW_THEME: WindowThemePalette = {
-  backgroundColor: '#1F1F1F',
-  overlayColor: '#1F1F1F',
-  symbolColor: '#CCCCCC',
+  backgroundColor: '#252525',
+  overlayColor: '#252525',
+  symbolColor: '#DFDFDF',
 }
 
 export function syncNativeThemeSource(appearance: AppAppearance) {
