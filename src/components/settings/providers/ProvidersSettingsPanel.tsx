@@ -28,7 +28,7 @@ type ExpandedProviderId = ApiKeyProviderId | 'codex' | null
 type ProviderValidationErrors = Partial<Record<ApiKeyProviderId, string>>
 
 const PRIMARY_BUTTON_CLASS_NAME =
-  'h-11 rounded-xl border border-transparent bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-[#f2f2f2] disabled:cursor-not-allowed disabled:opacity-70'
+  'h-10 rounded-xl border border-[#d8d8d8] bg-white px-3.5 text-sm font-medium text-black transition-[background-color,border-color,box-shadow,transform,color] duration-150 hover:border-[#b8b8b8] hover:bg-[#e7e7e7] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white disabled:border-[#d8d8d8] disabled:text-black/55'
 
 export function ProvidersSettingsPanel({
   activeOperation,

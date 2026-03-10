@@ -52,6 +52,7 @@
     --sidebar-muted-surface-mix: color-mix(in srgb, var(--sidebar-hover-surface) 45%, transparent);
     --sidebar-item-active-surface: var(--color-surface);
     --sidebar-item-active-border: transparent;
+    --user-message-hover-border: color-mix(in srgb, var(--color-action) 28%, var(--color-border));
     --segmented-control-hover-surface: var(--color-surface);
     --segmented-control-active-surface: var(--color-surface);
     --dropdown-control-hover-surface: var(--color-background);
@@ -102,6 +103,7 @@
     --sidebar-hover-surface: #343434;
     --sidebar-item-active-surface: #383838;
     --sidebar-item-active-border: #4b4b4b;
+    --user-message-hover-border: color-mix(in srgb, var(--color-foreground) 22%, var(--color-border));
     --segmented-control-hover-surface: #313131;
     --segmented-control-active-surface: #3a3a3a;
     --dropdown-control-hover-surface: #2f2f2f;
@@ -187,13 +189,23 @@
     background-color: var(--color-action-hover);
   }
 
+  .chat-send-button-disabled {
+    background-color: var(--color-disabled);
+    color: var(--color-disabled-foreground);
+  }
+
   :root[data-theme='dark'] .chat-send-button-enabled {
-    background-color: var(--color-action);
-    color: #fff;
+    background-color: #fff;
+    color: var(--color-background);
   }
 
   :root[data-theme='dark'] .chat-send-button-enabled:hover {
-    background-color: var(--color-action-hover);
+    background-color: #f2f2f2;
+  }
+
+  :root[data-theme='dark'] .chat-send-button-disabled {
+    background-color: rgb(255 255 255 / 0.5);
+    color: rgb(23 23 23 / 0.72);
   }
 
   .app-drag-region {

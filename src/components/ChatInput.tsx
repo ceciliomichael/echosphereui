@@ -136,7 +136,7 @@ export function ChatInput({
                 'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
                 canSend
                   ? 'chat-send-button-enabled cursor-pointer hover:scale-[1.03] active:scale-95'
-                  : 'cursor-not-allowed bg-disabled text-disabled-foreground',
+                  : 'chat-send-button-disabled cursor-not-allowed',
               ].join(' ')}
             >
               <ArrowUp size={16} strokeWidth={2.5} />

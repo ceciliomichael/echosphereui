@@ -11,7 +11,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
     chatMessageSurfaceClassName,
     chatMessageContentWidthClassName,
     'w-full px-4 py-3 text-[15px] leading-6 text-foreground transition-colors duration-150',
-    onEdit ? 'cursor-pointer hover:border-action/40' : '',
+    onEdit ? 'cursor-pointer hover:border-[var(--user-message-hover-border)]' : '',
   ].join(' ')
 
   if (!onEdit) {
