@@ -220,7 +220,7 @@ export function DropdownField({
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         onKeyDown={handleButtonKeyDown}
-        className="flex h-9 w-full items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-background disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm"
+        className="flex h-9 w-full items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-[var(--dropdown-control-hover-surface)] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm"
       >
         <span className="truncate pr-3 text-left">{selectedOption?.label ?? ''}</span>
         <ChevronDown
@@ -258,7 +258,9 @@ export function DropdownField({
                     onClick={() => commitValue(option.value)}
                     className={[
                       'flex h-9 w-full items-center justify-between rounded-lg px-3 text-left text-[13px] transition-colors md:text-sm',
-                      isHighlighted ? 'bg-background text-foreground' : 'text-foreground hover:bg-background',
+                      isHighlighted
+                        ? 'bg-[var(--dropdown-option-active-surface)] text-foreground'
+                        : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
                     ].join(' ')}
                   >
                     <span className="truncate pr-3">{option.label}</span>

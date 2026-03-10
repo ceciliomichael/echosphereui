@@ -43,8 +43,8 @@ export function SegmentedField({
             className={[
               'min-w-[56px] rounded-lg px-3 py-1.5 text-[13px] transition-colors md:text-sm',
               isActive
-                ? 'bg-surface font-medium text-foreground shadow-sm'
-                : 'bg-transparent font-normal text-muted-foreground hover:bg-surface hover:text-foreground',
+                ? 'bg-[var(--segmented-control-active-surface)] font-medium text-foreground shadow-sm'
+                : 'bg-transparent font-normal text-muted-foreground hover:bg-[var(--segmented-control-hover-surface)] hover:text-foreground',
             ].join(' ')}
           >
             {option.label}

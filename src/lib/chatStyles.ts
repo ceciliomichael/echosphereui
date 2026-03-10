@@ -1,4 +1,4 @@
-const baseChatSurfaceClassName = 'border border-border bg-surface shadow-soft'
+const baseChatSurfaceClassName = 'border border-border bg-surface shadow-sm'
 
 export const chatMessageSurfaceClassName = `${baseChatSurfaceClassName} rounded-2xl`
 export const chatMessageContentWidthClassName = 'max-w-full whitespace-pre-wrap [overflow-wrap:anywhere]'

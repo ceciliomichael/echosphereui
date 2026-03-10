@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { getStatusPillClassName, type StatusPillTone } from '../shared/statusPillStyles'
 
 interface ProviderAccordionItemProps {
   actions: ReactNode
@@ -8,6 +9,7 @@ interface ProviderAccordionItemProps {
   isExpanded: boolean
   isFirst?: boolean
   statusLabel: string
+  statusTone: StatusPillTone
   title: string
   onToggle: () => void
 }
@@ -19,6 +21,7 @@ export function ProviderAccordionItem({
   isExpanded,
   isFirst = false,
   statusLabel,
+  statusTone,
   title,
   onToggle,
 }: ProviderAccordionItemProps) {
@@ -34,7 +37,7 @@ export function ProviderAccordionItem({
           >
             <div className="flex min-w-0 items-center gap-2">
               <p className="truncate text-sm font-medium text-foreground">{title}</p>
-              <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              <span className={getStatusPillClassName(statusTone)}>
                 {statusLabel}
               </span>
               <ChevronDown

@@ -45,6 +45,7 @@ export function ApiKeyProviderAccordion({
       title={schema.label}
       description={schema.description}
       statusLabel={statusLabel}
+      statusTone={providerStatus?.configured ? 'active' : 'inactive'}
       isExpanded={isExpanded}
       isFirst={isFirst}
       onToggle={onToggle}

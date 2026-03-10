@@ -52,6 +52,11 @@
     --sidebar-muted-surface-mix: color-mix(in srgb, var(--sidebar-hover-surface) 45%, transparent);
     --sidebar-item-active-surface: var(--color-surface);
     --sidebar-item-active-border: transparent;
+    --segmented-control-hover-surface: var(--color-surface);
+    --segmented-control-active-surface: var(--color-surface);
+    --dropdown-control-hover-surface: var(--color-background);
+    --dropdown-option-hover-surface: var(--color-background);
+    --dropdown-option-active-surface: var(--color-surface-muted);
   }
 
   :root[data-theme='dark'] {
@@ -97,6 +102,11 @@
     --sidebar-hover-surface: var(--color-sidebar-muted);
     --sidebar-item-active-surface: #252526;
     --sidebar-item-active-border: var(--color-border);
+    --segmented-control-hover-surface: #2d2d30;
+    --segmented-control-active-surface: #38383d;
+    --dropdown-control-hover-surface: #2d2d30;
+    --dropdown-option-hover-surface: #2d2d30;
+    --dropdown-option-active-surface: #38383d;
   }
 
   :root.theme-transition,

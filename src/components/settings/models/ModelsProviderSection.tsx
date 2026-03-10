@@ -1,4 +1,5 @@
 import type { ModelCatalogItem, ModelToggleState } from './modelTypes'
+import { getStatusPillClassName } from '../shared/statusPillStyles'
 
 interface ModelsProviderSectionProps {
   configured: boolean
@@ -60,6 +61,7 @@ export function ModelsProviderSection({
   onToggleModel,
 }: ModelsProviderSectionProps) {
   const statusLabel = getProviderStatusLabel(configured, isProviderStateLoading)
+  const statusTone = configured && !isProviderStateLoading ? 'active' : 'inactive'
   const canToggleModels = configured && !isProviderStateLoading
   const enabledCount = models.reduce((result, model) => (toggleState[model.id] ? result + 1 : result), 0)
 
@@ -69,7 +71,7 @@ export function ModelsProviderSection({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <h4 className="truncate text-sm font-medium text-foreground md:text-[15px]">{providerLabel}</h4>
-            <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+            <span className={getStatusPillClassName(statusTone)}>
               {statusLabel}
             </span>
           </div>

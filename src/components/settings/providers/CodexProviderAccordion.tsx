@@ -38,6 +38,7 @@ export function CodexProviderAccordion({
       title="Codex (OAuth)"
       description="Connect Codex and use OAuth-managed access."
       statusLabel={isAuthenticated ? 'Connected' : 'Not Configured'}
+      statusTone={isAuthenticated ? 'active' : 'inactive'}
       isExpanded={isExpanded}
       isFirst={isFirst}
       onToggle={onToggle}
