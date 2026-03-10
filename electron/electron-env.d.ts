@@ -25,5 +25,6 @@ declare namespace NodeJS {
 interface Window {
   ipcRenderer: import('electron').IpcRenderer
   echosphereHistory: import('../src/types/chat').EchosphereHistoryApi
+  echosphereProviders: import('../src/types/chat').EchosphereProvidersApi
   echosphereSettings: import('../src/types/chat').EchosphereSettingsApi
 }

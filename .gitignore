@@ -47,3 +47,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+codex-sdk
+codex-proxy

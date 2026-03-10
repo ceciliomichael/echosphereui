@@ -12,11 +12,13 @@ import {
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import type {
+  ApiKeyProviderId,
   AppendConversationMessagesInput,
   AppSettings,
   CreateConversationFolderInput,
   CreateConversationInput,
   ReplaceConversationMessagesInput,
+  SaveApiKeyProviderInput,
 } from '../src/types/chat'
 import {
   appendStoredMessages,
@@ -31,6 +33,13 @@ import {
 import { getStoredSettings, updateStoredSettings } from './settings/store'
 import { serializeInitialSettingsArg } from './settings/bootstrap'
 import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
+import {
+  connectCodexWithOAuth,
+  disconnectCodex,
+  getProvidersState,
+  removeApiKeyProvider,
+  saveApiKeyProvider,
+} from './providers/service'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -171,6 +180,13 @@ function registerHistoryHandlers() {
 
     return nextSettings
   })
+  ipcMain.handle('providers:state', async () => getProvidersState())
+  ipcMain.handle('providers:codex:connectOauth', async () => connectCodexWithOAuth(shell.openExternal))
+  ipcMain.handle('providers:codex:disconnect', async () => disconnectCodex())
+  ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveApiKeyProvider(input))
+  ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
+    removeApiKeyProvider(providerId),
+  )
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common

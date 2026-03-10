@@ -2,7 +2,10 @@ import { ipcRenderer, contextBridge } from 'electron'
 import { parseInitialSettingsArg } from './settings/bootstrap'
 import type {
   AppendConversationMessagesInput,
+  ApiKeyProviderId,
   AppSettings,
+  EchosphereProvidersApi,
+  SaveApiKeyProviderInput,
   CreateConversationFolderInput,
   CreateConversationInput,
   EchosphereHistoryApi,
@@ -53,5 +56,15 @@ const settingsApi: EchosphereSettingsApi = {
   updateSettings: (input: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', input),
 }
 
+const providersApi: EchosphereProvidersApi = {
+  getProvidersState: () => ipcRenderer.invoke('providers:state'),
+  connectCodexWithOAuth: () => ipcRenderer.invoke('providers:codex:connectOauth'),
+  disconnectCodex: () => ipcRenderer.invoke('providers:codex:disconnect'),
+  saveApiKeyProvider: (input: SaveApiKeyProviderInput) => ipcRenderer.invoke('providers:apikey:save', input),
+  removeApiKeyProvider: (providerId: ApiKeyProviderId) =>
+    ipcRenderer.invoke('providers:apikey:remove', providerId),
+}
+
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
+contextBridge.exposeInMainWorld('echosphereProviders', providersApi)

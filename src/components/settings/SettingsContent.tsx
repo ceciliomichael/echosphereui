@@ -1,9 +1,10 @@
 import { GeneralSettingsPanel } from './general/GeneralSettingsPanel'
+import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
 import type { AppAppearance, AppLanguage } from '../../lib/appSettings'
 import type { AppSettingsSaveState } from '../../hooks/useAppSettings'
-import type { AppSettings } from '../../types/chat'
+import type { AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
 
 interface GeneralSettingsViewModel {
   isLoading: boolean
@@ -19,15 +20,25 @@ interface GeneralSettingsViewModel {
 interface SettingsContentProps {
   activeItemId: SettingsItemId
   generalSettings: GeneralSettingsViewModel
+  providersSettings: {
+    activeOperation: string | null
+    errorMessage: string | null
+    isLoading: boolean
+    onConnectCodexWithOAuth: () => Promise<boolean>
+    onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
+    providersState: ProvidersState | null
+  }
 }
 
-export function SettingsContent({ activeItemId, generalSettings }: SettingsContentProps) {
+export function SettingsContent({ activeItemId, generalSettings, providersSettings }: SettingsContentProps) {
   const activeItem = getSettingsItem(activeItemId)
 
   return (
     <div className="flex min-h-0 flex-1 overflow-y-auto px-4 pb-4 md:px-5">
       {activeItemId === 'settings-item1' ? (
         <GeneralSettingsPanel {...generalSettings} />
+      ) : activeItemId === 'settings-item2' ? (
+        <ProvidersSettingsPanel {...providersSettings} />
       ) : (
         <SettingsPlaceholderPanel item={activeItem} />
       )}

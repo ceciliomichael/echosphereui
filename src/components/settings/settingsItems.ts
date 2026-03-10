@@ -6,8 +6,8 @@ export const SETTINGS_ITEMS = [
   },
   {
     id: 'settings-item2',
-    label: 'settings-item2',
-    description: 'Reserved for the second settings surface.',
+    label: 'Providers',
+    description: 'Configure AI providers and authentication.',
   },
   {
     id: 'settings-item3',

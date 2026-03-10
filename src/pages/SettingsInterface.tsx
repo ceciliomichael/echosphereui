@@ -10,6 +10,7 @@ import {
   type SettingsItemId,
 } from '../components/settings/settingsItems'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
+import { useProvidersState } from '../hooks/useProvidersState'
 import type { AppSettingsSaveState } from '../hooks/useAppSettings'
 import type { AppSettings } from '../types/chat'
 
@@ -34,6 +35,7 @@ export function SettingsInterface({
 }: SettingsInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(DEFAULT_SETTINGS_ITEM_ID)
+  const providersState = useProvidersState()
 
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
@@ -73,6 +75,14 @@ export function SettingsInterface({
               language: settings.language,
               sendMessageOnEnter: settings.sendMessageOnEnter,
             },
+          }}
+          providersSettings={{
+            activeOperation: providersState.activeOperation,
+            errorMessage: providersState.errorMessage,
+            isLoading: providersState.isLoading,
+            onConnectCodexWithOAuth: providersState.connectCodexWithOAuth,
+            onSaveApiKeyProvider: providersState.saveApiKeyProvider,
+            providersState: providersState.providersState,
           }}
         />
       </WorkspacePanel>

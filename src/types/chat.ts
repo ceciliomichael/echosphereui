@@ -93,6 +93,35 @@ export interface AppSettings {
   sidebarWidth: number
 }
 
+export interface CodexProviderConnectionStatus {
+  accountId: string | null
+  authFilePath: string
+  email: string | null
+  isAuthenticated: boolean
+  lastRefreshAt: string | null
+  tokenExpiresAt: string | null
+}
+
+export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
+
+export interface ApiKeyProviderStatus {
+  baseUrl: string | null
+  configured: boolean
+  id: ApiKeyProviderId
+  label: string
+}
+
+export interface ProvidersState {
+  apiKeyProviders: ApiKeyProviderStatus[]
+  codex: CodexProviderConnectionStatus
+}
+
+export interface SaveApiKeyProviderInput {
+  apiKey: string
+  baseUrl?: string
+  providerId: ApiKeyProviderId
+}
+
 export interface EchosphereHistoryApi {
   listConversations: () => Promise<ConversationSummary[]>
   listFolders: () => Promise<ConversationFolderSummary[]>
@@ -110,4 +139,12 @@ export interface EchosphereSettingsApi {
   getInitialSettings: () => AppSettings
   getSettings: () => Promise<AppSettings>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings>
+}
+
+export interface EchosphereProvidersApi {
+  getProvidersState: () => Promise<ProvidersState>
+  connectCodexWithOAuth: () => Promise<ProvidersState>
+  disconnectCodex: () => Promise<ProvidersState>
+  removeApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<ProvidersState>
+  saveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<ProvidersState>
 }
