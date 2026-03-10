@@ -76,6 +76,10 @@ export function SettingsInterface({
               sendMessageOnEnter: settings.sendMessageOnEnter,
             },
           }}
+          modelsSettings={{
+            isProvidersLoading: providersState.isLoading,
+            providersState: providersState.providersState,
+          }}
           providersSettings={{
             activeOperation: providersState.activeOperation,
             errorMessage: providersState.errorMessage,

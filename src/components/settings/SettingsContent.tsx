@@ -1,4 +1,5 @@
 import { GeneralSettingsPanel } from './general/GeneralSettingsPanel'
+import { ModelsSettingsPanel } from './models/ModelsSettingsPanel'
 import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
@@ -20,6 +21,10 @@ interface GeneralSettingsViewModel {
 interface SettingsContentProps {
   activeItemId: SettingsItemId
   generalSettings: GeneralSettingsViewModel
+  modelsSettings: {
+    isProvidersLoading: boolean
+    providersState: ProvidersState | null
+  }
   providersSettings: {
     activeOperation: string | null
     errorMessage: string | null
@@ -30,7 +35,7 @@ interface SettingsContentProps {
   }
 }
 
-export function SettingsContent({ activeItemId, generalSettings, providersSettings }: SettingsContentProps) {
+export function SettingsContent({ activeItemId, generalSettings, modelsSettings, providersSettings }: SettingsContentProps) {
   const activeItem = getSettingsItem(activeItemId)
 
   return (
@@ -39,6 +44,8 @@ export function SettingsContent({ activeItemId, generalSettings, providersSettin
         <GeneralSettingsPanel {...generalSettings} />
       ) : activeItemId === 'settings-item2' ? (
         <ProvidersSettingsPanel {...providersSettings} />
+      ) : activeItemId === 'settings-item3' ? (
+        <ModelsSettingsPanel {...modelsSettings} />
       ) : (
         <SettingsPlaceholderPanel item={activeItem} />
       )}

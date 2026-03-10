@@ -11,8 +11,8 @@ export const SETTINGS_ITEMS = [
   },
   {
     id: 'settings-item3',
-    label: 'settings-item3',
-    description: 'Reserved for the third settings surface.',
+    label: 'Models',
+    description: 'Choose which models are available per provider.',
   },
   {
     id: 'settings-item4',

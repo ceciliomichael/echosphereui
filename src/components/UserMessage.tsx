@@ -19,7 +19,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
   }
 
   return (
-    <Tooltip content="Edit this message">
+    <Tooltip content="Edit this message" side="right">
       <button
         type="button"
         onClick={onEdit}
