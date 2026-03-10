@@ -16,11 +16,30 @@ function isMessage(value: unknown): value is Message {
   }
 
   const message = value as Partial<Message>
+  const hasValidProviderId =
+    message.providerId === undefined ||
+    message.providerId === 'codex' ||
+    message.providerId === 'openai' ||
+    message.providerId === 'anthropic' ||
+    message.providerId === 'google' ||
+    message.providerId === 'openai-compatible'
+  const hasValidReasoningEffort =
+    message.reasoningEffort === undefined ||
+    message.reasoningEffort === 'low' ||
+    message.reasoningEffort === 'medium' ||
+    message.reasoningEffort === 'high' ||
+    message.reasoningEffort === 'xhigh'
+
   return (
     typeof message.id === 'string' &&
     (message.role === 'user' || message.role === 'assistant') &&
     typeof message.content === 'string' &&
-    typeof message.timestamp === 'number'
+    typeof message.timestamp === 'number' &&
+    (message.modelId === undefined || typeof message.modelId === 'string') &&
+    hasValidProviderId &&
+    (message.reasoningContent === undefined || typeof message.reasoningContent === 'string') &&
+    (message.reasoningCompletedAt === undefined || typeof message.reasoningCompletedAt === 'number') &&
+    hasValidReasoningEffort
   )
 }
 

@@ -6,6 +6,11 @@ export interface Message {
   id: string
   role: MessageRole
   content: string
+  modelId?: string
+  providerId?: ChatProviderId
+  reasoningContent?: string
+  reasoningCompletedAt?: number
+  reasoningEffort?: ReasoningEffort
   timestamp: number
 }
 
@@ -103,6 +108,8 @@ export interface CodexProviderConnectionStatus {
 }
 
 export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
+export type ChatProviderId = 'codex' | ApiKeyProviderId
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface ApiKeyProviderStatus {
   baseUrl: string | null
@@ -121,6 +128,42 @@ export interface SaveApiKeyProviderInput {
   baseUrl?: string
   providerId: ApiKeyProviderId
 }
+
+export interface StartChatStreamInput {
+  messages: Message[]
+  modelId: string
+  providerId: ChatProviderId
+  reasoningEffort: ReasoningEffort
+}
+
+export interface StartChatStreamResult {
+  streamId: string
+}
+
+export type ChatStreamEvent =
+  | {
+      streamId: string
+      type: 'started'
+    }
+  | {
+      delta: string
+      streamId: string
+      type: 'content_delta'
+    }
+  | {
+      delta: string
+      streamId: string
+      type: 'reasoning_delta'
+    }
+  | {
+      streamId: string
+      type: 'completed'
+    }
+  | {
+      errorMessage: string
+      streamId: string
+      type: 'error'
+    }
 
 export interface EchosphereHistoryApi {
   listConversations: () => Promise<ConversationSummary[]>
@@ -147,4 +190,10 @@ export interface EchosphereProvidersApi {
   disconnectCodex: () => Promise<ProvidersState>
   removeApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<ProvidersState>
   saveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<ProvidersState>
+}
+
+export interface EchosphereChatApi {
+  cancelStream: (streamId: string) => Promise<void>
+  onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
+  startStream: (input: StartChatStreamInput) => Promise<StartChatStreamResult>
 }

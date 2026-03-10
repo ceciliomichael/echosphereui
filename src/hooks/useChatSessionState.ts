@@ -71,6 +71,17 @@ export function useChatSessionState(language: AppLanguage) {
   )
 
   const clearError = useCallback(() => setError(null), [])
+  const appendLocalMessage = useCallback((message: Message) => {
+    setMessages((currentValue) => [...currentValue, message])
+  }, [])
+  const removeLocalMessage = useCallback((messageId: string) => {
+    setMessages((currentValue) => currentValue.filter((message) => message.id !== messageId))
+  }, [])
+  const updateLocalMessage = useCallback((messageId: string, updater: (message: Message) => Message) => {
+    setMessages((currentValue) =>
+      currentValue.map((message) => (message.id === messageId ? updater(message) : message)),
+    )
+  }, [])
 
   return {
     activeConversationId,
@@ -79,6 +90,7 @@ export function useChatSessionState(language: AppLanguage) {
     addFolder,
     applyConversation,
     applySavedConversation,
+    appendLocalMessage,
     clearConversationSelection,
     clearError,
     conversationGroups: buildConversationGroups(
@@ -95,10 +107,12 @@ export function useChatSessionState(language: AppLanguage) {
     isSending,
     messages,
     replaceConversationSummaries: setConversationSummaries,
+    removeLocalMessage,
     selectedFolderId,
     selectedFolderName: getSelectedFolderName(folderSummaries, selectedFolderId),
     setError,
     setIsLoading,
     setIsSending,
+    updateLocalMessage,
   }
 }

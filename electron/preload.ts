@@ -4,6 +4,8 @@ import type {
   AppendConversationMessagesInput,
   ApiKeyProviderId,
   AppSettings,
+  ChatStreamEvent,
+  EchosphereChatApi,
   EchosphereProvidersApi,
   SaveApiKeyProviderInput,
   CreateConversationFolderInput,
@@ -11,6 +13,7 @@ import type {
   EchosphereHistoryApi,
   EchosphereSettingsApi,
   ReplaceConversationMessagesInput,
+  StartChatStreamInput,
 } from '../src/types/chat'
 
 // --------- Expose some API to the Renderer process ---------
@@ -65,6 +68,19 @@ const providersApi: EchosphereProvidersApi = {
     ipcRenderer.invoke('providers:apikey:remove', providerId),
 }
 
+const chatApi: EchosphereChatApi = {
+  cancelStream: (streamId: string) => ipcRenderer.invoke('chat:stream:cancel', streamId),
+  onStreamEvent: (listener: (event: ChatStreamEvent) => void) => {
+    const wrappedListener = (_event: unknown, payload: ChatStreamEvent) => listener(payload)
+    ipcRenderer.on('chat:stream:event', wrappedListener)
+    return () => {
+      ipcRenderer.off('chat:stream:event', wrappedListener)
+    }
+  },
+  startStream: (input: StartChatStreamInput) => ipcRenderer.invoke('chat:stream:start', input),
+}
+
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
+contextBridge.exposeInMainWorld('echosphereChat', chatApi)

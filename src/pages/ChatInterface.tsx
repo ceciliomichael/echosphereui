@@ -7,6 +7,8 @@ import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { useChatMessages } from '../hooks/useChatMessages'
+import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
+import { useProvidersState } from '../hooks/useProvidersState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppLanguage } from '../lib/appSettings'
 
@@ -26,7 +28,10 @@ export function ChatInterface({
   sidebarWidth,
 }: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const providersState = useProvidersState()
+  const chatRuntimeConfig = useChatRuntimeConfig(providersState.providersState)
   const {
+    activeConversationId,
     activeConversationTitle,
     cancelEditingMessage,
     conversationGroups,
@@ -47,9 +52,23 @@ export function ChatInterface({
     selectConversation,
     sendEditedMessage,
     sendNewMessage,
+    streamingAssistantMessageId,
     selectFolder,
     startEditingMessage,
-  } = useChatMessages(language)
+  } = useChatMessages(language, {
+    isCodexAuthenticated: chatRuntimeConfig.isCodexAuthenticated,
+    modelId: chatRuntimeConfig.selectedModelId,
+    providerId: chatRuntimeConfig.providerId,
+    reasoningEffort: chatRuntimeConfig.reasoningEffort,
+  })
+  const {
+    codexModelOptions,
+    reasoningEffort,
+    selectedModelId,
+    setReasoningEffort,
+    setSelectedModelId,
+    showReasoningEffortSelector,
+  } = chatRuntimeConfig
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
@@ -96,6 +115,7 @@ export function ChatInterface({
               <EmptyState folderName={selectedFolderName} />
             ) : (
               <MessageList
+                conversationId={activeConversationId}
                 messages={messages}
                 editingMessageId={editingMessageId}
                 onEditUserMessage={startEditingMessage}
@@ -106,6 +126,7 @@ export function ChatInterface({
                 composerFocusSignal={editComposerFocusSignal}
                 isSending={isSending}
                 sendMessageOnEnter={sendMessageOnEnter}
+                streamingAssistantMessageId={streamingAssistantMessageId}
               />
             )}
           </div>
@@ -119,6 +140,16 @@ export function ChatInterface({
               onSend={sendNewMessage}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
+              modelOptions={codexModelOptions.map((option) => ({
+                label: option.label,
+                providerLabel: 'CODEX',
+                value: option.id,
+              }))}
+              selectedModelId={selectedModelId}
+              onModelChange={setSelectedModelId}
+              reasoningEffort={reasoningEffort}
+              onReasoningEffortChange={setReasoningEffort}
+              showReasoningEffortSelector={showReasoningEffortSelector}
             />
           </div>
         </div>

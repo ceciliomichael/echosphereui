@@ -2,13 +2,22 @@ import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react
 import { ArrowUp } from 'lucide-react'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
+import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
+import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
+import type { ReasoningEffort } from '../types/chat'
 
 interface ChatInputProps {
   disabled?: boolean
   focusSignal?: number
   isEditing?: boolean
+  modelOptions?: readonly ModelSelectorOption[]
   onCancelEdit?: () => void
+  onModelChange?: (modelId: string) => void
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSend: () => void
+  reasoningEffort?: ReasoningEffort
+  selectedModelId?: string
+  showReasoningEffortSelector?: boolean
   value: string
   onValueChange: (value: string) => void
   sendOnEnter?: boolean
@@ -20,7 +29,13 @@ export function ChatInput({
   onValueChange,
   onSend,
   onCancelEdit,
+  modelOptions = [],
+  onModelChange,
+  onReasoningEffortChange,
   isEditing = false,
+  reasoningEffort = 'medium',
+  selectedModelId = '',
+  showReasoningEffortSelector = false,
   sendOnEnter = true,
   variant = 'composer',
   focusSignal,
@@ -29,6 +44,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInline = variant === 'inline'
+  const showRuntimeControls = !isInline && modelOptions.length > 0 && typeof onModelChange === 'function'
 
   const canSend = value.trim().length > 0 && !disabled
 
@@ -125,7 +141,26 @@ export function ChatInput({
           />
         </div>
 
-        <div className={isInline ? 'mt-2 flex items-center justify-end' : 'mt-3 flex items-center justify-end'}>
+        <div className={isInline ? 'mt-2 flex items-center justify-end' : 'mt-3 flex items-end justify-between gap-3'}>
+          {showRuntimeControls ? (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:flex-nowrap">
+              <ModelSelectorField
+                value={selectedModelId}
+                onChange={onModelChange ?? (() => undefined)}
+                options={modelOptions}
+                disabled={disabled}
+              />
+
+              {showReasoningEffortSelector && onReasoningEffortChange ? (
+                <ReasoningEffortBlock
+                  value={reasoningEffort}
+                  onChange={onReasoningEffortChange}
+                  disabled={disabled}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
           <Tooltip content={isEditing ? 'Send edited message' : 'Send message'}>
             <button
               type="button"

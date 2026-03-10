@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import { useAutoScroll } from '../hooks/useAutoScroll'
 import type { Message } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
 
 interface MessageListProps {
+  conversationId: string | null
   composerValue: string
   composerFocusSignal?: number
   editingMessageId?: string | null
@@ -15,9 +17,11 @@ interface MessageListProps {
   onEditUserMessage?: (messageId: string) => void
   onSendEditedMessage: () => void
   sendMessageOnEnter: boolean
+  streamingAssistantMessageId?: string | null
 }
 
 export function MessageList({
+  conversationId,
   messages,
   editingMessageId = null,
   onEditUserMessage,
@@ -28,15 +32,17 @@ export function MessageList({
   composerFocusSignal,
   isSending = false,
   sendMessageOnEnter,
+  streamingAssistantMessageId = null,
 }: MessageListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  useAutoScroll(scrollContainerRef, messages, {
+    resetKey: conversationId,
+    shouldAutoScroll: true,
+  })
 
   return (
-    <div className="scroll-stable flex-1 w-full overflow-y-auto">
+    <div ref={scrollContainerRef} className="scroll-stable flex-1 w-full overflow-y-auto">
       <div className="chat-column mx-auto space-y-4 px-4 pb-6 pt-6">
         {messages.map((msg) => (
           <div key={msg.id} className={msg.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
@@ -61,11 +67,16 @@ export function MessageList({
                 </div>
               )
             ) : (
-              <AssistantMessage content={msg.content} />
+              <AssistantMessage
+                content={msg.content}
+                isStreaming={streamingAssistantMessageId === msg.id}
+                reasoningCompletedAt={msg.reasoningCompletedAt}
+                reasoningContent={msg.reasoningContent}
+                timestamp={msg.timestamp}
+              />
             )}
           </div>
         ))}
-        <div ref={bottomRef} />
       </div>
     </div>
   )

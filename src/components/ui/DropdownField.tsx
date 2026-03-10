@@ -20,6 +20,8 @@ interface DropdownFieldProps {
   ariaLabel?: string
   className?: string
   disabled?: boolean
+  fitToContent?: boolean
+  flushOptions?: boolean
   id?: string
   onChange: (value: string) => void
   options: readonly DropdownOption[]
@@ -30,6 +32,8 @@ export function DropdownField({
   ariaLabel,
   className,
   disabled = false,
+  fitToContent = false,
+  flushOptions = false,
   id,
   onChange,
   options,
@@ -220,9 +224,14 @@ export function DropdownField({
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         onKeyDown={handleButtonKeyDown}
-        className="flex h-9 w-full items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-[var(--dropdown-control-hover-surface)] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm"
+        className={[
+          'flex h-9 items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-[var(--dropdown-control-hover-surface)] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
+          fitToContent ? 'w-auto max-w-full' : 'w-full',
+        ].join(' ')}
       >
-        <span className="truncate pr-3 text-left">{selectedOption?.label ?? ''}</span>
+        <span className={['text-left', fitToContent ? 'pr-2' : 'truncate pr-3'].join(' ')}>
+          {selectedOption?.label ?? ''}
+        </span>
         <ChevronDown
           size={16}
           strokeWidth={2.2}
@@ -239,7 +248,10 @@ export function DropdownField({
               tabIndex={-1}
               aria-labelledby={controlId}
               onKeyDown={handleListboxKeyDown}
-              className="fixed z-50 max-h-64 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-soft"
+              className={[
+                'fixed z-50 max-h-64 overflow-y-auto rounded-xl border border-border bg-surface shadow-soft',
+                flushOptions ? 'p-0' : fitToContent ? 'p-0.5' : 'p-1',
+              ].join(' ')}
               style={menuStyle}
             >
               {options.map((option, index) => {
@@ -257,10 +269,15 @@ export function DropdownField({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => commitValue(option.value)}
                     className={[
-                      'flex h-9 w-full items-center justify-between rounded-lg px-3 text-left text-[13px] transition-colors md:text-sm',
-                      isHighlighted
-                        ? 'bg-[var(--dropdown-option-active-surface)] text-foreground'
-                        : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
+                      'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-colors md:text-sm',
+                      flushOptions ? 'rounded-none' : 'rounded-lg',
+                      isSelected && isHighlighted
+                        ? 'bg-[var(--dropdown-option-active-hover-surface)] text-foreground'
+                        : isSelected
+                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground'
+                          : isHighlighted
+                            ? 'bg-[var(--dropdown-option-hover-surface)] text-foreground'
+                            : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
                     ].join(' ')}
                   >
                     <span className="truncate pr-3">{option.label}</span>

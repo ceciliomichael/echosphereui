@@ -56,8 +56,9 @@
     --segmented-control-hover-surface: var(--color-surface);
     --segmented-control-active-surface: var(--color-surface);
     --dropdown-control-hover-surface: var(--color-background);
-    --dropdown-option-hover-surface: var(--color-background);
+    --dropdown-option-hover-surface: color-mix(in srgb, var(--color-foreground) 3%, var(--color-surface));
     --dropdown-option-active-surface: var(--color-surface-muted);
+    --dropdown-option-active-hover-surface: color-mix(in srgb, var(--color-foreground) 10%, var(--color-surface));
   }
 
   :root[data-theme='dark'] {
@@ -109,6 +110,7 @@
     --dropdown-control-hover-surface: #2f2f2f;
     --dropdown-option-hover-surface: #333333;
     --dropdown-option-active-surface: #3a3a3a;
+    --dropdown-option-active-hover-surface: #404040;
   }
 
   :root.theme-transition,
@@ -192,6 +194,64 @@
   .chat-send-button-disabled {
     background-color: var(--color-disabled);
     color: var(--color-disabled-foreground);
+  }
+
+  .thinking-shimmer {
+    background: linear-gradient(90deg, var(--color-muted-foreground) 0%, var(--color-foreground) 50%, var(--color-muted-foreground) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: thinking-shimmer 1.2s linear infinite;
+  }
+
+  .thinking-flow {
+    position: relative;
+    display: inline-block;
+    color: var(--color-muted-foreground);
+  }
+
+  .thinking-flow::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-foreground) 92%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    background-position: -130% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    pointer-events: none;
+    animation: thinking-flow 1.05s linear infinite;
+  }
+
+  .chat-markdown {
+    word-break: break-word;
+  }
+
+  @keyframes thinking-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes thinking-flow {
+    0% {
+      background-position: -130% 0;
+    }
+    100% {
+      background-position: 130% 0;
+    }
   }
 
   :root[data-theme='dark'] .chat-send-button-enabled {

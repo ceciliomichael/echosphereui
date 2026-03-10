@@ -39,9 +39,14 @@ function parseStoredCodexAuthData(input: unknown): StoredCodexAuthData | null {
   if (
     !hasText(tokensCandidate.id_token) ||
     !hasText(tokensCandidate.access_token) ||
-    !hasText(tokensCandidate.refresh_token) ||
-    !hasText(tokensCandidate.account_id)
+    !hasText(tokensCandidate.refresh_token)
   ) {
+    return null
+  }
+
+  const parsedClaims = parseCodexIdTokenClaims(tokensCandidate.id_token)
+  const accountId = hasText(tokensCandidate.account_id) ? tokensCandidate.account_id : parsedClaims.accountId
+  if (!hasText(accountId)) {
     return null
   }
 
@@ -54,7 +59,7 @@ function parseStoredCodexAuthData(input: unknown): StoredCodexAuthData | null {
     last_refresh: lastRefresh,
     tokens: {
       access_token: tokensCandidate.access_token,
-      account_id: tokensCandidate.account_id,
+      account_id: accountId,
       id_token: tokensCandidate.id_token,
       refresh_token: tokensCandidate.refresh_token,
     },

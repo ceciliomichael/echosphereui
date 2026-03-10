@@ -15,6 +15,7 @@ import type {
   ApiKeyProviderId,
   AppendConversationMessagesInput,
   AppSettings,
+  StartChatStreamInput,
   CreateConversationFolderInput,
   CreateConversationInput,
   ReplaceConversationMessagesInput,
@@ -40,6 +41,7 @@ import {
   removeApiKeyProvider,
   saveApiKeyProvider,
 } from './providers/service'
+import { cancelChatStream, startChatStream } from './chat/service'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -187,6 +189,10 @@ function registerHistoryHandlers() {
   ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
     removeApiKeyProvider(providerId),
   )
+  ipcMain.handle('chat:stream:start', async (event, input: StartChatStreamInput) =>
+    startChatStream(event.sender, input),
+  )
+  ipcMain.handle('chat:stream:cancel', async (event, streamId: string) => cancelChatStream(event.sender, streamId))
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common

@@ -4,11 +4,10 @@ import type {
   ConversationRecord,
   ConversationSummary,
   Message,
+  ReasoningEffort,
+  ChatProviderId,
 } from '../types/chat'
 import { getConversationTitle } from './chatHistoryViewModels'
-
-const TEST_ASSISTANT_REPLY =
-  'mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm'
 
 export interface ChatHistorySnapshot {
   conversationSummaries: ConversationSummary[]
@@ -16,31 +15,37 @@ export interface ChatHistorySnapshot {
   initialConversation: ConversationRecord | null
 }
 
-interface PersistConversationTurnInput {
+interface PersistUserTurnInput {
   activeConversationId: string | null
+  modelId: string
+  providerId: ChatProviderId
+  reasoningEffort: ReasoningEffort
   selectedFolderId: string | null
   targetEditMessageId: string | null
   trimmedText: string
 }
 
-function buildGeneratedTurn(trimmedText: string, targetEditMessageId: string | null) {
-  const timestamp = Date.now()
+interface PersistUserTurnResult {
+  conversation: ConversationRecord
+  userMessage: Message
+}
 
-  const userMessage: Message = {
-    id: targetEditMessageId ?? uuidv4(),
-    role: 'user',
+function buildUserMessage(
+  trimmedText: string,
+  modelId: string,
+  providerId: ChatProviderId,
+  reasoningEffort: ReasoningEffort,
+  forcedId?: string,
+): Message {
+  return {
     content: trimmedText,
-    timestamp,
+    id: forcedId ?? uuidv4(),
+    modelId,
+    providerId,
+    reasoningEffort,
+    role: 'user',
+    timestamp: Date.now(),
   }
-
-  const assistantMessage: Message = {
-    id: uuidv4(),
-    role: 'assistant',
-    content: TEST_ASSISTANT_REPLY,
-    timestamp: timestamp + 1,
-  }
-
-  return [userMessage, assistantMessage]
 }
 
 async function loadStoredConversationOrThrow(conversationId: string) {
@@ -75,53 +80,69 @@ export async function loadInitialChatHistory(): Promise<ChatHistorySnapshot> {
   }
 }
 
-export async function persistConversationTurn({
-  activeConversationId,
-  selectedFolderId,
-  targetEditMessageId,
-  trimmedText,
-}: PersistConversationTurnInput): Promise<ConversationRecord> {
-  const nextMessages = buildGeneratedTurn(trimmedText, targetEditMessageId)
+export async function persistUserTurn(input: PersistUserTurnInput): Promise<PersistUserTurnResult> {
+  const userMessage = buildUserMessage(
+    input.trimmedText,
+    input.modelId,
+    input.providerId,
+    input.reasoningEffort,
+    input.targetEditMessageId ?? undefined,
+  )
 
-  if (targetEditMessageId !== null) {
-    if (!activeConversationId) {
+  if (input.targetEditMessageId !== null) {
+    if (!input.activeConversationId) {
       throw new Error('Cannot edit a message without an active conversation.')
     }
 
-    const currentConversation = await loadStoredConversationOrThrow(activeConversationId)
+    const currentConversation = await loadStoredConversationOrThrow(input.activeConversationId)
     const targetMessageIndex = currentConversation.messages.findIndex(
-      (message) => message.id === targetEditMessageId && message.role === 'user',
+      (message) => message.id === input.targetEditMessageId && message.role === 'user',
     )
 
     if (targetMessageIndex < 0) {
-      throw new Error(`Message not found: ${targetEditMessageId}`)
+      throw new Error(`Message not found: ${input.targetEditMessageId}`)
     }
 
-    const rewrittenMessages = [...currentConversation.messages.slice(0, targetMessageIndex), ...nextMessages]
-
-    return window.echosphereHistory.replaceMessages({
+    const rewrittenMessages = [...currentConversation.messages.slice(0, targetMessageIndex), userMessage]
+    const conversation = await window.echosphereHistory.replaceMessages({
       conversationId: currentConversation.id,
       messages: rewrittenMessages,
-      title: targetMessageIndex === 0 ? getConversationTitle(trimmedText) : undefined,
+      title: targetMessageIndex === 0 ? getConversationTitle(input.trimmedText) : undefined,
     })
+
+    return {
+      conversation,
+      userMessage,
+    }
   }
 
-  let conversationId = activeConversationId
+  let conversationId = input.activeConversationId
   let currentConversation: ConversationRecord | null = null
 
   if (conversationId) {
     currentConversation = await window.echosphereHistory.getConversation(conversationId)
   } else {
-    const createdConversation = await window.echosphereHistory.createConversation({ folderId: selectedFolderId })
+    const createdConversation = await window.echosphereHistory.createConversation({ folderId: input.selectedFolderId })
     conversationId = createdConversation.id
     currentConversation = createdConversation
   }
 
   const shouldUpdateTitle = Boolean(currentConversation && currentConversation.messages.length === 0)
+  const conversation = await window.echosphereHistory.appendMessages({
+    conversationId,
+    messages: [userMessage],
+    title: shouldUpdateTitle ? getConversationTitle(input.trimmedText) : undefined,
+  })
 
+  return {
+    conversation,
+    userMessage,
+  }
+}
+
+export async function persistAssistantMessage(conversationId: string, assistantMessage: Message) {
   return window.echosphereHistory.appendMessages({
     conversationId,
-    messages: nextMessages,
-    title: shouldUpdateTitle ? getConversationTitle(trimmedText) : undefined,
+    messages: [assistantMessage],
   })
 }

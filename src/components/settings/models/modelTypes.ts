@@ -7,6 +7,7 @@ export interface ModelCatalogItem {
   id: string
   label: string
   providerId: ModelProviderId
+  reasoningCapable?: boolean
 }
 
 export interface ProviderSectionDefinition {
