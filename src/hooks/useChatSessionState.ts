@@ -59,6 +59,10 @@ export function useChatSessionState(language: AppLanguage) {
     [applyConversation],
   )
 
+  const updateConversationSummary = useCallback((conversation: ConversationRecord) => {
+    setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))
+  }, [])
+
   const getDeletionContext = useCallback(
     (conversationId: string) => {
       return {
@@ -113,6 +117,7 @@ export function useChatSessionState(language: AppLanguage) {
     setError,
     setIsLoading,
     setIsSending,
+    updateConversationSummary,
     updateLocalMessage,
   }
 }

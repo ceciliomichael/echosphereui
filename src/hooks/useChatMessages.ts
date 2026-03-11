@@ -135,6 +135,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     setError,
     setIsLoading,
     setIsSending,
+    updateConversationSummary,
     updateLocalMessage,
   } = useChatSessionState(language)
   const {
@@ -324,9 +325,6 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
 
-      removeLocalMessage(draftAssistantId)
-      didAppendDraftAssistant = false
-      setStreamingAssistantMessageId(null)
       const assistantMessage: Message = {
         content: normalizeMarkdownText(streamedAssistant.content),
         id: draftAssistantId,
@@ -343,8 +341,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         throw new Error('The assistant returned an empty response.')
       }
 
+      updateLocalMessage(draftAssistantId, () => assistantMessage)
+      setStreamingAssistantMessageId(null)
       const savedConversation = await persistAssistantMessage(conversation.id, assistantMessage)
-      applySavedConversation(savedConversation)
+      didAppendDraftAssistant = false
+      updateConversationSummary(savedConversation)
     } catch (caughtError) {
       console.error(caughtError)
       if (didAppendDraftAssistant) {
