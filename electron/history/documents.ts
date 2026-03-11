@@ -25,6 +25,7 @@ function isMessage(value: unknown): value is Message {
     message.providerId === 'openai-compatible'
   const hasValidReasoningEffort =
     message.reasoningEffort === undefined ||
+    message.reasoningEffort === 'minimal' ||
     message.reasoningEffort === 'low' ||
     message.reasoningEffort === 'medium' ||
     message.reasoningEffort === 'high' ||

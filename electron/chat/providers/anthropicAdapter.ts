@@ -1,5 +1,5 @@
 import type { MessageParam, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'
-import type { Message } from '../../../src/types/chat'
+import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
 import {
   ANTHROPIC_DEFAULT_MAX_TOKENS,
@@ -33,6 +33,24 @@ function handleAnthropicStreamEvent(
   event: MessageStreamEvent,
   emitDelta: (deltaEvent: { delta: string; type: 'content_delta' | 'reasoning_delta' }) => void,
 ) {
+  if (event.type === 'content_block_start') {
+    if (event.content_block.type === 'text' && event.content_block.text.length > 0) {
+      emitDelta({
+        delta: event.content_block.text,
+        type: 'content_delta',
+      })
+      return
+    }
+
+    if (event.content_block.type === 'thinking' && event.content_block.thinking.length > 0) {
+      emitDelta({
+        delta: event.content_block.thinking,
+        type: 'reasoning_delta',
+      })
+    }
+    return
+  }
+
   if (event.type !== 'content_block_delta') {
     return
   }
@@ -58,7 +76,7 @@ async function streamAnthropicMessage(
   request: {
     messages: Message[]
     modelId: string
-    reasoningEffort: 'low' | 'medium' | 'high' | 'xhigh'
+    reasoningEffort: ReasoningEffort
   },
   emitDelta: (deltaEvent: { delta: string; type: 'content_delta' | 'reasoning_delta' }) => void,
   signal: AbortSignal,

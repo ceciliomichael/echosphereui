@@ -1,4 +1,8 @@
-import { ANTHROPIC_REASONING_EFFORT_VALUES } from '../../../lib/reasoningEffort'
+import {
+  ANTHROPIC_REASONING_EFFORT_VALUES,
+  GOOGLE_PRO_REASONING_EFFORT_VALUES,
+  GOOGLE_REASONING_EFFORT_VALUES,
+} from '../../../lib/reasoningEffort'
 import type { ModelCatalogItem, ModelProviderId } from './modelTypes'
 
 type ProviderModelDefinition = Pick<
@@ -73,8 +77,30 @@ export const PROVIDER_MODELS = {
     },
   ],
   google: [
-    { enabledByDefault: true, id: 'google-gemini-2.5-flash', label: 'google-gemini-2.5-flash' },
-    { enabledByDefault: false, id: 'google-gemini-2.5-pro', label: 'google-gemini-2.5-pro' },
+    {
+      apiModelId: 'gemini-3.1-pro-preview',
+      enabledByDefault: true,
+      id: 'google-gemini-3.1-pro-preview',
+      label: 'gemini-3.1-pro-preview',
+      reasoningCapable: true,
+      reasoningEfforts: GOOGLE_PRO_REASONING_EFFORT_VALUES,
+    },
+    {
+      apiModelId: 'gemini-3-flash-preview',
+      enabledByDefault: true,
+      id: 'google-gemini-3-flash-preview',
+      label: 'gemini-3-flash-preview',
+      reasoningCapable: true,
+      reasoningEfforts: GOOGLE_REASONING_EFFORT_VALUES,
+    },
+    {
+      apiModelId: 'gemini-3.1-flash-lite-preview',
+      enabledByDefault: true,
+      id: 'google-gemini-3.1-flash-lite-preview',
+      label: 'gemini-3.1-flash-lite-preview',
+      reasoningCapable: true,
+      reasoningEfforts: GOOGLE_REASONING_EFFORT_VALUES,
+    },
   ],
   'openai-compatible': [],
 } as const satisfies Record<ModelProviderId, readonly ProviderModelDefinition[]>

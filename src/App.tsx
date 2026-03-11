@@ -15,6 +15,14 @@ export default function App() {
 
   useDocumentTheme(settings.appearance)
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--workspace-shell-surface)] px-4 text-sm text-subtle-foreground">
+        Loading workspace...
+      </div>
+    )
+  }
+
   if (activeScreen === 'settings') {
     return (
       <SettingsInterface

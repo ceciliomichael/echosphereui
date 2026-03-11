@@ -4,6 +4,7 @@ import type { ReasoningEffort } from '../../types/chat'
 const REASONING_EFFORT_LABELS: Readonly<Record<ReasoningEffort, string>> = {
   high: 'High',
   low: 'Low',
+  minimal: 'Minimal',
   medium: 'Medium',
   xhigh: 'XHigh',
 }

@@ -63,6 +63,10 @@ export function anthropicModelSupportsReasoningEffort(modelId: string) {
 }
 
 export function toAnthropicReasoningEffort(reasoningEffort: ReasoningEffort): 'low' | 'medium' | 'high' {
+  if (reasoningEffort === 'minimal') {
+    return 'low'
+  }
+
   if (reasoningEffort === 'xhigh') {
     return 'high'
   }

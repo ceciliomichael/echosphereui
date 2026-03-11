@@ -8,6 +8,7 @@ import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const SETTINGS_FILE_NAME = 'settings.json'
+let settingsUpdateQueue: Promise<void> = Promise.resolve()
 
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
@@ -69,12 +70,20 @@ export async function getStoredSettings() {
 }
 
 export async function updateStoredSettings(input: Partial<AppSettings>) {
-  const currentSettings = await getStoredSettings().catch(() => DEFAULT_APP_SETTINGS)
-  const nextSettings = sanitizeSettings({
-    ...currentSettings,
-    ...input,
-  })
+  let nextSettings = DEFAULT_APP_SETTINGS
 
-  await writeSettingsFile(nextSettings)
+  settingsUpdateQueue = settingsUpdateQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const currentSettings = await getStoredSettings().catch(() => DEFAULT_APP_SETTINGS)
+      nextSettings = sanitizeSettings({
+        ...currentSettings,
+        ...input,
+      })
+
+      await writeSettingsFile(nextSettings)
+    })
+
+  await settingsUpdateQueue
   return nextSettings
 }

@@ -112,7 +112,7 @@ export interface CodexProviderConnectionStatus {
 export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
 export type ChatProviderId = 'codex' | ApiKeyProviderId
 export type CustomModelProviderId = 'openai' | 'openai-compatible'
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface ApiKeyProviderStatus {
   baseUrl: string | null
