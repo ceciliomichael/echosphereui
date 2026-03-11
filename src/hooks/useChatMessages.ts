@@ -4,7 +4,7 @@ import { loadInitialChatHistory, persistAssistantTurn, persistUserTurn } from '.
 import { useChatComposerState } from './useChatComposerState'
 import { useChatSessionState } from './useChatSessionState'
 import type { AppLanguage } from '../lib/appSettings'
-import type { ChatProviderId, Message, ReasoningEffort, ToolInvocationTrace } from '../types/chat'
+import type { ChatMode, ChatProviderId, Message, ReasoningEffort, ToolInvocationTrace } from '../types/chat'
 
 interface ChatRuntimeSelection {
   hasConfiguredProvider: boolean
@@ -15,10 +15,11 @@ interface ChatRuntimeSelection {
 }
 
 interface StreamAssistantResponseInput {
+  agentContextRootPath: string
+  chatMode: ChatMode
   messages: Message[]
   modelId: string
   onContentDelta: (delta: string) => void
-  onReasoningCompleted: (completedAt: number) => void
   onReasoningDelta: (delta: string) => void
   onStreamStarted: (streamId: string) => void
   onSyntheticToolMessage: (message: Message) => void
@@ -39,18 +40,47 @@ interface StreamAssistantResponseInput {
 }
 
 interface StreamAssistantResponseOutput {
-  content: string
-  reasoningCompletedAt: number | null
-  reasoningContent: string
-  syntheticToolMessages: Message[]
-  toolInvocations: ToolInvocationTrace[]
   wasAborted: boolean
 }
+
+type DraftAssistantMessageKind = 'placeholder' | 'content' | 'tool'
+
+type StreamedMessageOrderEntry =
+  | {
+      id: string
+      kind: 'assistant'
+    }
+  | {
+      kind: 'message'
+      message: Message
+    }
 
 function normalizeMarkdownText(input: string) {
   return input
     .replace(/\r\n/g, '\n')
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
+}
+
+function hasMeaningfulAssistantOutput(message: Message) {
+  return (
+    message.role === 'assistant' &&
+    (message.content.trim().length > 0 ||
+      (message.reasoningContent ?? '').trim().length > 0 ||
+      (message.toolInvocations?.length ?? 0) > 0)
+  )
+}
+
+function normalizeAssistantMessage(message: Message): Message {
+  if (message.role !== 'assistant') {
+    return message
+  }
+
+  return {
+    ...message,
+    content: normalizeMarkdownText(message.content),
+    reasoningContent:
+      message.reasoningContent === undefined ? undefined : normalizeMarkdownText(message.reasoningContent),
+  }
 }
 
 function toErrorMessage(error: unknown, fallbackMessage: string) {
@@ -78,11 +108,6 @@ function upsertToolInvocation(
 
 async function streamAssistantResponse(input: StreamAssistantResponseInput): Promise<StreamAssistantResponseOutput> {
   let streamId: string | null = null
-  let assistantContent = ''
-  let reasoningCompletedAt: number | null = null
-  let reasoningContent = ''
-  let toolInvocations: ToolInvocationTrace[] = []
-  const syntheticToolMessages: Message[] = []
 
   return new Promise<StreamAssistantResponseOutput>((resolve, reject) => {
     const unsubscribe = window.echosphereChat.onStreamEvent((event) => {
@@ -91,32 +116,16 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       }
 
       if (event.type === 'content_delta') {
-        if (reasoningCompletedAt === null && reasoningContent.trim().length > 0) {
-          reasoningCompletedAt = Date.now()
-          input.onReasoningCompleted(reasoningCompletedAt)
-        }
-
-        assistantContent += event.delta
         input.onContentDelta(event.delta)
         return
       }
 
       if (event.type === 'reasoning_delta') {
-        reasoningContent += event.delta
         input.onReasoningDelta(event.delta)
         return
       }
 
       if (event.type === 'tool_invocation_started') {
-        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
-          argumentsText: event.argumentsText,
-          id: event.invocationId,
-          resultContent: currentValue?.resultContent,
-          startedAt: currentValue?.startedAt ?? event.startedAt,
-          state: 'running',
-          toolName: event.toolName,
-        }))
-
         input.onToolInvocationStarted(event.invocationId, {
           argumentsText: event.argumentsText,
           startedAt: event.startedAt,
@@ -126,17 +135,6 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       }
 
       if (event.type === 'tool_invocation_completed') {
-        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
-          argumentsText: event.argumentsText,
-          completedAt: event.completedAt,
-          id: event.invocationId,
-          resultContent: event.resultContent,
-          startedAt: currentValue?.startedAt ?? event.completedAt,
-          state: 'completed',
-          toolName: event.toolName,
-        }))
-
-        syntheticToolMessages.push(event.syntheticMessage)
         input.onSyntheticToolMessage(event.syntheticMessage)
         input.onToolInvocationCompleted(event.invocationId, {
           argumentsText: event.argumentsText,
@@ -148,17 +146,6 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       }
 
       if (event.type === 'tool_invocation_failed') {
-        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
-          argumentsText: event.argumentsText,
-          completedAt: event.completedAt,
-          id: event.invocationId,
-          resultContent: event.resultContent,
-          startedAt: currentValue?.startedAt ?? event.completedAt,
-          state: 'failed',
-          toolName: event.toolName,
-        }))
-
-        syntheticToolMessages.push(event.syntheticMessage)
         input.onSyntheticToolMessage(event.syntheticMessage)
         input.onToolInvocationFailed(event.invocationId, {
           argumentsText: event.argumentsText,
@@ -170,36 +157,16 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       }
 
       if (event.type === 'completed') {
-        if (reasoningCompletedAt === null && reasoningContent.trim().length > 0) {
-          reasoningCompletedAt = Date.now()
-          input.onReasoningCompleted(reasoningCompletedAt)
-        }
-
         unsubscribe()
         resolve({
-          content: assistantContent,
-          reasoningCompletedAt,
-          reasoningContent,
-          syntheticToolMessages,
-          toolInvocations,
           wasAborted: false,
         })
         return
       }
 
       if (event.type === 'aborted') {
-        if (reasoningCompletedAt === null && reasoningContent.trim().length > 0) {
-          reasoningCompletedAt = Date.now()
-          input.onReasoningCompleted(reasoningCompletedAt)
-        }
-
         unsubscribe()
         resolve({
-          content: assistantContent,
-          reasoningCompletedAt,
-          reasoningContent,
-          syntheticToolMessages,
-          toolInvocations,
           wasAborted: true,
         })
         return
@@ -214,6 +181,8 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
     void window.echosphereChat
       .startStream({
         messages: input.messages,
+        agentContextRootPath: input.agentContextRootPath,
+        chatMode: input.chatMode,
         modelId: input.modelId,
         providerId: input.providerId,
         reasoningEffort: input.reasoningEffort,
@@ -243,7 +212,6 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     error,
     getDeletionContext,
     initializeHistory,
-    insertLocalMessagesBefore,
     isLoading,
     isSending,
     messages,
@@ -270,6 +238,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
   } = useChatComposerState(messages, isSending)
   const [streamingAssistantMessageId, setStreamingAssistantMessageId] = useState<string | null>(null)
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null)
+  const [draftChatMode, setDraftChatMode] = useState<ChatMode>('agent')
   const activeStreamIdRef = useRef<string | null>(null)
 
   const updateActiveStreamId = useCallback((streamId: string | null) => {
@@ -390,14 +359,105 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     clearError()
     setIsSending(true)
 
-    const draftAssistantId = uuidv4()
-    const assistantStartedAt = Date.now()
-    let didAppendDraftAssistant = false
-    const insertedSyntheticToolMessageIds: string[] = []
+    const insertedMessageIds: string[] = []
+    const streamedMessageOrder: StreamedMessageOrderEntry[] = []
+    const draftAssistantMessages = new Map<string, Message>()
+    const toolInvocationMessageIds = new Map<string, string>()
+    let activeAssistantDraftId: string | null = null
+    let activeAssistantDraftKind: DraftAssistantMessageKind | null = null
+    let reasoningDraftAssistantId: string | null = null
+
+    function appendAssistantDraft(kind: DraftAssistantMessageKind) {
+      const draftAssistantMessage: Message = {
+        content: '',
+        id: uuidv4(),
+        modelId: runtimeSelection.modelId,
+        providerId,
+        reasoningContent: '',
+        reasoningCompletedAt: undefined,
+        reasoningEffort: runtimeSelection.reasoningEffort,
+        role: 'assistant',
+        timestamp: Date.now(),
+        toolInvocations: [],
+      }
+
+      appendLocalMessage(draftAssistantMessage)
+      insertedMessageIds.push(draftAssistantMessage.id)
+      streamedMessageOrder.push({
+        id: draftAssistantMessage.id,
+        kind: 'assistant',
+      })
+      draftAssistantMessages.set(draftAssistantMessage.id, draftAssistantMessage)
+      activeAssistantDraftId = draftAssistantMessage.id
+      activeAssistantDraftKind = kind
+      setStreamingAssistantMessageId(draftAssistantMessage.id)
+
+      return draftAssistantMessage.id
+    }
+
+    function getDraftAssistantMessage(draftAssistantId: string) {
+      const message = draftAssistantMessages.get(draftAssistantId)
+      if (!message) {
+        throw new Error(`Missing draft assistant message: ${draftAssistantId}`)
+      }
+
+      return message
+    }
+
+    function updateDraftAssistantMessage(draftAssistantId: string, updater: (message: Message) => Message) {
+      const nextValue = updater(getDraftAssistantMessage(draftAssistantId))
+      draftAssistantMessages.set(draftAssistantId, nextValue)
+      updateLocalMessage(draftAssistantId, () => nextValue)
+    }
+
+    function completeReasoningDraft(completedAt = Date.now()) {
+      if (!reasoningDraftAssistantId) {
+        return
+      }
+
+      const draftAssistantId = reasoningDraftAssistantId
+      const draftAssistantMessage = draftAssistantMessages.get(draftAssistantId)
+      reasoningDraftAssistantId = null
+
+      if (
+        !draftAssistantMessage ||
+        draftAssistantMessage.role !== 'assistant' ||
+        draftAssistantMessage.reasoningCompletedAt !== undefined ||
+        (draftAssistantMessage.reasoningContent ?? '').trim().length === 0
+      ) {
+        return
+      }
+
+      updateDraftAssistantMessage(draftAssistantId, (message) => ({
+        ...message,
+        reasoningCompletedAt: completedAt,
+      }))
+    }
+
+    function ensureAssistantDraft(kind: Exclude<DraftAssistantMessageKind, 'placeholder'>) {
+      if (!activeAssistantDraftId) {
+        return appendAssistantDraft(kind)
+      }
+
+      if (activeAssistantDraftKind === kind) {
+        setStreamingAssistantMessageId(activeAssistantDraftId)
+        return activeAssistantDraftId
+      }
+
+      const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
+      if (activeAssistantDraftKind === 'placeholder' && !hasMeaningfulAssistantOutput(activeDraftMessage)) {
+        activeAssistantDraftKind = kind
+        setStreamingAssistantMessageId(activeAssistantDraftId)
+        return activeAssistantDraftId
+      }
+
+      return appendAssistantDraft(kind)
+    }
 
     try {
       const { conversation } = await persistUserTurn({
         activeConversationId,
+        chatMode: draftChatMode,
         modelId: runtimeSelection.modelId,
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
@@ -414,76 +474,80 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         setMainComposerValue('')
       }
 
-      appendLocalMessage({
-        content: '',
-        id: draftAssistantId,
-        modelId: runtimeSelection.modelId,
-        providerId,
-        reasoningContent: '',
-        reasoningCompletedAt: undefined,
-        reasoningEffort: runtimeSelection.reasoningEffort,
-        role: 'assistant',
-        timestamp: assistantStartedAt,
-        toolInvocations: [],
-      })
-      didAppendDraftAssistant = true
-      setStreamingAssistantMessageId(draftAssistantId)
+      appendAssistantDraft('placeholder')
       const streamedAssistant = await streamAssistantResponse({
+        agentContextRootPath: conversation.agentContextRootPath,
+        chatMode: conversation.chatMode,
         messages: conversation.messages,
         modelId: runtimeSelection.modelId,
         onContentDelta: (delta) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
+          completeReasoningDraft()
+          const draftAssistantId = ensureAssistantDraft('content')
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
             ...message,
             content: message.content + delta,
           }))
         },
-        onReasoningCompleted: (completedAt) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
-            ...message,
-            reasoningCompletedAt: message.reasoningCompletedAt ?? completedAt,
-          }))
-        },
         onReasoningDelta: (delta) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
+          const draftAssistantId = ensureAssistantDraft('content')
+          reasoningDraftAssistantId = draftAssistantId
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
             ...message,
             reasoningContent: (message.reasoningContent ?? '') + delta,
           }))
         },
         onSyntheticToolMessage: (syntheticMessage) => {
-          insertedSyntheticToolMessageIds.push(syntheticMessage.id)
-          insertLocalMessagesBefore(draftAssistantId, [syntheticMessage])
+          appendLocalMessage(syntheticMessage)
+          insertedMessageIds.push(syntheticMessage.id)
+          streamedMessageOrder.push({
+            kind: 'message',
+            message: syntheticMessage,
+          })
         },
         onStreamStarted: updateActiveStreamId,
         onToolInvocationCompleted: (invocationId, nextValue) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
+          completeReasoningDraft(nextValue.completedAt)
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          activeAssistantDraftId = draftAssistantId
+          activeAssistantDraftKind = 'tool'
+          setStreamingAssistantMessageId(draftAssistantId)
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
               completedAt: nextValue.completedAt,
               id: invocationId,
               resultContent: nextValue.resultContent,
-              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? assistantStartedAt,
+              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? message.timestamp,
               state: 'completed',
               toolName: nextValue.toolName,
             })),
           }))
         },
         onToolInvocationFailed: (invocationId, nextValue) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
+          completeReasoningDraft(nextValue.completedAt)
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          activeAssistantDraftId = draftAssistantId
+          activeAssistantDraftKind = 'tool'
+          setStreamingAssistantMessageId(draftAssistantId)
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
               completedAt: nextValue.completedAt,
               id: invocationId,
               resultContent: nextValue.resultContent,
-              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? assistantStartedAt,
+              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? message.timestamp,
               state: 'failed',
               toolName: nextValue.toolName,
             })),
           }))
         },
         onToolInvocationStarted: (invocationId, nextValue) => {
-          updateLocalMessage(draftAssistantId, (message) => ({
+          completeReasoningDraft(nextValue.startedAt)
+          const draftAssistantId = ensureAssistantDraft('tool')
+          toolInvocationMessageIds.set(invocationId, draftAssistantId)
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
@@ -498,50 +562,53 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
+      completeReasoningDraft()
 
       updateActiveStreamId(null)
 
-      const assistantMessage: Message = {
-        content: normalizeMarkdownText(streamedAssistant.content),
-        id: draftAssistantId,
-        modelId: runtimeSelection.modelId,
-        providerId,
-        reasoningCompletedAt: streamedAssistant.reasoningCompletedAt ?? undefined,
-        reasoningContent: normalizeMarkdownText(streamedAssistant.reasoningContent),
-        reasoningEffort: runtimeSelection.reasoningEffort,
-        role: 'assistant',
-        timestamp: assistantStartedAt,
-        toolInvocations: streamedAssistant.toolInvocations,
-      }
+      const streamedMessages = streamedMessageOrder.flatMap((entry) => {
+        if (entry.kind === 'message') {
+          return [entry.message]
+        }
 
-      if (assistantMessage.content.trim().length === 0 && (assistantMessage.reasoningContent ?? '').trim().length === 0) {
+        const draftAssistantMessage = draftAssistantMessages.get(entry.id)
+        if (!draftAssistantMessage) {
+          return []
+        }
+
+        if (!hasMeaningfulAssistantOutput(draftAssistantMessage)) {
+          return []
+        }
+
+        return [normalizeAssistantMessage(draftAssistantMessage)]
+      })
+
+      if (streamedMessages.every((message) => !hasMeaningfulAssistantOutput(message))) {
         if (streamedAssistant.wasAborted) {
-          removeLocalMessage(draftAssistantId)
-          for (const syntheticMessage of streamedAssistant.syntheticToolMessages) {
-            removeLocalMessage(syntheticMessage.id)
+          for (const messageId of insertedMessageIds) {
+            removeLocalMessage(messageId)
           }
-          didAppendDraftAssistant = false
           return
         }
 
         throw new Error('The assistant returned an empty response.')
       }
 
-      updateLocalMessage(draftAssistantId, () => assistantMessage)
+      for (const message of streamedMessages) {
+        if (message.role !== 'assistant') {
+          continue
+        }
+
+        updateLocalMessage(message.id, () => message)
+      }
+
       setStreamingAssistantMessageId(null)
-      const savedConversation = await persistAssistantTurn(conversation.id, [
-        ...streamedAssistant.syntheticToolMessages,
-        assistantMessage,
-      ])
-      didAppendDraftAssistant = false
+      const savedConversation = await persistAssistantTurn(conversation.id, streamedMessages)
       updateConversationSummary(savedConversation)
     } catch (caughtError) {
       console.error(caughtError)
-      if (didAppendDraftAssistant) {
-        removeLocalMessage(draftAssistantId)
-      }
-      for (const syntheticMessageId of insertedSyntheticToolMessageIds) {
-        removeLocalMessage(syntheticMessageId)
+      for (const messageId of insertedMessageIds) {
+        removeLocalMessage(messageId)
       }
 
       const providerLabel = runtimeSelection.providerLabel ?? 'the selected provider'
@@ -647,9 +714,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     isStreamingResponse: activeStreamId !== null,
     mainComposerValue,
     messages,
+    selectedChatMode: draftChatMode,
     selectConversation,
     selectFolder,
     selectedFolderName,
+    setSelectedChatMode: setDraftChatMode,
     abortStreamingResponse,
     sendEditedMessage,
     sendNewMessage,

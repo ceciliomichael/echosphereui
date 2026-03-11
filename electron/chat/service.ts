@@ -67,6 +67,8 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
       try {
         await streamProviderResponse(
           {
+            agentContextRootPath: input.agentContextRootPath,
+            chatMode: input.chatMode,
             messages: input.messages,
             modelId: input.modelId,
             providerId: input.providerId,

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { ConversationFolderSummary, ConversationRecord, ConversationSummary, Message } from '../types/chat'
+import type { ChatMode, ConversationFolderSummary, ConversationRecord, ConversationSummary, Message } from '../types/chat'
 import {
   buildConversationGroups,
   getSelectedFolderName,
@@ -15,6 +15,8 @@ export function useChatSessionState(language: AppLanguage) {
   const [folderSummaries, setFolderSummaries] = useState<ConversationFolderSummary[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [activeConversationChatMode, setActiveConversationChatMode] = useState<ChatMode | null>(null)
+  const [activeConversationAgentContextRootPath, setActiveConversationAgentContextRootPath] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
@@ -22,12 +24,16 @@ export function useChatSessionState(language: AppLanguage) {
 
   const clearConversationSelection = useCallback((nextFolderId: string | null) => {
     setActiveConversationId(null)
+    setActiveConversationChatMode(null)
+    setActiveConversationAgentContextRootPath(null)
     setSelectedFolderId(nextFolderId)
     setMessages([])
   }, [])
 
   const applyConversation = useCallback((conversation: ConversationRecord) => {
     setActiveConversationId(conversation.id)
+    setActiveConversationChatMode(conversation.chatMode)
+    setActiveConversationAgentContextRootPath(conversation.agentContextRootPath)
     setSelectedFolderId(conversation.folderId)
     setMessages(conversation.messages)
   }, [])
@@ -107,6 +113,8 @@ export function useChatSessionState(language: AppLanguage) {
 
   return {
     activeConversationId,
+    activeConversationAgentContextRootPath,
+    activeConversationChatMode,
     activeConversationTitle:
       conversationSummaries.find((conversation) => conversation.id === activeConversationId)?.title ?? 'New thread',
     addFolder,

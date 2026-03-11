@@ -77,7 +77,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, 
     : `Thought for ${formatDuration(completedDuration)}`
 
   return (
-    <div className="mb-2">
+    <div>
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}

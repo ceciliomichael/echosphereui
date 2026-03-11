@@ -1,6 +1,7 @@
 import type { AppAppearance, AppLanguage } from '../lib/appSettings'
 
 export type MessageRole = 'user' | 'assistant'
+export type ChatMode = 'agent'
 export type UserMessageKind = 'human' | 'tool_result'
 export type ToolInvocationState = 'running' | 'completed' | 'failed'
 
@@ -29,6 +30,8 @@ export interface Message {
 }
 
 export interface ConversationSummary {
+  agentContextRootPath: string
+  chatMode: ChatMode
   id: string
   title: string
   preview: string
@@ -47,6 +50,8 @@ export interface ConversationPreview {
 }
 
 export interface ConversationRecord {
+  agentContextRootPath: string
+  chatMode: ChatMode
   id: string
   title: string
   createdAt: number
@@ -85,6 +90,7 @@ export interface ConversationGroupPreview {
 }
 
 export interface CreateConversationInput {
+  chatMode?: ChatMode
   folderId?: string | null
 }
 
@@ -165,6 +171,8 @@ export interface SaveCustomModelInput {
 }
 
 export interface StartChatStreamInput {
+  agentContextRootPath: string
+  chatMode: ChatMode
   messages: Message[]
   modelId: string
   providerId: ChatProviderId

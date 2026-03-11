@@ -40,6 +40,12 @@ export async function appendMessagesToLog(conversationId: string, messages: Mess
 }
 
 export async function listConversationSummaries() {
+  const conversations = await listConversationRecords()
+
+  return conversations.sort((left, right) => right.updatedAt - left.updatedAt).map(buildConversationSummary)
+}
+
+export async function listConversationRecords() {
   await ensureHistoryDirectory()
 
   const fileNames = await fs.readdir(getHistoryDirectoryPath())
@@ -61,10 +67,7 @@ export async function listConversationSummaries() {
     }),
   )
 
-  return conversations
-    .filter((conversation): conversation is ConversationRecord => conversation !== null)
-    .sort((left, right) => right.updatedAt - left.updatedAt)
-    .map(buildConversationSummary)
+  return conversations.filter((conversation): conversation is ConversationRecord => conversation !== null)
 }
 
 export async function deleteConversationFile(conversationId: string) {

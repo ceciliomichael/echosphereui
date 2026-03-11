@@ -12,6 +12,8 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
       await streamOpenAICompatibleResponseWithTools(
         client,
         {
+          agentContextRootPath: request.agentContextRootPath,
+          chatMode: request.chatMode,
           messages: request.messages,
           modelId: request.modelId,
           reasoningEffort: request.reasoningEffort,

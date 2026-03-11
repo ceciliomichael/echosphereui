@@ -2,11 +2,14 @@ import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react
 import { ArrowUp, Square } from 'lucide-react'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
+import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
 import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
-import type { ReasoningEffort } from '../types/chat'
+import type { ChatMode, ReasoningEffort } from '../types/chat'
 
 interface ChatInputProps {
+  chatModeOptions?: readonly ChatModeOption[]
+  chatModeSelectorDisabled?: boolean
   disabled?: boolean
   focusSignal?: number
   isEditing?: boolean
@@ -14,9 +17,11 @@ interface ChatInputProps {
   modelOptions?: readonly ModelSelectorOption[]
   onAbort?: () => void
   onCancelEdit?: () => void
+  onChatModeChange?: (mode: ChatMode) => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSend: () => void
+  selectedChatMode?: ChatMode
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
@@ -32,11 +37,15 @@ export function ChatInput({
   onValueChange,
   onSend,
   onCancelEdit,
+  chatModeOptions = [],
+  chatModeSelectorDisabled = false,
   modelOptions = [],
+  onChatModeChange,
   onModelChange,
   onReasoningEffortChange,
   isEditing = false,
   isStreaming = false,
+  selectedChatMode = 'agent',
   reasoningEffort = 'medium',
   reasoningEffortOptions = [],
   selectedModelId = '',
@@ -50,7 +59,9 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInline = variant === 'inline'
-  const showRuntimeControls = modelOptions.length > 0 && typeof onModelChange === 'function'
+  const showChatModeSelector = chatModeOptions.length > 0 && typeof onChatModeChange === 'function'
+  const showModelSelector = modelOptions.length > 0 && typeof onModelChange === 'function'
+  const showRuntimeControls = showChatModeSelector || showModelSelector
   const canAbort = isStreaming && typeof onAbort === 'function'
 
   const canSend = value.trim().length > 0 && !disabled
@@ -163,12 +174,23 @@ export function ChatInput({
         <div className="mt-3 flex items-end justify-between gap-3">
           {showRuntimeControls ? (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:flex-nowrap">
-              <ModelSelectorField
-                value={selectedModelId}
-                onChange={onModelChange ?? (() => undefined)}
-                options={modelOptions}
-                disabled={disabled}
-              />
+              {showChatModeSelector ? (
+                <ChatModeSelectorField
+                  value={selectedChatMode}
+                  onChange={onChatModeChange ?? (() => undefined)}
+                  options={chatModeOptions}
+                  disabled={chatModeSelectorDisabled}
+                />
+              ) : null}
+
+              {showModelSelector ? (
+                <ModelSelectorField
+                  value={selectedModelId}
+                  onChange={onModelChange ?? (() => undefined)}
+                  options={modelOptions}
+                  disabled={disabled}
+                />
+              ) : null}
 
               {showReasoningEffortSelector && onReasoningEffortChange ? (
                 <ReasoningEffortBlock

@@ -4,8 +4,9 @@ import type {
   ChatCompletionCreateParamsStreaming,
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions/completions'
-import type { Message, ReasoningEffort } from '../../../src/types/chat'
+import type { ChatMode, Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ProviderStreamContext } from '../providerTypes'
+import { buildSystemPrompt } from '../prompts'
 import {
   buildOpenAIClient,
   hasNonEmptyString,
@@ -13,7 +14,6 @@ import {
   isUnsupportedReasoningEffortError,
   OPENAI_MAX_RETRIES,
   OPENAI_REQUEST_TIMEOUT_MS,
-  OPENAI_SYSTEM_INSTRUCTIONS,
   readNestedRecord,
   readTextLikeValue,
 } from '../providers/openaiShared'
@@ -23,9 +23,11 @@ import {
   buildStartedToolInvocation,
   buildSuccessfulToolArtifacts,
 } from './toolResultFormatter'
-import type { OpenAICompatibleToolCall } from './toolTypes'
+import { OpenAICompatibleToolError, type OpenAICompatibleToolCall } from './toolTypes'
 
 interface StreamOpenAICompatibleResponseInput {
+  agentContextRootPath: string
+  chatMode: ChatMode
   messages: Message[]
   modelId: string
   reasoningEffort: ReasoningEffort
@@ -60,13 +62,19 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
   }
 }
 
-function buildOpenAICompatibleMessages(messages: Message[]): ChatCompletionMessageParam[] {
+function buildOpenAICompatibleMessages(request: StreamOpenAICompatibleResponseInput): ChatCompletionMessageParam[] {
   return [
     {
-      content: OPENAI_SYSTEM_INSTRUCTIONS,
+      content: buildSystemPrompt({
+        agentContextRootPath: request.agentContextRootPath,
+        chatMode: request.chatMode,
+        supportsNativeTools: true,
+      }),
       role: 'system',
     },
-    ...messages.map(toOpenAICompatibleMessage).filter((value): value is ChatCompletionMessageParam => value !== null),
+    ...request.messages
+      .map(toOpenAICompatibleMessage)
+      .filter((value): value is ChatCompletionMessageParam => value !== null),
   ]
 }
 
@@ -153,7 +161,7 @@ function buildOpenAICompatibleCompletionRequest(
   includeReasoningEffort: boolean,
 ): ChatCompletionCreateParamsStreaming {
   const payload: ChatCompletionCreateParamsStreaming = {
-    messages: buildOpenAICompatibleMessages(request.messages),
+    messages: buildOpenAICompatibleMessages(request),
     model: request.modelId,
     parallel_tool_calls: true,
     store: false,
@@ -239,6 +247,7 @@ function toErrorMessage(error: unknown) {
 async function executeToolCall(
   toolCall: OpenAICompatibleToolCall,
   context: ProviderStreamContext,
+  request: StreamOpenAICompatibleResponseInput,
   inMemoryMessages: Message[],
 ) {
   const startedAt = Date.now()
@@ -275,7 +284,10 @@ async function executeToolCall(
 
   try {
     const argumentsValue = toolDefinition.parseArguments(toolCall.argumentsText)
-    const semanticResult = await toolDefinition.execute(argumentsValue)
+    const semanticResult = await toolDefinition.execute(argumentsValue, {
+      agentContextRootPath: request.agentContextRootPath,
+      signal: context.signal,
+    })
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
 
@@ -293,7 +305,8 @@ async function executeToolCall(
   } catch (error) {
     const completedAt = Date.now()
     const errorMessage = toErrorMessage(error)
-    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt)
+    const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
+    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt, errorDetails)
 
     context.emitDelta({
       argumentsText: failedArtifacts.toolInvocation.argumentsText,
@@ -321,6 +334,8 @@ export async function streamOpenAICompatibleResponseWithTools(
     const turnResult = await streamOpenAICompatibleTurn(
       client,
       {
+        agentContextRootPath: request.agentContextRootPath,
+        chatMode: request.chatMode,
         messages: inMemoryMessages,
         modelId: request.modelId,
         reasoningEffort: request.reasoningEffort,
@@ -337,7 +352,7 @@ export async function streamOpenAICompatibleResponseWithTools(
     }
 
     for (const toolCall of turnResult.toolCalls) {
-      await executeToolCall(toolCall, context, inMemoryMessages)
+      await executeToolCall(toolCall, context, request, inMemoryMessages)
 
       if (context.signal.aborted) {
         return

@@ -1,4 +1,4 @@
-import type { ChatProviderId, Message, ReasoningEffort } from '../../src/types/chat'
+import type { ChatMode, ChatProviderId, Message, ReasoningEffort } from '../../src/types/chat'
 
 export type StreamDeltaEvent =
   | {
@@ -37,6 +37,8 @@ export type StreamDeltaEvent =
     }
 
 export interface ProviderStreamRequest {
+  agentContextRootPath: string
+  chatMode: ChatMode
   messages: Message[]
   modelId: string
   providerId: ChatProviderId

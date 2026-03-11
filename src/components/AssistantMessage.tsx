@@ -27,7 +27,7 @@ export function AssistantMessage({
   const shouldShowWaitingIndicator = isStreaming && !hasContent && !shouldShowThinking && toolInvocations.length === 0
 
   return (
-    <div className={chatMessageContentWidthClassName}>
+    <div className={[chatMessageContentWidthClassName, 'space-y-2'].join(' ')}>
       {shouldShowWaitingIndicator ? <ThinkingIndicator /> : null}
 
       {shouldShowThinking ? (
@@ -43,7 +43,9 @@ export function AssistantMessage({
         <ToolInvocationBlock key={invocation.id} invocation={invocation} />
       ))}
 
-      {hasContent ? <MarkdownRenderer content={content} className="text-left text-[15px]" isStreaming={isStreaming} /> : null}
+      {hasContent ? (
+        <MarkdownRenderer content={content} className="text-left text-[15px]" isStreaming={isStreaming} />
+      ) : null}
     </div>
   )
 }

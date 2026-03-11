@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type {
+  ChatMode,
   ConversationFolderSummary,
   ConversationRecord,
   ConversationSummary,
@@ -17,6 +18,7 @@ export interface ChatHistorySnapshot {
 
 interface PersistUserTurnInput {
   activeConversationId: string | null
+  chatMode: ChatMode
   modelId: string
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
@@ -122,7 +124,10 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
   if (conversationId) {
     currentConversation = await window.echosphereHistory.getConversation(conversationId)
   } else {
-    const createdConversation = await window.echosphereHistory.createConversation({ folderId: input.selectedFolderId })
+    const createdConversation = await window.echosphereHistory.createConversation({
+      chatMode: input.chatMode,
+      folderId: input.selectedFolderId,
+    })
     conversationId = createdConversation.id
     currentConversation = createdConversation
   }

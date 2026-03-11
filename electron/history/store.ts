@@ -1,6 +1,8 @@
+import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import type {
   AppendConversationMessagesInput,
+  ChatMode,
   ConversationRecord,
   CreateConversationFolderInput,
   ReplaceConversationMessagesInput,
@@ -9,14 +11,64 @@ import type {
 import {
   appendMessagesToLog,
   deleteConversationFile,
-  listConversationSummaries,
+  listConversationRecords,
   readConversationFile,
   writeConversationFile,
 } from './conversationFileStore'
+import { buildConversationSummary } from './documents'
 import { ensureStoredFolderExists, readFolderStore, toFolderSummaries, writeFolderStore } from './folderStore'
+import { getConversationAgentContextPath } from './paths'
+
+async function ensureVirtualAgentContextDirectory(conversationId: string) {
+  const agentContextPath = getConversationAgentContextPath(conversationId)
+  await fs.mkdir(agentContextPath, { recursive: true })
+  return agentContextPath
+}
+
+async function resolveAgentContextRootPath(conversationId: string, folderId: string | null, chatMode: ChatMode) {
+  if (chatMode !== 'agent') {
+    return ensureVirtualAgentContextDirectory(conversationId)
+  }
+
+  try {
+    const matchedFolder = await ensureStoredFolderExists(folderId)
+    if (matchedFolder?.path.trim()) {
+      return matchedFolder.path.trim()
+    }
+  } catch (error) {
+    console.warn(`Falling back to a virtual agent context for conversation ${conversationId}`, error)
+  }
+
+  return ensureVirtualAgentContextDirectory(conversationId)
+}
+
+async function ensureConversationAgentContext(conversation: ConversationRecord) {
+  const chatMode = conversation.chatMode ?? 'agent'
+  const agentContextRootPath =
+    conversation.agentContextRootPath.trim().length > 0
+      ? conversation.agentContextRootPath.trim()
+      : await resolveAgentContextRootPath(conversation.id, conversation.folderId, chatMode)
+
+  if (conversation.chatMode === chatMode && conversation.agentContextRootPath === agentContextRootPath) {
+    return conversation
+  }
+
+  const nextConversation: ConversationRecord = {
+    ...conversation,
+    agentContextRootPath,
+    chatMode,
+  }
+
+  await writeConversationFile(nextConversation)
+  return nextConversation
+}
 
 export async function listStoredConversations() {
-  return listConversationSummaries()
+  const conversations = await listConversationRecords()
+  const hydratedConversations = await Promise.all(conversations.map((conversation) => ensureConversationAgentContext(conversation)))
+  return hydratedConversations
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .map((conversation) => buildConversationSummary(conversation))
 }
 
 export async function listStoredFolders() {
@@ -25,7 +77,8 @@ export async function listStoredFolders() {
 
 export async function getStoredConversation(conversationId: string) {
   try {
-    return await readConversationFile(conversationId)
+    const conversation = await readConversationFile(conversationId)
+    return ensureConversationAgentContext(conversation)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return null
@@ -39,11 +92,15 @@ export async function getStoredConversation(conversationId: string) {
 export async function createStoredConversation(input?: CreateConversationInput) {
   const timestamp = Date.now()
   const folderId = input?.folderId ?? null
+  const chatMode = input?.chatMode ?? 'agent'
 
-  await ensureStoredFolderExists(folderId)
+  const conversationId = randomUUID()
+  const agentContextRootPath = await resolveAgentContextRootPath(conversationId, folderId, chatMode)
 
   const conversation: ConversationRecord = {
-    id: randomUUID(),
+    agentContextRootPath,
+    chatMode,
+    id: conversationId,
     title: 'New chat',
     createdAt: timestamp,
     updatedAt: timestamp,

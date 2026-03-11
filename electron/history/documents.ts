@@ -1,5 +1,11 @@
 import { getConversationPreviewContent } from '../../src/lib/chatMessageMetadata'
-import type { ConversationFolderRecord, ConversationRecord, ConversationSummary, Message } from '../../src/types/chat'
+import type {
+  ChatMode,
+  ConversationFolderRecord,
+  ConversationRecord,
+  ConversationSummary,
+  Message,
+} from '../../src/types/chat'
 
 export interface MessageLogEntry {
   conversationId: string
@@ -9,6 +15,10 @@ export interface MessageLogEntry {
 
 interface FolderStoreDocument {
   folders: ConversationFolderRecord[]
+}
+
+function normalizeChatMode(value: unknown): ChatMode {
+  return value === 'agent' ? 'agent' : 'agent'
 }
 
 function isToolInvocationTrace(value: unknown) {
@@ -97,6 +107,9 @@ export function normalizeConversationRecord(
     title: typeof conversation.title === 'string' && conversation.title.trim() ? conversation.title : 'New chat',
     createdAt,
     updatedAt: typeof conversation.updatedAt === 'number' ? conversation.updatedAt : createdAt,
+    chatMode: normalizeChatMode(conversation.chatMode),
+    agentContextRootPath:
+      typeof conversation.agentContextRootPath === 'string' ? conversation.agentContextRootPath.trim() : '',
     folderId: typeof conversation.folderId === 'string' ? conversation.folderId : null,
     messages,
   }
@@ -104,6 +117,8 @@ export function normalizeConversationRecord(
 
 export function buildConversationSummary(conversation: ConversationRecord): ConversationSummary {
   return {
+    agentContextRootPath: conversation.agentContextRootPath,
+    chatMode: conversation.chatMode,
     id: conversation.id,
     title: conversation.title,
     preview: getConversationPreviewContent(conversation.messages),

@@ -141,6 +141,8 @@ export function buildConversationGroups(
 
 export function buildConversationSummary(conversation: ConversationRecord): ConversationSummary {
   return {
+    agentContextRootPath: conversation.agentContextRootPath,
+    chatMode: conversation.chatMode,
     id: conversation.id,
     title: conversation.title,
     preview: getConversationPreviewContent(conversation.messages),

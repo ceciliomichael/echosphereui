@@ -3,6 +3,7 @@ import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
+import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
@@ -56,7 +57,9 @@ export function ChatInterface({
     isStreamingResponse,
     mainComposerValue,
     messages,
+    selectedChatMode,
     selectedFolderName,
+    setSelectedChatMode,
     setEditComposerValue,
     setMainComposerValue,
     selectConversation,
@@ -90,6 +93,17 @@ export function ChatInterface({
         value: option.id,
       })),
     [modelOptions],
+  )
+  const chatModeOptions = useMemo(
+    () =>
+      [
+        {
+          description: 'Echo can write and edit code',
+          label: 'Agent',
+          value: 'agent',
+        },
+      ] satisfies ChatModeOption[],
+    [],
   )
 
   useWorkspaceKeyboardShortcuts({
@@ -140,7 +154,9 @@ export function ChatInterface({
               <MessageList
                 conversationId={activeConversationId}
                 messages={messages}
+                chatModeOptions={chatModeOptions}
                 editingMessageId={editingMessageId}
+                onChatModeChange={setSelectedChatMode}
                 onEditUserMessage={startEditingMessage}
                 composerValue={editComposerValue}
                 onComposerValueChange={setEditComposerValue}
@@ -153,6 +169,7 @@ export function ChatInterface({
                 onReasoningEffortChange={setReasoningEffort}
                 reasoningEffort={reasoningEffort}
                 reasoningEffortOptions={availableReasoningEfforts}
+                selectedChatMode={selectedChatMode}
                 selectedModelId={selectedModelId}
                 sendMessageOnEnter={sendMessageOnEnter}
                 showReasoningEffortSelector={showReasoningEffortSelector}
@@ -169,10 +186,13 @@ export function ChatInterface({
               onValueChange={setMainComposerValue}
               onSend={sendNewMessage}
               onAbort={abortStreamingResponse}
+              chatModeOptions={chatModeOptions}
               isStreaming={isStreamingResponse}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
+              onChatModeChange={setSelectedChatMode}
               modelOptions={selectorOptions}
+              selectedChatMode={selectedChatMode}
               selectedModelId={selectedModelId}
               onModelChange={setSelectedModelId}
               reasoningEffort={reasoningEffort}

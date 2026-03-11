@@ -1,13 +1,16 @@
 import { memo, useRef } from 'react'
 import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
-import type { Message, ReasoningEffort } from '../types/chat'
+import type { ChatMode, Message, ReasoningEffort } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
+import type { ChatModeOption } from './chat/ChatModeSelectorField'
 import type { ModelSelectorOption } from './chat/ModelSelectorField'
 
 interface MessageListProps {
+  chatModeOptions?: readonly ChatModeOption[]
+  chatModeSelectorDisabled?: boolean
   conversationId: string | null
   composerValue: string
   composerFocusSignal?: number
@@ -15,11 +18,13 @@ interface MessageListProps {
   isSending?: boolean
   messages: Message[]
   onCancelEditingMessage: () => void
+  onChatModeChange?: (mode: ChatMode) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
+  selectedChatMode?: ChatMode
   modelOptions?: readonly ModelSelectorOption[]
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
@@ -30,6 +35,8 @@ interface MessageListProps {
 }
 
 interface MessageRowProps {
+  chatModeOptions?: readonly ChatModeOption[]
+  chatModeSelectorDisabled?: boolean
   composerFocusSignal?: number
   composerValue: string
   isEditing: boolean
@@ -37,11 +44,13 @@ interface MessageRowProps {
   isStreaming: boolean
   message: Message
   onCancelEditingMessage: () => void
+  onChatModeChange?: (mode: ChatMode) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
+  selectedChatMode?: ChatMode
   modelOptions?: readonly ModelSelectorOption[]
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
@@ -52,6 +61,8 @@ interface MessageRowProps {
 
 const MessageRow = memo(
   function MessageRow({
+    chatModeOptions,
+    chatModeSelectorDisabled,
     composerFocusSignal,
     composerValue,
     isEditing,
@@ -59,11 +70,13 @@ const MessageRow = memo(
     isStreaming,
     message,
     onCancelEditingMessage,
+    onChatModeChange,
     onComposerValueChange,
     onEditUserMessage,
     onModelChange,
     onReasoningEffortChange,
     onSendEditedMessage,
+    selectedChatMode,
     modelOptions,
     reasoningEffort,
     reasoningEffortOptions,
@@ -81,11 +94,15 @@ const MessageRow = memo(
                 onValueChange={onComposerValueChange}
                 onSend={onSendEditedMessage}
                 onCancelEdit={onCancelEditingMessage}
+                chatModeOptions={chatModeOptions}
+                chatModeSelectorDisabled={chatModeSelectorDisabled}
                 isEditing
+                onChatModeChange={onChatModeChange}
                 sendOnEnter={sendMessageOnEnter}
                 variant="inline"
                 focusSignal={composerFocusSignal}
                 disabled={isSending}
+                selectedChatMode={selectedChatMode}
                 modelOptions={modelOptions}
                 onModelChange={onModelChange}
                 onReasoningEffortChange={onReasoningEffortChange}
@@ -137,6 +154,8 @@ const MessageRow = memo(
       previousProps.composerValue === nextProps.composerValue &&
       previousProps.composerFocusSignal === nextProps.composerFocusSignal &&
       previousProps.isSending === nextProps.isSending &&
+      previousProps.chatModeSelectorDisabled === nextProps.chatModeSelectorDisabled &&
+      previousProps.selectedChatMode === nextProps.selectedChatMode &&
       previousProps.reasoningEffort === nextProps.reasoningEffort &&
       previousProps.selectedModelId === nextProps.selectedModelId &&
       previousProps.sendMessageOnEnter === nextProps.sendMessageOnEnter &&
@@ -147,6 +166,8 @@ const MessageRow = memo(
 )
 
 export function MessageList({
+  chatModeOptions,
+  chatModeSelectorDisabled,
   conversationId,
   messages,
   editingMessageId = null,
@@ -155,8 +176,10 @@ export function MessageList({
   onComposerValueChange,
   onSendEditedMessage,
   onCancelEditingMessage,
+  onChatModeChange,
   composerFocusSignal,
   isSending = false,
+  selectedChatMode,
   modelOptions,
   onModelChange,
   onReasoningEffortChange,
@@ -177,10 +200,12 @@ export function MessageList({
 
   return (
     <div ref={scrollContainerRef} className="scroll-stable flex-1 w-full overflow-y-auto">
-      <div className="chat-column mx-auto space-y-4 px-4 pb-6 pt-6">
+      <div className="chat-column mx-auto space-y-2.5 px-4 pb-6 pt-6">
         {visibleMessages.map((msg) => (
           <MessageRow
             key={msg.id}
+            chatModeOptions={chatModeOptions}
+            chatModeSelectorDisabled={chatModeSelectorDisabled}
             composerFocusSignal={composerFocusSignal}
             composerValue={composerValue}
             isEditing={editingMessageId === msg.id}
@@ -188,11 +213,13 @@ export function MessageList({
             isStreaming={streamingAssistantMessageId === msg.id}
             message={msg}
             onCancelEditingMessage={onCancelEditingMessage}
+            onChatModeChange={onChatModeChange}
             onComposerValueChange={onComposerValueChange}
             onEditUserMessage={onEditUserMessage}
             onModelChange={onModelChange}
             onReasoningEffortChange={onReasoningEffortChange}
             onSendEditedMessage={onSendEditedMessage}
+            selectedChatMode={selectedChatMode}
             modelOptions={modelOptions}
             reasoningEffort={reasoningEffort}
             reasoningEffortOptions={reasoningEffortOptions}

@@ -73,8 +73,10 @@ export function buildFailedToolArtifacts(
   errorMessage: string,
   startedAt: number,
   completedAt: number,
+  details?: Record<string, unknown>,
 ) {
   const payload = {
+    ...(details ? { details } : {}),
     error: errorMessage,
     ok: false,
     toolName: toolCall.name,
