@@ -9,6 +9,32 @@ export type StreamDeltaEvent =
       delta: string
       type: 'reasoning_delta'
     }
+  | {
+      argumentsText: string
+      invocationId: string
+      startedAt: number
+      toolName: string
+      type: 'tool_invocation_started'
+    }
+  | {
+      argumentsText: string
+      completedAt: number
+      invocationId: string
+      resultContent: string
+      syntheticMessage: Message
+      toolName: string
+      type: 'tool_invocation_completed'
+    }
+  | {
+      argumentsText: string
+      completedAt: number
+      errorMessage: string
+      invocationId: string
+      resultContent: string
+      syntheticMessage: Message
+      toolName: string
+      type: 'tool_invocation_failed'
+    }
 
 export interface ProviderStreamRequest {
   messages: Message[]

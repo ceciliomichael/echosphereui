@@ -1,6 +1,18 @@
 import type { AppAppearance, AppLanguage } from '../lib/appSettings'
 
 export type MessageRole = 'user' | 'assistant'
+export type UserMessageKind = 'human' | 'tool_result'
+export type ToolInvocationState = 'running' | 'completed' | 'failed'
+
+export interface ToolInvocationTrace {
+  argumentsText: string
+  completedAt?: number
+  id: string
+  resultContent?: string
+  startedAt: number
+  state: ToolInvocationState
+  toolName: string
+}
 
 export interface Message {
   id: string
@@ -12,6 +24,8 @@ export interface Message {
   reasoningCompletedAt?: number
   reasoningEffort?: ReasoningEffort
   timestamp: number
+  toolInvocations?: ToolInvocationTrace[]
+  userMessageKind?: UserMessageKind
 }
 
 export interface ConversationSummary {
@@ -175,6 +189,35 @@ export type ChatStreamEvent =
       delta: string
       streamId: string
       type: 'reasoning_delta'
+    }
+  | {
+      argumentsText: string
+      invocationId: string
+      startedAt: number
+      streamId: string
+      toolName: string
+      type: 'tool_invocation_started'
+    }
+  | {
+      argumentsText: string
+      completedAt: number
+      invocationId: string
+      resultContent: string
+      streamId: string
+      syntheticMessage: Message
+      toolName: string
+      type: 'tool_invocation_completed'
+    }
+  | {
+      argumentsText: string
+      completedAt: number
+      errorMessage: string
+      invocationId: string
+      resultContent: string
+      streamId: string
+      syntheticMessage: Message
+      toolName: string
+      type: 'tool_invocation_failed'
     }
   | {
       streamId: string

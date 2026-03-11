@@ -140,9 +140,9 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
   }
 }
 
-export async function persistAssistantMessage(conversationId: string, assistantMessage: Message) {
+export async function persistAssistantTurn(conversationId: string, messages: Message[]) {
   return window.echosphereHistory.appendMessages({
     conversationId,
-    messages: [assistantMessage],
+    messages,
   })
 }

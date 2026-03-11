@@ -2,6 +2,7 @@ import type { ReasoningEffort } from '../types/chat'
 
 export const REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh']
 export const DEFAULT_REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh']
+export const OPENAI_COMPATIBLE_REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['low', 'medium', 'high']
 export const ANTHROPIC_REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['low', 'medium', 'high']
 export const GOOGLE_REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['minimal', 'low', 'medium', 'high']
 export const GOOGLE_PRO_REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['low', 'medium', 'high']

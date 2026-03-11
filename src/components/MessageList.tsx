@@ -1,4 +1,5 @@
 import { memo, useRef } from 'react'
+import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
 import type { Message, ReasoningEffort } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
@@ -109,6 +110,7 @@ const MessageRow = memo(
             reasoningCompletedAt={message.reasoningCompletedAt}
             reasoningContent={message.reasoningContent}
             timestamp={message.timestamp}
+            toolInvocations={message.toolInvocations}
           />
         )}
       </div>
@@ -166,8 +168,9 @@ export function MessageList({
   streamingAssistantMessageId = null,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const visibleMessages = messages.filter((message) => isVisibleTranscriptMessage(message))
 
-  useAutoScroll(scrollContainerRef, messages, {
+  useAutoScroll(scrollContainerRef, visibleMessages, {
     resetKey: conversationId,
     shouldAutoScroll: true,
   })
@@ -175,7 +178,7 @@ export function MessageList({
   return (
     <div ref={scrollContainerRef} className="scroll-stable flex-1 w-full overflow-y-auto">
       <div className="chat-column mx-auto space-y-4 px-4 pb-6 pt-6">
-        {messages.map((msg) => (
+        {visibleMessages.map((msg) => (
           <MessageRow
             key={msg.id}
             composerFocusSignal={composerFocusSignal}

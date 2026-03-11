@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isHumanUserMessage } from '../lib/chatMessageMetadata'
 import type { Message } from '../types/chat'
 
 export function useChatComposerState(messages: Message[], isSending: boolean) {
@@ -28,7 +29,7 @@ export function useChatComposerState(messages: Message[], isSending: boolean) {
       return
     }
 
-    const targetMessage = messagesRef.current.find((message) => message.id === messageId && message.role === 'user')
+    const targetMessage = messagesRef.current.find((message) => message.id === messageId && isHumanUserMessage(message))
     if (!targetMessage) {
       return
     }

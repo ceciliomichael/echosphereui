@@ -78,6 +78,24 @@ export function useChatSessionState(language: AppLanguage) {
   const appendLocalMessage = useCallback((message: Message) => {
     setMessages((currentValue) => [...currentValue, message])
   }, [])
+  const insertLocalMessagesBefore = useCallback((targetMessageId: string, nextMessages: Message[]) => {
+    if (nextMessages.length === 0) {
+      return
+    }
+
+    setMessages((currentValue) => {
+      const targetMessageIndex = currentValue.findIndex((message) => message.id === targetMessageId)
+      if (targetMessageIndex < 0) {
+        return [...currentValue, ...nextMessages]
+      }
+
+      return [
+        ...currentValue.slice(0, targetMessageIndex),
+        ...nextMessages,
+        ...currentValue.slice(targetMessageIndex),
+      ]
+    })
+  }, [])
   const removeLocalMessage = useCallback((messageId: string) => {
     setMessages((currentValue) => currentValue.filter((message) => message.id !== messageId))
   }, [])
@@ -107,6 +125,7 @@ export function useChatSessionState(language: AppLanguage) {
     error,
     getDeletionContext,
     initializeHistory,
+    insertLocalMessagesBefore,
     isLoading,
     isSending,
     messages,

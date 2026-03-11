@@ -3,7 +3,11 @@ import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
 import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
 import { isProviderConfigured } from '../components/settings/models/modelViewUtils'
-import { DEFAULT_REASONING_EFFORT_VALUES, normalizeReasoningEffort } from '../lib/reasoningEffort'
+import {
+  DEFAULT_REASONING_EFFORT_VALUES,
+  normalizeReasoningEffort,
+  OPENAI_COMPATIBLE_REASONING_EFFORT_VALUES,
+} from '../lib/reasoningEffort'
 import type { AppSettings, ChatProviderId, CustomModelConfig, ProvidersState, ReasoningEffort } from '../types/chat'
 
 interface ChatModelOption {
@@ -52,6 +56,14 @@ interface UseChatRuntimeConfigInput {
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
 }
 
+function getDefaultReasoningEfforts(providerId: ChatProviderId) {
+  if (providerId === 'openai-compatible') {
+    return OPENAI_COMPATIBLE_REASONING_EFFORT_VALUES
+  }
+
+  return DEFAULT_REASONING_EFFORT_VALUES
+}
+
 export function useChatRuntimeConfig({ providersState, settings, updateSettings }: UseChatRuntimeConfigInput) {
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
   const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
@@ -66,7 +78,7 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
       return [] as readonly ReasoningEffort[]
     }
 
-    return selectedModel.reasoningEfforts ?? DEFAULT_REASONING_EFFORT_VALUES
+    return selectedModel.reasoningEfforts ?? getDefaultReasoningEfforts(selectedModel.providerId)
   }, [selectedModel])
   const reasoningEffort = useMemo(
     () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),

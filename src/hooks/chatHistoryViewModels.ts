@@ -1,4 +1,5 @@
 import type { AppLanguage } from '../lib/appSettings'
+import { getConversationPreviewContent } from '../lib/chatMessageMetadata'
 import type {
   ConversationFolderSummary,
   ConversationGroupPreview,
@@ -139,12 +140,10 @@ export function buildConversationGroups(
 }
 
 export function buildConversationSummary(conversation: ConversationRecord): ConversationSummary {
-  const latestMessage = conversation.messages.at(-1)
-
   return {
     id: conversation.id,
     title: conversation.title,
-    preview: latestMessage?.content ?? 'No messages yet',
+    preview: getConversationPreviewContent(conversation.messages),
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
     folderId: conversation.folderId,

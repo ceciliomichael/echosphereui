@@ -1,3 +1,4 @@
+import { getConversationPreviewContent } from '../../src/lib/chatMessageMetadata'
 import type { ConversationFolderRecord, ConversationRecord, ConversationSummary, Message } from '../../src/types/chat'
 
 export interface MessageLogEntry {
@@ -8,6 +9,23 @@ export interface MessageLogEntry {
 
 interface FolderStoreDocument {
   folders: ConversationFolderRecord[]
+}
+
+function isToolInvocationTrace(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const invocation = value as Partial<NonNullable<Message['toolInvocations']>[number]>
+  return (
+    typeof invocation.id === 'string' &&
+    typeof invocation.toolName === 'string' &&
+    typeof invocation.argumentsText === 'string' &&
+    typeof invocation.startedAt === 'number' &&
+    (invocation.completedAt === undefined || typeof invocation.completedAt === 'number') &&
+    (invocation.resultContent === undefined || typeof invocation.resultContent === 'string') &&
+    (invocation.state === 'running' || invocation.state === 'completed' || invocation.state === 'failed')
+  )
 }
 
 function isMessage(value: unknown): value is Message {
@@ -30,6 +48,13 @@ function isMessage(value: unknown): value is Message {
     message.reasoningEffort === 'medium' ||
     message.reasoningEffort === 'high' ||
     message.reasoningEffort === 'xhigh'
+  const hasValidUserMessageKind =
+    message.userMessageKind === undefined ||
+    message.userMessageKind === 'human' ||
+    message.userMessageKind === 'tool_result'
+  const hasValidToolInvocations =
+    message.toolInvocations === undefined ||
+    (Array.isArray(message.toolInvocations) && message.toolInvocations.every((entry) => isToolInvocationTrace(entry)))
 
   return (
     typeof message.id === 'string' &&
@@ -40,7 +65,9 @@ function isMessage(value: unknown): value is Message {
     hasValidProviderId &&
     (message.reasoningContent === undefined || typeof message.reasoningContent === 'string') &&
     (message.reasoningCompletedAt === undefined || typeof message.reasoningCompletedAt === 'number') &&
-    hasValidReasoningEffort
+    hasValidReasoningEffort &&
+    hasValidUserMessageKind &&
+    hasValidToolInvocations
   )
 }
 
@@ -76,12 +103,10 @@ export function normalizeConversationRecord(
 }
 
 export function buildConversationSummary(conversation: ConversationRecord): ConversationSummary {
-  const latestMessage = conversation.messages.at(-1)
-
   return {
     id: conversation.id,
     title: conversation.title,
-    preview: latestMessage?.content ?? 'No messages yet',
+    preview: getConversationPreviewContent(conversation.messages),
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
     folderId: conversation.folderId,

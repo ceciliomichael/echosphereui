@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { loadInitialChatHistory, persistAssistantMessage, persistUserTurn } from './chatHistoryWorkflows'
+import { loadInitialChatHistory, persistAssistantTurn, persistUserTurn } from './chatHistoryWorkflows'
 import { useChatComposerState } from './useChatComposerState'
 import { useChatSessionState } from './useChatSessionState'
 import type { AppLanguage } from '../lib/appSettings'
-import type { ChatProviderId, Message, ReasoningEffort } from '../types/chat'
+import type { ChatProviderId, Message, ReasoningEffort, ToolInvocationTrace } from '../types/chat'
 
 interface ChatRuntimeSelection {
   hasConfiguredProvider: boolean
@@ -21,14 +21,29 @@ interface StreamAssistantResponseInput {
   onReasoningCompleted: (completedAt: number) => void
   onReasoningDelta: (delta: string) => void
   onStreamStarted: (streamId: string) => void
+  onSyntheticToolMessage: (message: Message) => void
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
+  onToolInvocationCompleted: (
+    invocationId: string,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'toolName'>,
+  ) => void
+  onToolInvocationFailed: (
+    invocationId: string,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'toolName'>,
+  ) => void
+  onToolInvocationStarted: (
+    invocationId: string,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>,
+  ) => void
 }
 
 interface StreamAssistantResponseOutput {
   content: string
   reasoningCompletedAt: number | null
   reasoningContent: string
+  syntheticToolMessages: Message[]
+  toolInvocations: ToolInvocationTrace[]
   wasAborted: boolean
 }
 
@@ -46,11 +61,28 @@ function toErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage
 }
 
+function upsertToolInvocation(
+  toolInvocations: ToolInvocationTrace[],
+  invocationId: string,
+  updater: (currentValue: ToolInvocationTrace | null) => ToolInvocationTrace,
+) {
+  const existingInvocation = toolInvocations.find((invocation) => invocation.id === invocationId) ?? null
+  const nextInvocation = updater(existingInvocation)
+
+  if (!existingInvocation) {
+    return [...toolInvocations, nextInvocation]
+  }
+
+  return toolInvocations.map((invocation) => (invocation.id === invocationId ? nextInvocation : invocation))
+}
+
 async function streamAssistantResponse(input: StreamAssistantResponseInput): Promise<StreamAssistantResponseOutput> {
   let streamId: string | null = null
   let assistantContent = ''
   let reasoningCompletedAt: number | null = null
   let reasoningContent = ''
+  let toolInvocations: ToolInvocationTrace[] = []
+  const syntheticToolMessages: Message[] = []
 
   return new Promise<StreamAssistantResponseOutput>((resolve, reject) => {
     const unsubscribe = window.echosphereChat.onStreamEvent((event) => {
@@ -75,6 +107,68 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
         return
       }
 
+      if (event.type === 'tool_invocation_started') {
+        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
+          argumentsText: event.argumentsText,
+          id: event.invocationId,
+          resultContent: currentValue?.resultContent,
+          startedAt: currentValue?.startedAt ?? event.startedAt,
+          state: 'running',
+          toolName: event.toolName,
+        }))
+
+        input.onToolInvocationStarted(event.invocationId, {
+          argumentsText: event.argumentsText,
+          startedAt: event.startedAt,
+          toolName: event.toolName,
+        })
+        return
+      }
+
+      if (event.type === 'tool_invocation_completed') {
+        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
+          argumentsText: event.argumentsText,
+          completedAt: event.completedAt,
+          id: event.invocationId,
+          resultContent: event.resultContent,
+          startedAt: currentValue?.startedAt ?? event.completedAt,
+          state: 'completed',
+          toolName: event.toolName,
+        }))
+
+        syntheticToolMessages.push(event.syntheticMessage)
+        input.onSyntheticToolMessage(event.syntheticMessage)
+        input.onToolInvocationCompleted(event.invocationId, {
+          argumentsText: event.argumentsText,
+          completedAt: event.completedAt,
+          resultContent: event.resultContent,
+          toolName: event.toolName,
+        })
+        return
+      }
+
+      if (event.type === 'tool_invocation_failed') {
+        toolInvocations = upsertToolInvocation(toolInvocations, event.invocationId, (currentValue) => ({
+          argumentsText: event.argumentsText,
+          completedAt: event.completedAt,
+          id: event.invocationId,
+          resultContent: event.resultContent,
+          startedAt: currentValue?.startedAt ?? event.completedAt,
+          state: 'failed',
+          toolName: event.toolName,
+        }))
+
+        syntheticToolMessages.push(event.syntheticMessage)
+        input.onSyntheticToolMessage(event.syntheticMessage)
+        input.onToolInvocationFailed(event.invocationId, {
+          argumentsText: event.argumentsText,
+          completedAt: event.completedAt,
+          resultContent: event.resultContent,
+          toolName: event.toolName,
+        })
+        return
+      }
+
       if (event.type === 'completed') {
         if (reasoningCompletedAt === null && reasoningContent.trim().length > 0) {
           reasoningCompletedAt = Date.now()
@@ -86,6 +180,8 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
           content: assistantContent,
           reasoningCompletedAt,
           reasoningContent,
+          syntheticToolMessages,
+          toolInvocations,
           wasAborted: false,
         })
         return
@@ -102,6 +198,8 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
           content: assistantContent,
           reasoningCompletedAt,
           reasoningContent,
+          syntheticToolMessages,
+          toolInvocations,
           wasAborted: true,
         })
         return
@@ -145,6 +243,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     error,
     getDeletionContext,
     initializeHistory,
+    insertLocalMessagesBefore,
     isLoading,
     isSending,
     messages,
@@ -294,6 +393,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     const draftAssistantId = uuidv4()
     const assistantStartedAt = Date.now()
     let didAppendDraftAssistant = false
+    const insertedSyntheticToolMessageIds: string[] = []
 
     try {
       const { conversation } = await persistUserTurn({
@@ -324,6 +424,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         reasoningEffort: runtimeSelection.reasoningEffort,
         role: 'assistant',
         timestamp: assistantStartedAt,
+        toolInvocations: [],
       })
       didAppendDraftAssistant = true
       setStreamingAssistantMessageId(draftAssistantId)
@@ -348,7 +449,52 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
             reasoningContent: (message.reasoningContent ?? '') + delta,
           }))
         },
+        onSyntheticToolMessage: (syntheticMessage) => {
+          insertedSyntheticToolMessageIds.push(syntheticMessage.id)
+          insertLocalMessagesBefore(draftAssistantId, [syntheticMessage])
+        },
         onStreamStarted: updateActiveStreamId,
+        onToolInvocationCompleted: (invocationId, nextValue) => {
+          updateLocalMessage(draftAssistantId, (message) => ({
+            ...message,
+            toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
+              argumentsText: nextValue.argumentsText,
+              completedAt: nextValue.completedAt,
+              id: invocationId,
+              resultContent: nextValue.resultContent,
+              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? assistantStartedAt,
+              state: 'completed',
+              toolName: nextValue.toolName,
+            })),
+          }))
+        },
+        onToolInvocationFailed: (invocationId, nextValue) => {
+          updateLocalMessage(draftAssistantId, (message) => ({
+            ...message,
+            toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
+              argumentsText: nextValue.argumentsText,
+              completedAt: nextValue.completedAt,
+              id: invocationId,
+              resultContent: nextValue.resultContent,
+              startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? assistantStartedAt,
+              state: 'failed',
+              toolName: nextValue.toolName,
+            })),
+          }))
+        },
+        onToolInvocationStarted: (invocationId, nextValue) => {
+          updateLocalMessage(draftAssistantId, (message) => ({
+            ...message,
+            toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
+              argumentsText: nextValue.argumentsText,
+              id: invocationId,
+              resultContent: currentValue?.resultContent,
+              startedAt: currentValue?.startedAt ?? nextValue.startedAt,
+              state: 'running',
+              toolName: nextValue.toolName,
+            })),
+          }))
+        },
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
@@ -365,11 +511,15 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         reasoningEffort: runtimeSelection.reasoningEffort,
         role: 'assistant',
         timestamp: assistantStartedAt,
+        toolInvocations: streamedAssistant.toolInvocations,
       }
 
       if (assistantMessage.content.trim().length === 0 && (assistantMessage.reasoningContent ?? '').trim().length === 0) {
         if (streamedAssistant.wasAborted) {
           removeLocalMessage(draftAssistantId)
+          for (const syntheticMessage of streamedAssistant.syntheticToolMessages) {
+            removeLocalMessage(syntheticMessage.id)
+          }
           didAppendDraftAssistant = false
           return
         }
@@ -379,13 +529,19 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
 
       updateLocalMessage(draftAssistantId, () => assistantMessage)
       setStreamingAssistantMessageId(null)
-      const savedConversation = await persistAssistantMessage(conversation.id, assistantMessage)
+      const savedConversation = await persistAssistantTurn(conversation.id, [
+        ...streamedAssistant.syntheticToolMessages,
+        assistantMessage,
+      ])
       didAppendDraftAssistant = false
       updateConversationSummary(savedConversation)
     } catch (caughtError) {
       console.error(caughtError)
       if (didAppendDraftAssistant) {
         removeLocalMessage(draftAssistantId)
+      }
+      for (const syntheticMessageId of insertedSyntheticToolMessageIds) {
+        removeLocalMessage(syntheticMessageId)
       }
 
       const providerLabel = runtimeSelection.providerLabel ?? 'the selected provider'
