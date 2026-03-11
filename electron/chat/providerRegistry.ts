@@ -1,5 +1,6 @@
 import type { ChatProviderId } from '../../src/types/chat'
 import type { ChatProviderAdapter, ProviderStreamContext, ProviderStreamRequest } from './providerTypes'
+import { anthropicChatProviderAdapter } from './providers/anthropicAdapter'
 import { codexChatProviderAdapter } from './providers/codexAdapter'
 import { openaiChatProviderAdapter } from './providers/openaiAdapter'
 import { openaiCompatibleChatProviderAdapter } from './providers/openaiCompatibleAdapter'
@@ -9,10 +10,7 @@ async function unsupportedProviderResponse(request: ProviderStreamRequest) {
 }
 
 const providerRegistry: Record<ChatProviderId, ChatProviderAdapter> = {
-  anthropic: {
-    providerId: 'anthropic',
-    streamResponse: unsupportedProviderResponse,
-  },
+  anthropic: anthropicChatProviderAdapter,
   codex: codexChatProviderAdapter,
   google: {
     providerId: 'google',

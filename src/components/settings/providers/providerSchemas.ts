@@ -29,11 +29,11 @@ export const API_KEY_PROVIDER_SCHEMAS: readonly ApiKeyProviderSchema[] = [
     baseUrlLabel: 'Base URL',
     baseUrlRequired: false,
     defaultBaseUrl: 'https://api.anthropic.com',
-    description: 'Connect to Anthropic Claude using your API key.',
+    description: 'Connect to Anthropic Claude using your API key. You can override the default API base URL if needed.',
     id: 'anthropic',
     label: 'Anthropic',
     showAdvancedDefaults: true,
-    showBaseUrl: false,
+    showBaseUrl: true,
   },
   {
     apiKeyOptional: false,

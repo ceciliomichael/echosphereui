@@ -16,6 +16,7 @@ interface ChatInputProps {
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSend: () => void
   reasoningEffort?: ReasoningEffort
+  reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
   showReasoningEffortSelector?: boolean
   value: string
@@ -34,6 +35,7 @@ export function ChatInput({
   onReasoningEffortChange,
   isEditing = false,
   reasoningEffort = 'medium',
+  reasoningEffortOptions = [],
   selectedModelId = '',
   showReasoningEffortSelector = false,
   sendOnEnter = true,
@@ -157,6 +159,7 @@ export function ChatInput({
 
               {showReasoningEffortSelector && onReasoningEffortChange ? (
                 <ReasoningEffortBlock
+                  options={reasoningEffortOptions}
                   value={reasoningEffort}
                   onChange={onReasoningEffortChange}
                   disabled={disabled}

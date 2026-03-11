@@ -1,8 +1,9 @@
+import { ANTHROPIC_REASONING_EFFORT_VALUES } from '../../../lib/reasoningEffort'
 import type { ModelCatalogItem, ModelProviderId } from './modelTypes'
 
 type ProviderModelDefinition = Pick<
   ModelCatalogItem,
-  'apiModelId' | 'enabledByDefault' | 'id' | 'label' | 'reasoningCapable'
+  'apiModelId' | 'enabledByDefault' | 'id' | 'label' | 'reasoningCapable' | 'reasoningEfforts'
 >
 
 export const PROVIDER_MODELS = {
@@ -34,9 +35,42 @@ export const PROVIDER_MODELS = {
     },
   ],
   anthropic: [
-    { enabledByDefault: true, id: 'anthropic-opus-4.5', label: 'anthropic-opus-4.5' },
-    { enabledByDefault: true, id: 'anthropic-sonnet-4.5', label: 'anthropic-sonnet-4.5' },
-    { enabledByDefault: false, id: 'anthropic-sonnet-4.5-thinking', label: 'anthropic-sonnet-4.5-thinking' },
+    {
+      apiModelId: 'claude-sonnet-4-6',
+      enabledByDefault: true,
+      id: 'anthropic:claude-sonnet-4.6',
+      label: 'claude-sonnet-4.6',
+      reasoningCapable: true,
+      reasoningEfforts: ANTHROPIC_REASONING_EFFORT_VALUES,
+    },
+    {
+      apiModelId: 'claude-sonnet-4-5',
+      enabledByDefault: true,
+      id: 'anthropic:claude-sonnet-4.5',
+      label: 'claude-sonnet-4.5',
+    },
+    {
+      apiModelId: 'claude-opus-4-5',
+      enabledByDefault: true,
+      id: 'anthropic:claude-opus-4.5',
+      label: 'claude-opus-4.5',
+      reasoningCapable: true,
+      reasoningEfforts: ANTHROPIC_REASONING_EFFORT_VALUES,
+    },
+    {
+      apiModelId: 'claude-opus-4-6',
+      enabledByDefault: true,
+      id: 'anthropic:claude-opus-4.6',
+      label: 'claude-opus-4.6',
+      reasoningCapable: true,
+      reasoningEfforts: ANTHROPIC_REASONING_EFFORT_VALUES,
+    },
+    {
+      apiModelId: 'claude-haiku-4-5',
+      enabledByDefault: true,
+      id: 'anthropic:claude-haiku-4.5',
+      label: 'claude-haiku-4.5',
+    },
   ],
   google: [
     { enabledByDefault: true, id: 'google-gemini-2.5-flash', label: 'google-gemini-2.5-flash' },

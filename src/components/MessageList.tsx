@@ -21,6 +21,7 @@ interface MessageListProps {
   onSendEditedMessage: () => void
   modelOptions?: readonly ModelSelectorOption[]
   reasoningEffort?: ReasoningEffort
+  reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
   sendMessageOnEnter: boolean
   showReasoningEffortSelector?: boolean
@@ -42,6 +43,7 @@ interface MessageRowProps {
   onSendEditedMessage: () => void
   modelOptions?: readonly ModelSelectorOption[]
   reasoningEffort?: ReasoningEffort
+  reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
   sendMessageOnEnter: boolean
   showReasoningEffortSelector?: boolean
@@ -63,6 +65,7 @@ const MessageRow = memo(
     onSendEditedMessage,
     modelOptions,
     reasoningEffort,
+    reasoningEffortOptions,
     selectedModelId,
     sendMessageOnEnter,
     showReasoningEffortSelector,
@@ -86,6 +89,7 @@ const MessageRow = memo(
                 onModelChange={onModelChange}
                 onReasoningEffortChange={onReasoningEffortChange}
                 reasoningEffort={reasoningEffort}
+                reasoningEffortOptions={reasoningEffortOptions}
                 selectedModelId={selectedModelId}
                 showReasoningEffortSelector={showReasoningEffortSelector}
               />
@@ -155,6 +159,7 @@ export function MessageList({
   onModelChange,
   onReasoningEffortChange,
   reasoningEffort,
+  reasoningEffortOptions,
   selectedModelId,
   sendMessageOnEnter,
   showReasoningEffortSelector = false,
@@ -187,6 +192,7 @@ export function MessageList({
             onSendEditedMessage={onSendEditedMessage}
             modelOptions={modelOptions}
             reasoningEffort={reasoningEffort}
+            reasoningEffortOptions={reasoningEffortOptions}
             selectedModelId={selectedModelId}
             sendMessageOnEnter={sendMessageOnEnter}
             showReasoningEffortSelector={showReasoningEffortSelector}

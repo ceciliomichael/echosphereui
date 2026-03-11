@@ -211,9 +211,6 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
           <section className="rounded-2xl border border-border bg-surface p-4 md:p-5">
             <header className="mb-3">
               <h4 className="text-sm font-medium text-foreground md:text-[15px]">Add Custom Model</h4>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Custom models are saved to your local config at <code>~/.echosphere/config/custom-models.json</code>.
-              </p>
             </header>
 
             <div className="grid gap-3 md:grid-cols-2">

@@ -72,6 +72,7 @@ export function ChatInterface({
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
   })
   const {
+    availableReasoningEfforts,
     modelOptions,
     reasoningEffort,
     selectedModelId,
@@ -149,6 +150,7 @@ export function ChatInterface({
                 onModelChange={setSelectedModelId}
                 onReasoningEffortChange={setReasoningEffort}
                 reasoningEffort={reasoningEffort}
+                reasoningEffortOptions={availableReasoningEfforts}
                 selectedModelId={selectedModelId}
                 sendMessageOnEnter={sendMessageOnEnter}
                 showReasoningEffortSelector={showReasoningEffortSelector}
@@ -170,6 +172,7 @@ export function ChatInterface({
               selectedModelId={selectedModelId}
               onModelChange={setSelectedModelId}
               reasoningEffort={reasoningEffort}
+              reasoningEffortOptions={availableReasoningEfforts}
               onReasoningEffortChange={setReasoningEffort}
               showReasoningEffortSelector={showReasoningEffortSelector}
             />

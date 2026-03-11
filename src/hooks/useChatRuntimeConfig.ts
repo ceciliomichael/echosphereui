@@ -3,6 +3,7 @@ import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
 import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
 import { isProviderConfigured } from '../components/settings/models/modelViewUtils'
+import { REASONING_EFFORT_VALUES, normalizeReasoningEffort } from '../lib/reasoningEffort'
 import type { AppSettings, ChatProviderId, CustomModelConfig, ProvidersState, ReasoningEffort } from '../types/chat'
 
 interface ChatModelOption {
@@ -11,6 +12,7 @@ interface ChatModelOption {
   providerId: ChatProviderId
   providerLabel: string
   reasoningCapable: boolean
+  reasoningEfforts?: readonly ReasoningEffort[]
   runtimeModelId: string
 }
 
@@ -38,6 +40,7 @@ function buildChatModelOptions(
       providerId: provider.id,
       providerLabel: provider.label,
       reasoningCapable: model.reasoningCapable ?? false,
+      reasoningEfforts: model.reasoningEfforts,
       runtimeModelId: model.apiModelId ?? model.id,
     }))
   })
@@ -56,6 +59,17 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
   const selectedModel = useMemo(
     () => modelOptions.find((model) => model.id === settings.chatModelId) ?? modelOptions[0] ?? null,
     [modelOptions, settings.chatModelId],
+  )
+  const availableReasoningEfforts = useMemo(() => {
+    if (!selectedModel?.reasoningCapable) {
+      return [] as readonly ReasoningEffort[]
+    }
+
+    return selectedModel.reasoningEfforts ?? REASONING_EFFORT_VALUES
+  }, [selectedModel])
+  const reasoningEffort = useMemo(
+    () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),
+    [availableReasoningEfforts, settings.chatReasoningEffort],
   )
 
   useEffect(() => {
@@ -88,6 +102,14 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
     void updateSettings({ chatModelId: nextModelId })
   }, [modelOptions.length, selectedModel?.id, settings.chatModelId, updateSettings])
 
+  useEffect(() => {
+    if (availableReasoningEfforts.length === 0 || reasoningEffort === settings.chatReasoningEffort) {
+      return
+    }
+
+    void updateSettings({ chatReasoningEffort: reasoningEffort })
+  }, [availableReasoningEfforts.length, reasoningEffort, settings.chatReasoningEffort, updateSettings])
+
   const setSelectedModelId = useCallback(
     (chatModelId: string) => {
       void updateSettings({ chatModelId })
@@ -103,15 +125,16 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
   )
 
   return {
+    availableReasoningEfforts,
     hasConfiguredProvider: modelOptions.length > 0,
     modelOptions,
     providerId: selectedModel?.providerId ?? null,
     providerLabel: selectedModel?.providerLabel ?? null,
-    reasoningEffort: settings.chatReasoningEffort,
+    reasoningEffort,
     selectedModelId: selectedModel?.id ?? '',
     selectedRuntimeModelId: selectedModel?.runtimeModelId ?? '',
     setReasoningEffort,
     setSelectedModelId,
-    showReasoningEffortSelector: Boolean(selectedModel?.reasoningCapable),
+    showReasoningEffortSelector: availableReasoningEfforts.length > 0,
   }
 }

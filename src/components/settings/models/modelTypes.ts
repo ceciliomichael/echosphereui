@@ -1,4 +1,4 @@
-import type { ApiKeyProviderId } from '../../../types/chat'
+import type { ApiKeyProviderId, ReasoningEffort } from '../../../types/chat'
 
 export type ModelProviderId = 'codex' | ApiKeyProviderId
 
@@ -10,6 +10,7 @@ export interface ModelCatalogItem {
   label: string
   providerId: ModelProviderId
   reasoningCapable?: boolean
+  reasoningEfforts?: readonly ReasoningEffort[]
 }
 
 export interface ProviderSectionDefinition {

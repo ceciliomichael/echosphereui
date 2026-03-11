@@ -1,24 +1,31 @@
 import { DropdownField } from '../ui/DropdownField'
 import type { ReasoningEffort } from '../../types/chat'
 
-const REASONING_EFFORT_OPTIONS = [
-  { label: 'Low', value: 'low' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'High', value: 'high' },
-  { label: 'XHigh', value: 'xhigh' },
-] as const
+const REASONING_EFFORT_LABELS: Readonly<Record<ReasoningEffort, string>> = {
+  high: 'High',
+  low: 'Low',
+  medium: 'Medium',
+  xhigh: 'XHigh',
+}
 
 interface ReasoningEffortBlockProps {
   disabled?: boolean
   onChange: (effort: ReasoningEffort) => void
+  options: readonly ReasoningEffort[]
   value: ReasoningEffort
 }
 
 export function ReasoningEffortBlock({
   disabled = false,
   onChange,
+  options,
   value,
 }: ReasoningEffortBlockProps) {
+  const reasoningEffortOptions = options.map((option) => ({
+    label: REASONING_EFFORT_LABELS[option],
+    value: option,
+  }))
+
   return (
     <section aria-label="Reasoning effort" className="flex items-center">
       <DropdownField
@@ -28,7 +35,7 @@ export function ReasoningEffortBlock({
         flushOptions
         value={value}
         onChange={(nextValue) => onChange(nextValue as ReasoningEffort)}
-        options={REASONING_EFFORT_OPTIONS}
+        options={reasoningEffortOptions}
         disabled={disabled}
       />
     </section>

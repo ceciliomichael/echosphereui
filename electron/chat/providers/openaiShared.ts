@@ -1,12 +1,13 @@
 import OpenAI from 'openai'
 import type { ApiKeyProviderId } from '../../../src/types/chat'
 import { readStoredApiKeyProviders } from '../../providers/store'
+import { PROVIDER_SYSTEM_INSTRUCTIONS } from './providerSystemInstructions'
 
 export const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 export const OPENAI_COMPATIBLE_FALLBACK_API_KEY = 'echosphere-openai-compatible'
 export const OPENAI_MAX_RETRIES = 2
 export const OPENAI_REQUEST_TIMEOUT_MS = 120_000
-export const OPENAI_SYSTEM_INSTRUCTIONS = 'You are EchoSphere, a helpful coding assistant.'
+export const OPENAI_SYSTEM_INSTRUCTIONS = PROVIDER_SYSTEM_INSTRUCTIONS
 
 export type OpenAIProviderId = Extract<ApiKeyProviderId, 'openai' | 'openai-compatible'>
 
