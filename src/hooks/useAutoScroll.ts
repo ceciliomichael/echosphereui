@@ -37,6 +37,8 @@ export function useAutoScroll(
   const userHasScrolledUpRef = useRef(false)
   const isProgrammaticScrollRef = useRef(false)
   const releaseProgrammaticFlagTimeoutRef = useRef<number | null>(null)
+  const pendingScrollRafRef = useRef<number | null>(null)
+  const lastKnownScrollHeightRef = useRef(0)
   const userMessageCount = useMemo(() => getUserMessageCount(messages), [messages])
 
   const releaseProgrammaticFlag = useCallback(() => {
@@ -49,6 +51,32 @@ export function useAutoScroll(
       releaseProgrammaticFlagTimeoutRef.current = null
     }, 32)
   }, [])
+
+  const scrollToBottomIfAllowed = useCallback(
+    (element: HTMLDivElement, force = false) => {
+      if (!shouldAutoScroll || hasSelectionInside(element)) {
+        return
+      }
+
+      const previousScrollHeight = lastKnownScrollHeightRef.current
+      const wasNearBottomBeforeChange =
+        previousScrollHeight === 0
+          ? isAtBottom(element, 48)
+          : Math.abs(previousScrollHeight - element.scrollTop - element.clientHeight) <= 48
+      const isNearBottomNow = isAtBottom(element, 48)
+
+      if (!force && userHasScrolledUpRef.current && !wasNearBottomBeforeChange && !isNearBottomNow) {
+        lastKnownScrollHeightRef.current = element.scrollHeight
+        return
+      }
+
+      isProgrammaticScrollRef.current = true
+      element.scrollTop = element.scrollHeight
+      lastKnownScrollHeightRef.current = element.scrollHeight
+      releaseProgrammaticFlag()
+    },
+    [releaseProgrammaticFlag, shouldAutoScroll],
+  )
 
   useEffect(() => {
     userHasScrolledUpRef.current = false
@@ -63,6 +91,7 @@ export function useAutoScroll(
     userHasScrolledUpRef.current = false
     isProgrammaticScrollRef.current = true
     element.scrollTop = element.scrollHeight
+    lastKnownScrollHeightRef.current = element.scrollHeight
     releaseProgrammaticFlag()
   }, [containerRef, releaseProgrammaticFlag, resetKey])
 
@@ -72,36 +101,56 @@ export function useAutoScroll(
       return
     }
 
+    lastKnownScrollHeightRef.current = element.scrollHeight
+
     const onScroll = () => {
       if (isProgrammaticScrollRef.current || !shouldAutoScroll) {
         return
       }
 
-      userHasScrolledUpRef.current = !isAtBottom(element)
+      userHasScrolledUpRef.current = !isAtBottom(element, 48)
+      lastKnownScrollHeightRef.current = element.scrollHeight
     }
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (!shouldAutoScroll || userHasScrolledUpRef.current || hasSelectionInside(element)) {
+    const scheduleAutoScroll = () => {
+      if (pendingScrollRafRef.current !== null) {
         return
       }
 
-      isProgrammaticScrollRef.current = true
-      element.scrollTop = element.scrollHeight
-      releaseProgrammaticFlag()
+      pendingScrollRafRef.current = window.requestAnimationFrame(() => {
+        pendingScrollRafRef.current = null
+        scrollToBottomIfAllowed(element)
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleAutoScroll)
+    const mutationObserver = new MutationObserver(() => {
+      // Streaming text updates can change text nodes without a reliable resize event.
+      scheduleAutoScroll()
     })
 
     element.addEventListener('scroll', onScroll, { passive: true })
     resizeObserver.observe(element)
     Array.from(element.children).forEach((child) => resizeObserver.observe(child))
+    mutationObserver.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
 
     return () => {
       if (releaseProgrammaticFlagTimeoutRef.current !== null) {
         window.clearTimeout(releaseProgrammaticFlagTimeoutRef.current)
         releaseProgrammaticFlagTimeoutRef.current = null
       }
+      if (pendingScrollRafRef.current !== null) {
+        window.cancelAnimationFrame(pendingScrollRafRef.current)
+        pendingScrollRafRef.current = null
+      }
 
       resizeObserver.disconnect()
+      mutationObserver.disconnect()
       element.removeEventListener('scroll', onScroll)
     }
-  }, [containerRef, releaseProgrammaticFlag, shouldAutoScroll, messages.length])
+  }, [containerRef, scrollToBottomIfAllowed, shouldAutoScroll, messages.length])
 }

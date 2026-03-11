@@ -34,7 +34,7 @@ function extractLanguage(className: string | undefined): string | undefined {
   return match?.[1]
 }
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className, isStreaming = false }: MarkdownRendererProps) {
   const rootClassName = ['chat-markdown', 'whitespace-normal', className].filter(Boolean).join(' ')
 
   const markdownComponents = useMemo(
@@ -72,7 +72,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
           codeText.includes('\n')
 
         if (isBlock) {
-          return <CodeBlock code={codeText} language={extractLanguage(nodeClassName)} />
+          return <CodeBlock code={codeText} language={extractLanguage(nodeClassName)} isStreaming={isStreaming} />
         }
 
         return (
@@ -104,7 +104,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
       ),
       hr: (props: React.ComponentPropsWithoutRef<'hr'>) => <hr {...props} className="my-2 border-border" />,
     }),
-    [],
+    [isStreaming],
   )
 
   return (

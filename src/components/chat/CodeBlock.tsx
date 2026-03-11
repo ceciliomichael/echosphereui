@@ -1,9 +1,10 @@
 import { Check, Copy } from 'lucide-react'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 
 interface CodeBlockProps {
   code: string
   language?: string
+  isStreaming?: boolean
 }
 
 function toLanguageLabel(language: string | undefined) {
@@ -15,7 +16,7 @@ function toLanguageLabel(language: string | undefined) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
-export const CodeBlock = memo(function CodeBlock({ code, language }: CodeBlockProps) {
+export const CodeBlock = memo(function CodeBlock({ code, language, isStreaming = false }: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false)
   const languageLabel = toLanguageLabel(language)
 
@@ -57,8 +58,55 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: CodeBlockPr
         </button>
       </div>
       <pre className="overflow-x-auto p-3 text-[13px] leading-[1.55] text-foreground">
-        <code>{code}</code>
+        {isStreaming ? <CodeBlockContent code={code} /> : <code>{code}</code>}
       </pre>
     </div>
   )
 })
+
+interface TokenizedCodeLine {
+  id: string
+  text: string
+}
+
+interface CodeBlockContentProps {
+  code: string
+}
+
+const CodeBlockContent = memo(function CodeBlockContent({ code }: CodeBlockContentProps) {
+  const tokenizedLines = useMemo(() => tokenizeCode(code), [code])
+
+  return (
+    <code>
+      {tokenizedLines.map((line, index) => (
+        <CodeLineToken
+          key={line.id}
+          lineText={line.text}
+          hasTrailingNewline={index < tokenizedLines.length - 1}
+        />
+      ))}
+    </code>
+  )
+})
+
+interface CodeLineTokenProps {
+  lineText: string
+  hasTrailingNewline: boolean
+}
+
+const CodeLineToken = memo(function CodeLineToken({ lineText, hasTrailingNewline }: CodeLineTokenProps) {
+  return (
+    <span>
+      {lineText}
+      {hasTrailingNewline ? '\n' : ''}
+    </span>
+  )
+})
+
+function tokenizeCode(code: string): TokenizedCodeLine[] {
+  const lines = code.split('\n')
+  return lines.map((line, index) => ({
+    id: `${index}:${line}`,
+    text: line,
+  }))
+}
