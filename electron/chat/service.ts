@@ -57,7 +57,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
     ownerWebContentsId: webContents.id,
   })
 
-  queueMicrotask(() => {
+  setTimeout(() => {
     void (async () => {
       emitStreamEvent(webContents, {
         streamId,
@@ -105,7 +105,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
         activeStreams.delete(streamId)
       }
     })()
-  })
+  }, 0)
 
   return {
     streamId,

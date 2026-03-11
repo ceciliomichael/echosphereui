@@ -94,7 +94,12 @@ export function ModelSelectorField({
         aria-expanded={isOpen}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
-        className="flex h-9 w-auto max-w-full items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-[var(--dropdown-control-hover-surface)] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm"
+        className={[
+          'flex h-9 w-auto max-w-full items-center justify-between rounded-xl border bg-surface px-3 text-[13px] font-normal text-foreground transition-[background-color,border-color,color] hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
+          isOpen
+            ? 'border-[var(--dropdown-control-open-border)] bg-[var(--dropdown-control-open-surface)]'
+            : 'border-border',
+        ].join(' ')}
       >
         <Cpu size={15} className="mr-2 shrink-0 text-muted-foreground" />
         <span className="min-w-0 max-w-[18rem] truncate pr-3 text-left">{selectedOption?.label ?? 'Select model'}</span>
@@ -148,9 +153,9 @@ export function ModelSelectorField({
                       aria-selected={option.value === value}
                       onClick={() => handleSelect(option.value)}
                       className={[
-                        'flex w-full flex-col items-start gap-0.5 px-2.5 py-2 text-left transition-colors',
+                        'flex w-full flex-col items-start gap-0.5 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
                         option.value === value
-                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground hover:bg-[var(--dropdown-option-active-hover-surface)]'
+                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm hover:bg-[var(--dropdown-option-active-hover-surface)]'
                           : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
                       ].join(' ')}
                     >

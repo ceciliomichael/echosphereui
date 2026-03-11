@@ -18,6 +18,12 @@ export type StreamDeltaEvent =
     }
   | {
       argumentsText: string
+      invocationId: string
+      toolName: string
+      type: 'tool_invocation_delta'
+    }
+  | {
+      argumentsText: string
       completedAt: number
       invocationId: string
       resultContent: string

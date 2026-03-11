@@ -83,10 +83,10 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, 
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className={!isComplete ? 'thinking-shimmer' : ''}>{headerLabel}</span>
+        <span className={!isReasoningComplete ? 'thinking-shimmer' : ''}>{headerLabel}</span>
         <ChevronRight
           className={[
-            'h-3.5 w-3.5 shrink-0 transition-transform duration-200',
+            'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
             isOpen ? 'rotate-90' : '',
           ].join(' ')}
         />

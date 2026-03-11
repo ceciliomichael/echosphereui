@@ -37,6 +37,10 @@ interface StreamAssistantResponseInput {
     invocationId: string,
     nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>,
   ) => void
+  onToolInvocationDelta: (
+    invocationId: string,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'toolName'>,
+  ) => void
 }
 
 interface StreamAssistantResponseOutput {
@@ -110,11 +114,9 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
   let streamId: string | null = null
 
   return new Promise<StreamAssistantResponseOutput>((resolve, reject) => {
-    const unsubscribe = window.echosphereChat.onStreamEvent((event) => {
-      if (!streamId || event.streamId !== streamId) {
-        return
-      }
+    const queuedEvents: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0][] = []
 
+    const handleStreamEvent = (event: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0]) => {
       if (event.type === 'content_delta') {
         input.onContentDelta(event.delta)
         return
@@ -129,6 +131,14 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
         input.onToolInvocationStarted(event.invocationId, {
           argumentsText: event.argumentsText,
           startedAt: event.startedAt,
+          toolName: event.toolName,
+        })
+        return
+      }
+
+      if (event.type === 'tool_invocation_delta') {
+        input.onToolInvocationDelta(event.invocationId, {
+          argumentsText: event.argumentsText,
           toolName: event.toolName,
         })
         return
@@ -176,6 +186,19 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
         unsubscribe()
         reject(new Error(event.errorMessage))
       }
+    }
+
+    const unsubscribe = window.echosphereChat.onStreamEvent((event) => {
+      if (!streamId) {
+        queuedEvents.push(event)
+        return
+      }
+
+      if (event.streamId !== streamId) {
+        return
+      }
+
+      handleStreamEvent(event)
     })
 
     void window.echosphereChat
@@ -190,6 +213,16 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       .then((result) => {
         streamId = result.streamId
         input.onStreamStarted(result.streamId)
+
+        for (const event of queuedEvents) {
+          if (event.streamId !== result.streamId) {
+            continue
+          }
+
+          handleStreamEvent(event)
+        }
+
+        queuedEvents.length = 0
       })
       .catch((error) => {
         unsubscribe()
@@ -555,6 +588,21 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
               resultContent: currentValue?.resultContent,
               startedAt: currentValue?.startedAt ?? nextValue.startedAt,
               state: 'running',
+              toolName: nextValue.toolName,
+            })),
+          }))
+        },
+        onToolInvocationDelta: (invocationId, nextValue) => {
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          toolInvocationMessageIds.set(invocationId, draftAssistantId)
+          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+            ...message,
+            toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
+              argumentsText: nextValue.argumentsText,
+              id: invocationId,
+              resultContent: currentValue?.resultContent,
+              startedAt: currentValue?.startedAt ?? message.timestamp,
+              state: currentValue?.state ?? 'running',
               toolName: nextValue.toolName,
             })),
           }))

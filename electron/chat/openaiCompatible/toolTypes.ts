@@ -4,6 +4,7 @@ export interface OpenAICompatibleToolCall {
   argumentsText: string
   id: string
   name: string
+  startedAt: number
 }
 
 export interface OpenAICompatibleToolExecutionContext {

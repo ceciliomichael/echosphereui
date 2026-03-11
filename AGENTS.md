@@ -26,7 +26,7 @@ If the request spans multiple categories, handle them in the order: understand, 
 ## Required Workflow For Code Changes
 Follow this sequence for every code-modifying task.
 
-0. Always repeat the user task to the user before going to step 1
+0. Always repeat the user query back to user to show understanding of the request
 1. Classify the task and restate the implementation goal internally.
 2. Inspect the relevant files, modules, patterns, and reusable helpers before editing.
 3. Map responsibilities that will be affected: entrypoint, domain logic, data access, presentation, validation, shared types, utilities, tests, and configuration as applicable.

@@ -5,7 +5,7 @@ import type {
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions/completions'
 import type { ChatMode, Message, ReasoningEffort } from '../../../src/types/chat'
-import type { ProviderStreamContext } from '../providerTypes'
+import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import {
   buildOpenAIClient,
@@ -20,7 +20,6 @@ import {
 import { getOpenAICompatibleToolDefinition, getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import {
   buildFailedToolArtifacts,
-  buildStartedToolInvocation,
   buildSuccessfulToolArtifacts,
 } from './toolResultFormatter'
 import { OpenAICompatibleToolError, type OpenAICompatibleToolCall } from './toolTypes'
@@ -42,6 +41,7 @@ interface ToolCallAccumulator {
   argumentsText: string
   id: string
   name: string
+  startedAt: number | null
 }
 
 function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
@@ -62,14 +62,18 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
   }
 }
 
-function buildOpenAICompatibleMessages(request: StreamOpenAICompatibleResponseInput): ChatCompletionMessageParam[] {
+async function buildOpenAICompatibleMessages(
+  request: StreamOpenAICompatibleResponseInput,
+): Promise<ChatCompletionMessageParam[]> {
+  const systemPrompt = await buildSystemPrompt({
+    agentContextRootPath: request.agentContextRootPath,
+    chatMode: request.chatMode,
+    supportsNativeTools: true,
+  })
+
   return [
     {
-      content: buildSystemPrompt({
-        agentContextRootPath: request.agentContextRootPath,
-        chatMode: request.chatMode,
-        supportsNativeTools: true,
-      }),
+      content: systemPrompt,
       role: 'system',
     },
     ...request.messages
@@ -95,6 +99,7 @@ function extractOpenAICompatibleReasoningDelta(delta: unknown): string | null {
 function collectToolCalls(
   chunk: ChatCompletionChunk,
   toolCallsByIndex: Map<number, ToolCallAccumulator>,
+  emitDelta: ProviderStreamContext['emitDelta'],
 ) {
   for (const choice of chunk.choices) {
     for (const toolCallDelta of choice.delta.tool_calls ?? []) {
@@ -102,7 +107,9 @@ function collectToolCalls(
         argumentsText: '',
         id: toolCallDelta.id ?? randomUUID(),
         name: '',
+        startedAt: null,
       }
+      const previousArgumentsText = currentToolCall.argumentsText
 
       if (hasNonEmptyString(toolCallDelta.id)) {
         currentToolCall.id = toolCallDelta.id
@@ -114,6 +121,29 @@ function collectToolCalls(
 
       if (hasNonEmptyString(toolCallDelta.function?.arguments)) {
         currentToolCall.argumentsText += toolCallDelta.function.arguments
+      }
+
+      if (currentToolCall.startedAt === null && currentToolCall.name.trim().length > 0) {
+        currentToolCall.startedAt = Date.now()
+        const startedEvent = {
+          argumentsText: currentToolCall.argumentsText,
+          invocationId: currentToolCall.id,
+          startedAt: currentToolCall.startedAt,
+          toolName: currentToolCall.name,
+          type: 'tool_invocation_started',
+        } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }>
+        emitDelta(startedEvent)
+      } else if (
+        currentToolCall.startedAt !== null &&
+        currentToolCall.argumentsText !== previousArgumentsText
+      ) {
+        const deltaEvent = {
+          argumentsText: currentToolCall.argumentsText,
+          invocationId: currentToolCall.id,
+          toolName: currentToolCall.name,
+          type: 'tool_invocation_delta',
+        } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_delta' }>
+        emitDelta(deltaEvent)
       }
 
       toolCallsByIndex.set(toolCallDelta.index, currentToolCall)
@@ -152,16 +182,17 @@ function toToolCallList(toolCallsByIndex: Map<number, ToolCallAccumulator>) {
         argumentsText: toolCall.argumentsText,
         id: toolCall.id,
         name: toolCall.name,
+        startedAt: toolCall.startedAt ?? Date.now(),
       } satisfies OpenAICompatibleToolCall
     })
 }
 
-function buildOpenAICompatibleCompletionRequest(
+async function buildOpenAICompatibleCompletionRequest(
   request: StreamOpenAICompatibleResponseInput,
   includeReasoningEffort: boolean,
-): ChatCompletionCreateParamsStreaming {
+): Promise<ChatCompletionCreateParamsStreaming> {
   const payload: ChatCompletionCreateParamsStreaming = {
-    messages: buildOpenAICompatibleMessages(request),
+    messages: await buildOpenAICompatibleMessages(request),
     model: request.modelId,
     parallel_tool_calls: true,
     store: false,
@@ -189,7 +220,7 @@ async function createOpenAICompatibleChatCompletionStream(
 
   try {
     return await client.chat.completions.create(
-      buildOpenAICompatibleCompletionRequest(request, true),
+      await buildOpenAICompatibleCompletionRequest(request, true),
       requestOptions,
     )
   } catch (error) {
@@ -197,7 +228,7 @@ async function createOpenAICompatibleChatCompletionStream(
       throw error
     }
 
-    return client.chat.completions.create(buildOpenAICompatibleCompletionRequest(request, false), requestOptions)
+    return client.chat.completions.create(await buildOpenAICompatibleCompletionRequest(request, false), requestOptions)
   }
 }
 
@@ -212,7 +243,7 @@ async function streamOpenAICompatibleTurn(
 
   for await (const chunk of stream) {
     emitChunkDeltas(chunk, context.emitDelta)
-    collectToolCalls(chunk, toolCallsByIndex)
+    collectToolCalls(chunk, toolCallsByIndex, context.emitDelta)
 
     for (const choice of chunk.choices) {
       if (hasNonEmptyString(choice.delta.content)) {
@@ -250,16 +281,7 @@ async function executeToolCall(
   request: StreamOpenAICompatibleResponseInput,
   inMemoryMessages: Message[],
 ) {
-  const startedAt = Date.now()
-  const startedToolInvocation = buildStartedToolInvocation(toolCall, startedAt)
-
-  context.emitDelta({
-    argumentsText: startedToolInvocation.argumentsText,
-    invocationId: toolCall.id,
-    startedAt,
-    toolName: toolCall.name,
-    type: 'tool_invocation_started',
-  })
+  const startedAt = toolCall.startedAt
 
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
   if (!toolDefinition) {
@@ -267,7 +289,7 @@ async function executeToolCall(
     const errorMessage = `Unsupported tool: ${toolCall.name}`
     const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt)
 
-    context.emitDelta({
+    const failedEvent = {
       argumentsText: failedArtifacts.toolInvocation.argumentsText,
       completedAt,
       errorMessage,
@@ -276,7 +298,8 @@ async function executeToolCall(
       syntheticMessage: failedArtifacts.syntheticMessage,
       toolName: toolCall.name,
       type: 'tool_invocation_failed',
-    })
+    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_failed' }>
+    context.emitDelta(failedEvent)
 
     inMemoryMessages.push(failedArtifacts.syntheticMessage)
     return
@@ -291,7 +314,7 @@ async function executeToolCall(
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
 
-    context.emitDelta({
+    const completedEvent = {
       argumentsText: successfulArtifacts.toolInvocation.argumentsText,
       completedAt,
       invocationId: toolCall.id,
@@ -299,7 +322,8 @@ async function executeToolCall(
       syntheticMessage: successfulArtifacts.syntheticMessage,
       toolName: toolCall.name,
       type: 'tool_invocation_completed',
-    })
+    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }>
+    context.emitDelta(completedEvent)
 
     inMemoryMessages.push(successfulArtifacts.syntheticMessage)
   } catch (error) {
@@ -308,7 +332,7 @@ async function executeToolCall(
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
     const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt, errorDetails)
 
-    context.emitDelta({
+    const failedEvent = {
       argumentsText: failedArtifacts.toolInvocation.argumentsText,
       completedAt,
       errorMessage,
@@ -317,7 +341,8 @@ async function executeToolCall(
       syntheticMessage: failedArtifacts.syntheticMessage,
       toolName: toolCall.name,
       type: 'tool_invocation_failed',
-    })
+    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_failed' }>
+    context.emitDelta(failedEvent)
 
     inMemoryMessages.push(failedArtifacts.syntheticMessage)
   }

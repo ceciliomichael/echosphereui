@@ -208,6 +208,13 @@ export type ChatStreamEvent =
     }
   | {
       argumentsText: string
+      invocationId: string
+      streamId: string
+      toolName: string
+      type: 'tool_invocation_delta'
+    }
+  | {
+      argumentsText: string
       completedAt: number
       invocationId: string
       resultContent: string

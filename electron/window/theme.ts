@@ -21,8 +21,8 @@ const LIGHT_WINDOW_THEME: WindowThemePalette = {
 }
 
 const DARK_WINDOW_THEME: WindowThemePalette = {
-  backgroundColor: '#252525',
-  overlayColor: '#252525',
+  backgroundColor: '#222222',
+  overlayColor: '#222222',
   symbolColor: '#DFDFDF',
 }
 

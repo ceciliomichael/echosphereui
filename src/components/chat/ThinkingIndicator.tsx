@@ -1,8 +1,7 @@
 export function ThinkingIndicator() {
   return (
     <span
-      className="thinking-flow text-sm font-medium"
-      data-text="Thinking"
+      className="thinking-shimmer text-sm font-medium"
       role="status"
       aria-live="polite"
       aria-label="Assistant is thinking"

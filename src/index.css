@@ -11,8 +11,8 @@
 
   --color-surface: oklch(1 0 0);
   --color-surface-muted: oklch(0.965 0.008 145);
-  --color-sidebar: oklch(0.938 0.016 145);
-  --color-sidebar-muted: oklch(0.91 0.012 145);
+  --color-sidebar: oklch(0.944 0.009 145);
+  --color-sidebar-muted: oklch(0.922 0.007 145);
   --color-tooltip-surface: oklch(0.19 0.004 264);
   --color-tooltip-foreground: oklch(0.985 0 0);
   --color-tooltip-border: oklch(0.19 0.004 264);
@@ -55,10 +55,14 @@
     --user-message-hover-border: color-mix(in srgb, var(--color-action) 28%, var(--color-border));
     --segmented-control-hover-surface: var(--color-surface);
     --segmented-control-active-surface: var(--color-surface);
-    --dropdown-control-hover-surface: var(--color-background);
-    --dropdown-option-hover-surface: color-mix(in srgb, var(--color-foreground) 3%, var(--color-surface));
-    --dropdown-option-active-surface: var(--color-surface-muted);
-    --dropdown-option-active-hover-surface: color-mix(in srgb, var(--color-foreground) 10%, var(--color-surface));
+    --dropdown-control-hover-surface: color-mix(in srgb, var(--color-foreground) 2%, var(--color-surface));
+    --dropdown-control-hover-border: color-mix(in srgb, var(--color-foreground) 10%, var(--color-border));
+    --dropdown-control-open-surface: color-mix(in srgb, var(--color-foreground) 4%, var(--color-surface));
+    --dropdown-control-open-border: color-mix(in srgb, var(--color-foreground) 12%, var(--color-border));
+    --dropdown-option-hover-surface: color-mix(in srgb, var(--color-foreground) 4%, var(--color-surface));
+    --dropdown-option-active-surface: color-mix(in srgb, var(--color-foreground) 12%, var(--color-surface));
+    --dropdown-option-active-hover-surface: color-mix(in srgb, var(--color-foreground) 15%, var(--color-surface));
+    --dropdown-option-active-border: transparent;
   }
 
   :root[data-theme='dark'] {
@@ -69,8 +73,8 @@
 
     --color-surface: #1f1f1f;
     --color-surface-muted: #262626;
-    --color-sidebar: #232323;
-    --color-sidebar-muted: #2c2c2c;
+    --color-sidebar: #212121;
+    --color-sidebar-muted: #292929;
     --color-tooltip-surface: #2a2a2a;
     --color-tooltip-foreground: #e1e1e1;
     --color-tooltip-border: #454545;
@@ -96,21 +100,25 @@
     --shadow-soft: 0 14px 34px oklch(0 0 0 / 0.32);
     --shadow-control-inset: inset 0 1px 2px oklch(0 0 0 / 0.34);
     color-scheme: dark;
-    --titlebar-surface: #252525;
-    --workspace-shell-surface: #252525;
+    --titlebar-surface: #222222;
+    --workspace-shell-surface: #222222;
     --workspace-panel-surface: #1b1b1b;
-    --sidebar-panel-surface: #252525;
-    --sidebar-raised-surface: #2d2d2d;
-    --sidebar-hover-surface: #343434;
-    --sidebar-item-active-surface: #383838;
-    --sidebar-item-active-border: #4b4b4b;
+    --sidebar-panel-surface: #222222;
+    --sidebar-raised-surface: #2a2a2a;
+    --sidebar-hover-surface: #313131;
+    --sidebar-item-active-surface: #353535;
+    --sidebar-item-active-border: #474747;
     --user-message-hover-border: color-mix(in srgb, var(--color-foreground) 22%, var(--color-border));
     --segmented-control-hover-surface: #313131;
     --segmented-control-active-surface: #3a3a3a;
-    --dropdown-control-hover-surface: #2f2f2f;
-    --dropdown-option-hover-surface: #333333;
-    --dropdown-option-active-surface: #3a3a3a;
+    --dropdown-control-hover-surface: #2a2a2a;
+    --dropdown-control-hover-border: #474747;
+    --dropdown-control-open-surface: #2d2d2d;
+    --dropdown-control-open-border: #484848;
+    --dropdown-option-hover-surface: #2f2f2f;
+    --dropdown-option-active-surface: #393939;
     --dropdown-option-active-hover-surface: #404040;
+    --dropdown-option-active-border: transparent;
   }
 
   :root.theme-transition,
@@ -197,60 +205,32 @@
   }
 
   .thinking-shimmer {
-    background: linear-gradient(90deg, var(--color-muted-foreground) 0%, var(--color-foreground) 50%, var(--color-muted-foreground) 100%);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: thinking-shimmer 1.2s linear infinite;
-  }
-
-  .thinking-flow {
-    position: relative;
-    display: inline-block;
-    color: var(--color-muted-foreground);
-  }
-
-  .thinking-flow::after {
-    content: attr(data-text);
-    position: absolute;
-    inset: 0;
-    background-image: linear-gradient(
+    background: linear-gradient(
       90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--color-foreground) 92%, transparent) 50%,
-      transparent 100%
+      var(--color-muted-foreground) 0%,
+      var(--color-muted-foreground) 40%,
+      var(--color-foreground) 50%,
+      var(--color-muted-foreground) 60%,
+      var(--color-muted-foreground) 100%
     );
-    background-size: 200% 100%;
-    background-repeat: no-repeat;
-    background-position: -130% 0;
+    background-size: 300% 100%;
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
     -webkit-text-fill-color: transparent;
-    pointer-events: none;
-    animation: thinking-flow 1.05s linear infinite;
+    color: transparent;
+    animation: wave-shine 2s linear infinite;
   }
 
   .chat-markdown {
     word-break: break-word;
   }
 
-  @keyframes thinking-shimmer {
+  @keyframes wave-shine {
     0% {
       background-position: 200% 0;
     }
     100% {
-      background-position: -200% 0;
-    }
-  }
-
-  @keyframes thinking-flow {
-    0% {
-      background-position: -130% 0;
-    }
-    100% {
-      background-position: 130% 0;
+      background-position: -100% 0;
     }
   }
 

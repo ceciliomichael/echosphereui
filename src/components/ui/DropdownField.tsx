@@ -188,7 +188,10 @@ export function DropdownField({
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         onKeyDown={handleButtonKeyDown}
         className={[
-          'flex h-9 items-center justify-between rounded-xl border border-border bg-surface px-3 text-[13px] font-normal text-foreground transition-colors hover:bg-[var(--dropdown-control-hover-surface)] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
+          'flex h-9 items-center justify-between rounded-xl border bg-surface px-3 text-[13px] font-normal text-foreground transition-[background-color,border-color,color] hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
+          isOpen
+            ? 'border-[var(--dropdown-control-open-border)] bg-[var(--dropdown-control-open-surface)]'
+            : 'border-border',
           fitToContent ? 'w-auto max-w-full' : 'w-full',
         ].join(' ')}
       >
@@ -233,12 +236,12 @@ export function DropdownField({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => commitValue(option.value)}
                     className={[
-                      'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-colors md:text-sm',
+                      'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
                       flushOptions ? 'rounded-none' : 'rounded-lg',
                       isSelected && isHighlighted
-                        ? 'bg-[var(--dropdown-option-active-hover-surface)] text-foreground'
+                        ? 'bg-[var(--dropdown-option-active-hover-surface)] text-foreground shadow-sm'
                         : isSelected
-                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground'
+                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
                           : isHighlighted
                             ? 'bg-[var(--dropdown-option-hover-surface)] text-foreground'
                             : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
