@@ -1,4 +1,4 @@
-import { Bot, ChevronDown } from 'lucide-react'
+import { Bot, Check, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
@@ -27,12 +27,21 @@ export function ChatModeSelectorField({
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [highlightedValue, setHighlightedValue] = useState<ChatMode>(value)
   const selectedOption = useMemo(() => options.find((option) => option.value === value) ?? options[0], [options, value])
   const menuStyle = useFloatingMenuPosition({
     anchorRef: buttonRef,
     isOpen,
     menuRef,
   })
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    setHighlightedValue(value)
+  }, [isOpen, value])
 
   useEffect(() => {
     if (!isOpen) {
@@ -94,25 +103,34 @@ export function ChatModeSelectorField({
               className="fixed z-40 w-[min(14rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-border bg-surface shadow-soft"
               style={menuStyle}
             >
-              <div role="listbox" className="space-y-0.5 p-1.5">
-                {options.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="option"
-                    aria-selected={option.value === value}
-                    onClick={() => handleSelect(option.value)}
-                    className={[
-                      'flex w-full flex-col items-start gap-0.5 rounded-xl px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
-                      option.value === value
-                        ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm hover:bg-[var(--dropdown-option-active-hover-surface)]'
-                        : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
-                    ].join(' ')}
-                  >
-                    <span className="text-[15px] leading-5">{option.label}</span>
-                    <span className="text-[11px] text-muted-foreground">{option.description}</span>
-                  </button>
-                ))}
+              <div role="listbox" onMouseLeave={() => setHighlightedValue(value)} className="space-y-0.5 p-1.5">
+                {options.map((option) => {
+                  const isSelected = option.value === value
+                  const isHighlighted = option.value === highlightedValue
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onMouseEnter={() => setHighlightedValue(option.value)}
+                      onClick={() => handleSelect(option.value)}
+                      className={[
+                        'flex w-full items-start justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+                        isHighlighted
+                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                          : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+                      ].join(' ')}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] leading-5">{option.label}</span>
+                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.description}</span>
+                      </span>
+                      {isSelected ? <Check size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-foreground" /> : null}
+                    </button>
+                  )
+                })}
               </div>
             </div>,
             document.body,

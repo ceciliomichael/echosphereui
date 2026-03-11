@@ -73,6 +73,17 @@ export function DropdownField({
       return
     }
 
+    const selectedIndex = options.findIndex((option) => option.value === value)
+    if (selectedIndex >= 0) {
+      setHighlightedIndex(selectedIndex)
+    }
+  }, [isOpen, options, value])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
     function handlePointerDown(event: MouseEvent) {
       const target = event.target
       if (
@@ -116,6 +127,13 @@ export function DropdownField({
       onChange(nextValue)
     }
     buttonRef.current?.focus()
+  }
+
+  function resetHighlightToSelected() {
+    const selectedIndex = options.findIndex((option) => option.value === value)
+    if (selectedIndex >= 0) {
+      setHighlightedIndex(selectedIndex)
+    }
   }
 
   function handleButtonKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
@@ -215,6 +233,7 @@ export function DropdownField({
               tabIndex={-1}
               aria-labelledby={controlId}
               onKeyDown={handleListboxKeyDown}
+              onMouseLeave={resetHighlightToSelected}
               className={[
                 'fixed z-50 overflow-y-auto rounded-xl border border-border bg-surface shadow-soft',
                 flushOptions ? 'p-0' : fitToContent ? 'p-0.5' : 'p-1',
@@ -238,13 +257,9 @@ export function DropdownField({
                     className={[
                       'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
                       flushOptions ? 'rounded-none' : 'rounded-lg',
-                      isSelected && isHighlighted
-                        ? 'bg-[var(--dropdown-option-active-hover-surface)] text-foreground shadow-sm'
-                        : isSelected
-                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
-                          : isHighlighted
-                            ? 'bg-[var(--dropdown-option-hover-surface)] text-foreground'
-                            : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
+                      isHighlighted
+                        ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                        : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
                     ].join(' ')}
                   >
                     <span className="truncate pr-3">{option.label}</span>

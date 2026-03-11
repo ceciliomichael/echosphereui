@@ -1,4 +1,4 @@
-import { Search, RefreshCw, Cpu, ChevronDown } from 'lucide-react'
+import { Search, RefreshCw, Cpu, Check, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
@@ -32,6 +32,7 @@ export function ModelSelectorField({
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [highlightedValue, setHighlightedValue] = useState(value)
   const normalizedSearch = normalizeSearch(searchValue)
   const menuStyle = useFloatingMenuPosition({
     anchorRef: buttonRef,
@@ -77,6 +78,14 @@ export function ModelSelectorField({
 
     searchInputRef.current?.focus()
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    setHighlightedValue(value)
+  }, [isOpen, value])
 
   function handleSelect(nextValue: string) {
     setIsOpen(false)
@@ -143,28 +152,41 @@ export function ModelSelectorField({
                 </button>
               </div>
 
-              <div role="listbox" className="max-h-56 space-y-0 overflow-y-auto">
+              <div
+                role="listbox"
+                onMouseLeave={() => setHighlightedValue(value)}
+                className="max-h-56 space-y-0 overflow-y-auto"
+              >
                 {filteredOptions.length > 0 ? (
-                  filteredOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={option.value === value}
-                      onClick={() => handleSelect(option.value)}
-                      className={[
-                        'flex w-full flex-col items-start gap-0.5 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
-                        option.value === value
-                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm hover:bg-[var(--dropdown-option-active-hover-surface)]'
-                          : 'text-foreground hover:bg-[var(--dropdown-option-hover-surface)]',
-                      ].join(' ')}
-                    >
-                      <span className="truncate text-[15px] leading-5">{option.label}</span>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {option.providerLabel}
-                      </span>
-                    </button>
-                  ))
+                  filteredOptions.map((option) => {
+                    const isSelected = option.value === value
+                    const isHighlighted = option.value === highlightedValue
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onMouseEnter={() => setHighlightedValue(option.value)}
+                        onClick={() => handleSelect(option.value)}
+                        className={[
+                          'flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+                          isHighlighted
+                            ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                            : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+                        ].join(' ')}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] leading-5">{option.label}</span>
+                          <span className="mt-0.5 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {option.providerLabel}
+                          </span>
+                        </span>
+                        {isSelected ? <Check size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-foreground" /> : null}
+                      </button>
+                    )
+                  })
                 ) : (
                   <p className="px-2.5 py-2 text-sm text-muted-foreground">No models found.</p>
                 )}
