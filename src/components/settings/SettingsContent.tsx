@@ -5,7 +5,7 @@ import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
 import type { AppAppearance, AppLanguage } from '../../lib/appSettings'
 import type { AppSettingsSaveState } from '../../hooks/useAppSettings'
-import type { AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
+import type { ApiKeyProviderId, AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
 
 interface GeneralSettingsViewModel {
   isLoading: boolean
@@ -30,6 +30,7 @@ interface SettingsContentProps {
     errorMessage: string | null
     isLoading: boolean
     onConnectCodexWithOAuth: () => Promise<boolean>
+    onRemoveApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<boolean>
     onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
     providersState: ProvidersState | null
   }

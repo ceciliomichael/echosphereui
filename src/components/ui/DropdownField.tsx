@@ -2,14 +2,13 @@ import { Check, ChevronDown } from 'lucide-react'
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
 
 export interface DropdownOption {
   label: string
@@ -52,11 +51,10 @@ export function DropdownField({
       options.findIndex((option) => option.value === value),
     ),
   )
-  const [menuStyle, setMenuStyle] = useState<CSSProperties>({
-    left: 0,
-    minWidth: 0,
-    top: 0,
-    visibility: 'hidden',
+  const menuStyle = useFloatingMenuPosition({
+    anchorRef: buttonRef,
+    isOpen,
+    menuRef: listboxRef,
   })
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? options[0],
@@ -101,41 +99,6 @@ export function DropdownField({
       document.removeEventListener('keydown', handleEscape)
     }
   }, [isOpen])
-
-  useLayoutEffect(() => {
-    if (!isOpen || !buttonRef.current) {
-      return
-    }
-
-    function updateMenuPosition() {
-      const buttonRect = buttonRef.current?.getBoundingClientRect()
-      const listboxRect = listboxRef.current?.getBoundingClientRect()
-      if (!buttonRect) {
-        return
-      }
-
-      const viewportHeight = window.innerHeight
-      const menuHeight = listboxRect?.height ?? 0
-      const spaceBelow = viewportHeight - buttonRect.bottom
-      const shouldOpenAbove = spaceBelow < menuHeight + 12 && buttonRect.top > spaceBelow
-
-      setMenuStyle({
-        left: buttonRect.left,
-        minWidth: buttonRect.width,
-        top: shouldOpenAbove ? Math.max(8, buttonRect.top - menuHeight - 6) : buttonRect.bottom + 6,
-        visibility: 'visible',
-      })
-    }
-
-    updateMenuPosition()
-    window.addEventListener('resize', updateMenuPosition)
-    window.addEventListener('scroll', updateMenuPosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updateMenuPosition)
-      window.removeEventListener('scroll', updateMenuPosition, true)
-    }
-  }, [isOpen, highlightedIndex])
 
   useEffect(() => {
     if (!isOpen) {
@@ -244,12 +207,13 @@ export function DropdownField({
             <div
               ref={listboxRef}
               id={listboxId}
+              data-floating-menu-root="true"
               role="listbox"
               tabIndex={-1}
               aria-labelledby={controlId}
               onKeyDown={handleListboxKeyDown}
               className={[
-                'fixed z-50 max-h-64 overflow-y-auto rounded-xl border border-border bg-surface shadow-soft',
+                'fixed z-50 overflow-y-auto rounded-xl border border-border bg-surface shadow-soft',
                 flushOptions ? 'p-0' : fitToContent ? 'p-0.5' : 'p-1',
               ].join(' ')}
               style={menuStyle}

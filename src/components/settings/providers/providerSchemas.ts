@@ -51,7 +51,7 @@ export const API_KEY_PROVIDER_SCHEMAS: readonly ApiKeyProviderSchema[] = [
     baseUrlLabel: 'Base URL',
     baseUrlRequired: true,
     defaultBaseUrl: 'https://your-provider.example.com/v1',
-    description: 'Connect to any OpenAI-compatible endpoint.',
+    description: 'Connect to any OpenAI-compatible endpoint. API key is optional.',
     id: 'openai-compatible',
     label: 'OpenAI Compatible',
     showAdvancedDefaults: true,

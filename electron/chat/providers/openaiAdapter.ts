@@ -1,23 +1,18 @@
-import OpenAI from 'openai'
 import type { ResponseIncludable } from 'openai/resources/responses/responses'
-import type { ApiKeyProviderId, Message, ReasoningEffort } from '../../../src/types/chat'
-import { readStoredApiKeyProviders } from '../../providers/store'
+import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
+import {
+  buildOpenAIClient,
+  hasText,
+  loadOpenAIProviderConfig,
+  OPENAI_MAX_RETRIES,
+  OPENAI_REQUEST_TIMEOUT_MS,
+  OPENAI_SYSTEM_INSTRUCTIONS,
+  readDeltaText,
+  readNestedRecord,
+} from './openaiShared'
 
-const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
-const OPENAI_COMPATIBLE_FALLBACK_API_KEY = 'echosphere-openai-compatible'
-const OPENAI_MAX_RETRIES = 2
-const OPENAI_REQUEST_TIMEOUT_MS = 120_000
 const OPENAI_REASONING_INCLUDE_FIELDS: ResponseIncludable[] = ['reasoning.encrypted_content' as ResponseIncludable]
-const OPENAI_SYSTEM_INSTRUCTIONS = 'You are EchoSphere, a helpful coding assistant.'
-
-type OpenAIResponsesProviderId = Extract<ApiKeyProviderId, 'openai' | 'openai-compatible'>
-
-interface OpenAIProviderConfig {
-  apiKey: string
-  baseURL: string
-  stripAuthorizationHeader: boolean
-}
 
 interface OpenAIInputMessage {
   content: string
@@ -32,10 +27,6 @@ interface OpenAIStreamEventPayload {
   part?: unknown
   text?: unknown
   type?: unknown
-}
-
-function hasText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
 }
 
 function toOpenAIInputMessage(message: Message): OpenAIInputMessage | null {
@@ -60,35 +51,6 @@ function toOpenAIInputMessage(message: Message): OpenAIInputMessage | null {
 
 function buildOpenAIInput(messages: Message[]) {
   return messages.map(toOpenAIInputMessage).filter((value): value is OpenAIInputMessage => value !== null)
-}
-
-function readDeltaText(input: unknown): string | null {
-  if (typeof input === 'string' && input.length > 0) {
-    return input
-  }
-
-  if (typeof input !== 'object' || input === null) {
-    return null
-  }
-
-  const candidate = input as Record<string, unknown>
-  if (typeof candidate.delta === 'string' && candidate.delta.length > 0) {
-    return candidate.delta
-  }
-
-  if (typeof candidate.text === 'string' && candidate.text.length > 0) {
-    return candidate.text
-  }
-
-  return null
-}
-
-function readNestedRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== 'object' || value === null) {
-    return null
-  }
-
-  return value as Record<string, unknown>
 }
 
 function extractReasoningTextFromOutputItem(payload: OpenAIStreamEventPayload): string | null {
@@ -137,7 +99,7 @@ function extractReasoningTextFromContentPart(payload: OpenAIStreamEventPayload):
   return readDeltaText(payload.delta) ?? readDeltaText(part?.text) ?? readDeltaText(part?.delta)
 }
 
-function handleStreamEventPayload(
+function handleResponsesStreamEventPayload(
   payload: OpenAIStreamEventPayload,
   emitDelta: (event: {
     delta: string
@@ -209,71 +171,8 @@ function handleStreamEventPayload(
   }
 }
 
-function removeAuthorizationHeader(headersInput: HeadersInit | undefined) {
-  const headers = new Headers(headersInput)
-  headers.delete('Authorization')
-  headers.delete('authorization')
-  return headers
-}
-
-function buildOpenAIClient(providerConfig: OpenAIProviderConfig) {
-  const baseClientOptions = {
-    apiKey: providerConfig.apiKey,
-    baseURL: providerConfig.baseURL,
-    maxRetries: OPENAI_MAX_RETRIES,
-    timeout: OPENAI_REQUEST_TIMEOUT_MS,
-  }
-
-  if (!providerConfig.stripAuthorizationHeader) {
-    return new OpenAI(baseClientOptions)
-  }
-
-  return new OpenAI({
-    ...baseClientOptions,
-    fetch: async (input, init) => {
-      const nextInit: RequestInit = {
-        ...init,
-        headers: removeAuthorizationHeader(init?.headers),
-      }
-
-      return fetch(input, nextInit)
-    },
-  })
-}
-
-async function loadOpenAIProviderConfig(providerId: OpenAIResponsesProviderId): Promise<OpenAIProviderConfig> {
-  const storedProviders = await readStoredApiKeyProviders()
-  const providerConfig = storedProviders[providerId]
-  const apiKey = providerConfig?.api_key?.trim() ?? ''
-  const configuredBaseUrl = providerConfig?.base_url?.trim() ?? ''
-
-  if (providerId === 'openai') {
-    if (!apiKey) {
-      throw new Error('OpenAI is not configured. Save an OpenAI API key in Settings > Providers before sending messages.')
-    }
-
-    return {
-      apiKey,
-      baseURL: configuredBaseUrl || OPENAI_DEFAULT_BASE_URL,
-      stripAuthorizationHeader: false,
-    }
-  }
-
-  if (!configuredBaseUrl) {
-    throw new Error(
-      'OpenAI Compatible is not configured. Save a base URL in Settings > Providers before sending messages.',
-    )
-  }
-
-  return {
-    apiKey: apiKey || OPENAI_COMPATIBLE_FALLBACK_API_KEY,
-    baseURL: configuredBaseUrl,
-    stripAuthorizationHeader: apiKey.length === 0,
-  }
-}
-
 async function streamOpenAIResponse(
-  client: OpenAI,
+  client: ReturnType<typeof buildOpenAIClient>,
   request: {
     messages: Message[]
     modelId: string
@@ -318,7 +217,7 @@ async function streamOpenAIResponse(
         shouldPrefixNextReasoningSummaryDelta = true
       }
 
-      handleStreamEventPayload(payload, (parsedEvent) => {
+      handleResponsesStreamEventPayload(payload, (parsedEvent) => {
         if (parsedEvent.type !== 'reasoning_delta') {
           emitDelta(parsedEvent)
           return
@@ -353,33 +252,6 @@ export const openaiChatProviderAdapter: ChatProviderAdapter = {
   providerId: 'openai',
   async streamResponse(request, context) {
     const providerConfig = await loadOpenAIProviderConfig('openai')
-    const client = buildOpenAIClient(providerConfig)
-
-    try {
-      await streamOpenAIResponse(
-        client,
-        {
-          messages: request.messages,
-          modelId: request.modelId,
-          reasoningEffort: request.reasoningEffort,
-        },
-        context.emitDelta,
-        context.signal,
-      )
-    } catch (error) {
-      if (context.signal.aborted) {
-        return
-      }
-
-      throw error
-    }
-  },
-}
-
-export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
-  providerId: 'openai-compatible',
-  async streamResponse(request, context) {
-    const providerConfig = await loadOpenAIProviderConfig('openai-compatible')
     const client = buildOpenAIClient(providerConfig)
 
     try {

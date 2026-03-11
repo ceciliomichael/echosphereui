@@ -31,6 +31,8 @@ export default function App() {
 
   return (
     <ChatInterface
+      settings={settings}
+      onUpdateSettings={updateSettings}
       language={settings.language}
       onSidebarWidthChange={handleSidebarWidthChange}
       sendMessageOnEnter={settings.sendMessageOnEnter}

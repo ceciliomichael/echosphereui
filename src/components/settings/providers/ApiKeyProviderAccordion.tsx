@@ -7,10 +7,12 @@ interface ApiKeyProviderAccordionProps {
   draft: ApiKeyProviderDraft
   errorMessage: string | undefined
   isBusy: boolean
+  isClearing: boolean
   isExpanded: boolean
   isFirst?: boolean
   isSaving: boolean
   onBaseUrlChange: (value: string) => void
+  onClear: () => Promise<void>
   onMaxTokensChange: (value: string) => void
   onSave: () => Promise<void>
   onTemperatureChange: (value: string) => void
@@ -25,10 +27,12 @@ export function ApiKeyProviderAccordion({
   draft,
   errorMessage,
   isBusy,
+  isClearing,
   isExpanded,
   isFirst = false,
   isSaving,
   onBaseUrlChange,
+  onClear,
   onMaxTokensChange,
   onSave,
   onTemperatureChange,
@@ -39,6 +43,7 @@ export function ApiKeyProviderAccordion({
   schema,
 }: ApiKeyProviderAccordionProps) {
   const statusLabel = providerStatus?.configured ? 'Configured' : 'Not Configured'
+  const hasStoredApiKey = Boolean(providerStatus?.hasApiKey)
 
   return (
     <ProviderAccordionItem
@@ -61,10 +66,19 @@ export function ApiKeyProviderAccordion({
             type="password"
             value={draft.apiKey}
             onChange={(event) => onUpdateApiKey(event.target.value)}
-            placeholder={providerStatus?.configured ? 'Enter new API key to rotate' : 'Paste API key'}
+            placeholder={
+              hasStoredApiKey ? 'Stored locally. Enter a new API key to rotate.' : 'Paste API key'
+            }
             className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
             required={!schema.apiKeyOptional}
           />
+          {hasStoredApiKey ? (
+            <p className="text-xs text-muted-foreground">Leave this blank to keep the saved API key.</p>
+          ) : schema.apiKeyOptional ? (
+            <p className="text-xs text-muted-foreground">
+              Optional. Leave this blank if your endpoint does not require authentication.
+            </p>
+          ) : null}
         </div>
 
         {schema.showBaseUrl ? (
@@ -129,6 +143,16 @@ export function ApiKeyProviderAccordion({
         ) : null}
 
         <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          {providerStatus?.configured ? (
+            <button
+              type="button"
+              onClick={() => void onClear()}
+              disabled={isBusy}
+              className={primaryButtonClassName}
+            >
+              {isClearing ? 'Clearing...' : 'Clear'}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => void onSave()}

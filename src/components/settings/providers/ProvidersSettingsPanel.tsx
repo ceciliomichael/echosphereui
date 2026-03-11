@@ -20,6 +20,7 @@ interface ProvidersSettingsPanelProps {
   errorMessage: string | null
   isLoading: boolean
   onConnectCodexWithOAuth: () => Promise<boolean>
+  onRemoveApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<boolean>
   onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
   providersState: ProvidersState | null
 }
@@ -35,6 +36,7 @@ export function ProvidersSettingsPanel({
   errorMessage,
   isLoading,
   onConnectCodexWithOAuth,
+  onRemoveApiKeyProvider,
   onSaveApiKeyProvider,
   providersState,
 }: ProvidersSettingsPanelProps) {
@@ -45,15 +47,24 @@ export function ProvidersSettingsPanel({
   useEffect(() => {
     setProviderDrafts((currentValue) => {
       const fallbackDraftMap = buildInitialDraftMap()
+      const providerStatuses = providersState?.apiKeyProviders ?? []
+      const providerStatusById = providerStatuses.reduce<Partial<Record<ApiKeyProviderId, (typeof providerStatuses)[number]>>>(
+        (result, provider) => {
+        result[provider.id] = provider
+        return result
+      },
+        {},
+      )
       const nextValue = { ...currentValue }
 
       for (const schema of API_KEY_PROVIDER_SCHEMAS) {
         const existingDraft = nextValue[schema.id]
         const fallbackDraft = fallbackDraftMap[schema.id]
+        const providerStatus = providerStatusById[schema.id]
 
         nextValue[schema.id] = {
           apiKey: existingDraft?.apiKey ?? fallbackDraft.apiKey,
-          baseUrl: existingDraft?.baseUrl ?? fallbackDraft.baseUrl,
+          baseUrl: providerStatus?.baseUrl ?? existingDraft?.baseUrl ?? fallbackDraft.baseUrl,
           maxTokens: existingDraft?.maxTokens ?? fallbackDraft.maxTokens,
           temperature: existingDraft?.temperature ?? fallbackDraft.temperature,
         }
@@ -123,9 +134,10 @@ export function ProvidersSettingsPanel({
     const apiKey = draft.apiKey.trim()
     const inputBaseUrl = draft.baseUrl.trim()
     const fallbackBaseUrl = apiKeyProviderStatusById[providerId]?.baseUrl?.trim() ?? ''
+    const hasStoredApiKey = Boolean(apiKeyProviderStatusById[providerId]?.hasApiKey)
     const resolvedBaseUrl = inputBaseUrl || fallbackBaseUrl
 
-    if (!schema.apiKeyOptional && !apiKey) {
+    if (!schema.apiKeyOptional && !apiKey && !hasStoredApiKey) {
       setProviderValidationError(providerId, 'API key is required for this provider.')
       return
     }
@@ -155,6 +167,31 @@ export function ProvidersSettingsPanel({
     if (didSave && schema.showAdvancedDefaults) {
       persistAdvancedDefaults(providerId)
     }
+
+    if (didSave) {
+      setProviderDrafts((currentValue) => ({
+        ...currentValue,
+        [providerId]: {
+          ...currentValue[providerId],
+          apiKey: '',
+          baseUrl: resolvedBaseUrl,
+        },
+      }))
+    }
+  }
+
+  async function handleClearProvider(providerId: ApiKeyProviderId) {
+    const didClear = await onRemoveApiKeyProvider(providerId)
+    if (!didClear) {
+      return
+    }
+
+    const fallbackDraftMap = buildInitialDraftMap()
+    setProviderDrafts((currentValue) => ({
+      ...currentValue,
+      [providerId]: fallbackDraftMap[providerId],
+    }))
+    setProviderValidationError(providerId, null)
   }
 
   return (
@@ -176,7 +213,7 @@ export function ProvidersSettingsPanel({
 
           {API_KEY_PROVIDER_SCHEMAS.map((schema) => {
             const operationState = operationForProvider(activeOperation, schema.id)
-            const isBusy = isLoading || operationState.isSaving
+            const isBusy = isLoading || operationState.isRemoving || operationState.isSaving
             const draft = providerDrafts[schema.id]
             const providerStatus = apiKeyProviderStatusById[schema.id]
 
@@ -186,10 +223,12 @@ export function ProvidersSettingsPanel({
                 draft={draft}
                 errorMessage={validationErrors[schema.id]}
                 isBusy={isBusy}
+                isClearing={operationState.isRemoving}
                 isExpanded={expandedProviderId === schema.id}
                 isFirst={false}
                 isSaving={operationState.isSaving}
                 onBaseUrlChange={(value) => updateProviderDraft(schema.id, { baseUrl: value })}
+                onClear={() => handleClearProvider(schema.id)}
                 onMaxTokensChange={(value) => updateProviderDraft(schema.id, { maxTokens: normalizeOptionalIntegerInput(value) })}
                 onSave={() => handleSaveProvider(schema.id)}
                 onTemperatureChange={(value) => updateProviderDraft(schema.id, { temperature: normalizeOptionalNumericInput(value) })}

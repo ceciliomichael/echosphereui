@@ -85,6 +85,7 @@ export function SettingsInterface({
             errorMessage: providersState.errorMessage,
             isLoading: providersState.isLoading,
             onConnectCodexWithOAuth: providersState.connectCodexWithOAuth,
+            onRemoveApiKeyProvider: providersState.removeApiKeyProvider,
             onSaveApiKeyProvider: providersState.saveApiKeyProvider,
             providersState: providersState.providersState,
           }}

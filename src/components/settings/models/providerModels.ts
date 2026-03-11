@@ -42,8 +42,5 @@ export const PROVIDER_MODELS = {
     { enabledByDefault: true, id: 'google-gemini-2.5-flash', label: 'google-gemini-2.5-flash' },
     { enabledByDefault: false, id: 'google-gemini-2.5-pro', label: 'google-gemini-2.5-pro' },
   ],
-  'openai-compatible': [
-    { enabledByDefault: true, id: 'openai-compatible-grok-code', label: 'openai-compatible-grok-code' },
-    { enabledByDefault: false, id: 'openai-compatible-custom-fast', label: 'openai-compatible-custom-fast' },
-  ],
+  'openai-compatible': [],
 } as const satisfies Record<ModelProviderId, readonly ProviderModelDefinition[]>

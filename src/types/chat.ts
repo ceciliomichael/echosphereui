@@ -93,6 +93,8 @@ export interface ReplaceConversationMessagesInput {
 
 export interface AppSettings {
   appearance: AppAppearance
+  chatModelId: string
+  chatReasoningEffort: ReasoningEffort
   language: AppLanguage
   sendMessageOnEnter: boolean
   sidebarWidth: number
@@ -115,6 +117,7 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 export interface ApiKeyProviderStatus {
   baseUrl: string | null
   configured: boolean
+  hasApiKey: boolean
   id: ApiKeyProviderId
   label: string
 }

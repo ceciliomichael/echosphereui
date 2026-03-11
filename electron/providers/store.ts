@@ -110,29 +110,31 @@ export async function readStoredApiKeyProviders() {
 }
 
 export async function saveApiKeyProviderConfig(input: SaveApiKeyProviderInput) {
-  const apiKey = input.apiKey.trim()
-  const baseUrl = input.baseUrl?.trim() ?? ''
-  if (!apiKey && input.providerId !== 'openai-compatible') {
+  const currentProviders = await readStoredApiKeyProviders()
+  const currentProviderConfig = currentProviders[input.providerId]
+  const nextApiKey = input.apiKey.trim() || currentProviderConfig?.api_key?.trim() || ''
+  const nextBaseUrl = input.baseUrl?.trim() || currentProviderConfig?.base_url?.trim() || ''
+
+  if (!nextApiKey && input.providerId !== 'openai-compatible') {
     throw new Error('API key is required.')
   }
 
-  const currentProviders = await readStoredApiKeyProviders()
   const nextProviderConfig: StoredApiKeyProviderConfig = {
     updated_at: new Date().toISOString(),
   }
 
-  if (apiKey) {
-    nextProviderConfig.api_key = apiKey
+  if (nextApiKey) {
+    nextProviderConfig.api_key = nextApiKey
   }
 
   if (input.providerId === 'openai-compatible') {
-    if (!baseUrl) {
+    if (!nextBaseUrl) {
       throw new Error('Base URL is required for OpenAI-compatible providers.')
     }
   }
 
-  if (baseUrl) {
-    nextProviderConfig.base_url = baseUrl
+  if (nextBaseUrl) {
+    nextProviderConfig.base_url = nextBaseUrl
   }
 
   const nextProviders: StoredApiKeyProviders = {
@@ -161,6 +163,7 @@ export function toApiKeyProviderStatuses(storedProviders: StoredApiKeyProviders)
     return {
       baseUrl: storedProvider?.base_url ?? null,
       configured,
+      hasApiKey: Boolean(storedProvider?.api_key),
       id: providerId,
       label: PROVIDER_LABELS[providerId],
     }

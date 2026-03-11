@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { loadInitialChatHistory, persistAssistantMessage, persistUserTurn } from './chatHistoryWorkflows'
 import { useChatComposerState } from './useChatComposerState'
@@ -238,10 +238,10 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
   }
 
-  function startEditingMessage(messageId: string) {
+  const startEditingMessage = useCallback((messageId: string) => {
     clearError()
     beginEditingMessage(messageId)
-  }
+  }, [beginEditingMessage, clearError])
 
   async function persistAndStreamMessage(trimmedText: string, targetEditMessageId: string | null) {
     if (!runtimeSelection.hasConfiguredProvider) {

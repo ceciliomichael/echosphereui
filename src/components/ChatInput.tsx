@@ -44,7 +44,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInline = variant === 'inline'
-  const showRuntimeControls = !isInline && modelOptions.length > 0 && typeof onModelChange === 'function'
+  const showRuntimeControls = modelOptions.length > 0 && typeof onModelChange === 'function'
 
   const canSend = value.trim().length > 0 && !disabled
 
@@ -109,6 +109,10 @@ export function ChatInput({
       }
 
       if (event.target instanceof Node && !container.contains(event.target)) {
+        if (event.target instanceof Element && event.target.closest('[data-floating-menu-root="true"]')) {
+          return
+        }
+
         cancelEditing?.()
       }
     }
@@ -141,7 +145,7 @@ export function ChatInput({
           />
         </div>
 
-        <div className={isInline ? 'mt-2 flex items-center justify-end' : 'mt-3 flex items-end justify-between gap-3'}>
+        <div className="mt-3 flex items-end justify-between gap-3">
           {showRuntimeControls ? (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:flex-nowrap">
               <ModelSelectorField
@@ -161,22 +165,24 @@ export function ChatInput({
             </div>
           ) : null}
 
-          <Tooltip content={isEditing ? 'Send edited message' : 'Send message'}>
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
-              aria-label={isEditing ? 'Send edited message' : 'Send message'}
-              className={[
-                'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
-                canSend
-                  ? 'chat-send-button-enabled cursor-pointer hover:scale-[1.03] active:scale-95'
-                  : 'chat-send-button-disabled cursor-not-allowed',
-              ].join(' ')}
-            >
-              <ArrowUp size={16} strokeWidth={2.5} />
-            </button>
-          </Tooltip>
+          <div className="flex shrink-0 justify-end self-end">
+            <Tooltip content={isEditing ? 'Send edited message' : 'Send message'}>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                aria-label={isEditing ? 'Send edited message' : 'Send message'}
+                className={[
+                  'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
+                  canSend
+                    ? 'chat-send-button-enabled cursor-pointer hover:scale-[1.03] active:scale-95'
+                    : 'chat-send-button-disabled cursor-not-allowed',
+                ].join(' ')}
+              >
+                <ArrowUp size={16} strokeWidth={2.5} />
+              </button>
+            </Tooltip>
+          </div>
         </div>
       </div>
     </div>

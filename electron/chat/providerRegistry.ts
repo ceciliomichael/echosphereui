@@ -1,7 +1,8 @@
 import type { ChatProviderId } from '../../src/types/chat'
 import type { ChatProviderAdapter, ProviderStreamContext, ProviderStreamRequest } from './providerTypes'
 import { codexChatProviderAdapter } from './providers/codexAdapter'
-import { openaiChatProviderAdapter, openaiCompatibleChatProviderAdapter } from './providers/openaiAdapter'
+import { openaiChatProviderAdapter } from './providers/openaiAdapter'
+import { openaiCompatibleChatProviderAdapter } from './providers/openaiCompatibleAdapter'
 
 async function unsupportedProviderResponse(request: ProviderStreamRequest) {
   throw new Error(`Provider "${request.providerId}" is not implemented yet.`)

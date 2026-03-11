@@ -1,5 +1,6 @@
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 import type { AppSettings } from '../../src/types/chat'
 
 const INITIAL_SETTINGS_ARG_PREFIX = '--echosphere-initial-settings='
@@ -9,6 +10,10 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
 
   return {
     appearance: isAppAppearance(candidate?.appearance) ? candidate.appearance : DEFAULT_APP_SETTINGS.appearance,
+    chatModelId: typeof candidate?.chatModelId === 'string' ? candidate.chatModelId.trim() : DEFAULT_APP_SETTINGS.chatModelId,
+    chatReasoningEffort: isReasoningEffort(candidate?.chatReasoningEffort)
+      ? candidate.chatReasoningEffort
+      : DEFAULT_APP_SETTINGS.chatReasoningEffort,
     language: isAppLanguage(candidate?.language) ? candidate.language : DEFAULT_APP_SETTINGS.language,
     sendMessageOnEnter:
       typeof candidate?.sendMessageOnEnter === 'boolean'

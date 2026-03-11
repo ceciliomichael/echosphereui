@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
@@ -11,12 +11,15 @@ import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import { useProvidersState } from '../hooks/useProvidersState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppLanguage } from '../lib/appSettings'
+import type { AppSettings } from '../types/chat'
 
 interface ChatInterfaceProps {
   language: AppLanguage
   onOpenSettings: () => void
   onSidebarWidthChange: (sidebarWidth: number) => void
+  onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
   sendMessageOnEnter: boolean
+  settings: AppSettings
   sidebarWidth: number
 }
 
@@ -24,12 +27,18 @@ export function ChatInterface({
   language,
   onOpenSettings,
   onSidebarWidthChange,
+  onUpdateSettings,
   sendMessageOnEnter,
+  settings,
   sidebarWidth,
 }: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const providersState = useProvidersState()
-  const chatRuntimeConfig = useChatRuntimeConfig(providersState.providersState)
+  const chatRuntimeConfig = useChatRuntimeConfig({
+    providersState: providersState.providersState,
+    settings,
+    updateSettings: onUpdateSettings,
+  })
   const {
     activeConversationId,
     activeConversationTitle,
@@ -70,6 +79,16 @@ export function ChatInterface({
     setSelectedModelId,
     showReasoningEffortSelector,
   } = chatRuntimeConfig
+  const selectorOptions = useMemo(
+    () =>
+      modelOptions.map((option) => ({
+        label: option.label,
+        providerLabel: option.providerLabel,
+        value: option.id,
+      })),
+    [modelOptions],
+  )
+
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
@@ -126,7 +145,13 @@ export function ChatInterface({
                 onCancelEditingMessage={cancelEditingMessage}
                 composerFocusSignal={editComposerFocusSignal}
                 isSending={isSending}
+                modelOptions={selectorOptions}
+                onModelChange={setSelectedModelId}
+                onReasoningEffortChange={setReasoningEffort}
+                reasoningEffort={reasoningEffort}
+                selectedModelId={selectedModelId}
                 sendMessageOnEnter={sendMessageOnEnter}
+                showReasoningEffortSelector={showReasoningEffortSelector}
                 streamingAssistantMessageId={streamingAssistantMessageId}
               />
             )}
@@ -141,11 +166,7 @@ export function ChatInterface({
               onSend={sendNewMessage}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
-              modelOptions={modelOptions.map((option) => ({
-                label: option.label,
-                providerLabel: option.providerLabel,
-                value: option.id,
-              }))}
+              modelOptions={selectorOptions}
               selectedModelId={selectedModelId}
               onModelChange={setSelectedModelId}
               reasoningEffort={reasoningEffort}

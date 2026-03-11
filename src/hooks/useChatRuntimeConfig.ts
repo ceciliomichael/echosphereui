@@ -1,15 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/modelCatalog'
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
 import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
 import { isProviderConfigured } from '../components/settings/models/modelViewUtils'
-import type { ChatProviderId, CustomModelConfig, ProvidersState, ReasoningEffort } from '../types/chat'
-
-const SELECTED_MODEL_STORAGE_KEY = 'echosphere:chat:selected-model'
-const LEGACY_SELECTED_CODEX_MODEL_STORAGE_KEY = 'echosphere:chat:codex:model'
-const REASONING_EFFORT_STORAGE_KEY = 'echosphere:chat:reasoning-effort'
-
-const REASONING_EFFORT_VALUES: readonly ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh']
+import type { AppSettings, ChatProviderId, CustomModelConfig, ProvidersState, ReasoningEffort } from '../types/chat'
 
 interface ChatModelOption {
   id: string
@@ -18,28 +12,6 @@ interface ChatModelOption {
   providerLabel: string
   reasoningCapable: boolean
   runtimeModelId: string
-}
-
-function readStoredStringValue(storageKey: string) {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
-  try {
-    const value = window.localStorage.getItem(storageKey)
-    return typeof value === 'string' ? value : ''
-  } catch {
-    return ''
-  }
-}
-
-function readStoredReasoningEffort(): ReasoningEffort {
-  const storedValue = readStoredStringValue(REASONING_EFFORT_STORAGE_KEY)
-  if (REASONING_EFFORT_VALUES.includes(storedValue as ReasoningEffort)) {
-    return storedValue as ReasoningEffort
-  }
-
-  return 'medium'
 }
 
 function buildChatModelOptions(
@@ -71,22 +43,19 @@ function buildChatModelOptions(
   })
 }
 
-export function useChatRuntimeConfig(providersState: ProvidersState | null) {
+interface UseChatRuntimeConfigInput {
+  providersState: ProvidersState | null
+  settings: Pick<AppSettings, 'chatModelId' | 'chatReasoningEffort'>
+  updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
+}
+
+export function useChatRuntimeConfig({ providersState, settings, updateSettings }: UseChatRuntimeConfigInput) {
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
   const modelOptions = useMemo(() => buildChatModelOptions(providersState, customModels), [customModels, providersState])
-  const [selectedModelId, setSelectedModelId] = useState(() => {
-    const storedModelId = readStoredStringValue(SELECTED_MODEL_STORAGE_KEY)
-    if (storedModelId.trim().length > 0) {
-      return storedModelId
-    }
-
-    return readStoredStringValue(LEGACY_SELECTED_CODEX_MODEL_STORAGE_KEY)
-  })
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(() => readStoredReasoningEffort())
 
   const selectedModel = useMemo(
-    () => modelOptions.find((model) => model.id === selectedModelId) ?? modelOptions[0] ?? null,
-    [modelOptions, selectedModelId],
+    () => modelOptions.find((model) => model.id === settings.chatModelId) ?? modelOptions[0] ?? null,
+    [modelOptions, settings.chatModelId],
   )
 
   useEffect(() => {
@@ -111,46 +80,34 @@ export function useChatRuntimeConfig(providersState: ProvidersState | null) {
   }, [])
 
   useEffect(() => {
-    if (selectedModel?.id !== selectedModelId) {
-      setSelectedModelId(selectedModel?.id ?? '')
-    }
-  }, [selectedModel, selectedModelId])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
+    const nextModelId = selectedModel?.id ?? ''
+    if (modelOptions.length === 0 || nextModelId === settings.chatModelId) {
       return
     }
 
-    try {
-      if (selectedModelId.trim().length > 0) {
-        window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelId)
-        return
-      }
+    void updateSettings({ chatModelId: nextModelId })
+  }, [modelOptions.length, selectedModel?.id, settings.chatModelId, updateSettings])
 
-      window.localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY)
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [selectedModelId])
+  const setSelectedModelId = useCallback(
+    (chatModelId: string) => {
+      void updateSettings({ chatModelId })
+    },
+    [updateSettings],
+  )
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    try {
-      window.localStorage.setItem(REASONING_EFFORT_STORAGE_KEY, reasoningEffort)
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [reasoningEffort])
+  const setReasoningEffort = useCallback(
+    (chatReasoningEffort: ReasoningEffort) => {
+      void updateSettings({ chatReasoningEffort })
+    },
+    [updateSettings],
+  )
 
   return {
     hasConfiguredProvider: modelOptions.length > 0,
     modelOptions,
     providerId: selectedModel?.providerId ?? null,
     providerLabel: selectedModel?.providerLabel ?? null,
-    reasoningEffort,
+    reasoningEffort: settings.chatReasoningEffort,
     selectedModelId: selectedModel?.id ?? '',
     selectedRuntimeModelId: selectedModel?.runtimeModelId ?? '',
     setReasoningEffort,

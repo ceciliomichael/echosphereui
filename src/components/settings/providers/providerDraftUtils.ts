@@ -47,6 +47,7 @@ export function isValidMaxTokens(value: string) {
 
 export function operationForProvider(activeOperation: string | null, providerId: ApiKeyProviderId) {
   return {
+    isRemoving: activeOperation === `apikey:${providerId}:remove`,
     isSaving: activeOperation === `apikey:${providerId}:save`,
   }
 }

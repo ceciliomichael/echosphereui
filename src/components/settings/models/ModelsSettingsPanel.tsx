@@ -4,7 +4,8 @@ import { SettingsPanelLayout } from '../shared/SettingsPanelPrimitives'
 import { ModelsProviderSection } from './ModelsProviderSection'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
 import type { ModelToggleState } from './modelTypes'
-import { buildModelProviderSections } from './modelViewUtils'
+import { buildModelProviderSections, isProviderConfigured } from './modelViewUtils'
+import { PROVIDER_SECTIONS } from './modelCatalog'
 import { DropdownField } from '../../ui/DropdownField'
 
 interface ModelsSettingsPanelProps {
@@ -81,13 +82,13 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
   )
   const customProviderOptions = useMemo(
     () =>
-      providerSections
-        .filter((section) => isCustomModelProviderId(section.provider.id) && section.configured)
-        .map((section) => ({
-          label: section.provider.label,
-          value: section.provider.id,
+      PROVIDER_SECTIONS.filter(
+        (provider) => isCustomModelProviderId(provider.id) && isProviderConfigured(provider.id, providersState),
+      ).map((provider) => ({
+          label: provider.label,
+          value: provider.id,
         })),
-    [providerSections],
+    [providersState],
   )
 
   function handleToggleModel(modelId: string) {

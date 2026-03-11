@@ -4,6 +4,8 @@ import { DEFAULT_SIDEBAR_WIDTH } from './sidebarSizing'
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   appearance: DEFAULT_APP_APPEARANCE,
+  chatModelId: '',
+  chatReasoningEffort: 'medium',
   language: DEFAULT_APP_LANGUAGE,
   sendMessageOnEnter: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,

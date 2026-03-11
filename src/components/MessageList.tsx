@@ -1,9 +1,10 @@
 import { memo, useRef } from 'react'
 import { useAutoScroll } from '../hooks/useAutoScroll'
-import type { Message } from '../types/chat'
+import type { Message, ReasoningEffort } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
+import type { ModelSelectorOption } from './chat/ModelSelectorField'
 
 interface MessageListProps {
   conversationId: string | null
@@ -15,8 +16,14 @@ interface MessageListProps {
   onCancelEditingMessage: () => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
+  onModelChange?: (modelId: string) => void
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
+  modelOptions?: readonly ModelSelectorOption[]
+  reasoningEffort?: ReasoningEffort
+  selectedModelId?: string
   sendMessageOnEnter: boolean
+  showReasoningEffortSelector?: boolean
   streamingAssistantMessageId?: string | null
 }
 
@@ -30,8 +37,14 @@ interface MessageRowProps {
   onCancelEditingMessage: () => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
+  onModelChange?: (modelId: string) => void
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
+  modelOptions?: readonly ModelSelectorOption[]
+  reasoningEffort?: ReasoningEffort
+  selectedModelId?: string
   sendMessageOnEnter: boolean
+  showReasoningEffortSelector?: boolean
 }
 
 const MessageRow = memo(
@@ -45,8 +58,14 @@ const MessageRow = memo(
     onCancelEditingMessage,
     onComposerValueChange,
     onEditUserMessage,
+    onModelChange,
+    onReasoningEffortChange,
     onSendEditedMessage,
+    modelOptions,
+    reasoningEffort,
+    selectedModelId,
     sendMessageOnEnter,
+    showReasoningEffortSelector,
   }: MessageRowProps) {
     return (
       <div className={message.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
@@ -63,6 +82,12 @@ const MessageRow = memo(
                 variant="inline"
                 focusSignal={composerFocusSignal}
                 disabled={isSending}
+                modelOptions={modelOptions}
+                onModelChange={onModelChange}
+                onReasoningEffortChange={onReasoningEffortChange}
+                reasoningEffort={reasoningEffort}
+                selectedModelId={selectedModelId}
+                showReasoningEffortSelector={showReasoningEffortSelector}
               />
             </div>
           ) : (
@@ -106,7 +131,11 @@ const MessageRow = memo(
       previousProps.composerValue === nextProps.composerValue &&
       previousProps.composerFocusSignal === nextProps.composerFocusSignal &&
       previousProps.isSending === nextProps.isSending &&
-      previousProps.sendMessageOnEnter === nextProps.sendMessageOnEnter
+      previousProps.reasoningEffort === nextProps.reasoningEffort &&
+      previousProps.selectedModelId === nextProps.selectedModelId &&
+      previousProps.sendMessageOnEnter === nextProps.sendMessageOnEnter &&
+      previousProps.showReasoningEffortSelector === nextProps.showReasoningEffortSelector &&
+      previousProps.modelOptions === nextProps.modelOptions
     )
   },
 )
@@ -122,7 +151,13 @@ export function MessageList({
   onCancelEditingMessage,
   composerFocusSignal,
   isSending = false,
+  modelOptions,
+  onModelChange,
+  onReasoningEffortChange,
+  reasoningEffort,
+  selectedModelId,
   sendMessageOnEnter,
+  showReasoningEffortSelector = false,
   streamingAssistantMessageId = null,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -147,8 +182,14 @@ export function MessageList({
             onCancelEditingMessage={onCancelEditingMessage}
             onComposerValueChange={onComposerValueChange}
             onEditUserMessage={onEditUserMessage}
+            onModelChange={onModelChange}
+            onReasoningEffortChange={onReasoningEffortChange}
             onSendEditedMessage={onSendEditedMessage}
+            modelOptions={modelOptions}
+            reasoningEffort={reasoningEffort}
+            selectedModelId={selectedModelId}
             sendMessageOnEnter={sendMessageOnEnter}
+            showReasoningEffortSelector={showReasoningEffortSelector}
           />
         ))}
       </div>

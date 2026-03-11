@@ -4,6 +4,7 @@ import { app } from 'electron'
 import type { AppSettings } from '../../src/types/chat'
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const SETTINGS_FILE_NAME = 'settings.json'
@@ -31,6 +32,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
       ? Math.max(DEFAULT_APP_SETTINGS.sidebarWidth, input.sidebarWidth)
       : DEFAULT_APP_SETTINGS.sidebarWidth
   const appearance = isAppAppearance(input?.appearance) ? input.appearance : DEFAULT_APP_SETTINGS.appearance
+  const chatModelId = typeof input?.chatModelId === 'string' ? input.chatModelId.trim() : DEFAULT_APP_SETTINGS.chatModelId
+  const chatReasoningEffort = isReasoningEffort(input?.chatReasoningEffort)
+    ? input.chatReasoningEffort
+    : DEFAULT_APP_SETTINGS.chatReasoningEffort
   const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
   const sendMessageOnEnter =
     typeof input?.sendMessageOnEnter === 'boolean'
@@ -39,6 +44,8 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 
   return {
     appearance,
+    chatModelId,
+    chatReasoningEffort,
     language,
     sendMessageOnEnter,
     sidebarWidth,
