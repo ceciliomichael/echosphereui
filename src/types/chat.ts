@@ -109,6 +109,7 @@ export interface CodexProviderConnectionStatus {
 
 export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
 export type ChatProviderId = 'codex' | ApiKeyProviderId
+export type CustomModelProviderId = 'openai' | 'openai-compatible'
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface ApiKeyProviderStatus {
@@ -127,6 +128,23 @@ export interface SaveApiKeyProviderInput {
   apiKey: string
   baseUrl?: string
   providerId: ApiKeyProviderId
+}
+
+export interface CustomModelConfig {
+  apiModelId: string
+  createdAt: string
+  id: string
+  label: string
+  providerId: CustomModelProviderId
+  reasoningCapable: boolean
+  updatedAt: string
+}
+
+export interface SaveCustomModelInput {
+  apiModelId: string
+  label?: string
+  providerId: CustomModelProviderId
+  reasoningCapable: boolean
 }
 
 export interface StartChatStreamInput {
@@ -190,6 +208,12 @@ export interface EchosphereProvidersApi {
   disconnectCodex: () => Promise<ProvidersState>
   removeApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<ProvidersState>
   saveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<ProvidersState>
+}
+
+export interface EchosphereModelsApi {
+  listCustomModels: () => Promise<CustomModelConfig[]>
+  removeCustomModel: (modelId: string) => Promise<CustomModelConfig[]>
+  saveCustomModel: (input: SaveCustomModelInput) => Promise<CustomModelConfig[]>
 }
 
 export interface EchosphereChatApi {

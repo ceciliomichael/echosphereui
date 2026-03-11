@@ -1,10 +1,13 @@
+import { Trash2 } from 'lucide-react'
 import type { ModelCatalogItem, ModelToggleState } from './modelTypes'
 import { getStatusPillClassName } from '../shared/statusPillStyles'
 
 interface ModelsProviderSectionProps {
   configured: boolean
   isProviderStateLoading: boolean
+  isRemovingCustomModel: boolean
   models: ModelCatalogItem[]
+  onRemoveCustomModel: (modelId: string) => Promise<void>
   providerDescription: string
   providerLabel: string
   toggleState: ModelToggleState
@@ -54,7 +57,9 @@ function ModelToggleControl({ checked, disabled, label, onToggle }: ModelToggleC
 export function ModelsProviderSection({
   configured,
   isProviderStateLoading,
+  isRemovingCustomModel,
   models,
+  onRemoveCustomModel,
   providerDescription,
   providerLabel,
   toggleState,
@@ -63,7 +68,10 @@ export function ModelsProviderSection({
   const statusLabel = getProviderStatusLabel(configured, isProviderStateLoading)
   const statusTone = configured && !isProviderStateLoading ? 'active' : 'inactive'
   const canToggleModels = configured && !isProviderStateLoading
-  const enabledCount = models.reduce((result, model) => (toggleState[model.id] ? result + 1 : result), 0)
+  const enabledCount = models.reduce(
+    (result, model) => ((toggleState[model.id] ?? model.enabledByDefault) ? result + 1 : result),
+    0,
+  )
 
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -82,7 +90,7 @@ export function ModelsProviderSection({
 
       <div className="border-t border-border">
         {models.map((model, index) => {
-          const isEnabled = Boolean(toggleState[model.id])
+          const isEnabled = Boolean(toggleState[model.id] ?? model.enabledByDefault)
 
           return (
             <div
@@ -93,13 +101,33 @@ export function ModelsProviderSection({
                 canToggleModels ? '' : 'opacity-60',
               ].join(' ')}
             >
-              <p className="min-w-0 truncate text-sm text-foreground">{model.label}</p>
-              <ModelToggleControl
-                checked={isEnabled}
-                disabled={!canToggleModels}
-                label={model.label}
-                onToggle={() => onToggleModel(model.id)}
-              />
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="min-w-0 truncate text-sm text-foreground">{model.label}</p>
+                {model.isCustom ? (
+                  <span className="rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-[#6d5ed6]">
+                    Custom
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                {model.isCustom ? (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${model.label}`}
+                    disabled={isRemovingCustomModel}
+                    onClick={() => void onRemoveCustomModel(model.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-surface-muted text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+                <ModelToggleControl
+                  checked={isEnabled}
+                  disabled={!canToggleModels}
+                  label={model.label}
+                  onToggle={() => onToggleModel(model.id)}
+                />
+              </div>
             </div>
           )
         })}

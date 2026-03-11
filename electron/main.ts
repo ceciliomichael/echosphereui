@@ -15,6 +15,7 @@ import type {
   ApiKeyProviderId,
   AppendConversationMessagesInput,
   AppSettings,
+  SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
   CreateConversationInput,
@@ -42,6 +43,7 @@ import {
   saveApiKeyProvider,
 } from './providers/service'
 import { cancelChatStream, startChatStream } from './chat/service'
+import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -189,6 +191,9 @@ function registerHistoryHandlers() {
   ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
     removeApiKeyProvider(providerId),
   )
+  ipcMain.handle('models:custom:list', async () => listCustomModels())
+  ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveCustomModel(input))
+  ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeCustomModel(modelId))
   ipcMain.handle('chat:stream:start', async (event, input: StartChatStreamInput) =>
     startChatStream(event.sender, input),
   )

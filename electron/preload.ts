@@ -6,8 +6,10 @@ import type {
   AppSettings,
   ChatStreamEvent,
   EchosphereChatApi,
+  EchosphereModelsApi,
   EchosphereProvidersApi,
   SaveApiKeyProviderInput,
+  SaveCustomModelInput,
   CreateConversationFolderInput,
   CreateConversationInput,
   EchosphereHistoryApi,
@@ -68,6 +70,12 @@ const providersApi: EchosphereProvidersApi = {
     ipcRenderer.invoke('providers:apikey:remove', providerId),
 }
 
+const modelsApi: EchosphereModelsApi = {
+  listCustomModels: () => ipcRenderer.invoke('models:custom:list'),
+  saveCustomModel: (input: SaveCustomModelInput) => ipcRenderer.invoke('models:custom:save', input),
+  removeCustomModel: (modelId: string) => ipcRenderer.invoke('models:custom:remove', modelId),
+}
+
 const chatApi: EchosphereChatApi = {
   cancelStream: (streamId: string) => ipcRenderer.invoke('chat:stream:cancel', streamId),
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => {
@@ -81,6 +89,7 @@ const chatApi: EchosphereChatApi = {
 }
 
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
+contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)

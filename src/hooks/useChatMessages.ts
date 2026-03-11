@@ -7,9 +7,10 @@ import type { AppLanguage } from '../lib/appSettings'
 import type { ChatProviderId, Message, ReasoningEffort } from '../types/chat'
 
 interface ChatRuntimeSelection {
-  isCodexAuthenticated: boolean
+  hasConfiguredProvider: boolean
   modelId: string
-  providerId: ChatProviderId
+  providerId: ChatProviderId | null
+  providerLabel: string | null
   reasoningEffort: ReasoningEffort
 }
 
@@ -242,16 +243,23 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
   }
 
   async function persistAndStreamMessage(trimmedText: string, targetEditMessageId: string | null) {
-    if (!runtimeSelection.isCodexAuthenticated) {
-      setError('Codex is not connected. Connect Codex in Settings before sending messages.')
+    if (!runtimeSelection.hasConfiguredProvider) {
+      setError('No provider is configured. Configure a provider in Settings before sending messages.')
+      return
+    }
+
+    if (!runtimeSelection.providerId) {
+      setError('Select a configured model before sending your message.')
       return
     }
 
     if (runtimeSelection.modelId.trim().length === 0) {
-      setError('Select a Codex model before sending your message.')
+      const providerLabel = runtimeSelection.providerLabel ?? 'provider'
+      setError(`Select a ${providerLabel} model before sending your message.`)
       return
     }
 
+    const providerId = runtimeSelection.providerId
     clearError()
     setIsSending(true)
 
@@ -263,7 +271,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       const { conversation } = await persistUserTurn({
         activeConversationId,
         modelId: runtimeSelection.modelId,
-        providerId: runtimeSelection.providerId,
+        providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
         selectedFolderId,
         targetEditMessageId,
@@ -282,7 +290,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         content: '',
         id: draftAssistantId,
         modelId: runtimeSelection.modelId,
-        providerId: runtimeSelection.providerId,
+        providerId,
         reasoningContent: '',
         reasoningCompletedAt: undefined,
         reasoningEffort: runtimeSelection.reasoningEffort,
@@ -312,7 +320,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
             reasoningContent: (message.reasoningContent ?? '') + delta,
           }))
         },
-        providerId: runtimeSelection.providerId,
+        providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
 
@@ -323,7 +331,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         content: normalizeMarkdownText(streamedAssistant.content),
         id: draftAssistantId,
         modelId: runtimeSelection.modelId,
-        providerId: runtimeSelection.providerId,
+        providerId,
         reasoningCompletedAt: streamedAssistant.reasoningCompletedAt ?? undefined,
         reasoningContent: normalizeMarkdownText(streamedAssistant.reasoningContent),
         reasoningEffort: runtimeSelection.reasoningEffort,
@@ -343,7 +351,8 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         removeLocalMessage(draftAssistantId)
       }
 
-      setError(toErrorMessage(caughtError, 'Unable to get a response from Codex right now.'))
+      const providerLabel = runtimeSelection.providerLabel ?? 'the selected provider'
+      setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
     } finally {
       setStreamingAssistantMessageId(null)
       setIsSending(false)

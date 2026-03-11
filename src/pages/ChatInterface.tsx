@@ -56,13 +56,14 @@ export function ChatInterface({
     selectFolder,
     startEditingMessage,
   } = useChatMessages(language, {
-    isCodexAuthenticated: chatRuntimeConfig.isCodexAuthenticated,
-    modelId: chatRuntimeConfig.selectedModelId,
+    hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
+    modelId: chatRuntimeConfig.selectedRuntimeModelId,
     providerId: chatRuntimeConfig.providerId,
+    providerLabel: chatRuntimeConfig.providerLabel,
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
   })
   const {
-    codexModelOptions,
+    modelOptions,
     reasoningEffort,
     selectedModelId,
     setReasoningEffort,
@@ -140,9 +141,9 @@ export function ChatInterface({
               onSend={sendNewMessage}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
-              modelOptions={codexModelOptions.map((option) => ({
+              modelOptions={modelOptions.map((option) => ({
                 label: option.label,
-                providerLabel: 'CODEX',
+                providerLabel: option.providerLabel,
                 value: option.id,
               }))}
               selectedModelId={selectedModelId}

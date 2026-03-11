@@ -3,8 +3,10 @@ import type { ApiKeyProviderId } from '../../../types/chat'
 export type ModelProviderId = 'codex' | ApiKeyProviderId
 
 export interface ModelCatalogItem {
+  apiModelId?: string
   enabledByDefault: boolean
   id: string
+  isCustom?: boolean
   label: string
   providerId: ModelProviderId
   reasoningCapable?: boolean

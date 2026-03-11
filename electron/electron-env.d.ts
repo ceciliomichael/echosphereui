@@ -26,6 +26,7 @@ interface Window {
   ipcRenderer: import('electron').IpcRenderer
   echosphereChat: import('../src/types/chat').EchosphereChatApi
   echosphereHistory: import('../src/types/chat').EchosphereHistoryApi
+  echosphereModels: import('../src/types/chat').EchosphereModelsApi
   echosphereProviders: import('../src/types/chat').EchosphereProvidersApi
   echosphereSettings: import('../src/types/chat').EchosphereSettingsApi
 }

@@ -1,6 +1,7 @@
 import { MODEL_CATALOG, PROVIDER_SECTIONS } from './modelCatalog'
 import type { ModelCatalogItem, ModelProviderId, ProviderSectionDefinition } from './modelTypes'
-import type { ProvidersState } from '../../../types/chat'
+import { toCustomModelCatalogItems } from './customModelUtils'
+import type { CustomModelConfig, ProvidersState } from '../../../types/chat'
 
 export interface ModelProviderSectionView {
   configured: boolean
@@ -12,7 +13,7 @@ function normalizeSearchValue(value: string) {
   return value.trim().toLowerCase()
 }
 
-function isProviderConfigured(providerId: ModelProviderId, providersState: ProvidersState | null) {
+export function isProviderConfigured(providerId: ModelProviderId, providersState: ProvidersState | null) {
   if (!providersState) {
     return false
   }
@@ -25,12 +26,17 @@ function isProviderConfigured(providerId: ModelProviderId, providersState: Provi
   return Boolean(providerStatus?.configured)
 }
 
-export function buildModelProviderSections(searchValue: string, providersState: ProvidersState | null): ModelProviderSectionView[] {
+export function buildModelProviderSections(
+  searchValue: string,
+  providersState: ProvidersState | null,
+  customModels: readonly CustomModelConfig[],
+): ModelProviderSectionView[] {
   const normalizedSearch = normalizeSearchValue(searchValue)
+  const modelCatalog = [...MODEL_CATALOG, ...toCustomModelCatalogItems(customModels)]
   const filteredModels =
     normalizedSearch.length === 0
-      ? MODEL_CATALOG
-      : MODEL_CATALOG.filter((model) => model.label.toLowerCase().includes(normalizedSearch))
+      ? modelCatalog
+      : modelCatalog.filter((model) => model.label.toLowerCase().includes(normalizedSearch))
 
   return PROVIDER_SECTIONS.map((provider) => ({
     configured: isProviderConfigured(provider.id, providersState),

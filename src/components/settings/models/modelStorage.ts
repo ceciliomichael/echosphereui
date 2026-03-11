@@ -25,6 +25,12 @@ export function sanitizeModelToggleState(input: unknown): ModelToggleState {
     return defaults
   }
 
+  for (const [modelId, rawValue] of Object.entries(input)) {
+    if (isBoolean(rawValue)) {
+      defaults[modelId] = rawValue
+    }
+  }
+
   for (const model of MODEL_CATALOG) {
     const rawValue = input[model.id]
     if (isBoolean(rawValue)) {
