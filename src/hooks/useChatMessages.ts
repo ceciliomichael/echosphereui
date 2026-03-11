@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { loadInitialChatHistory, persistAssistantMessage, persistUserTurn } from './chatHistoryWorkflows'
 import { useChatComposerState } from './useChatComposerState'
@@ -20,6 +20,7 @@ interface StreamAssistantResponseInput {
   onContentDelta: (delta: string) => void
   onReasoningCompleted: (completedAt: number) => void
   onReasoningDelta: (delta: string) => void
+  onStreamStarted: (streamId: string) => void
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
 }
@@ -28,6 +29,7 @@ interface StreamAssistantResponseOutput {
   content: string
   reasoningCompletedAt: number | null
   reasoningContent: string
+  wasAborted: boolean
 }
 
 function normalizeMarkdownText(input: string) {
@@ -84,6 +86,23 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
           content: assistantContent,
           reasoningCompletedAt,
           reasoningContent,
+          wasAborted: false,
+        })
+        return
+      }
+
+      if (event.type === 'aborted') {
+        if (reasoningCompletedAt === null && reasoningContent.trim().length > 0) {
+          reasoningCompletedAt = Date.now()
+          input.onReasoningCompleted(reasoningCompletedAt)
+        }
+
+        unsubscribe()
+        resolve({
+          content: assistantContent,
+          reasoningCompletedAt,
+          reasoningContent,
+          wasAborted: true,
         })
         return
       }
@@ -103,6 +122,7 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
       })
       .then((result) => {
         streamId = result.streamId
+        input.onStreamStarted(result.streamId)
       })
       .catch((error) => {
         unsubscribe()
@@ -150,6 +170,13 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     cancelEditingMessage,
   } = useChatComposerState(messages, isSending)
   const [streamingAssistantMessageId, setStreamingAssistantMessageId] = useState<string | null>(null)
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null)
+  const activeStreamIdRef = useRef<string | null>(null)
+
+  const updateActiveStreamId = useCallback((streamId: string | null) => {
+    activeStreamIdRef.current = streamId
+    setActiveStreamId(streamId)
+  }, [])
 
   function resetDraft(nextFolderId: string | null) {
     resetComposerState()
@@ -321,9 +348,12 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
             reasoningContent: (message.reasoningContent ?? '') + delta,
           }))
         },
+        onStreamStarted: updateActiveStreamId,
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
+
+      updateActiveStreamId(null)
 
       const assistantMessage: Message = {
         content: normalizeMarkdownText(streamedAssistant.content),
@@ -338,6 +368,12 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       }
 
       if (assistantMessage.content.trim().length === 0 && (assistantMessage.reasoningContent ?? '').trim().length === 0) {
+        if (streamedAssistant.wasAborted) {
+          removeLocalMessage(draftAssistantId)
+          didAppendDraftAssistant = false
+          return
+        }
+
         throw new Error('The assistant returned an empty response.')
       }
 
@@ -355,6 +391,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       const providerLabel = runtimeSelection.providerLabel ?? 'the selected provider'
       setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
     } finally {
+      updateActiveStreamId(null)
       setStreamingAssistantMessageId(null)
       setIsSending(false)
     }
@@ -385,6 +422,20 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
 
     await persistAndStreamMessage(trimmedText, editingMessageId)
   }
+
+  const abortStreamingResponse = useCallback(async () => {
+    const streamId = activeStreamIdRef.current
+    if (!streamId) {
+      return
+    }
+
+    try {
+      await window.echosphereChat.cancelStream(streamId)
+    } catch (caughtError) {
+      console.error(caughtError)
+      setError('Unable to stop the current response.')
+    }
+  }, [setError])
 
   async function deleteConversation(conversationId: string) {
     clearError()
@@ -437,11 +488,13 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     isEditingMessage: editingMessageId !== null,
     isLoading,
     isSending,
+    isStreamingResponse: activeStreamId !== null,
     mainComposerValue,
     messages,
     selectConversation,
     selectFolder,
     selectedFolderName,
+    abortStreamingResponse,
     sendEditedMessage,
     sendNewMessage,
     streamingAssistantMessageId,

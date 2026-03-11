@@ -120,6 +120,10 @@ export function cancelChatStream(webContents: WebContents, streamId: string) {
     return
   }
 
+  emitStreamEvent(webContents, {
+    streamId,
+    type: 'aborted',
+  })
   activeStream.abortController.abort()
   activeStreams.delete(streamId)
 }

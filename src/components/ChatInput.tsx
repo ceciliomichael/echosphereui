@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
@@ -10,7 +10,9 @@ interface ChatInputProps {
   disabled?: boolean
   focusSignal?: number
   isEditing?: boolean
+  isStreaming?: boolean
   modelOptions?: readonly ModelSelectorOption[]
+  onAbort?: () => void
   onCancelEdit?: () => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
@@ -34,6 +36,7 @@ export function ChatInput({
   onModelChange,
   onReasoningEffortChange,
   isEditing = false,
+  isStreaming = false,
   reasoningEffort = 'medium',
   reasoningEffortOptions = [],
   selectedModelId = '',
@@ -42,17 +45,27 @@ export function ChatInput({
   variant = 'composer',
   focusSignal,
   disabled = false,
+  onAbort,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInline = variant === 'inline'
   const showRuntimeControls = modelOptions.length > 0 && typeof onModelChange === 'function'
+  const canAbort = isStreaming && typeof onAbort === 'function'
 
   const canSend = value.trim().length > 0 && !disabled
 
   function handleSend() {
     if (!canSend) return
     onSend()
+  }
+
+  function handleAbort() {
+    if (!canAbort) {
+      return
+    }
+
+    onAbort()
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -169,20 +182,20 @@ export function ChatInput({
           ) : null}
 
           <div className="flex shrink-0 justify-end self-end">
-            <Tooltip content={isEditing ? 'Send edited message' : 'Send message'}>
+            <Tooltip content={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}>
               <button
                 type="button"
-                onClick={handleSend}
-                disabled={!canSend}
-                aria-label={isEditing ? 'Send edited message' : 'Send message'}
+                onClick={canAbort ? handleAbort : handleSend}
+                disabled={canAbort ? false : !canSend}
+                aria-label={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}
                 className={[
                   'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
-                  canSend
+                  canAbort || canSend
                     ? 'chat-send-button-enabled cursor-pointer hover:scale-[1.03] active:scale-95'
                     : 'chat-send-button-disabled cursor-not-allowed',
                 ].join(' ')}
               >
-                <ArrowUp size={16} strokeWidth={2.5} />
+                {canAbort ? <Square size={14} strokeWidth={2.5} fill="currentColor" /> : <ArrowUp size={16} strokeWidth={2.5} />}
               </button>
             </Tooltip>
           </div>

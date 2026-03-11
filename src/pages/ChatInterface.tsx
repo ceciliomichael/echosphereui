@@ -53,6 +53,7 @@ export function ChatInterface({
     error,
     isLoading,
     isSending,
+    isStreamingResponse,
     mainComposerValue,
     messages,
     selectedFolderName,
@@ -64,6 +65,7 @@ export function ChatInterface({
     streamingAssistantMessageId,
     selectFolder,
     startEditingMessage,
+    abortStreamingResponse,
   } = useChatMessages(language, {
     hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
     modelId: chatRuntimeConfig.selectedRuntimeModelId,
@@ -166,6 +168,8 @@ export function ChatInterface({
               value={mainComposerValue}
               onValueChange={setMainComposerValue}
               onSend={sendNewMessage}
+              onAbort={abortStreamingResponse}
+              isStreaming={isStreamingResponse}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
               modelOptions={selectorOptions}

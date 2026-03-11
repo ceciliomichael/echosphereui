@@ -181,6 +181,10 @@ export type ChatStreamEvent =
       type: 'completed'
     }
   | {
+      streamId: string
+      type: 'aborted'
+    }
+  | {
       errorMessage: string
       streamId: string
       type: 'error'
