@@ -12,10 +12,10 @@ import { buildRipgrepArguments } from '../../electron/chat/openaiCompatible/tool
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 interface ToolResultMatch {
-  absolutePath: string
   columnNumber: number
   lineNumber: number
   lineText: string
+  path: string
 }
 
 function buildExecutionContext(agentContextRootPath: string) {
@@ -132,7 +132,7 @@ test('grep tool respects .gitignore files', async () => {
     const matches = readMatches(result)
 
     assert.equal(matches.length, 1)
-    assert.equal(matches[0].absolutePath, path.resolve(path.join(workspacePath, 'visible.txt')))
+    assert.equal(matches[0].path, 'visible.txt')
   })
 })
 
@@ -159,8 +159,8 @@ test('grep tool supports fixed-string and regex search modes', async () => {
       buildExecutionContext(workspacePath),
     )
 
-    assert.equal(readNumberField(fixedResult, 'matchCount'), 1)
-    assert.equal(readNumberField(regexResult, 'matchCount'), 2)
+    assert.equal(readMatches(fixedResult).length, 1)
+    assert.equal(readMatches(regexResult).length, 2)
   })
 })
 
@@ -178,7 +178,7 @@ test('grep tool truncates results at max_results', async () => {
       buildExecutionContext(workspacePath),
     )
 
-    assert.equal(readNumberField(result, 'matchCount'), 3)
+    assert.equal(readMatches(result).length, 3)
     assert.equal(readBooleanField(result, 'truncated'), true)
   })
 })

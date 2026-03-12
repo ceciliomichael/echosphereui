@@ -1,5 +1,12 @@
 import { promises as fs } from 'node:fs'
-import { ensureFileParentDirectory, parseToolArguments, readRequiredString, readRequiredText, resolveToolPath } from './filesystemToolUtils'
+import {
+  ensureFileParentDirectory,
+  parseToolArguments,
+  readRequiredString,
+  readRequiredText,
+  resolveToolPath,
+  toDisplayPath,
+} from './filesystemToolUtils'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 
 export const writeTool: OpenAICompatibleToolDefinition = {
@@ -8,15 +15,18 @@ export const writeTool: OpenAICompatibleToolDefinition = {
   async execute(argumentsValue, context) {
     const absolutePath = readRequiredString(argumentsValue, 'absolute_path')
     const content = readRequiredText(argumentsValue, 'content', true)
-    const { normalizedTargetPath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
 
     await ensureFileParentDirectory(normalizedTargetPath)
     await fs.writeFile(normalizedTargetPath, content, 'utf8')
 
     return {
-      absolutePath: normalizedTargetPath,
-      bytesWritten: Buffer.byteLength(content, 'utf8'),
+      endLineNumber: content.split('\n').length,
+      message: `Created ${toDisplayPath(relativePath)} successfully.`,
+      newContent: content,
       ok: true,
+      path: toDisplayPath(relativePath),
+      startLineNumber: 1,
     }
   },
   tool: {

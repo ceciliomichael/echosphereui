@@ -210,7 +210,7 @@ export function ChatInput({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className={`${chatInputSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-4'}`}>
+      <div className={`${chatInputSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-3'}`}>
         {isEditing && !isInline ? (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-action/25 bg-action/10 px-3 py-2 text-xs text-foreground">
             <span>Editing message</span>
@@ -251,7 +251,7 @@ export function ChatInput({
 
         {attachmentError ? <p className="mt-2 text-sm text-danger-foreground">{attachmentError}</p> : null}
 
-        <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="mt-1 flex items-end justify-between gap-3">
           {showRuntimeControls ? (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:flex-nowrap">
               {canManageAttachments ? (
@@ -269,30 +269,36 @@ export function ChatInput({
               ) : null}
 
               {showChatModeSelector ? (
-                <ChatModeSelectorField
-                  value={selectedChatMode}
-                  onChange={onChatModeChange ?? (() => undefined)}
-                  options={chatModeOptions}
-                  disabled={chatModeSelectorDisabled}
-                />
+                <Tooltip content="Select mode" hideWhenTriggerExpanded>
+                  <ChatModeSelectorField
+                    value={selectedChatMode}
+                    onChange={onChatModeChange ?? (() => undefined)}
+                    options={chatModeOptions}
+                    disabled={chatModeSelectorDisabled}
+                  />
+                </Tooltip>
               ) : null}
 
               {showModelSelector ? (
-                <ModelSelectorField
-                  value={selectedModelId}
-                  onChange={onModelChange ?? (() => undefined)}
-                  options={modelOptions}
-                  disabled={disabled}
-                />
+                <Tooltip content="Select model" hideWhenTriggerExpanded>
+                  <ModelSelectorField
+                    value={selectedModelId}
+                    onChange={onModelChange ?? (() => undefined)}
+                    options={modelOptions}
+                    disabled={disabled}
+                  />
+                </Tooltip>
               ) : null}
 
               {showReasoningControl ? (
-                <ReasoningEffortBlock
-                  options={reasoningEffortOptions}
-                  value={reasoningEffort}
-                  onChange={onReasoningEffortChange}
-                  disabled={disabled}
-                />
+                <Tooltip content="Set reasoning effort" hideWhenTriggerExpanded>
+                  <ReasoningEffortBlock
+                    options={reasoningEffortOptions}
+                    value={reasoningEffort}
+                    onChange={onReasoningEffortChange}
+                    disabled={disabled}
+                  />
+                </Tooltip>
               ) : null}
             </div>
           ) : null}

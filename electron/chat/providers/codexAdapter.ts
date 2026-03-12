@@ -7,6 +7,10 @@ import {
   parseSseResponseStream,
   type CodexRequestPayload,
 } from './codexRuntime'
+import {
+  createToolExecutionTurnState,
+  filterHistoricalToolMessages,
+} from '../openaiCompatible/toolExecution'
 import { forceRefreshCodexAuthData, loadCodexAuthData } from './codexAuth'
 
 const CODEX_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
@@ -56,7 +60,8 @@ async function streamCodexResponseWithTools(
   request: ProviderStreamRequest,
   context: ProviderStreamContext,
 ) {
-  const inMemoryMessages = [...request.messages]
+  const inMemoryMessages = filterHistoricalToolMessages(request.messages)
+  const turnState = createToolExecutionTurnState()
 
   while (!context.signal.aborted) {
     const payload = await buildCodexPayload(request, inMemoryMessages)
@@ -72,7 +77,7 @@ async function streamCodexResponseWithTools(
     }
 
     for (const toolCall of turnResult.toolCalls) {
-      await executeCodexToolCall(toolCall, context, request, inMemoryMessages)
+      await executeCodexToolCall(toolCall, context, request, inMemoryMessages, turnState)
 
       if (context.signal.aborted) {
         return

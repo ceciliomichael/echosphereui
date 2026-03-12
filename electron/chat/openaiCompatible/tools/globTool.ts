@@ -5,6 +5,7 @@ import {
   readOptionalBoundedPositiveInteger,
   readRequiredString,
   resolveToolPath,
+  toDisplayPath,
 } from './filesystemToolUtils'
 import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from './gitignoreMatcher'
 import { resolveRipgrepBinaryPath } from './ripgrepBinary'
@@ -57,7 +58,10 @@ export const globTool: OpenAICompatibleToolDefinition = {
       DEFAULT_GLOB_RESULT_LIMIT,
       MAX_GLOB_RESULT_LIMIT,
     )
-    const { normalizedRootPath, normalizedTargetPath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const { normalizedRootPath, normalizedTargetPath, relativePath } = resolveToolPath(
+      context.agentContextRootPath,
+      absolutePath,
+    )
 
     await ensureGlobTargetExists(normalizedTargetPath)
 
@@ -94,13 +98,9 @@ export const globTool: OpenAICompatibleToolDefinition = {
     const limitedPaths = visiblePaths.slice(0, maxResults)
 
     return {
-      absolutePath: normalizedTargetPath,
-      matchCount: limitedPaths.length,
-      matches: limitedPaths.map((matchedPath) => ({
-        absolutePath: matchedPath,
-      })),
-      maxResults,
+      matches: limitedPaths.map((matchedPath) => toDisplayPath(path.relative(normalizedRootPath, matchedPath))),
       ok: true,
+      path: toDisplayPath(relativePath),
       pattern,
       truncated: globResult.truncated || visiblePaths.length > limitedPaths.length,
     }

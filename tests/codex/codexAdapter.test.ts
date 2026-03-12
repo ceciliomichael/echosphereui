@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { StreamDeltaEvent } from '../../electron/chat/providerTypes'
 import {
+  buildCodexInputMessages,
   getCodexToolDefinitions,
   parseSseResponseStream,
-  toCodexInputMessage,
 } from '../../electron/chat/providers/codexRuntime'
 import type { Message } from '../../src/types/chat'
 
@@ -39,24 +39,46 @@ test('getCodexToolDefinitions returns flat function tools for native Responses p
   assert.equal('function' in listTool, false)
 })
 
-test('toCodexInputMessage maps tool results back into user-style Codex input items', () => {
-  const toolMessage: Message = {
-    content: 'Tool result for list:\n```json\n{"ok":true}\n```',
-    id: 'tool-message-1',
-    role: 'tool',
-    timestamp: 1_700_000_000_000,
-    toolCallId: 'call_123',
-  }
+test('buildCodexInputMessages groups current-turn tool results into one user-style context item', () => {
+  const messages: Message[] = [
+    {
+      content: 'Inspecting now.',
+      id: 'assistant-message-1',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+    },
+    {
+      content: 'Directory .\n[F] package.json',
+      id: 'tool-message-1',
+      role: 'tool',
+      timestamp: 1_700_000_000_001,
+      toolCallId: 'call_123',
+    },
+    {
+      content: 'File src/index.ts (lines 1-2)\n```\nexport {}\n```',
+      id: 'tool-message-2',
+      role: 'tool',
+      timestamp: 1_700_000_000_002,
+      toolCallId: 'call_456',
+    },
+  ]
 
-  assert.deepEqual(toCodexInputMessage(toolMessage), {
-    content: [
-      {
-        text: toolMessage.content,
-        type: 'input_text',
-      },
-    ],
-    role: 'user',
-  })
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{ text: 'Inspecting now.', type: 'output_text' }],
+      role: 'assistant',
+    },
+    {
+      content: [
+        {
+          text:
+            'Tool result context:\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
+          type: 'input_text',
+        },
+      ],
+      role: 'user',
+    },
+  ])
 })
 
 test('parseSseResponseStream assembles native Codex tool calls from streamed function call events', async () => {

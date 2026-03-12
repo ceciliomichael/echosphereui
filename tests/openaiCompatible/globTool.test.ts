@@ -7,10 +7,6 @@ import { globTool } from '../../electron/chat/openaiCompatible/tools/globTool'
 import { buildRipgrepGlobArguments } from '../../electron/chat/openaiCompatible/tools/ripgrepGlobRunner'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
-interface GlobMatchResult {
-  absolutePath: string
-}
-
 function buildExecutionContext(agentContextRootPath: string) {
   const abortController = new AbortController()
   return {
@@ -34,7 +30,7 @@ function readBooleanField(input: Record<string, unknown>, fieldName: string) {
 function readMatches(input: Record<string, unknown>) {
   const matches = input.matches
   assert.ok(Array.isArray(matches), 'matches must be an array.')
-  return matches as GlobMatchResult[]
+  return matches as string[]
 }
 
 async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Promise<T>) {
@@ -78,11 +74,10 @@ test('glob tool returns matching files for the glob pattern', async () => {
       buildExecutionContext(workspacePath),
     )
     const matches = readMatches(result)
-    const matchedPaths = new Set(matches.map((match) => path.resolve(match.absolutePath)))
+    const matchedPaths = new Set(matches)
 
-    assert.equal(readNumberField(result, 'matchCount'), 2)
-    assert.equal(matchedPaths.has(path.resolve(path.join(workspacePath, 'src', 'index.ts'))), true)
-    assert.equal(matchedPaths.has(path.resolve(path.join(workspacePath, 'src', 'util.ts'))), true)
+    assert.equal(matchedPaths.has('src/index.ts'), true)
+    assert.equal(matchedPaths.has('src/util.ts'), true)
   })
 })
 
@@ -101,8 +96,8 @@ test('glob tool respects .gitignore', async () => {
     )
     const matches = readMatches(result)
 
-    assert.equal(readNumberField(result, 'matchCount'), 1)
-    assert.equal(path.resolve(matches[0].absolutePath), path.resolve(path.join(workspacePath, 'visible.ts')))
+    assert.equal(matches.length, 1)
+    assert.equal(matches[0], 'visible.ts')
   })
 })
 
@@ -123,7 +118,7 @@ test('glob tool truncates results at max_results', async () => {
       buildExecutionContext(workspacePath),
     )
 
-    assert.equal(readNumberField(result, 'matchCount'), 2)
+    assert.equal(readMatches(result).length, 2)
     assert.equal(readBooleanField(result, 'truncated'), true)
   })
 })

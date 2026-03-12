@@ -7,6 +7,18 @@ export type ToolInvocationState = 'running' | 'completed' | 'failed'
 export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash'
 export type ChatAttachmentKind = 'image' | 'text'
 
+export interface FileDiffToolResultPresentation {
+  contextLines?: number
+  endLineNumber?: number
+  fileName: string
+  kind: 'file_diff'
+  newContent: string
+  oldContent: string | null
+  startLineNumber?: number
+}
+
+export type ToolInvocationResultPresentation = FileDiffToolResultPresentation
+
 interface ChatAttachmentBase {
   fileName: string
   id: string
@@ -32,6 +44,7 @@ export interface ToolInvocationTrace {
   completedAt?: number
   id: string
   resultContent?: string
+  resultPresentation?: ToolInvocationResultPresentation
   startedAt: number
   state: ToolInvocationState
   toolName: string
@@ -242,6 +255,7 @@ export type ChatStreamEvent =
       completedAt: number
       invocationId: string
       resultContent: string
+      resultPresentation?: ToolInvocationResultPresentation
       streamId: string
       syntheticMessage: Message
       toolName: string
@@ -253,6 +267,7 @@ export type ChatStreamEvent =
       errorMessage: string
       invocationId: string
       resultContent: string
+      resultPresentation?: ToolInvocationResultPresentation
       streamId: string
       syntheticMessage: Message
       toolName: string

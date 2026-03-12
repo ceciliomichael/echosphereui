@@ -6,13 +6,10 @@ import {
   readRequiredString,
   readRequiredText,
   resolveToolPath,
+  toDisplayPath,
 } from './filesystemToolUtils'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 import { OpenAICompatibleToolError } from '../toolTypes'
-
-function getLineNumberFromIndex(input: string, index: number) {
-  return input.slice(0, index).split('\n').length
-}
 
 function getNearbySnippet(input: string, targetLine: number) {
   const lines = input.split('\n')
@@ -43,6 +40,10 @@ function buildMissingMatchDetails(fileContent: string, oldString: string) {
   }
 }
 
+function getLineNumberAtIndex(input: string, index: number) {
+  return input.slice(0, index).split('\n').length
+}
+
 export const editTool: OpenAICompatibleToolDefinition = {
   name: 'edit',
   parseArguments: parseToolArguments,
@@ -51,7 +52,7 @@ export const editTool: OpenAICompatibleToolDefinition = {
     const oldString = readRequiredText(argumentsValue, 'old_string')
     const newString = readRequiredText(argumentsValue, 'new_string', true)
     const replaceAll = readOptionalBoolean(argumentsValue, 'replace_all', false)
-    const { normalizedTargetPath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
 
     const fileContent = await fs.readFile(normalizedTargetPath, 'utf8').catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -99,15 +100,23 @@ export const editTool: OpenAICompatibleToolDefinition = {
       ? normalizedContent.split(normalizedOldString).join(normalizedNewString)
       : normalizedContent.replace(normalizedOldString, normalizedNewString)
 
+    const replacementIndex = normalizedContent.indexOf(normalizedOldString)
+    const singleEditStartLine = replacementIndex >= 0 ? getLineNumberAtIndex(normalizedContent, replacementIndex) : 1
+    const singleEditEndLine =
+      singleEditStartLine + Math.max(normalizedOldString.split('\n').length, normalizedNewString.split('\n').length) - 1
+    const usesWholeFileDiff = replaceAll || occurrences > 1
+
     await fs.writeFile(normalizedTargetPath, usesCrlf ? nextContent.replace(/\n/g, '\r\n') : nextContent, 'utf8')
 
-    const firstMatchIndex = normalizedContent.indexOf(normalizedOldString)
     return {
-      absolutePath: normalizedTargetPath,
-      matchCount: occurrences,
+      contextLines: usesWholeFileDiff ? 3 : undefined,
+      endLineNumber: usesWholeFileDiff ? nextContent.split('\n').length : singleEditEndLine,
+      message: `Edited ${toDisplayPath(relativePath)} successfully.`,
+      newContent: usesWholeFileDiff ? nextContent : normalizedNewString,
+      oldContent: usesWholeFileDiff ? normalizedContent : normalizedOldString,
       ok: true,
-      replacementMode: replaceAll ? 'all' : 'single',
-      startLine: firstMatchIndex >= 0 ? getLineNumberFromIndex(normalizedContent, firstMatchIndex) : 1,
+      path: toDisplayPath(relativePath),
+      startLineNumber: usesWholeFileDiff ? 1 : singleEditStartLine,
     }
   },
   tool: {

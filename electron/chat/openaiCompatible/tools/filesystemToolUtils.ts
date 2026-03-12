@@ -162,3 +162,11 @@ export async function ensureFileParentDirectory(absolutePath: string) {
 export function normalizeLineEndings(input: string) {
   return input.replace(/\r\n/g, '\n')
 }
+
+export function toDisplayPath(input: string) {
+  if (input === '.') {
+    return '.'
+  }
+
+  return input.replace(/\\/g, '/')
+}

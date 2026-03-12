@@ -1,17 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { Message } from '../../../src/types/chat'
 import {
-  buildFailedToolArtifacts,
-  buildSuccessfulToolArtifacts,
+  buildCodexGroupedToolResultContent,
 } from '../openaiCompatible/toolResultFormatter'
 import {
-  getOpenAICompatibleToolDefinition,
-  getOpenAICompatibleToolDefinitions,
-} from '../openaiCompatible/toolRegistry'
-import {
-  OpenAICompatibleToolError,
-  type OpenAICompatibleToolCall,
-} from '../openaiCompatible/toolTypes'
+  createToolExecutionTurnState,
+  executeToolCallWithPolicies,
+} from '../openaiCompatible/toolExecution'
+import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
+import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import { buildSystemPrompt } from '../prompts'
 import type {
   ProviderStreamContext,
@@ -177,6 +174,43 @@ export function toCodexInputMessage(message: Message): CodexInputMessage | null 
   }
 }
 
+export function buildCodexInputMessages(messages: Message[]) {
+  const inputMessages: CodexInputMessage[] = []
+  const pendingToolContents: string[] = []
+
+  const flushPendingToolContents = () => {
+    const groupedContent = buildCodexGroupedToolResultContent(pendingToolContents)
+    pendingToolContents.length = 0
+
+    if (!groupedContent) {
+      return
+    }
+
+    inputMessages.push({
+      content: [{ text: groupedContent, type: 'input_text' }],
+      role: 'user',
+    })
+  }
+
+  for (const message of messages) {
+    if (message.role === 'tool') {
+      if (hasText(message.content)) {
+        pendingToolContents.push(message.content)
+      }
+      continue
+    }
+
+    flushPendingToolContents()
+    const inputMessage = toCodexInputMessage(message)
+    if (inputMessage) {
+      inputMessages.push(inputMessage)
+    }
+  }
+
+  flushPendingToolContents()
+  return inputMessages
+}
+
 export function getCodexToolDefinitions(): CodexFunctionToolDefinition[] {
   return getOpenAICompatibleToolDefinitions().map((toolDefinition) => {
     if (toolDefinition.tool.type !== 'function') {
@@ -204,7 +238,7 @@ export async function buildCodexPayload(
 
   return {
     include: ['reasoning.encrypted_content'],
-    input: messages.map(toCodexInputMessage).filter((value): value is CodexInputMessage => value !== null),
+    input: buildCodexInputMessages(messages),
     instructions,
     model: request.modelId,
     parallel_tool_calls: true,
@@ -748,80 +782,12 @@ export function buildInMemoryAssistantMessage(content: string): Message {
   }
 }
 
-function toErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message
-  }
-
-  return 'Tool execution failed.'
-}
-
 export async function executeCodexToolCall(
   toolCall: OpenAICompatibleToolCall,
   context: ProviderStreamContext,
   request: ProviderStreamRequest,
   inMemoryMessages: Message[],
+  turnState: ReturnType<typeof createToolExecutionTurnState>,
 ) {
-  const startedAt = toolCall.startedAt
-  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
-
-  if (!toolDefinition) {
-    const completedAt = Date.now()
-    const errorMessage = `Unsupported tool: ${toolCall.name}`
-    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt)
-
-    context.emitDelta({
-      argumentsText: failedArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      errorMessage,
-      invocationId: toolCall.id,
-      resultContent: failedArtifacts.resultContent,
-      syntheticMessage: failedArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_failed',
-    })
-
-    inMemoryMessages.push(failedArtifacts.syntheticMessage)
-    return
-  }
-
-  try {
-    const argumentsValue = toolDefinition.parseArguments(toolCall.argumentsText)
-    const semanticResult = await toolDefinition.execute(argumentsValue, {
-      agentContextRootPath: request.agentContextRootPath,
-      signal: context.signal,
-    })
-    const completedAt = Date.now()
-    const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
-
-    context.emitDelta({
-      argumentsText: successfulArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      invocationId: toolCall.id,
-      resultContent: successfulArtifacts.resultContent,
-      syntheticMessage: successfulArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_completed',
-    })
-
-    inMemoryMessages.push(successfulArtifacts.syntheticMessage)
-  } catch (error) {
-    const completedAt = Date.now()
-    const errorMessage = toErrorMessage(error)
-    const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
-    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt, errorDetails)
-
-    context.emitDelta({
-      argumentsText: failedArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      errorMessage,
-      invocationId: toolCall.id,
-      resultContent: failedArtifacts.resultContent,
-      syntheticMessage: failedArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_failed',
-    })
-
-    inMemoryMessages.push(failedArtifacts.syntheticMessage)
-  }
+  await executeToolCallWithPolicies(toolCall, context, request.agentContextRootPath, inMemoryMessages, turnState)
 }

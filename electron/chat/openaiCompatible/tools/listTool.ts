@@ -1,6 +1,12 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { parseToolArguments, readOptionalPositiveInteger, readRequiredString, resolveToolPath } from './filesystemToolUtils'
+import {
+  parseToolArguments,
+  readOptionalPositiveInteger,
+  readRequiredString,
+  resolveToolPath,
+  toDisplayPath,
+} from './filesystemToolUtils'
 import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from './gitignoreMatcher'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 import { OpenAICompatibleToolError } from '../toolTypes'
@@ -13,7 +19,10 @@ export const listTool: OpenAICompatibleToolDefinition = {
   async execute(argumentsValue, context) {
     const absolutePath = readRequiredString(argumentsValue, 'absolute_path')
     const limit = readOptionalPositiveInteger(argumentsValue, 'limit', DEFAULT_DIRECTORY_ENTRY_LIMIT)
-    const { normalizedRootPath, normalizedTargetPath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const { normalizedRootPath, normalizedTargetPath, relativePath } = resolveToolPath(
+      context.agentContextRootPath,
+      absolutePath,
+    )
 
     const directoryEntries = await fs.readdir(normalizedTargetPath, { withFileTypes: true }).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -43,16 +52,12 @@ export const listTool: OpenAICompatibleToolDefinition = {
     const limitedEntries = sortedEntries.slice(0, limit)
 
     return {
-      absolutePath: normalizedTargetPath,
       entries: limitedEntries.map((entry) => ({
-        absolutePath: path.join(normalizedTargetPath, entry.name),
+        kind: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
         name: entry.name,
-        type: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
       })),
-      ignoredEntriesCount: directoryEntries.length - visibleEntries.length,
-      limit,
+      path: toDisplayPath(relativePath),
       ok: true,
-      totalEntries: sortedEntries.length,
       truncated: sortedEntries.length > limitedEntries.length,
     }
   },

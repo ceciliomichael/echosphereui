@@ -1,4 +1,4 @@
-import type { ChatMode, ChatProviderId, Message, ReasoningEffort } from '../../src/types/chat'
+import type { ChatMode, ChatProviderId, Message, ReasoningEffort, ToolInvocationResultPresentation } from '../../src/types/chat'
 
 export type StreamDeltaEvent =
   | {
@@ -27,6 +27,7 @@ export type StreamDeltaEvent =
       completedAt: number
       invocationId: string
       resultContent: string
+      resultPresentation?: ToolInvocationResultPresentation
       syntheticMessage: Message
       toolName: string
       type: 'tool_invocation_completed'
@@ -37,6 +38,7 @@ export type StreamDeltaEvent =
       errorMessage: string
       invocationId: string
       resultContent: string
+      resultPresentation?: ToolInvocationResultPresentation
       syntheticMessage: Message
       toolName: string
       type: 'tool_invocation_failed'

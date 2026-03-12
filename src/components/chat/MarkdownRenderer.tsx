@@ -7,6 +7,7 @@ interface MarkdownRendererProps {
   content: string
   className?: string
   isStreaming?: boolean
+  preserveLineBreaks?: boolean
 }
 
 interface CodeNodeProps extends React.ComponentPropsWithoutRef<'code'> {
@@ -34,8 +35,15 @@ function extractLanguage(className: string | undefined): string | undefined {
   return match?.[1]
 }
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className, isStreaming = false }: MarkdownRendererProps) {
-  const rootClassName = ['chat-markdown', 'whitespace-normal', className].filter(Boolean).join(' ')
+export const MarkdownRenderer = memo(function MarkdownRenderer({
+  content,
+  className,
+  isStreaming = false,
+  preserveLineBreaks = false,
+}: MarkdownRendererProps) {
+  const rootClassName = ['chat-markdown', preserveLineBreaks ? 'whitespace-pre-wrap' : 'whitespace-normal', className]
+    .filter(Boolean)
+    .join(' ')
 
   const markdownComponents = useMemo(
     () => ({

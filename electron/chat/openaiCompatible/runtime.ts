@@ -21,12 +21,13 @@ import {
   readNestedRecord,
   readTextLikeValue,
 } from '../providers/openaiShared'
-import { getOpenAICompatibleToolDefinition, getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import {
-  buildFailedToolArtifacts,
-  buildSuccessfulToolArtifacts,
-} from './toolResultFormatter'
-import { OpenAICompatibleToolError, type OpenAICompatibleToolCall } from './toolTypes'
+  createToolExecutionTurnState,
+  executeToolCallWithPolicies,
+  filterHistoricalToolMessages,
+} from './toolExecution'
+import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
+import type { OpenAICompatibleToolCall } from './toolTypes'
 
 interface StreamOpenAICompatibleResponseInput {
   agentContextRootPath: string
@@ -305,93 +306,13 @@ function buildInMemoryAssistantMessage(content: string): Message {
   }
 }
 
-function toErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message
-  }
-
-  return 'Tool execution failed.'
-}
-
-async function executeToolCall(
-  toolCall: OpenAICompatibleToolCall,
-  context: ProviderStreamContext,
-  request: StreamOpenAICompatibleResponseInput,
-  inMemoryMessages: Message[],
-) {
-  const startedAt = toolCall.startedAt
-
-  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
-  if (!toolDefinition) {
-    const completedAt = Date.now()
-    const errorMessage = `Unsupported tool: ${toolCall.name}`
-    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt)
-
-    const failedEvent = {
-      argumentsText: failedArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      errorMessage,
-      invocationId: toolCall.id,
-      resultContent: failedArtifacts.resultContent,
-      syntheticMessage: failedArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_failed',
-    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_failed' }>
-    context.emitDelta(failedEvent)
-
-    inMemoryMessages.push(failedArtifacts.syntheticMessage)
-    return
-  }
-
-  try {
-    const argumentsValue = toolDefinition.parseArguments(toolCall.argumentsText)
-    const semanticResult = await toolDefinition.execute(argumentsValue, {
-      agentContextRootPath: request.agentContextRootPath,
-      signal: context.signal,
-    })
-    const completedAt = Date.now()
-    const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
-
-    const completedEvent = {
-      argumentsText: successfulArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      invocationId: toolCall.id,
-      resultContent: successfulArtifacts.resultContent,
-      syntheticMessage: successfulArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_completed',
-    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }>
-    context.emitDelta(completedEvent)
-
-    inMemoryMessages.push(successfulArtifacts.syntheticMessage)
-  } catch (error) {
-    const completedAt = Date.now()
-    const errorMessage = toErrorMessage(error)
-    const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
-    const failedArtifacts = buildFailedToolArtifacts(toolCall, errorMessage, startedAt, completedAt, errorDetails)
-
-    const failedEvent = {
-      argumentsText: failedArtifacts.toolInvocation.argumentsText,
-      completedAt,
-      errorMessage,
-      invocationId: toolCall.id,
-      resultContent: failedArtifacts.resultContent,
-      syntheticMessage: failedArtifacts.syntheticMessage,
-      toolName: toolCall.name,
-      type: 'tool_invocation_failed',
-    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_failed' }>
-    context.emitDelta(failedEvent)
-
-    inMemoryMessages.push(failedArtifacts.syntheticMessage)
-  }
-}
-
 export async function streamOpenAICompatibleResponseWithTools(
   client: ReturnType<typeof buildOpenAIClient>,
   request: StreamOpenAICompatibleResponseInput,
   context: ProviderStreamContext,
 ) {
-  const inMemoryMessages = [...request.messages]
+  const inMemoryMessages = filterHistoricalToolMessages(request.messages)
+  const turnState = createToolExecutionTurnState()
 
   while (!context.signal.aborted) {
     const turnResult = await streamOpenAICompatibleTurn(
@@ -415,7 +336,7 @@ export async function streamOpenAICompatibleResponseWithTools(
     }
 
     for (const toolCall of turnResult.toolCalls) {
-      await executeToolCall(toolCall, context, request, inMemoryMessages)
+      await executeToolCallWithPolicies(toolCall, context, request.agentContextRootPath, inMemoryMessages, turnState)
 
       if (context.signal.aborted) {
         return

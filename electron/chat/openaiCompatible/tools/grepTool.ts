@@ -1,10 +1,12 @@
 import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import {
   parseToolArguments,
   readOptionalBoolean,
   readOptionalBoundedPositiveInteger,
   readRequiredString,
   resolveToolPath,
+  toDisplayPath,
 } from './filesystemToolUtils'
 import { resolveRipgrepBinaryPath } from './ripgrepBinary'
 import { runRipgrepSearch } from './ripgrepRunner'
@@ -58,7 +60,10 @@ export const grepTool: OpenAICompatibleToolDefinition = {
       DEFAULT_GREP_RESULT_LIMIT,
       MAX_GREP_RESULT_LIMIT,
     )
-    const { normalizedRootPath, normalizedTargetPath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const { normalizedRootPath, normalizedTargetPath, relativePath } = resolveToolPath(
+      context.agentContextRootPath,
+      absolutePath,
+    )
 
     await ensureSearchTargetExists(normalizedTargetPath)
 
@@ -75,13 +80,14 @@ export const grepTool: OpenAICompatibleToolDefinition = {
     })
 
     return {
-      absolutePath: normalizedTargetPath,
-      caseSensitive,
-      isRegex,
-      matchCount: searchResult.matches.length,
-      matches: searchResult.matches,
-      maxResults,
+      matches: searchResult.matches.map((match) => ({
+        columnNumber: match.columnNumber,
+        lineNumber: match.lineNumber,
+        lineText: match.lineText,
+        path: toDisplayPath(path.relative(normalizedRootPath, match.absolutePath)),
+      })),
       ok: true,
+      path: toDisplayPath(relativePath),
       pattern,
       truncated: searchResult.truncated,
     }

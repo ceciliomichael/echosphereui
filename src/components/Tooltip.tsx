@@ -1,6 +1,7 @@
 import {
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -19,6 +20,7 @@ interface TooltipProps {
   children: ReactElement<TooltipChildProps>
   content: string
   side?: 'top' | 'bottom' | 'left' | 'right'
+  hideWhenTriggerExpanded?: boolean
 }
 
 const TOOLTIP_OFFSET = 6
@@ -28,11 +30,24 @@ function mergeClassNames(left: string | undefined, right: string) {
   return left ? `${left} ${right}` : right
 }
 
-export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
+function triggerHasExpandedDescendant(triggerElement: HTMLSpanElement | null) {
+  if (!triggerElement) {
+    return false
+  }
+
+  return (
+    triggerElement.getAttribute('aria-expanded') === 'true' ||
+    triggerElement.getAttribute('data-open') === 'true' ||
+    triggerElement.querySelector('[aria-expanded="true"], [data-open="true"]') !== null
+  )
+}
+
+export function Tooltip({ children, content, side = 'top', hideWhenTriggerExpanded = false }: TooltipProps) {
   const tooltipId = useId()
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const tooltipRef = useRef<HTMLDivElement | null>(null)
   const [isVisible, setIsVisible] = useState(false)
+  const [isTriggerExpanded, setIsTriggerExpanded] = useState(false)
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({
     left: 0,
     top: 0,
@@ -40,8 +55,49 @@ export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
     visibility: 'hidden',
   })
 
+  useEffect(() => {
+    if (!hideWhenTriggerExpanded) {
+      setIsTriggerExpanded(false)
+      return
+    }
+
+    const triggerElement = triggerRef.current
+    if (!triggerElement) {
+      return
+    }
+
+    function syncExpandedState() {
+      setIsTriggerExpanded(triggerHasExpandedDescendant(triggerElement))
+    }
+
+    syncExpandedState()
+
+    const observer = new MutationObserver(() => {
+      syncExpandedState()
+    })
+
+    observer.observe(triggerElement, {
+      attributes: true,
+      attributeFilter: ['aria-expanded', 'data-open'],
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [children, hideWhenTriggerExpanded])
+
+  useEffect(() => {
+    if (hideWhenTriggerExpanded && isTriggerExpanded && isVisible) {
+      setIsVisible(false)
+    }
+  }, [hideWhenTriggerExpanded, isTriggerExpanded, isVisible])
+
+  const shouldSuppressTooltip = hideWhenTriggerExpanded && isTriggerExpanded
+
   useLayoutEffect(() => {
-    if (!isVisible || !triggerRef.current || !tooltipRef.current) {
+    if (!isVisible || shouldSuppressTooltip || !triggerRef.current || !tooltipRef.current) {
       return
     }
 
@@ -125,14 +181,14 @@ export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
       window.removeEventListener('scroll', updateTooltipPosition, true)
       window.removeEventListener('resize', updateTooltipPosition)
     }
-  }, [isVisible, side])
+  }, [isVisible, shouldSuppressTooltip, side])
 
   if (!isValidElement<TooltipChildProps>(children)) {
     return children
   }
 
   const enhancedChild = cloneElement(children, {
-    'aria-describedby': isVisible ? tooltipId : undefined,
+    'aria-describedby': isVisible && !shouldSuppressTooltip ? tooltipId : undefined,
     className: mergeClassNames(
       typeof children.props.className === 'string' ? children.props.className : undefined,
       'outline-none',
@@ -144,14 +200,28 @@ export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
       <span
         ref={triggerRef}
         className="inline-flex"
-        onMouseEnter={() => setIsVisible(true)}
+        onMouseEnter={() => {
+          if (shouldSuppressTooltip) {
+            setIsVisible(false)
+            return
+          }
+
+          setIsVisible(true)
+        }}
         onMouseLeave={() => setIsVisible(false)}
-        onFocus={() => setIsVisible(true)}
+        onFocus={() => {
+          if (shouldSuppressTooltip) {
+            setIsVisible(false)
+            return
+          }
+
+          setIsVisible(true)
+        }}
         onBlur={() => setIsVisible(false)}
       >
         {enhancedChild}
       </span>
-      {isVisible
+      {isVisible && !shouldSuppressTooltip
         ? createPortal(
             <div
               ref={tooltipRef}

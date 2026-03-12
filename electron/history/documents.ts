@@ -5,6 +5,7 @@ import type {
   ConversationFolderRecord,
   ConversationRecord,
   ConversationSummary,
+  ToolInvocationResultPresentation,
   Message,
 } from '../../src/types/chat'
 
@@ -22,6 +23,23 @@ function normalizeChatMode(value: unknown): ChatMode {
   return value === 'agent' ? 'agent' : 'agent'
 }
 
+function isToolInvocationResultPresentation(value: unknown): value is ToolInvocationResultPresentation {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const presentation = value as Partial<ToolInvocationResultPresentation>
+  return (
+    presentation.kind === 'file_diff' &&
+    typeof presentation.fileName === 'string' &&
+    (presentation.oldContent === null || typeof presentation.oldContent === 'string') &&
+    typeof presentation.newContent === 'string' &&
+    (presentation.startLineNumber === undefined || typeof presentation.startLineNumber === 'number') &&
+    (presentation.endLineNumber === undefined || typeof presentation.endLineNumber === 'number') &&
+    (presentation.contextLines === undefined || typeof presentation.contextLines === 'number')
+  )
+}
+
 function isToolInvocationTrace(value: unknown) {
   if (!value || typeof value !== 'object') {
     return false
@@ -35,6 +53,7 @@ function isToolInvocationTrace(value: unknown) {
     typeof invocation.startedAt === 'number' &&
     (invocation.completedAt === undefined || typeof invocation.completedAt === 'number') &&
     (invocation.resultContent === undefined || typeof invocation.resultContent === 'string') &&
+    (invocation.resultPresentation === undefined || isToolInvocationResultPresentation(invocation.resultPresentation)) &&
     (invocation.state === 'running' || invocation.state === 'completed' || invocation.state === 'failed')
   )
 }

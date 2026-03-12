@@ -35,11 +35,11 @@ interface StreamAssistantResponseInput {
   reasoningEffort: ReasoningEffort
   onToolInvocationCompleted: (
     invocationId: string,
-    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'toolName'>,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
   ) => void
   onToolInvocationFailed: (
     invocationId: string,
-    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'toolName'>,
+    nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
   ) => void
   onToolInvocationStarted: (
     invocationId: string,
@@ -160,6 +160,7 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
           argumentsText: event.argumentsText,
           completedAt: event.completedAt,
           resultContent: event.resultContent,
+          resultPresentation: event.resultPresentation,
           toolName: event.toolName,
         })
         return
@@ -171,6 +172,7 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
           argumentsText: event.argumentsText,
           completedAt: event.completedAt,
           resultContent: event.resultContent,
+          resultPresentation: event.resultPresentation,
           toolName: event.toolName,
         })
         return
@@ -632,6 +634,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
               completedAt: nextValue.completedAt,
               id: invocationId,
               resultContent: nextValue.resultContent,
+              resultPresentation: nextValue.resultPresentation,
               startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? message.timestamp,
               state: 'completed',
               toolName: nextValue.toolName,
@@ -652,6 +655,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
               completedAt: nextValue.completedAt,
               id: invocationId,
               resultContent: nextValue.resultContent,
+              resultPresentation: nextValue.resultPresentation,
               startedAt: currentValue?.startedAt ?? nextValue.completedAt ?? message.timestamp,
               state: 'failed',
               toolName: nextValue.toolName,
@@ -669,6 +673,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
               argumentsText: nextValue.argumentsText,
               id: invocationId,
               resultContent: currentValue?.resultContent,
+              resultPresentation: currentValue?.resultPresentation,
               startedAt: currentValue?.startedAt ?? nextValue.startedAt,
               state: 'running',
               toolName: nextValue.toolName,
@@ -685,6 +690,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
               argumentsText: nextValue.argumentsText,
               id: invocationId,
               resultContent: currentValue?.resultContent,
+              resultPresentation: currentValue?.resultPresentation,
               startedAt: currentValue?.startedAt ?? message.timestamp,
               state: currentValue?.state ?? 'running',
               toolName: nextValue.toolName,
