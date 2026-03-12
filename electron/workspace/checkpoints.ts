@@ -5,6 +5,7 @@ import type { CreateWorkspaceCheckpointInput, UserMessageRunCheckpoint } from '.
 
 interface WorkspaceCheckpointEntry {
   existed: boolean
+  missingDirectories?: string[]
   relativePath: string
   snapshotFileName?: string
 }
@@ -46,6 +47,52 @@ function assertInsideWorkspace(workspaceRootPath: string, absolutePath: string) 
 
 async function ensureDirectory(directoryPath: string) {
   await fs.mkdir(directoryPath, { recursive: true })
+}
+
+function splitRelativePathSegments(value: string) {
+  return value.split(/[\\/]+/).filter(Boolean)
+}
+
+async function getMissingParentDirectories(workspaceRootPath: string, relativeFilePath: string) {
+  const relativeDirectoryPath = path.dirname(relativeFilePath)
+  if (relativeDirectoryPath === '.' || relativeDirectoryPath.trim().length === 0) {
+    return []
+  }
+
+  const segments = splitRelativePathSegments(relativeDirectoryPath)
+  const missingDirectories: string[] = []
+  let currentRelativePath = ''
+  let hasMissingAncestor = false
+
+  for (const segment of segments) {
+    currentRelativePath = currentRelativePath.length > 0 ? path.join(currentRelativePath, segment) : segment
+
+    if (hasMissingAncestor) {
+      missingDirectories.push(currentRelativePath)
+      continue
+    }
+
+    const absoluteDirectoryPath = path.join(workspaceRootPath, currentRelativePath)
+    const directoryStats = await fs.stat(absoluteDirectoryPath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null
+      }
+
+      throw error
+    })
+
+    if (!directoryStats) {
+      hasMissingAncestor = true
+      missingDirectories.push(currentRelativePath)
+      continue
+    }
+
+    if (!directoryStats.isDirectory()) {
+      throw new Error(`Checkpoint restore expects a directory at ${absoluteDirectoryPath}`)
+    }
+  }
+
+  return missingDirectories
 }
 
 export function createWorkspaceCheckpointStore(storageRootPath: string): WorkspaceCheckpointStore {
@@ -166,6 +213,7 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
 
           manifest.entries.push({
             existed: false,
+            missingDirectories: await getMissingParentDirectories(manifest.workspaceRootPath, relativePath),
             relativePath,
           })
         }
@@ -178,6 +226,7 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
       await withCheckpointLock(checkpointId, async () => {
         const manifest = await readManifest(checkpointId)
         const restoreEntries = [...manifest.entries].reverse()
+        const directoryCleanupCandidates = new Set<string>()
 
         for (const entry of restoreEntries) {
           const absolutePath = path.join(manifest.workspaceRootPath, entry.relativePath)
@@ -188,6 +237,10 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
                 throw error
               }
             })
+
+            for (const missingDirectory of entry.missingDirectories ?? []) {
+              directoryCleanupCandidates.add(missingDirectory)
+            }
             continue
           }
 
@@ -211,6 +264,22 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
 
           await ensureDirectory(path.dirname(absolutePath))
           await fs.writeFile(absolutePath, snapshotContent, 'utf8')
+        }
+
+        const orderedDirectories = Array.from(directoryCleanupCandidates).sort((left, right) => {
+          return splitRelativePathSegments(right).length - splitRelativePathSegments(left).length
+        })
+
+        for (const relativeDirectory of orderedDirectories) {
+          const absoluteDirectoryPath = path.join(manifest.workspaceRootPath, relativeDirectory)
+          await fs.rmdir(absoluteDirectoryPath).catch((error: unknown) => {
+            const code = (error as NodeJS.ErrnoException).code
+            if (code === 'ENOENT' || code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'EPERM') {
+              return
+            }
+
+            throw error
+          })
         }
       })
     },

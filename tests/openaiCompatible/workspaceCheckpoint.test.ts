@@ -62,3 +62,29 @@ test('workspace checkpoints delete files that did not exist when the run started
     })
   })
 })
+
+test('workspace checkpoints delete directories that did not exist when the run started', async () => {
+  await withTemporaryDirectories(async ({ historyPath, workspacePath }) => {
+    const checkpointStore = createWorkspaceCheckpointStore(historyPath)
+    const createdFilePath = path.join(workspacePath, 'generated', 'nested', 'new-file.ts')
+    const createdTopDirectory = path.join(workspacePath, 'generated')
+
+    const checkpoint = await checkpointStore.createCheckpoint({
+      workspaceRootPath: workspacePath,
+    })
+
+    await checkpointStore.captureFileState(checkpoint.id, createdFilePath)
+    await fs.mkdir(path.dirname(createdFilePath), { recursive: true })
+    await fs.writeFile(createdFilePath, 'generated', 'utf8')
+
+    await checkpointStore.restoreCheckpoint(checkpoint.id)
+
+    await assert.rejects(() => fs.stat(createdFilePath), (error: unknown) => {
+      return (error as NodeJS.ErrnoException).code === 'ENOENT'
+    })
+
+    await assert.rejects(() => fs.stat(createdTopDirectory), (error: unknown) => {
+      return (error as NodeJS.ErrnoException).code === 'ENOENT'
+    })
+  })
+})
