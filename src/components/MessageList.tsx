@@ -1,7 +1,7 @@
 import { memo, useRef } from 'react'
 import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
-import type { ChatMode, Message, ReasoningEffort } from '../types/chat'
+import type { AssistantWaitingIndicatorVariant, ChatMode, Message, ReasoningEffort } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
@@ -32,6 +32,8 @@ interface MessageListProps {
   sendMessageOnEnter: boolean
   showReasoningEffortSelector?: boolean
   streamingAssistantMessageId?: string | null
+  streamingWaitingIndicatorVariant?: AssistantWaitingIndicatorVariant | null
+  streamingTextActive?: boolean
 }
 
 interface MessageRowProps {
@@ -57,6 +59,8 @@ interface MessageRowProps {
   selectedModelId?: string
   sendMessageOnEnter: boolean
   showReasoningEffortSelector?: boolean
+  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
+  isTextStreaming?: boolean
 }
 
 const MessageRow = memo(
@@ -83,6 +87,8 @@ const MessageRow = memo(
     selectedModelId,
     sendMessageOnEnter,
     showReasoningEffortSelector,
+    waitingIndicatorVariant,
+    isTextStreaming = false,
   }: MessageRowProps) {
     return (
       <div className={message.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
@@ -128,6 +134,8 @@ const MessageRow = memo(
             reasoningContent={message.reasoningContent}
             timestamp={message.timestamp}
             toolInvocations={message.toolInvocations}
+            waitingIndicatorVariant={waitingIndicatorVariant}
+            isTextStreaming={isTextStreaming}
           />
         )}
       </div>
@@ -137,7 +145,9 @@ const MessageRow = memo(
     if (
       previousProps.message !== nextProps.message ||
       previousProps.isEditing !== nextProps.isEditing ||
-      previousProps.isStreaming !== nextProps.isStreaming
+      previousProps.isStreaming !== nextProps.isStreaming ||
+      previousProps.waitingIndicatorVariant !== nextProps.waitingIndicatorVariant ||
+      previousProps.isTextStreaming !== nextProps.isTextStreaming
     ) {
       return false
     }
@@ -189,6 +199,8 @@ export function MessageList({
   sendMessageOnEnter,
   showReasoningEffortSelector = false,
   streamingAssistantMessageId = null,
+  streamingWaitingIndicatorVariant = null,
+  streamingTextActive = false,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const visibleMessages = messages.filter((message) => isVisibleTranscriptMessage(message))
@@ -226,6 +238,8 @@ export function MessageList({
             selectedModelId={selectedModelId}
             sendMessageOnEnter={sendMessageOnEnter}
             showReasoningEffortSelector={showReasoningEffortSelector}
+            waitingIndicatorVariant={streamingAssistantMessageId === msg.id ? streamingWaitingIndicatorVariant ?? 'thinking' : undefined}
+            isTextStreaming={streamingAssistantMessageId === msg.id ? streamingTextActive : false}
           />
         ))}
       </div>

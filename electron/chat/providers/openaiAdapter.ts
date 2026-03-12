@@ -30,6 +30,10 @@ interface OpenAIStreamEventPayload {
 }
 
 function toOpenAIInputMessage(message: Message): OpenAIInputMessage | null {
+  if (message.role === 'tool') {
+    return null
+  }
+
   if (!hasText(message.content)) {
     return null
   }

@@ -11,6 +11,15 @@
     "dist",
     "dist-electron"
   ],
+  "extraResources": [
+    {
+      "from": "node_modules/@vscode/ripgrep/bin",
+      "to": "ripgrep",
+      "filter": [
+        "**/*"
+      ]
+    }
+  ],
   "mac": {
     "target": [
       "dmg"

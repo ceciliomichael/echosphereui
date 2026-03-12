@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.44.0",
     "@tailwindcss/vite": "^4.2.1",
+    "@vscode/ripgrep": "^1.17.1",
     "clsx": "^2.1.1",
     "ignore": "^7.0.5",
     "lucide-react": "^0.577.0",
@@ -36,6 +38,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "tsx": "^4.21.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.6",
     "vite-plugin-electron": "^0.28.6",

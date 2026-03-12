@@ -5,7 +5,7 @@ function getResolvedUserMessageKind(message: Message): UserMessageKind {
 }
 
 export function isSyntheticToolResultMessage(message: Message) {
-  return message.role === 'user' && getResolvedUserMessageKind(message) === 'tool_result'
+  return message.role === 'tool' || (message.role === 'user' && getResolvedUserMessageKind(message) === 'tool_result')
 }
 
 export function isHumanUserMessage(message: Message) {

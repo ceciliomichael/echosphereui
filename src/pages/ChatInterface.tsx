@@ -54,6 +54,7 @@ export function ChatInterface({
     error,
     isLoading,
     isSending,
+    isStreamingTextActive,
     isStreamingResponse,
     mainComposerValue,
     messages,
@@ -66,6 +67,7 @@ export function ChatInterface({
     sendEditedMessage,
     sendNewMessage,
     streamingAssistantMessageId,
+    streamingWaitingIndicatorVariant,
     selectFolder,
     startEditingMessage,
     abortStreamingResponse,
@@ -174,6 +176,8 @@ export function ChatInterface({
                 sendMessageOnEnter={sendMessageOnEnter}
                 showReasoningEffortSelector={showReasoningEffortSelector}
                 streamingAssistantMessageId={streamingAssistantMessageId}
+                streamingWaitingIndicatorVariant={streamingWaitingIndicatorVariant}
+                streamingTextActive={isStreamingTextActive}
               />
             )}
           </div>

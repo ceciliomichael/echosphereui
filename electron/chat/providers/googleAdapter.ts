@@ -13,6 +13,10 @@ import {
 } from './googleShared'
 
 function toGoogleContent(message: Message): Content | null {
+  if (message.role === 'tool') {
+    return null
+  }
+
   const content = message.content.trim()
   if (content.length === 0) {
     return null

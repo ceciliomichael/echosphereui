@@ -56,9 +56,21 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
     }
   }
 
+  if (message.role === 'assistant') {
+    return {
+      content: message.content,
+      role: 'assistant',
+    }
+  }
+
+  if (!hasNonEmptyString(message.toolCallId)) {
+    return null
+  }
+
   return {
     content: message.content,
-    role: 'assistant',
+    role: 'tool',
+    tool_call_id: message.toolCallId,
   }
 }
 

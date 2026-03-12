@@ -113,6 +113,22 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     return invocation.state === 'running' ? 'Reading' : invocation.state === 'completed' ? 'Read' : 'Read failed'
   }
 
+  if (invocation.toolName === 'glob') {
+    return invocation.state === 'running'
+      ? 'Searching'
+      : invocation.state === 'completed'
+        ? 'Searched'
+        : 'Search failed'
+  }
+
+  if (invocation.toolName === 'grep') {
+    return invocation.state === 'running'
+      ? 'Searching'
+      : invocation.state === 'completed'
+        ? 'Searched'
+        : 'Search failed'
+  }
+
   if (invocation.toolName === 'write') {
     return invocation.state === 'running' ? 'Creating' : invocation.state === 'completed' ? 'Created' : 'Create failed'
   }
@@ -134,7 +150,7 @@ function getToolTarget(invocation: ToolInvocationTrace) {
     return null
   }
 
-  if (invocation.toolName === 'list') {
+  if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
     return absolutePath
   }
 

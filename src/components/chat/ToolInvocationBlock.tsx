@@ -11,12 +11,11 @@ interface ToolInvocationBlockProps {
 const MIN_RUNNING_LABEL_DURATION_MS = 200
 
 export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocation }: ToolInvocationBlockProps) {
-  const [isOpen, setIsOpen] = useState(invocation.state === 'running')
+  const [isOpen, setIsOpen] = useState(false)
   const [displayedState, setDisplayedState] = useState<ToolInvocationTrace['state']>(invocation.state)
 
   useEffect(() => {
     if (invocation.state === 'running') {
-      setIsOpen(true)
       setDisplayedState('running')
       return undefined
     }
@@ -26,14 +25,12 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
 
     if (remainingRunningLabelTime === 0) {
       setDisplayedState(invocation.state)
-      setIsOpen(false)
       return undefined
     }
 
     setDisplayedState('running')
     const timeoutId = window.setTimeout(() => {
       setDisplayedState(invocation.state)
-      setIsOpen(false)
     }, remainingRunningLabelTime)
 
     return () => {

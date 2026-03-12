@@ -1,5 +1,5 @@
 import { chatMessageContentWidthClassName } from '../lib/chatStyles'
-import type { ToolInvocationTrace } from '../types/chat'
+import type { AssistantWaitingIndicatorVariant, ToolInvocationTrace } from '../types/chat'
 import { MarkdownRenderer } from './chat/MarkdownRenderer'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { ThinkingIndicator } from './chat/ThinkingIndicator'
@@ -8,29 +8,31 @@ import { ToolInvocationBlock } from './chat/ToolInvocationBlock'
 interface AssistantMessageProps {
   content: string
   isStreaming?: boolean
+  isTextStreaming?: boolean
   reasoningCompletedAt?: number
   reasoningContent?: string
   timestamp: number
   toolInvocations?: ToolInvocationTrace[]
+  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
 }
 
 export function AssistantMessage({
   content,
   isStreaming = false,
+  isTextStreaming = false,
   reasoningCompletedAt,
   reasoningContent = '',
   timestamp,
   toolInvocations = [],
+  waitingIndicatorVariant = 'thinking',
 }: AssistantMessageProps) {
   const hasContent = content.trim().length > 0
-  const shouldShowThinking = reasoningContent.trim().length > 0
-  const shouldShowWaitingIndicator = isStreaming && !hasContent && !shouldShowThinking && toolInvocations.length === 0
+  const hasRunningToolInvocation = toolInvocations.some((invocation) => invocation.state === 'running')
+  const shouldShowWaitingIndicator = isStreaming && !isTextStreaming && !hasRunningToolInvocation
 
   return (
     <div className={[chatMessageContentWidthClassName, 'space-y-2'].join(' ')}>
-      {shouldShowWaitingIndicator ? <ThinkingIndicator /> : null}
-
-      {shouldShowThinking ? (
+      {reasoningContent.trim().length > 0 ? (
         <ThinkingBlock
           content={reasoningContent}
           isComplete={!isStreaming}
@@ -46,6 +48,8 @@ export function AssistantMessage({
       {hasContent ? (
         <MarkdownRenderer content={content} className="text-left text-[15px]" isStreaming={isStreaming} />
       ) : null}
+
+      {shouldShowWaitingIndicator ? <ThinkingIndicator variant={waitingIndicatorVariant} /> : null}
     </div>
   )
 }

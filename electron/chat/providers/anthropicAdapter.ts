@@ -14,6 +14,10 @@ import {
 } from './anthropicShared'
 
 function toAnthropicMessage(message: Message): MessageParam | null {
+  if (message.role === 'tool') {
+    return null
+  }
+
   const content = message.content.trim()
   if (content.length === 0) {
     return null
@@ -21,7 +25,7 @@ function toAnthropicMessage(message: Message): MessageParam | null {
 
   return {
     content,
-    role: message.role,
+    role: message.role === 'assistant' ? 'assistant' : 'user',
   }
 }
 

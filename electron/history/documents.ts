@@ -62,13 +62,16 @@ function isMessage(value: unknown): value is Message {
     message.userMessageKind === undefined ||
     message.userMessageKind === 'human' ||
     message.userMessageKind === 'tool_result'
+  const hasValidToolCallId = message.toolCallId === undefined || typeof message.toolCallId === 'string'
+  const hasRequiredToolCallId =
+    message.role !== 'tool' || (typeof message.toolCallId === 'string' && message.toolCallId.trim().length > 0)
   const hasValidToolInvocations =
     message.toolInvocations === undefined ||
     (Array.isArray(message.toolInvocations) && message.toolInvocations.every((entry) => isToolInvocationTrace(entry)))
 
   return (
     typeof message.id === 'string' &&
-    (message.role === 'user' || message.role === 'assistant') &&
+    (message.role === 'user' || message.role === 'assistant' || message.role === 'tool') &&
     typeof message.content === 'string' &&
     typeof message.timestamp === 'number' &&
     (message.modelId === undefined || typeof message.modelId === 'string') &&
@@ -77,6 +80,8 @@ function isMessage(value: unknown): value is Message {
     (message.reasoningCompletedAt === undefined || typeof message.reasoningCompletedAt === 'number') &&
     hasValidReasoningEffort &&
     hasValidUserMessageKind &&
+    hasValidToolCallId &&
+    hasRequiredToolCallId &&
     hasValidToolInvocations
   )
 }

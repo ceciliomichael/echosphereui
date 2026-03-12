@@ -30,6 +30,10 @@ function hasText(value: unknown): value is string {
 }
 
 function toCodexInputMessage(message: Message): CodexInputMessage | null {
+  if (message.role === 'tool') {
+    return null
+  }
+
   if (!hasText(message.content)) {
     return null
   }

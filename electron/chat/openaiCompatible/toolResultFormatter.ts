@@ -48,9 +48,9 @@ export function buildSuccessfulToolArtifacts(
   const syntheticMessage: Message = {
     content: `Tool result for ${toolCall.name}:\n${resultContent}`,
     id: randomUUID(),
-    role: 'user',
+    role: 'tool',
     timestamp: completedAt,
-    userMessageKind: 'tool_result',
+    toolCallId: toolCall.id,
   }
 
   return {
@@ -85,9 +85,9 @@ export function buildFailedToolArtifacts(
   const syntheticMessage: Message = {
     content: `Tool result for ${toolCall.name}:\n${resultContent}`,
     id: randomUUID(),
-    role: 'user',
+    role: 'tool',
     timestamp: completedAt,
-    userMessageKind: 'tool_result',
+    toolCallId: toolCall.id,
   }
 
   return {

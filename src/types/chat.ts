@@ -1,9 +1,10 @@
 import type { AppAppearance, AppLanguage } from '../lib/appSettings'
 
-export type MessageRole = 'user' | 'assistant'
+export type MessageRole = 'user' | 'assistant' | 'tool'
 export type ChatMode = 'agent'
 export type UserMessageKind = 'human' | 'tool_result'
 export type ToolInvocationState = 'running' | 'completed' | 'failed'
+export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash'
 
 export interface ToolInvocationTrace {
   argumentsText: string
@@ -25,6 +26,7 @@ export interface Message {
   reasoningCompletedAt?: number
   reasoningEffort?: ReasoningEffort
   timestamp: number
+  toolCallId?: string
   toolInvocations?: ToolInvocationTrace[]
   userMessageKind?: UserMessageKind
 }

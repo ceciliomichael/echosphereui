@@ -96,6 +96,24 @@ export function readOptionalPositiveInteger(
   return rawValue
 }
 
+export function readOptionalBoundedPositiveInteger(
+  input: Record<string, unknown>,
+  fieldName: string,
+  defaultValue: number,
+  maxValue: number,
+) {
+  const value = readOptionalPositiveInteger(input, fieldName, defaultValue)
+  if (value > maxValue) {
+    throw new OpenAICompatibleToolError(`${fieldName} must be less than or equal to ${maxValue}.`, {
+      fieldName,
+      maxValue,
+      receivedValue: value,
+    })
+  }
+
+  return value
+}
+
 export function resolveToolPath(agentContextRootPath: string, absolutePath: string) {
   if (!path.isAbsolute(absolutePath)) {
     throw new OpenAICompatibleToolError('absolute_path must be an absolute path.', {

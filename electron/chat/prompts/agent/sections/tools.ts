@@ -9,9 +9,11 @@ export function buildAgentToolsSection(agentContextRootPath: string, supportsNat
   }
 
   return formatSection('Tools', [
-    'You have native filesystem tools named list, read, write, and edit.',
-    'Use list to inspect directories, read to inspect files, write to create or fully replace files, and edit to patch existing file content through exact replacements.',
+    'You have native filesystem tools named list, read, glob, grep, write, and edit.',
+    'Use list to inspect directories, read to inspect files, glob to match file paths, grep to search file contents, write to create or fully replace files, and edit to patch existing file content through exact replacements.',
     'Always begin codebase discovery by listing the locked root directory, then list subdirectories only when they are relevant to the request.',
+    'Prefer glob when you need to discover candidate files by path pattern before opening them.',
+    'Prefer grep when you need to locate symbols or text across files before reading specific files in detail.',
     'Prefer read before edit when you do not already have the exact current file content you need.',
     'Prefer edit for targeted changes and use write when creating a file or replacing the full file content intentionally.',
     'If a tool fails, inspect the returned error details, correct the tool call, and retry instead of giving up or fabricating a result.',
