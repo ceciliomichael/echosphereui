@@ -204,6 +204,46 @@
     color: var(--color-disabled-foreground);
   }
 
+  .chat-runtime-control-trigger {
+    display: inline-flex;
+    height: 2.25rem;
+    max-width: 100%;
+    align-items: center;
+    border-radius: 0.75rem;
+    padding-inline: 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--color-muted-foreground);
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .chat-runtime-control-label {
+    transition-property: color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .chat-runtime-control-trigger:not(:disabled):hover {
+    color: var(--color-foreground);
+  }
+
+  .chat-runtime-control-trigger[data-open='true'] {
+    color: var(--color-foreground);
+  }
+
+  .chat-runtime-control-trigger:disabled {
+    color: var(--color-disabled-foreground);
+    opacity: 0.8;
+  }
+
+  @media (min-width: 768px) {
+    .chat-runtime-control-trigger {
+      font-size: 0.875rem;
+    }
+  }
+
   .thinking-shimmer {
     background: linear-gradient(
       90deg,

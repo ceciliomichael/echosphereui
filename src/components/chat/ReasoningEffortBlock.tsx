@@ -34,6 +34,7 @@ export function ReasoningEffortBlock({
         className="w-fit max-w-full"
         fitToContent
         flushOptions
+        variant="text"
         value={value}
         onChange={(nextValue) => onChange(nextValue as ReasoningEffort)}
         options={reasoningEffortOptions}

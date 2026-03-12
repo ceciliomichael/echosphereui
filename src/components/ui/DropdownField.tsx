@@ -25,6 +25,7 @@ interface DropdownFieldProps {
   onChange: (value: string) => void
   options: readonly DropdownOption[]
   value: string
+  variant?: 'default' | 'text'
 }
 
 export function DropdownField({
@@ -37,6 +38,7 @@ export function DropdownField({
   onChange,
   options,
   value,
+  variant = 'default',
 }: DropdownFieldProps) {
   const generatedId = useId()
   const controlId = id ?? generatedId
@@ -205,22 +207,35 @@ export function DropdownField({
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         onKeyDown={handleButtonKeyDown}
+        data-open={isOpen ? 'true' : 'false'}
         className={[
-          'flex h-9 items-center justify-between rounded-xl border bg-surface px-3 text-[13px] font-normal text-foreground transition-[background-color,border-color,color] hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
-          isOpen
-            ? 'border-[var(--dropdown-control-open-border)] bg-[var(--dropdown-control-open-surface)]'
-            : 'border-border',
-          fitToContent ? 'w-auto max-w-full' : 'w-full',
+          variant === 'text'
+            ? 'chat-runtime-control-trigger justify-start disabled:cursor-not-allowed'
+            : [
+                'flex h-9 items-center justify-between rounded-xl border bg-surface px-3 text-[13px] font-normal text-foreground transition-[background-color,border-color,color] hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
+                isOpen
+                  ? 'border-[var(--dropdown-control-open-border)] bg-[var(--dropdown-control-open-surface)]'
+                  : 'border-border',
+              ].join(' '),
+          variant === 'text' || fitToContent ? 'w-auto max-w-full' : 'w-full',
         ].join(' ')}
       >
-        <span className={['text-left', fitToContent ? 'pr-2' : 'truncate pr-3'].join(' ')}>
+        <span
+          className={[
+            'text-left',
+            variant === 'text' ? 'chat-runtime-control-label' : '',
+            variant === 'text' || fitToContent ? '' : 'truncate pr-3',
+          ].join(' ')}
+        >
           {selectedOption?.label ?? ''}
         </span>
-        <ChevronDown
-          size={16}
-          strokeWidth={2.2}
-          className={['shrink-0 text-muted-foreground transition-transform', isOpen ? 'rotate-180' : ''].join(' ')}
-        />
+        {variant === 'default' ? (
+          <ChevronDown
+            size={16}
+            strokeWidth={2.2}
+            className={['shrink-0 text-muted-foreground transition-transform', isOpen ? 'rotate-180' : ''].join(' ')}
+          />
+        ) : null}
       </button>
 
       {isOpen

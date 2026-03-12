@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown } from 'lucide-react'
+import { Bot, Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
@@ -77,22 +77,15 @@ export function ChatModeSelectorField({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        data-open={isOpen ? 'true' : 'false'}
         disabled={disabled}
         onClick={() => setIsOpen((currentValue) => !currentValue)}
-        className={[
-          'flex h-9 w-auto max-w-full items-center justify-between rounded-xl border bg-surface px-3 text-[13px] font-normal text-foreground transition-[background-color,border-color,color] hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-muted disabled:text-muted-foreground md:text-sm',
-          isOpen
-            ? 'border-[var(--dropdown-control-open-border)] bg-[var(--dropdown-control-open-surface)]'
-            : 'border-border',
-        ].join(' ')}
+        className="chat-runtime-control-trigger w-auto max-w-full disabled:cursor-not-allowed"
       >
-        <Bot size={15} className="mr-2 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 max-w-[12rem] truncate pr-3 text-left">{selectedOption?.label ?? 'Select mode'}</span>
-        <ChevronDown
-          size={16}
-          strokeWidth={2.2}
-          className={['shrink-0 text-muted-foreground transition-transform', isOpen ? 'rotate-180' : ''].join(' ')}
-        />
+        <Bot size={14} className="mr-1.5 shrink-0 text-current" />
+        <span className="chat-runtime-control-label min-w-0 max-w-[12rem] truncate text-left">
+          {selectedOption?.label ?? 'Select mode'}
+        </span>
       </button>
 
       {isOpen
