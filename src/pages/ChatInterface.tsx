@@ -7,15 +7,14 @@ import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
-import { useChatMessages } from '../hooks/useChatMessages'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
+import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useProvidersState } from '../hooks/useProvidersState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
-import type { AppLanguage } from '../lib/appSettings'
 import type { AppSettings } from '../types/chat'
 
 interface ChatInterfaceProps {
-  language: AppLanguage
+  chatMessages: ChatMessagesController
   onOpenSettings: () => void
   onSidebarWidthChange: (sidebarWidth: number) => void
   onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
@@ -25,7 +24,7 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({
-  language,
+  chatMessages,
   onOpenSettings,
   onSidebarWidthChange,
   onUpdateSettings,
@@ -42,6 +41,7 @@ export function ChatInterface({
   })
   const {
     activeConversationId,
+    activeConversationRootPath,
     activeConversationTitle,
     cancelEditingMessage,
     conversationGroups,
@@ -75,13 +75,14 @@ export function ChatInterface({
     selectFolder,
     startEditingMessage,
     abortStreamingResponse,
-  } = useChatMessages(language, {
+  } = chatMessages
+  const runtimeSelection: ChatRuntimeSelection = {
     hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
     modelId: chatRuntimeConfig.selectedRuntimeModelId,
     providerId: chatRuntimeConfig.providerId,
     providerLabel: chatRuntimeConfig.providerLabel,
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
-  })
+  }
   const {
     availableReasoningEfforts,
     modelOptions,
@@ -168,7 +169,7 @@ export function ChatInterface({
                 composerValue={editComposerValue}
                 onComposerAttachmentsChange={setEditComposerAttachments}
                 onComposerValueChange={setEditComposerValue}
-                onSendEditedMessage={sendEditedMessage}
+                onSendEditedMessage={() => void sendEditedMessage(runtimeSelection)}
                 onCancelEditingMessage={cancelEditingMessage}
                 composerFocusSignal={editComposerFocusSignal}
                 isSending={isSending}
@@ -184,6 +185,7 @@ export function ChatInterface({
                 streamingAssistantMessageId={streamingAssistantMessageId}
                 streamingWaitingIndicatorVariant={streamingWaitingIndicatorVariant}
                 streamingTextActive={isStreamingTextActive}
+                workspaceRootPath={activeConversationRootPath}
               />
             )}
           </div>
@@ -196,7 +198,7 @@ export function ChatInterface({
               value={mainComposerValue}
               onAttachmentsChange={setMainComposerAttachments}
               onValueChange={setMainComposerValue}
-              onSend={sendNewMessage}
+              onSend={() => void sendNewMessage(runtimeSelection)}
               onAbort={abortStreamingResponse}
               chatModeOptions={chatModeOptions}
               isStreaming={isStreamingResponse}

@@ -63,7 +63,6 @@ test('executeToolCallWithPolicies allows repeating the same list call without a 
 
     assert.equal(inMemoryMessages.length, 3)
     assert.equal(inMemoryMessages.every((message) => !message.content.includes('Repeated identical list call blocked')), true)
-
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
 
@@ -140,7 +139,63 @@ test('createToolExecutionScheduler runs parallel tool calls without serial buffe
   assert.equal(emittedEvents.length, 0)
 })
 
-test('createToolExecutionScheduler keeps exclusive tool calls as ordering barriers', async () => {
+test('createToolExecutionScheduler allows path-exclusive tool calls on different files to finish independently', async () => {
+  const executionLog: string[] = []
+  const completedToolCalls: string[] = []
+  const context = {
+    emitDelta(_event: StreamDeltaEvent) {},
+    signal: new AbortController().signal,
+  }
+  const scheduler = createToolExecutionScheduler(
+    {
+      agentContextRootPath: 'C:\\workspace',
+      context,
+      inMemoryMessages: [],
+      turnState: createToolExecutionTurnState(),
+    },
+    {
+      async executeToolCall(toolCall) {
+        executionLog.push(`start:${toolCall.id}`)
+        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'write-hero' ? 50 : 10))
+        executionLog.push(`end:${toolCall.id}`)
+        completedToolCalls.push(toolCall.id)
+      },
+      resolveExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
+        return toolName === 'write' ? 'path-exclusive' : 'parallel'
+      },
+      resolveExecutionResourceKey(toolCall) {
+        if (toolCall.id === 'write-hero') {
+          return 'src/components/Hero.tsx'
+        }
+
+        if (toolCall.id === 'write-footer') {
+          return 'src/components/Footer.tsx'
+        }
+
+        return null
+      },
+    },
+  )
+
+  scheduler.schedule({
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero' }),
+    id: 'write-hero',
+    name: 'write',
+    startedAt: 1_700_000_000_000,
+  })
+  scheduler.schedule({
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Footer.tsx', content: 'footer' }),
+    id: 'write-footer',
+    name: 'write',
+    startedAt: 1_700_000_000_000,
+  })
+  await scheduler.drain()
+
+  assert.deepEqual(executionLog.slice(0, 2), ['start:write-hero', 'start:write-footer'])
+  assert.deepEqual(completedToolCalls, ['write-footer', 'write-hero'])
+})
+
+test('createToolExecutionScheduler still serializes path-exclusive tool calls for the same file', async () => {
   const executionLog: string[] = []
   const context = {
     emitDelta(_event: StreamDeltaEvent) {},
@@ -156,31 +211,36 @@ test('createToolExecutionScheduler keeps exclusive tool calls as ordering barrie
     {
       async executeToolCall(toolCall) {
         executionLog.push(`start:${toolCall.id}`)
-        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'read-1' ? 30 : 5))
+        await new Promise((resolve) => setTimeout(resolve, 10))
         executionLog.push(`end:${toolCall.id}`)
       },
       resolveExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
-        return toolName === 'edit' ? 'exclusive' : 'parallel'
+        return toolName === 'write' ? 'path-exclusive' : 'parallel'
+      },
+      resolveExecutionResourceKey() {
+        return 'src/components/Hero.tsx'
       },
     },
   )
 
-  scheduler.schedule(createReadToolCall('read-1', 'C:\\workspace\\one.txt'))
   scheduler.schedule({
-    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\file.txt', new_string: 'next', old_string: 'old' }),
-    id: 'edit-1',
-    name: 'edit',
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero 1' }),
+    id: 'write-hero-1',
+    name: 'write',
     startedAt: 1_700_000_000_000,
   })
-  scheduler.schedule(createReadToolCall('read-2', 'C:\\workspace\\two.txt'))
+  scheduler.schedule({
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero 2' }),
+    id: 'write-hero-2',
+    name: 'write',
+    startedAt: 1_700_000_000_000,
+  })
   await scheduler.drain()
 
   assert.deepEqual(executionLog, [
-    'start:read-1',
-    'end:read-1',
-    'start:edit-1',
-    'end:edit-1',
-    'start:read-2',
-    'end:read-2',
+    'start:write-hero-1',
+    'end:write-hero-1',
+    'start:write-hero-2',
+    'end:write-hero-2',
   ])
 })

@@ -1,5 +1,12 @@
-import { useCallback, useState } from 'react'
-import type { ChatMode, ConversationFolderSummary, ConversationRecord, ConversationSummary, Message } from '../types/chat'
+import { useCallback, useMemo, useState } from 'react'
+import type {
+  AssistantWaitingIndicatorVariant,
+  ChatMode,
+  ConversationFolderSummary,
+  ConversationRecord,
+  ConversationSummary,
+  Message,
+} from '../types/chat'
 import {
   buildConversationGroups,
   getSelectedFolderName,
@@ -10,63 +17,242 @@ import {
 import type { ChatHistorySnapshot } from './chatHistoryWorkflows'
 import type { AppLanguage } from '../lib/appSettings'
 
+interface ConversationRuntimeState {
+  conversation: ConversationRecord
+  isSending: boolean
+  activeStreamId: string | null
+  isStreamingTextActive: boolean
+  streamingAssistantMessageId: string | null
+  streamingWaitingIndicatorVariant: AssistantWaitingIndicatorVariant | null
+}
+
+type ConversationRuntimeStateMap = Record<string, ConversationRuntimeState>
+
+interface UpdateConversationRuntimeInput {
+  activeStreamId?: string | null
+  isSending?: boolean
+  isStreamingTextActive?: boolean
+  streamingAssistantMessageId?: string | null
+  streamingWaitingIndicatorVariant?: AssistantWaitingIndicatorVariant | null
+}
+
+function createConversationRuntimeState(
+  conversation: ConversationRecord,
+  currentValue?: ConversationRuntimeState,
+): ConversationRuntimeState {
+  return {
+    activeStreamId: currentValue?.activeStreamId ?? null,
+    conversation,
+    isSending: currentValue?.isSending ?? false,
+    isStreamingTextActive: currentValue?.isStreamingTextActive ?? false,
+    streamingAssistantMessageId: currentValue?.streamingAssistantMessageId ?? null,
+    streamingWaitingIndicatorVariant: currentValue?.streamingWaitingIndicatorVariant ?? null,
+  }
+}
+
+function updateConversationRecord(
+  runtimeState: ConversationRuntimeState,
+  updater: (conversation: ConversationRecord) => ConversationRecord,
+) {
+  return {
+    ...runtimeState,
+    conversation: updater(runtimeState.conversation),
+  }
+}
+
 export function useChatSessionState(language: AppLanguage) {
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([])
   const [folderSummaries, setFolderSummaries] = useState<ConversationFolderSummary[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
   const [activeConversationChatMode, setActiveConversationChatMode] = useState<ChatMode | null>(null)
-  const [activeConversationAgentContextRootPath, setActiveConversationAgentContextRootPath] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [conversationRuntimeStates, setConversationRuntimeStates] = useState<ConversationRuntimeStateMap>({})
   const [isLoading, setIsLoading] = useState(true)
-  const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const activeConversationState = activeConversationId ? conversationRuntimeStates[activeConversationId] ?? null : null
+  const runningConversationIds = useMemo(
+    () =>
+      new Set(
+        Object.values(conversationRuntimeStates)
+          .filter((conversationState) => conversationState.isSending || conversationState.activeStreamId !== null)
+          .map((conversationState) => conversationState.conversation.id),
+      ),
+    [conversationRuntimeStates],
+  )
 
   const clearConversationSelection = useCallback((nextFolderId: string | null) => {
     setActiveConversationId(null)
     setActiveConversationChatMode(null)
-    setActiveConversationAgentContextRootPath(null)
     setSelectedFolderId(nextFolderId)
-    setMessages([])
   }, [])
 
-  const applyConversation = useCallback((conversation: ConversationRecord) => {
+  const setActiveConversationSelection = useCallback((conversation: ConversationRecord) => {
     setActiveConversationId(conversation.id)
     setActiveConversationChatMode(conversation.chatMode)
-    setActiveConversationAgentContextRootPath(conversation.agentContextRootPath)
     setSelectedFolderId(conversation.folderId)
-    setMessages(conversation.messages)
   }, [])
 
+  const upsertConversationRecord = useCallback((conversation: ConversationRecord) => {
+    setConversationRuntimeStates((currentValue) => ({
+      ...currentValue,
+      [conversation.id]: createConversationRuntimeState(conversation, currentValue[conversation.id]),
+    }))
+  }, [])
+
+  const applyConversation = useCallback(
+    (conversation: ConversationRecord) => {
+      upsertConversationRecord(conversation)
+      setActiveConversationSelection(conversation)
+    },
+    [setActiveConversationSelection, upsertConversationRecord],
+  )
+
   const initializeHistory = useCallback(
-    ({ conversationSummaries, folderSummaries, initialConversation }: ChatHistorySnapshot) => {
-      setConversationSummaries(conversationSummaries)
-      setFolderSummaries(folderSummaries)
+    ({ conversationSummaries: nextConversationSummaries, folderSummaries: nextFolderSummaries, initialConversation }: ChatHistorySnapshot) => {
+      setConversationSummaries(nextConversationSummaries)
+      setFolderSummaries(nextFolderSummaries)
 
       if (!initialConversation) {
         clearConversationSelection(null)
         return
       }
 
-      applyConversation(initialConversation)
+      setConversationRuntimeStates((currentValue) => ({
+        ...currentValue,
+        [initialConversation.id]: createConversationRuntimeState(initialConversation, currentValue[initialConversation.id]),
+      }))
+      setActiveConversationSelection(initialConversation)
     },
-    [applyConversation, clearConversationSelection],
+    [clearConversationSelection, setActiveConversationSelection],
   )
 
   const addFolder = useCallback((folder: ConversationFolderSummary) => {
     setFolderSummaries((currentValue) => insertFolderSummary(currentValue, folder))
   }, [])
 
-  const applySavedConversation = useCallback(
+  const upsertConversationSummaryOnly = useCallback((conversation: ConversationRecord) => {
+    setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))
+  }, [])
+
+  const upsertConversation = useCallback(
     (conversation: ConversationRecord) => {
-      setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))
-      applyConversation(conversation)
+      upsertConversationRecord(conversation)
+      upsertConversationSummaryOnly(conversation)
     },
-    [applyConversation],
+    [upsertConversationRecord, upsertConversationSummaryOnly],
   )
 
-  const updateConversationSummary = useCallback((conversation: ConversationRecord) => {
-    setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))
+  const updateConversationRuntimeState = useCallback(
+    (conversationId: string, input: UpdateConversationRuntimeInput) => {
+      setConversationRuntimeStates((currentValue) => {
+        const conversationState = currentValue[conversationId]
+        if (!conversationState) {
+          return currentValue
+        }
+
+        return {
+          ...currentValue,
+          [conversationId]: {
+            ...conversationState,
+            ...(input.activeStreamId !== undefined ? { activeStreamId: input.activeStreamId } : {}),
+            ...(input.isSending !== undefined ? { isSending: input.isSending } : {}),
+            ...(input.isStreamingTextActive !== undefined
+              ? { isStreamingTextActive: input.isStreamingTextActive }
+              : {}),
+            ...(input.streamingAssistantMessageId !== undefined
+              ? { streamingAssistantMessageId: input.streamingAssistantMessageId }
+              : {}),
+            ...(input.streamingWaitingIndicatorVariant !== undefined
+              ? { streamingWaitingIndicatorVariant: input.streamingWaitingIndicatorVariant }
+              : {}),
+          },
+        }
+      })
+    },
+    [],
+  )
+
+  const appendLocalMessage = useCallback((conversationId: string, message: Message) => {
+    setConversationRuntimeStates((currentValue) => {
+      const conversationState = currentValue[conversationId]
+      if (!conversationState) {
+        return currentValue
+      }
+
+      return {
+        ...currentValue,
+        [conversationId]: updateConversationRecord(conversationState, (conversation) => ({
+          ...conversation,
+          messages: [...conversation.messages, message],
+        })),
+      }
+    })
+  }, [])
+
+  const insertLocalMessagesBefore = useCallback((conversationId: string, targetMessageId: string, nextMessages: Message[]) => {
+    if (nextMessages.length === 0) {
+      return
+    }
+
+    setConversationRuntimeStates((currentValue) => {
+      const conversationState = currentValue[conversationId]
+      if (!conversationState) {
+        return currentValue
+      }
+
+      const targetMessageIndex = conversationState.conversation.messages.findIndex((message) => message.id === targetMessageId)
+      const nextConversationMessages =
+        targetMessageIndex < 0
+          ? [...conversationState.conversation.messages, ...nextMessages]
+          : [
+              ...conversationState.conversation.messages.slice(0, targetMessageIndex),
+              ...nextMessages,
+              ...conversationState.conversation.messages.slice(targetMessageIndex),
+            ]
+
+      return {
+        ...currentValue,
+        [conversationId]: updateConversationRecord(conversationState, (conversation) => ({
+          ...conversation,
+          messages: nextConversationMessages,
+        })),
+      }
+    })
+  }, [])
+
+  const removeLocalMessage = useCallback((conversationId: string, messageId: string) => {
+    setConversationRuntimeStates((currentValue) => {
+      const conversationState = currentValue[conversationId]
+      if (!conversationState) {
+        return currentValue
+      }
+
+      return {
+        ...currentValue,
+        [conversationId]: updateConversationRecord(conversationState, (conversation) => ({
+          ...conversation,
+          messages: conversation.messages.filter((message) => message.id !== messageId),
+        })),
+      }
+    })
+  }, [])
+
+  const updateLocalMessage = useCallback((conversationId: string, messageId: string, updater: (message: Message) => Message) => {
+    setConversationRuntimeStates((currentValue) => {
+      const conversationState = currentValue[conversationId]
+      if (!conversationState) {
+        return currentValue
+      }
+
+      return {
+        ...currentValue,
+        [conversationId]: updateConversationRecord(conversationState, (conversation) => ({
+          ...conversation,
+          messages: conversation.messages.map((message) => (message.id === messageId ? updater(message) : message)),
+        })),
+      }
+    })
   }, [])
 
   const getDeletionContext = useCallback(
@@ -80,47 +266,28 @@ export function useChatSessionState(language: AppLanguage) {
     [conversationSummaries],
   )
 
-  const clearError = useCallback(() => setError(null), [])
-  const appendLocalMessage = useCallback((message: Message) => {
-    setMessages((currentValue) => [...currentValue, message])
-  }, [])
-  const insertLocalMessagesBefore = useCallback((targetMessageId: string, nextMessages: Message[]) => {
-    if (nextMessages.length === 0) {
-      return
-    }
-
-    setMessages((currentValue) => {
-      const targetMessageIndex = currentValue.findIndex((message) => message.id === targetMessageId)
-      if (targetMessageIndex < 0) {
-        return [...currentValue, ...nextMessages]
+  const removeConversationRuntime = useCallback((conversationId: string) => {
+    setConversationRuntimeStates((currentValue) => {
+      if (!(conversationId in currentValue)) {
+        return currentValue
       }
 
-      return [
-        ...currentValue.slice(0, targetMessageIndex),
-        ...nextMessages,
-        ...currentValue.slice(targetMessageIndex),
-      ]
+      const nextConversationStates = { ...currentValue }
+      delete nextConversationStates[conversationId]
+      return nextConversationStates
     })
   }, [])
-  const removeLocalMessage = useCallback((messageId: string) => {
-    setMessages((currentValue) => currentValue.filter((message) => message.id !== messageId))
-  }, [])
-  const updateLocalMessage = useCallback((messageId: string, updater: (message: Message) => Message) => {
-    setMessages((currentValue) =>
-      currentValue.map((message) => (message.id === messageId ? updater(message) : message)),
-    )
-  }, [])
+
+  const clearError = useCallback(() => setError(null), [])
 
   return {
-    activeConversationId,
-    activeConversationAgentContextRootPath,
     activeConversationChatMode,
+    activeConversationId,
+    activeConversationState,
     activeConversationTitle:
       conversationSummaries.find((conversation) => conversation.id === activeConversationId)?.title ?? 'New thread',
     addFolder,
     applyConversation,
-    applySavedConversation,
-    appendLocalMessage,
     clearConversationSelection,
     clearError,
     conversationGroups: buildConversationGroups(
@@ -128,23 +295,27 @@ export function useChatSessionState(language: AppLanguage) {
       conversationSummaries,
       activeConversationId,
       selectedFolderId,
+      runningConversationIds,
       language,
     ),
+    conversationRuntimeStates,
     error,
     getDeletionContext,
     initializeHistory,
-    insertLocalMessagesBefore,
     isLoading,
-    isSending,
-    messages,
+    removeConversationRuntime,
     replaceConversationSummaries: setConversationSummaries,
-    removeLocalMessage,
+    runningConversationIds,
     selectedFolderId,
     selectedFolderName: getSelectedFolderName(folderSummaries, selectedFolderId),
     setError,
     setIsLoading,
-    setIsSending,
-    updateConversationSummary,
+    updateConversationRuntimeState,
+    updateConversationSummary: upsertConversationSummaryOnly,
     updateLocalMessage,
+    insertLocalMessagesBefore,
+    appendLocalMessage,
+    removeLocalMessage,
+    upsertConversation,
   }
 }

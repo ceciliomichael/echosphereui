@@ -99,10 +99,13 @@ export const globTool: OpenAICompatibleToolDefinition = {
     const limitedPaths = visiblePaths.slice(0, maxResults)
 
     return {
+      matchCount: limitedPaths.length,
       matches: limitedPaths.map((matchedPath) => toDisplayPath(path.relative(normalizedRootPath, matchedPath))),
       ok: true,
       path: toDisplayPath(relativePath),
       pattern,
+      targetKind: 'path',
+      totalMatchCount: visiblePaths.length,
       truncated: globResult.truncated || visiblePaths.length > limitedPaths.length,
     }
   },

@@ -68,7 +68,7 @@ function createFocusedDiffSnippet(
 }
 
 export const editTool: OpenAICompatibleToolDefinition = {
-  executionMode: 'exclusive',
+  executionMode: 'path-exclusive',
   name: 'edit',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
@@ -131,22 +131,32 @@ export const editTool: OpenAICompatibleToolDefinition = {
     const singleEditEndLine =
       singleEditStartLine + Math.max(oldLineCount, newLineCount) - 1
     const usesWholeFileDiff = replaceAll || occurrences > 1
+    const contentChanged = normalizedContent !== nextContent
 
     await fs.writeFile(normalizedTargetPath, usesCrlf ? nextContent.replace(/\n/g, '\r\n') : nextContent, 'utf8')
 
     const focusedDiffSnippet = usesWholeFileDiff
       ? null
       : createFocusedDiffSnippet(normalizedContent, nextContent, singleEditStartLine, oldLineCount, newLineCount)
+    const operation = contentChanged ? 'edit' : 'noop'
+    const message =
+      operation === 'edit'
+        ? `Edited ${toDisplayPath(relativePath)} successfully.`
+        : `Confirmed ${toDisplayPath(relativePath)} already matched the requested edit.`
 
     return {
+      contentChanged,
       contextLines: usesWholeFileDiff ? 5 : focusedDiffSnippet?.contextLines,
       endLineNumber: usesWholeFileDiff ? nextContent.split('\n').length : focusedDiffSnippet?.endLineNumber ?? singleEditEndLine,
-      message: `Edited ${toDisplayPath(relativePath)} successfully.`,
+      message,
       newContent: usesWholeFileDiff ? nextContent : focusedDiffSnippet?.newContent ?? normalizedNewString,
       oldContent: usesWholeFileDiff ? normalizedContent : focusedDiffSnippet?.oldContent ?? normalizedOldString,
       ok: true,
+      operation,
       path: toDisplayPath(relativePath),
+      replacementCount: replaceAll ? occurrences : 1,
       startLineNumber: usesWholeFileDiff ? 1 : focusedDiffSnippet?.startLineNumber ?? singleEditStartLine,
+      targetKind: 'file',
     }
   },
   tool: {

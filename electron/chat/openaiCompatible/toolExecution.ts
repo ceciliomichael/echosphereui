@@ -20,6 +20,7 @@ interface ToolExecutionSchedulerInput {
 interface ToolExecutionSchedulerDependencies {
   executeToolCall?: typeof executeToolCallWithPolicies
   resolveExecutionMode?: (toolName: string) => OpenAICompatibleToolExecutionMode
+  resolveExecutionResourceKey?: (toolCall: OpenAICompatibleToolCall) => string | null
 }
 
 export interface ToolExecutionScheduler {
@@ -67,6 +68,30 @@ export function createToolExecutionTurnState(): ToolExecutionTurnState {
 
 export function resolveToolExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
   return getOpenAICompatibleToolDefinition(toolName)?.executionMode ?? 'exclusive'
+}
+
+function normalizeExecutionResourceKey(absolutePath: string) {
+  const normalizedPath = absolutePath.replace(/\\/g, '/')
+  return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
+}
+
+export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall) {
+  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
+  if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
+    return null
+  }
+
+  try {
+    const argumentsValue = toolDefinition.parseArguments(toolCall.argumentsText)
+    const absolutePath = argumentsValue.absolute_path
+    if (typeof absolutePath !== 'string' || absolutePath.trim().length === 0) {
+      return null
+    }
+
+    return normalizeExecutionResourceKey(absolutePath.trim())
+  } catch {
+    return null
+  }
 }
 
 export async function executeToolCallWithPolicies(
@@ -127,8 +152,10 @@ export function createToolExecutionScheduler(
 ): ToolExecutionScheduler {
   const executeToolCall = dependencies.executeToolCall ?? executeToolCallWithPolicies
   const resolveExecutionMode = dependencies.resolveExecutionMode ?? resolveToolExecutionMode
+  const resolveExecutionResourceKey = dependencies.resolveExecutionResourceKey ?? resolveToolExecutionResourceKey
   let exclusiveBarrier: Promise<void> = Promise.resolve()
-  const activeParallelExecutions = new Set<Promise<void>>()
+  const activeNonExclusiveExecutions = new Set<Promise<void>>()
+  const resourceBarriers = new Map<string, Promise<void>>()
   const scheduledExecutions = new Set<Promise<void>>()
 
   function trackExecution(execution: Promise<void>, activeSet?: Set<Promise<void>>) {
@@ -160,13 +187,44 @@ export function createToolExecutionScheduler(
             input.turnState,
           ),
         ),
-        activeParallelExecutions,
+        activeNonExclusiveExecutions,
       )
     }
 
-    const pendingParallelExecutions = Array.from(activeParallelExecutions)
+    if (executionMode === 'path-exclusive') {
+      const resourceKey = resolveExecutionResourceKey(toolCall)
+      if (resourceKey) {
+        const resourceBarrier = resourceBarriers.get(resourceKey) ?? Promise.resolve()
+        const resourceExecution = exclusiveBarrier
+          .then(() => resourceBarrier)
+          .then(() =>
+            executeToolCall(
+              toolCall,
+              input.context,
+              input.agentContextRootPath,
+              input.inMemoryMessages,
+              input.turnState,
+            ),
+          )
+
+        const trackedResourceExecution = trackExecution(resourceExecution, activeNonExclusiveExecutions)
+        const nextResourceBarrier = trackedResourceExecution.catch(() => undefined)
+        resourceBarriers.set(resourceKey, nextResourceBarrier)
+        nextResourceBarrier.finally(() => {
+          if (resourceBarriers.get(resourceKey) === nextResourceBarrier) {
+            resourceBarriers.delete(resourceKey)
+          }
+        }).catch(() => {
+          // Resource cleanup should not surface as an unhandled rejection.
+        })
+
+        return trackedResourceExecution
+      }
+    }
+
+    const pendingNonExclusiveExecutions = Array.from(activeNonExclusiveExecutions)
     const exclusiveExecution = exclusiveBarrier
-      .then(() => Promise.allSettled(pendingParallelExecutions))
+      .then(() => Promise.allSettled(pendingNonExclusiveExecutions))
       .then(() =>
         executeToolCall(
           toolCall,

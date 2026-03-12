@@ -14,7 +14,7 @@ import type {
   ToolInvocationTrace,
 } from '../types/chat'
 
-interface ChatRuntimeSelection {
+export interface ChatRuntimeSelection {
   hasConfiguredProvider: boolean
   modelId: string
   providerId: ChatProviderId | null
@@ -180,17 +180,13 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
 
       if (event.type === 'completed') {
         unsubscribe()
-        resolve({
-          wasAborted: false,
-        })
+        resolve({ wasAborted: false })
         return
       }
 
       if (event.type === 'aborted') {
         unsubscribe()
-        resolve({
-          wasAborted: true,
-        })
+        resolve({ wasAborted: true })
         return
       }
 
@@ -243,33 +239,37 @@ async function streamAssistantResponse(input: StreamAssistantResponseInput): Pro
   })
 }
 
-export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRuntimeSelection) {
+export function useChatMessages(language: AppLanguage) {
   const {
     activeConversationId,
+    activeConversationState,
     activeConversationTitle,
     addFolder,
-    appendLocalMessage,
     applyConversation,
-    applySavedConversation,
+    appendLocalMessage,
     clearConversationSelection,
     clearError,
     conversationGroups,
+    conversationRuntimeStates,
     error,
     getDeletionContext,
     initializeHistory,
     isLoading,
-    isSending,
-    messages,
-    removeLocalMessage,
+    removeConversationRuntime,
     replaceConversationSummaries,
     selectedFolderId,
     selectedFolderName,
     setError,
     setIsLoading,
-    setIsSending,
+    updateConversationRuntimeState,
     updateConversationSummary,
     updateLocalMessage,
+    removeLocalMessage,
+    upsertConversation,
   } = useChatSessionState(language)
+
+  const messages = activeConversationState?.conversation.messages ?? []
+  const isSending = activeConversationState?.isSending ?? false
   const {
     mainComposerValue,
     setMainComposerValue,
@@ -285,48 +285,70 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     startEditingMessage: beginEditingMessage,
     cancelEditingMessage,
   } = useChatComposerState(messages, isSending)
-  const [streamingAssistantMessageId, setStreamingAssistantMessageId] = useState<string | null>(null)
-  const [streamingWaitingIndicatorVariant, setStreamingWaitingIndicatorVariant] =
-    useState<AssistantWaitingIndicatorVariant | null>(null)
-  const [isStreamingTextActive, setIsStreamingTextActive] = useState(false)
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(null)
   const [draftChatMode, setDraftChatMode] = useState<ChatMode>('agent')
-  const activeStreamIdRef = useRef<string | null>(null)
-  const textStreamingIdleTimeoutRef = useRef<number | null>(null)
+  const [pendingDraftSendCount, setPendingDraftSendCount] = useState(0)
+  const activeConversationIdRef = useRef<string | null>(activeConversationId)
+  const selectedFolderIdRef = useRef<string | null>(selectedFolderId)
+  const conversationRuntimeStatesRef = useRef(conversationRuntimeStates)
+  const textStreamingIdleTimeoutRef = useRef<Record<string, number>>({})
 
-  const updateActiveStreamId = useCallback((streamId: string | null) => {
-    activeStreamIdRef.current = streamId
-    setActiveStreamId(streamId)
-  }, [])
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
 
-  const clearTextStreamingIdleTimeout = useCallback(() => {
-    if (textStreamingIdleTimeoutRef.current === null) {
+  useEffect(() => {
+    selectedFolderIdRef.current = selectedFolderId
+  }, [selectedFolderId])
+
+  useEffect(() => {
+    conversationRuntimeStatesRef.current = conversationRuntimeStates
+  }, [conversationRuntimeStates])
+
+  const clearTextStreamingIdleTimeout = useCallback((conversationId: string) => {
+    const timeoutId = textStreamingIdleTimeoutRef.current[conversationId]
+    if (timeoutId === undefined) {
       return
     }
 
-    window.clearTimeout(textStreamingIdleTimeoutRef.current)
-    textStreamingIdleTimeoutRef.current = null
+    window.clearTimeout(timeoutId)
+    delete textStreamingIdleTimeoutRef.current[conversationId]
   }, [])
 
-  const stopTextStreaming = useCallback(() => {
-    clearTextStreamingIdleTimeout()
-    setIsStreamingTextActive(false)
-  }, [clearTextStreamingIdleTimeout])
+  const stopTextStreaming = useCallback(
+    (conversationId: string) => {
+      clearTextStreamingIdleTimeout(conversationId)
+      updateConversationRuntimeState(conversationId, {
+        isStreamingTextActive: false,
+      })
+    },
+    [clearTextStreamingIdleTimeout, updateConversationRuntimeState],
+  )
 
-  const markTextStreamingPulse = useCallback(() => {
-    setIsStreamingTextActive(true)
-    clearTextStreamingIdleTimeout()
-    textStreamingIdleTimeoutRef.current = window.setTimeout(() => {
-      textStreamingIdleTimeoutRef.current = null
-      setIsStreamingTextActive(false)
-    }, TEXT_STREAM_IDLE_GRACE_MS)
-  }, [clearTextStreamingIdleTimeout])
+  const markTextStreamingPulse = useCallback(
+    (conversationId: string) => {
+      updateConversationRuntimeState(conversationId, {
+        isStreamingTextActive: true,
+      })
+      clearTextStreamingIdleTimeout(conversationId)
+      textStreamingIdleTimeoutRef.current[conversationId] = window.setTimeout(() => {
+        delete textStreamingIdleTimeoutRef.current[conversationId]
+        updateConversationRuntimeState(conversationId, {
+          isStreamingTextActive: false,
+        })
+      }, TEXT_STREAM_IDLE_GRACE_MS)
+    },
+    [clearTextStreamingIdleTimeout, updateConversationRuntimeState],
+  )
 
   useEffect(
     () => () => {
-      clearTextStreamingIdleTimeout()
+      for (const timeoutId of Object.values(textStreamingIdleTimeoutRef.current)) {
+        window.clearTimeout(timeoutId)
+      }
+
+      textStreamingIdleTimeoutRef.current = {}
     },
-    [clearTextStreamingIdleTimeout],
+    [],
   )
 
   function resetDraft(nextFolderId: string | null) {
@@ -339,14 +361,13 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
 
     async function initializeConversations() {
       try {
-        const { conversationSummaries: summaries, folderSummaries: folders, initialConversation } =
-          await loadInitialChatHistory()
+        const { conversationSummaries, folderSummaries, initialConversation } = await loadInitialChatHistory()
 
         if (!isMounted) {
           return
         }
 
-        initializeHistory({ conversationSummaries: summaries, folderSummaries: folders, initialConversation })
+        initializeHistory({ conversationSummaries, folderSummaries, initialConversation })
       } catch (caughtError) {
         console.error(caughtError)
         if (isMounted) {
@@ -402,6 +423,12 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     clearError()
     resetComposerState()
 
+    const cachedConversation = conversationRuntimeStatesRef.current[conversationId]?.conversation
+    if (cachedConversation) {
+      applyConversation(cachedConversation)
+      return
+    }
+
     try {
       const conversation = await window.echosphereHistory.getConversation(conversationId)
       if (!conversation) {
@@ -416,15 +443,23 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
   }
 
-  const startEditingMessage = useCallback((messageId: string) => {
-    clearError()
-    beginEditingMessage(messageId)
-  }, [beginEditingMessage, clearError])
+  const startEditingMessage = useCallback(
+    (messageId: string) => {
+      clearError()
+      beginEditingMessage(messageId)
+    },
+    [beginEditingMessage, clearError],
+  )
+
+  const getCurrentConversationStreamId = useCallback((conversationId: string) => {
+    return conversationRuntimeStatesRef.current[conversationId]?.activeStreamId ?? null
+  }, [])
 
   async function persistAndStreamMessage(
     trimmedText: string,
     attachments: ChatAttachment[],
     targetEditMessageId: string | null,
+    runtimeSelection: ChatRuntimeSelection,
   ) {
     if (!runtimeSelection.hasConfiguredProvider) {
       setError('No provider is configured. Configure a provider in Settings before sending messages.')
@@ -443,38 +478,55 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
 
     const providerId = runtimeSelection.providerId
+    const initiatingConversationId = activeConversationId
+    const initiatingFolderId = selectedFolderId
+
     clearError()
-    setIsSending(true)
+
+    if (initiatingConversationId) {
+      updateConversationRuntimeState(initiatingConversationId, {
+        isSending: true,
+      })
+    } else {
+      setPendingDraftSendCount((currentValue) => currentValue + 1)
+    }
 
     const insertedMessageIds: string[] = []
     const streamedMessageOrder: StreamedMessageOrderEntry[] = []
     const draftAssistantMessages = new Map<string, Message>()
     const toolInvocationMessageIds = new Map<string, string>()
+    const waitingIndicatorVariantByDraftId = new Map<string, AssistantWaitingIndicatorVariant>()
     let activeAssistantDraftId: string | null = null
     let activeAssistantDraftKind: DraftAssistantMessageKind | null = null
     let reasoningDraftAssistantId: string | null = null
     let assistantDraftCount = 0
-    const waitingIndicatorVariantByDraftId = new Map<string, AssistantWaitingIndicatorVariant>()
+    let conversationIdForCleanup = initiatingConversationId
 
-    function setActiveStreamingDraft(draftAssistantId: string) {
-      setStreamingAssistantMessageId(draftAssistantId)
-      setStreamingWaitingIndicatorVariant(waitingIndicatorVariantByDraftId.get(draftAssistantId) ?? 'splash')
-      stopTextStreaming()
+    function updateStreamingIndicatorState(conversationId: string, draftAssistantId: string) {
+      updateConversationRuntimeState(conversationId, {
+        streamingAssistantMessageId: draftAssistantId,
+        streamingWaitingIndicatorVariant: waitingIndicatorVariantByDraftId.get(draftAssistantId) ?? 'splash',
+      })
+      stopTextStreaming(conversationId)
     }
 
-    function promoteWaitingIndicatorToSplash(draftAssistantId: string) {
+    function promoteWaitingIndicatorToSplash(conversationId: string, draftAssistantId: string) {
       const currentValue = waitingIndicatorVariantByDraftId.get(draftAssistantId)
       if (currentValue === 'splash') {
         return
       }
 
       waitingIndicatorVariantByDraftId.set(draftAssistantId, 'splash')
-      if (activeAssistantDraftId === draftAssistantId) {
-        setStreamingWaitingIndicatorVariant('splash')
+      if (activeAssistantDraftId !== draftAssistantId) {
+        return
       }
+
+      updateConversationRuntimeState(conversationId, {
+        streamingWaitingIndicatorVariant: 'splash',
+      })
     }
 
-    function appendAssistantDraft(kind: DraftAssistantMessageKind) {
+    function appendAssistantDraft(conversationId: string, kind: DraftAssistantMessageKind) {
       const draftAssistantMessage: Message = {
         content: '',
         id: uuidv4(),
@@ -488,7 +540,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         toolInvocations: [],
       }
 
-      appendLocalMessage(draftAssistantMessage)
+      appendLocalMessage(conversationId, draftAssistantMessage)
       insertedMessageIds.push(draftAssistantMessage.id)
       streamedMessageOrder.push({
         id: draftAssistantMessage.id,
@@ -499,7 +551,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       waitingIndicatorVariantByDraftId.set(draftAssistantMessage.id, assistantDraftCount === 1 ? 'thinking' : 'splash')
       activeAssistantDraftId = draftAssistantMessage.id
       activeAssistantDraftKind = kind
-      setActiveStreamingDraft(draftAssistantMessage.id)
+      updateStreamingIndicatorState(conversationId, draftAssistantMessage.id)
 
       return draftAssistantMessage.id
     }
@@ -513,13 +565,17 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       return message
     }
 
-    function updateDraftAssistantMessage(draftAssistantId: string, updater: (message: Message) => Message) {
+    function updateDraftAssistantMessage(
+      conversationId: string,
+      draftAssistantId: string,
+      updater: (message: Message) => Message,
+    ) {
       const nextValue = updater(getDraftAssistantMessage(draftAssistantId))
       draftAssistantMessages.set(draftAssistantId, nextValue)
-      updateLocalMessage(draftAssistantId, () => nextValue)
+      updateLocalMessage(conversationId, draftAssistantId, () => nextValue)
     }
 
-    function completeReasoningDraft(completedAt = Date.now()) {
+    function completeReasoningDraft(conversationId: string, completedAt = Date.now()) {
       if (!reasoningDraftAssistantId) {
         return
       }
@@ -537,97 +593,116 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         return
       }
 
-      updateDraftAssistantMessage(draftAssistantId, (message) => ({
+      updateDraftAssistantMessage(conversationId, draftAssistantId, (message) => ({
         ...message,
         reasoningCompletedAt: completedAt,
       }))
     }
 
-    function ensureAssistantDraft(kind: Exclude<DraftAssistantMessageKind, 'placeholder'>) {
+    function ensureAssistantDraft(conversationId: string, kind: Exclude<DraftAssistantMessageKind, 'placeholder'>) {
       if (!activeAssistantDraftId) {
-        return appendAssistantDraft(kind)
+        return appendAssistantDraft(conversationId, kind)
       }
 
       if (activeAssistantDraftKind === kind) {
-        setActiveStreamingDraft(activeAssistantDraftId)
+        updateStreamingIndicatorState(conversationId, activeAssistantDraftId)
         return activeAssistantDraftId
       }
 
       const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
       if (activeAssistantDraftKind === 'placeholder' && !hasMeaningfulAssistantOutput(activeDraftMessage)) {
         activeAssistantDraftKind = kind
-        setActiveStreamingDraft(activeAssistantDraftId)
+        updateStreamingIndicatorState(conversationId, activeAssistantDraftId)
         return activeAssistantDraftId
       }
 
-      return appendAssistantDraft(kind)
+      return appendAssistantDraft(conversationId, kind)
     }
 
     try {
       const { conversation } = await persistUserTurn({
-        activeConversationId,
+        activeConversationId: initiatingConversationId,
         chatMode: draftChatMode,
         modelId: runtimeSelection.modelId,
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
-        selectedFolderId,
+        selectedFolderId: initiatingFolderId,
         targetEditMessageId,
         attachments,
         trimmedText,
       })
 
-      applySavedConversation(conversation)
+      conversationIdForCleanup = conversation.id
+      const shouldKeepSelected =
+        initiatingConversationId === null
+          ? activeConversationIdRef.current === null && selectedFolderIdRef.current === initiatingFolderId
+          : activeConversationIdRef.current === conversation.id
+
+      upsertConversation(conversation)
+      updateConversationRuntimeState(conversation.id, {
+        isSending: true,
+      })
+
+      if (shouldKeepSelected) {
+        applyConversation(conversation)
+      }
 
       if (targetEditMessageId !== null) {
-        cancelEditingMessage()
-      } else {
+        if (shouldKeepSelected) {
+          cancelEditingMessage()
+        }
+      } else if (shouldKeepSelected) {
         setMainComposerValue('')
         setMainComposerAttachments([])
       }
 
-      appendAssistantDraft('placeholder')
+      appendAssistantDraft(conversation.id, 'placeholder')
       const streamedAssistant = await streamAssistantResponse({
         agentContextRootPath: conversation.agentContextRootPath,
         chatMode: conversation.chatMode,
         messages: conversation.messages,
         modelId: runtimeSelection.modelId,
         onContentDelta: (delta) => {
-          completeReasoningDraft()
-          const draftAssistantId = ensureAssistantDraft('content')
-          promoteWaitingIndicatorToSplash(draftAssistantId)
-          markTextStreamingPulse()
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          completeReasoningDraft(conversation.id)
+          const draftAssistantId = ensureAssistantDraft(conversation.id, 'content')
+          promoteWaitingIndicatorToSplash(conversation.id, draftAssistantId)
+          markTextStreamingPulse(conversation.id)
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             content: message.content + delta,
           }))
         },
         onReasoningDelta: (delta) => {
-          const draftAssistantId = ensureAssistantDraft('content')
+          const draftAssistantId = ensureAssistantDraft(conversation.id, 'content')
           reasoningDraftAssistantId = draftAssistantId
-          promoteWaitingIndicatorToSplash(draftAssistantId)
-          markTextStreamingPulse()
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          promoteWaitingIndicatorToSplash(conversation.id, draftAssistantId)
+          markTextStreamingPulse(conversation.id)
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             reasoningContent: (message.reasoningContent ?? '') + delta,
           }))
         },
         onSyntheticToolMessage: (syntheticMessage) => {
-          appendLocalMessage(syntheticMessage)
+          appendLocalMessage(conversation.id, syntheticMessage)
           insertedMessageIds.push(syntheticMessage.id)
           streamedMessageOrder.push({
             kind: 'message',
             message: syntheticMessage,
           })
         },
-        onStreamStarted: updateActiveStreamId,
+        onStreamStarted: (streamId) => {
+          updateConversationRuntimeState(conversation.id, {
+            activeStreamId: streamId,
+          })
+        },
         onToolInvocationCompleted: (invocationId, nextValue) => {
-          completeReasoningDraft(nextValue.completedAt)
-          stopTextStreaming()
-          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          completeReasoningDraft(conversation.id, nextValue.completedAt)
+          stopTextStreaming(conversation.id)
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft(conversation.id, 'tool')
           activeAssistantDraftId = draftAssistantId
           activeAssistantDraftKind = 'tool'
-          setActiveStreamingDraft(draftAssistantId)
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          updateStreamingIndicatorState(conversation.id, draftAssistantId)
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
@@ -642,13 +717,13 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
           }))
         },
         onToolInvocationFailed: (invocationId, nextValue) => {
-          completeReasoningDraft(nextValue.completedAt)
-          stopTextStreaming()
-          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          completeReasoningDraft(conversation.id, nextValue.completedAt)
+          stopTextStreaming(conversation.id)
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft(conversation.id, 'tool')
           activeAssistantDraftId = draftAssistantId
           activeAssistantDraftKind = 'tool'
-          setActiveStreamingDraft(draftAssistantId)
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          updateStreamingIndicatorState(conversation.id, draftAssistantId)
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
@@ -663,11 +738,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
           }))
         },
         onToolInvocationStarted: (invocationId, nextValue) => {
-          completeReasoningDraft(nextValue.startedAt)
-          stopTextStreaming()
-          const draftAssistantId = ensureAssistantDraft('tool')
+          completeReasoningDraft(conversation.id, nextValue.startedAt)
+          stopTextStreaming(conversation.id)
+          const draftAssistantId = ensureAssistantDraft(conversation.id, 'tool')
           toolInvocationMessageIds.set(invocationId, draftAssistantId)
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
@@ -681,10 +756,10 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
           }))
         },
         onToolInvocationDelta: (invocationId, nextValue) => {
-          stopTextStreaming()
-          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+          stopTextStreaming(conversation.id)
+          const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft(conversation.id, 'tool')
           toolInvocationMessageIds.set(invocationId, draftAssistantId)
-          updateDraftAssistantMessage(draftAssistantId, (message) => ({
+          updateDraftAssistantMessage(conversation.id, draftAssistantId, (message) => ({
             ...message,
             toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
               argumentsText: nextValue.argumentsText,
@@ -700,10 +775,14 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         providerId,
         reasoningEffort: runtimeSelection.reasoningEffort,
       })
-      completeReasoningDraft()
+      completeReasoningDraft(conversation.id)
 
-      updateActiveStreamId(null)
-      stopTextStreaming()
+      updateConversationRuntimeState(conversation.id, {
+        activeStreamId: null,
+        streamingAssistantMessageId: null,
+        streamingWaitingIndicatorVariant: null,
+      })
+      stopTextStreaming(conversation.id)
 
       const streamedMessages = streamedMessageOrder.flatMap((entry) => {
         if (entry.kind === 'message') {
@@ -725,7 +804,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       if (streamedMessages.every((message) => !hasMeaningfulAssistantOutput(message))) {
         if (streamedAssistant.wasAborted) {
           for (const messageId of insertedMessageIds) {
-            removeLocalMessage(messageId)
+            removeLocalMessage(conversation.id, messageId)
           }
           return
         }
@@ -738,32 +817,50 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
           continue
         }
 
-        updateLocalMessage(message.id, () => message)
+        updateLocalMessage(conversation.id, message.id, () => message)
       }
 
-      setStreamingAssistantMessageId(null)
-      setStreamingWaitingIndicatorVariant(null)
+      if (!(conversation.id in conversationRuntimeStatesRef.current)) {
+        return
+      }
+
       const savedConversation = await persistAssistantTurn(conversation.id, streamedMessages)
+      if (!(savedConversation.id in conversationRuntimeStatesRef.current)) {
+        return
+      }
+
+      upsertConversation(savedConversation)
       updateConversationSummary(savedConversation)
     } catch (caughtError) {
       console.error(caughtError)
-      for (const messageId of insertedMessageIds) {
-        removeLocalMessage(messageId)
+      if (conversationIdForCleanup) {
+        for (const messageId of insertedMessageIds) {
+          removeLocalMessage(conversationIdForCleanup, messageId)
+        }
       }
 
       const providerLabel = runtimeSelection.providerLabel ?? 'the selected provider'
       setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
     } finally {
-      updateActiveStreamId(null)
-      setStreamingAssistantMessageId(null)
-      setStreamingWaitingIndicatorVariant(null)
-      stopTextStreaming()
-      setIsSending(false)
+      if (initiatingConversationId === null) {
+        setPendingDraftSendCount((currentValue) => Math.max(0, currentValue - 1))
+      }
+
+      if (conversationIdForCleanup) {
+        updateConversationRuntimeState(conversationIdForCleanup, {
+          activeStreamId: null,
+          isSending: false,
+          isStreamingTextActive: false,
+          streamingAssistantMessageId: null,
+          streamingWaitingIndicatorVariant: null,
+        })
+        clearTextStreamingIdleTimeout(conversationIdForCleanup)
+      }
     }
   }
 
-  async function sendNewMessage() {
-    if (isSending) {
+  async function sendNewMessage(runtimeSelection: ChatRuntimeSelection) {
+    if (activeConversationState?.isSending || (activeConversationId === null && pendingDraftSendCount > 0)) {
       return
     }
 
@@ -772,11 +869,15 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       return
     }
 
-    await persistAndStreamMessage(trimmedText, mainComposerAttachments, null)
+    await persistAndStreamMessage(trimmedText, mainComposerAttachments, null, runtimeSelection)
   }
 
-  async function sendEditedMessage() {
-    if (isSending || editingMessageId === null) {
+  async function sendEditedMessage(runtimeSelection: ChatRuntimeSelection) {
+    if (
+      editingMessageId === null ||
+      activeConversationState?.isSending ||
+      (activeConversationId === null && pendingDraftSendCount > 0)
+    ) {
       return
     }
 
@@ -785,11 +886,15 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       return
     }
 
-    await persistAndStreamMessage(trimmedText, editComposerAttachments, editingMessageId)
+    await persistAndStreamMessage(trimmedText, editComposerAttachments, editingMessageId, runtimeSelection)
   }
 
   const abortStreamingResponse = useCallback(async () => {
-    const streamId = activeStreamIdRef.current
+    if (!activeConversationId) {
+      return
+    }
+
+    const streamId = getCurrentConversationStreamId(activeConversationId)
     if (!streamId) {
       return
     }
@@ -800,10 +905,27 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       console.error(caughtError)
       setError('Unable to stop the current response.')
     }
-  }, [setError])
+  }, [activeConversationId, getCurrentConversationStreamId, setError])
 
   async function deleteConversation(conversationId: string) {
     clearError()
+
+    const conversationState = conversationRuntimeStatesRef.current[conversationId] ?? null
+    if (conversationState?.isSending && conversationState.activeStreamId === null) {
+      setError('Wait for the current thread task to initialize before deleting it.')
+      return
+    }
+
+    if (conversationState?.activeStreamId) {
+      try {
+        await window.echosphereChat.cancelStream(conversationState.activeStreamId)
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to stop the current thread task before deleting it.')
+        return
+      }
+    }
+
     const { deletedConversationFolderId, remainingSummaries } = getDeletionContext(conversationId)
 
     if (conversationId === activeConversationId) {
@@ -812,6 +934,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
 
     try {
       await window.echosphereHistory.deleteConversation(conversationId)
+      removeConversationRuntime(conversationId)
       replaceConversationSummaries(remainingSummaries)
 
       if (remainingSummaries.length === 0) {
@@ -824,6 +947,12 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
       }
 
       clearConversationSelection(deletedConversationFolderId)
+
+      const cachedConversation = conversationRuntimeStatesRef.current[remainingSummaries[0].id]?.conversation
+      if (cachedConversation) {
+        applyConversation(cachedConversation)
+        return
+      }
 
       const nextConversation = await window.echosphereHistory.getConversation(remainingSummaries[0].id)
       if (!nextConversation) {
@@ -838,41 +967,46 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
   }
 
+  const isActiveDraftSending = activeConversationId === null && pendingDraftSendCount > 0
+
   return {
     activeConversationId,
+    activeConversationRootPath: activeConversationState?.conversation.agentContextRootPath ?? null,
     activeConversationTitle,
     cancelEditingMessage,
     conversationGroups,
     createConversation,
     createFolder,
     deleteConversation,
-    editComposerFocusSignal,
     editComposerAttachments,
+    editComposerFocusSignal,
     editComposerValue,
     editingMessageId,
     error,
     isEditingMessage: editingMessageId !== null,
     isLoading,
-    isSending,
-    isStreamingTextActive,
-    isStreamingResponse: activeStreamId !== null,
-    mainComposerValue,
+    isSending: activeConversationState?.isSending ?? isActiveDraftSending,
+    isStreamingResponse: activeConversationState?.activeStreamId !== null,
+    isStreamingTextActive: activeConversationState?.isStreamingTextActive ?? false,
     mainComposerAttachments,
+    mainComposerValue,
     messages,
     selectedChatMode: draftChatMode,
+    selectedFolderName,
     selectConversation,
     selectFolder,
-    selectedFolderName,
-    setSelectedChatMode: setDraftChatMode,
-    abortStreamingResponse,
-    sendEditedMessage,
-    sendNewMessage,
-    streamingAssistantMessageId,
-    streamingWaitingIndicatorVariant,
     setEditComposerAttachments,
     setEditComposerValue,
     setMainComposerAttachments,
     setMainComposerValue,
+    setSelectedChatMode: setDraftChatMode,
     startEditingMessage,
+    streamingAssistantMessageId: activeConversationState?.streamingAssistantMessageId ?? null,
+    streamingWaitingIndicatorVariant: activeConversationState?.streamingWaitingIndicatorVariant ?? null,
+    abortStreamingResponse,
+    sendEditedMessage,
+    sendNewMessage,
   }
 }
+
+export type ChatMessagesController = ReturnType<typeof useChatMessages>

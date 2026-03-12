@@ -14,6 +14,7 @@ interface AssistantMessageProps {
   timestamp: number
   toolInvocations?: ToolInvocationTrace[]
   waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
+  workspaceRootPath?: string | null
 }
 
 export function AssistantMessage({
@@ -25,14 +26,18 @@ export function AssistantMessage({
   timestamp,
   toolInvocations = [],
   waitingIndicatorVariant = 'thinking',
+  workspaceRootPath = null,
 }: AssistantMessageProps) {
   const hasContent = content.trim().length > 0
+  const hasReasoningContent = reasoningContent.trim().length > 0
+  const hasActiveReasoningBlock = hasReasoningContent && reasoningCompletedAt === undefined
   const hasRunningToolInvocation = toolInvocations.some((invocation) => invocation.state === 'running')
-  const shouldShowWaitingIndicator = isStreaming && !isTextStreaming && !hasRunningToolInvocation
+  const shouldShowWaitingIndicator =
+    isStreaming && !isTextStreaming && !hasRunningToolInvocation && !hasActiveReasoningBlock
 
   return (
     <div className={[chatMessageContentWidthClassName, 'space-y-2'].join(' ')}>
-      {reasoningContent.trim().length > 0 ? (
+      {hasReasoningContent ? (
         <ThinkingBlock
           content={reasoningContent}
           isComplete={!isStreaming}
@@ -42,7 +47,7 @@ export function AssistantMessage({
       ) : null}
 
       {toolInvocations.map((invocation) => (
-        <ToolInvocationBlock key={invocation.id} invocation={invocation} />
+        <ToolInvocationBlock key={invocation.id} invocation={invocation} workspaceRootPath={workspaceRootPath} />
       ))}
 
       {hasContent ? (

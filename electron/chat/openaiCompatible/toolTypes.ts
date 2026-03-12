@@ -7,7 +7,7 @@ export interface OpenAICompatibleToolCall {
   startedAt: number
 }
 
-export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel'
+export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel' | 'path-exclusive'
 
 export interface OpenAICompatibleToolExecutionContext {
   agentContextRootPath: string

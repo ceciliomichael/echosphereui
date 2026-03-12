@@ -86,6 +86,7 @@ export interface ConversationPreview {
   updatedAtLabel: string
   folderId: string | null
   isActive?: boolean
+  hasRunningTask?: boolean
 }
 
 export interface ConversationRecord {

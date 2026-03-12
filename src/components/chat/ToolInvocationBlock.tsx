@@ -7,9 +7,11 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { PathLabel } from './PathLabel'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getPathBasename } from '../../lib/pathPresentation'
+import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
   invocation: ToolInvocationTrace
+  workspaceRootPath?: string | null
 }
 
 interface ReadToolResultViewModel {
@@ -64,7 +66,10 @@ function renderDiffCountSummary(invocation: ToolInvocationTrace) {
   return null
 }
 
-export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocation }: ToolInvocationBlockProps) {
+export const ToolInvocationBlock = memo(function ToolInvocationBlock({
+  invocation,
+  workspaceRootPath = null,
+}: ToolInvocationBlockProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [displayedState, setDisplayedState] = useState<ToolInvocationTrace['state']>(invocation.state)
 
@@ -92,12 +97,17 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
     }
   }, [invocation.startedAt, invocation.state])
 
-  const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState)
+  const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState, workspaceRootPath)
   const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
-  const readResultPresentation =
-    invocation.toolName === 'read' && invocation.resultContent ? parseReadToolResult(invocation.resultContent) : null
+  const parsedStructuredResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const resultBody =
+    parsedStructuredResult?.body ??
+    parsedStructuredResult?.metadata?.summary ??
+    invocation.resultContent ??
+    ''
+  const readResultPresentation = invocation.toolName === 'read' ? parseReadToolResult(resultBody) : null
 
   return (
     <div className="w-full">
@@ -133,7 +143,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
             <div className="w-full text-left">
               <p className="my-0 mb-1.5 flex min-w-0 items-baseline gap-1 text-[15px] leading-[1.52] text-foreground">
                 <span className="shrink-0">File</span>
-                <PathLabel path={readResultPresentation.filePath} className="flex-1 text-left" />
+                <PathLabel path={readResultPresentation.filePath} className="min-w-0 max-w-full text-left" />
                 <span className="shrink-0">
                   (lines {readResultPresentation.startLineNumber}-{readResultPresentation.endLineNumber})
                 </span>
@@ -147,7 +157,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
             </div>
           ) : (
             <MarkdownRenderer
-              content={invocation.resultContent}
+              content={resultBody}
               className="w-full opacity-85"
               isStreaming={invocation.state === 'running'}
               preserveLineBreaks={shouldPreserveLineBreaks}

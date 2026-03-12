@@ -102,9 +102,11 @@ export function getConversationTitleFromInput(seed: string, attachments: readonl
 function mapConversationPreview(
   summary: ConversationSummary,
   activeConversationId: string | null,
+  runningConversationIds: ReadonlySet<string>,
   language: AppLanguage,
 ): ConversationPreview {
   return {
+    hasRunningTask: runningConversationIds.has(summary.id),
     id: summary.id,
     title: summary.title,
     preview: summary.preview,
@@ -119,6 +121,7 @@ export function buildConversationGroups(
   conversationSummaries: ConversationSummary[],
   activeConversationId: string | null,
   selectedFolderId: string | null,
+  runningConversationIds: ReadonlySet<string>,
   language: AppLanguage,
 ): ConversationGroupPreview[] {
   const groupedConversations = new Map<string | null, ConversationPreview[]>()
@@ -129,7 +132,7 @@ export function buildConversationGroups(
   }
 
   for (const conversation of conversationSummaries) {
-    const preview = mapConversationPreview(conversation, activeConversationId, language)
+    const preview = mapConversationPreview(conversation, activeConversationId, runningConversationIds, language)
     const targetFolderId =
       conversation.folderId !== null && groupedConversations.has(conversation.folderId) ? conversation.folderId : null
 

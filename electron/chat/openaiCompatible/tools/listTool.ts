@@ -53,12 +53,15 @@ export const listTool: OpenAICompatibleToolDefinition = {
     const limitedEntries = sortedEntries.slice(0, limit)
 
     return {
+      entryCount: limitedEntries.length,
       entries: limitedEntries.map((entry) => ({
         kind: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
         name: entry.name,
       })),
       path: toDisplayPath(relativePath),
       ok: true,
+      targetKind: 'directory',
+      totalVisibleEntryCount: sortedEntries.length,
       truncated: sortedEntries.length > limitedEntries.length,
     }
   },

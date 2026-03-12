@@ -109,18 +109,20 @@ export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isS
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-      <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2">
-        <span className="inline-flex min-h-4 items-center gap-2 text-[12px] font-medium text-muted-foreground">
+      <div className="relative flex items-center border-b border-border bg-surface px-3 py-2 pr-11 text-[12px] text-muted-foreground">
+        <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
           <span className="flex h-4 w-4 items-center justify-center">
             <LanguageIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
           </span>
-          <span className="flex h-4 items-center leading-[1]">{titleLabel}</span>
+          <span className="min-w-0 truncate leading-[1] text-foreground" title={titleLabel}>
+            {titleLabel}
+          </span>
         </span>
 
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
+          className="absolute top-1/2 right-3 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
           aria-label={isCopied ? 'Copied code' : 'Copy code'}
           title={isCopied ? 'Copied' : 'Copy'}
         >

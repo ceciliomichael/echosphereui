@@ -1,5 +1,6 @@
 import { Check, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { LuLoader } from 'react-icons/lu'
 import type { ConversationPreview } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
 
@@ -80,9 +81,16 @@ export function ConversationHistoryItem({
         className="flex h-8 w-[96px] shrink-0 cursor-pointer items-center justify-end"
       >
         {!isDeleteConfirming ? (
-          <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-subtle-foreground group-hover:hidden">
-            {conversation.updatedAtLabel}
-          </span>
+          conversation.hasRunningTask ? (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium text-subtle-foreground group-hover:hidden">
+              <LuLoader className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <span>Running</span>
+            </span>
+          ) : (
+            <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-subtle-foreground group-hover:hidden">
+              {conversation.updatedAtLabel}
+            </span>
+          )
         ) : null}
 
         <Tooltip content={isDeleteConfirming ? 'Click again to delete thread' : 'Delete thread'} side="right">

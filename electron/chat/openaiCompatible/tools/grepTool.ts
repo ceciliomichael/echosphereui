@@ -81,6 +81,7 @@ export const grepTool: OpenAICompatibleToolDefinition = {
     })
 
     return {
+      matchCount: searchResult.matches.length,
       matches: searchResult.matches.map((match) => ({
         columnNumber: match.columnNumber,
         lineNumber: match.lineNumber,
@@ -90,6 +91,7 @@ export const grepTool: OpenAICompatibleToolDefinition = {
       ok: true,
       path: toDisplayPath(relativePath),
       pattern,
+      targetKind: 'path',
       truncated: searchResult.truncated,
     }
   },

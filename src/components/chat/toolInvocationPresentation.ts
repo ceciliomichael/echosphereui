@@ -1,4 +1,6 @@
 import type { ToolInvocationTrace } from '../../types/chat'
+import { getRelativeDisplayPath } from '../../lib/pathPresentation'
+import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolArgumentsValue {
   absolute_path?: unknown
@@ -105,6 +107,12 @@ function getBasename(absolutePath: string) {
 }
 
 function getToolVerb(invocation: ToolInvocationTrace) {
+  const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const operation =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
+      ? parsedResult.metadata.semantics.operation
+      : null
+
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
   }
@@ -130,11 +138,35 @@ function getToolVerb(invocation: ToolInvocationTrace) {
   }
 
   if (invocation.toolName === 'write') {
-    return invocation.state === 'running' ? 'Creating' : invocation.state === 'completed' ? 'Created' : 'Create failed'
+    if (invocation.state === 'running') {
+      return 'Writing'
+    }
+
+    if (invocation.state === 'failed') {
+      return 'Write failed'
+    }
+
+    if (operation === 'overwrite') {
+      return 'Overwrote'
+    }
+
+    if (operation === 'noop') {
+      return 'Verified'
+    }
+
+    return 'Created'
   }
 
   if (invocation.toolName === 'edit') {
-    return invocation.state === 'running' ? 'Editing' : invocation.state === 'completed' ? 'Edited' : 'Edit failed'
+    if (invocation.state === 'running') {
+      return 'Editing'
+    }
+
+    if (invocation.state === 'failed') {
+      return 'Edit failed'
+    }
+
+    return operation === 'noop' ? 'Verified' : 'Edited'
   }
 
   return invocation.state === 'running'
@@ -144,14 +176,24 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : `Failed ${invocation.toolName}`
 }
 
-function getToolTarget(invocation: ToolInvocationTrace) {
+function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
+  const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const structuredPath = parsedResult?.metadata?.subject?.path
+  if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
+    if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
+      return structuredPath
+    }
+
+    return getBasename(structuredPath)
+  }
+
   const absolutePath = getAbsolutePath(invocation)
   if (!absolutePath) {
     return null
   }
 
   if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
-    return absolutePath
+    return workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, absolutePath) : absolutePath
   }
 
   return getBasename(absolutePath)
@@ -160,6 +202,7 @@ function getToolTarget(invocation: ToolInvocationTrace) {
 export function getToolInvocationHeaderLabel(
   invocation: ToolInvocationTrace,
   overrideState?: ToolInvocationTrace['state'],
+  workspaceRootPath?: string | null,
 ) {
   const effectiveInvocation =
     overrideState === undefined
@@ -168,6 +211,6 @@ export function getToolInvocationHeaderLabel(
           ...invocation,
           state: overrideState,
         }
-  const target = getToolTarget(invocation)
+  const target = getToolTarget(invocation, workspaceRootPath)
   return target ? `${getToolVerb(effectiveInvocation)} ${target}` : getToolVerb(effectiveInvocation)
 }

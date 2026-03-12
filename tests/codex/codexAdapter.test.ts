@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { StreamDeltaEvent } from '../../electron/chat/providerTypes'
 import {
+  buildCodexPayload,
   buildCodexInputMessages,
   getCodexToolDefinitions,
   parseSseResponseStream,
@@ -72,13 +73,29 @@ test('buildCodexInputMessages groups current-turn tool results into one user-sty
       content: [
         {
           text:
-            'Tool result context:\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
+            'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state.\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
           type: 'input_text',
         },
       ],
       role: 'user',
     },
   ])
+})
+
+test('buildCodexPayload keeps parallel tool call batching enabled', async () => {
+  const payload = await buildCodexPayload(
+    {
+      agentContextRootPath: 'C:/workspace',
+      chatMode: 'agent',
+      messages: [],
+      modelId: 'gpt-5-codex',
+      providerId: 'codex',
+      reasoningEffort: 'medium',
+    },
+    [],
+  )
+
+  assert.equal(payload.parallel_tool_calls, true)
 })
 
 test('parseSseResponseStream assembles native Codex tool calls from streamed function call events', async () => {

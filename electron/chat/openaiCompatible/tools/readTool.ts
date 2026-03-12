@@ -45,9 +45,11 @@ export const readTool: OpenAICompatibleToolDefinition = {
     return {
       content: selectedLines.join('\n'),
       endLine: safeEndLine,
+      lineCount: selectedLines.length,
       ok: true,
       path: toDisplayPath(relativePath),
       startLine: safeStartLine,
+      targetKind: 'file',
       truncated: safeEndLine < lines.length,
     }
   },

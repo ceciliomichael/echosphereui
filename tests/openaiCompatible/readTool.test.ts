@@ -40,9 +40,11 @@ test('read tool returns only focused file context fields', async () => {
     assert.deepEqual(result, {
       content: 'one\ntwo',
       endLine: 2,
+      lineCount: 2,
       ok: true,
       path: 'src/index.ts',
       startLine: 1,
+      targetKind: 'file',
       truncated: true,
     })
   })

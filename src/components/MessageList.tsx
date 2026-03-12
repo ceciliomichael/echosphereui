@@ -36,6 +36,7 @@ interface MessageListProps {
   streamingAssistantMessageId?: string | null
   streamingWaitingIndicatorVariant?: AssistantWaitingIndicatorVariant | null
   streamingTextActive?: boolean
+  workspaceRootPath?: string | null
 }
 
 interface MessageRowProps {
@@ -65,6 +66,7 @@ interface MessageRowProps {
   showReasoningEffortSelector?: boolean
   waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
   isTextStreaming?: boolean
+  workspaceRootPath?: string | null
 }
 
 const MessageRow = memo(
@@ -95,6 +97,7 @@ const MessageRow = memo(
     showReasoningEffortSelector,
     waitingIndicatorVariant,
     isTextStreaming = false,
+    workspaceRootPath = null,
   }: MessageRowProps) {
     return (
       <div className={message.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
@@ -145,6 +148,7 @@ const MessageRow = memo(
             toolInvocations={message.toolInvocations}
             waitingIndicatorVariant={waitingIndicatorVariant}
             isTextStreaming={isTextStreaming}
+            workspaceRootPath={workspaceRootPath}
           />
         )}
       </div>
@@ -213,6 +217,7 @@ export function MessageList({
   streamingAssistantMessageId = null,
   streamingWaitingIndicatorVariant = null,
   streamingTextActive = false,
+  workspaceRootPath = null,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const visibleMessages = messages.filter((message) => isVisibleTranscriptMessage(message))
@@ -254,6 +259,7 @@ export function MessageList({
             showReasoningEffortSelector={showReasoningEffortSelector}
             waitingIndicatorVariant={streamingAssistantMessageId === msg.id ? streamingWaitingIndicatorVariant ?? 'thinking' : undefined}
             isTextStreaming={streamingAssistantMessageId === msg.id ? streamingTextActive : false}
+            workspaceRootPath={workspaceRootPath}
           />
         ))}
       </div>

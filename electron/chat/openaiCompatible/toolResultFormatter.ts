@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { getDiffSummary } from '../../../src/lib/textDiff'
+import {
+  formatStructuredToolResultContent,
+  parseStructuredToolResultContent,
+  type StructuredToolResultMetadata,
+} from '../../../src/lib/toolResultContent'
 import type { Message, ToolInvocationResultPresentation, ToolInvocationTrace } from '../../../src/types/chat'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 
@@ -30,6 +35,15 @@ function formatArgumentsText(argumentsText: string) {
     return JSON.stringify(parsedValue, null, 2)
   } catch {
     return argumentsText
+  }
+}
+
+function parseArguments(argumentsText: string) {
+  try {
+    const parsedValue = JSON.parse(argumentsText) as unknown
+    return typeof parsedValue === 'object' && parsedValue !== null ? (parsedValue as Record<string, unknown>) : null
+  } catch {
+    return null
   }
 }
 
@@ -92,13 +106,13 @@ function appendTruncationNotice(lines: string[], truncated: boolean) {
 
 function formatTreeLine(name: string, kind: unknown, isLast: boolean) {
   const suffix = kind === 'directory' ? '/' : ''
-  const prefix = isLast ? '`- ' : '|- '
+  const prefix = isLast ? '└─ ' : '├─ '
   return `${prefix}${name}${suffix}`
 }
 
-function formatListResult(semanticResult: Record<string, unknown>) {
-  const path = readString(semanticResult.path) ?? '.'
-  const lines = [`Directory ${path}`]
+function formatListResultBody(semanticResult: Record<string, unknown>) {
+  const subjectPath = readString(semanticResult.path) ?? '.'
+  const lines = [`Directory ${subjectPath}`]
   const entries = readListEntries(semanticResult.entries)
 
   for (const [index, entry] of entries.entries()) {
@@ -114,31 +128,31 @@ function formatListResult(semanticResult: Record<string, unknown>) {
   return lines.join('\n')
 }
 
-function formatReadResult(semanticResult: Record<string, unknown>) {
-  const path = readString(semanticResult.path) ?? 'unknown'
+function formatReadResultBody(semanticResult: Record<string, unknown>) {
+  const subjectPath = readString(semanticResult.path) ?? 'unknown'
   const startLine = readNumber(semanticResult.startLine) ?? 1
   const endLine = readNumber(semanticResult.endLine) ?? startLine
   const content = typeof semanticResult.content === 'string' ? semanticResult.content : ''
-  const fenceLanguage = inferFenceLanguage(path)
-  const lines = [`File ${path} (lines ${startLine}-${endLine})`, `\`\`\`${fenceLanguage ?? ''}`, content, '```']
+  const fenceLanguage = inferFenceLanguage(subjectPath)
+  const lines = [`File ${subjectPath} (lines ${startLine}-${endLine})`, `\`\`\`${fenceLanguage ?? ''}`, content, '```']
 
   appendTruncationNotice(lines, readBoolean(semanticResult.truncated))
   return lines.join('\n')
 }
 
-function formatGlobResult(semanticResult: Record<string, unknown>) {
+function formatGlobResultBody(semanticResult: Record<string, unknown>) {
   const pattern = readString(semanticResult.pattern) ?? '*'
-  const searchPath = readString(semanticResult.path) ?? '.'
+  const subjectPath = readString(semanticResult.path) ?? '.'
   const matches = Array.isArray(semanticResult.matches)
     ? semanticResult.matches.filter((value): value is string => typeof value === 'string' && value.length > 0)
     : []
-  const lines = [`Paths matching ${pattern} in ${searchPath}`, ...matches]
+  const lines = [`Paths matching ${pattern} in ${subjectPath}`, ...matches]
 
   appendTruncationNotice(lines, readBoolean(semanticResult.truncated))
   return lines.join('\n')
 }
 
-function formatGrepResult(semanticResult: Record<string, unknown>) {
+function formatGrepResultBody(semanticResult: Record<string, unknown>) {
   const pattern = readString(semanticResult.pattern) ?? ''
   const lines = [`Search hits for ${pattern}`]
 
@@ -159,9 +173,51 @@ function formatGrepResult(semanticResult: Record<string, unknown>) {
   return lines.join('\n')
 }
 
-function formatMutationResult(semanticResult: Record<string, unknown>) {
+function formatMutationResultBody(semanticResult: Record<string, unknown>) {
   const message = readString(semanticResult.message)
   return message ?? 'Tool completed successfully.'
+}
+
+function formatFallbackResultBody(semanticResult: Record<string, unknown>) {
+  return JSON.stringify(semanticResult, null, 2)
+}
+
+function formatSuccessResultBody(toolName: string, semanticResult: Record<string, unknown>) {
+  if (toolName === 'list') {
+    return formatListResultBody(semanticResult)
+  }
+
+  if (toolName === 'read') {
+    return formatReadResultBody(semanticResult)
+  }
+
+  if (toolName === 'glob') {
+    return formatGlobResultBody(semanticResult)
+  }
+
+  if (toolName === 'grep') {
+    return formatGrepResultBody(semanticResult)
+  }
+
+  if (toolName === 'write' || toolName === 'edit') {
+    return formatMutationResultBody(semanticResult)
+  }
+
+  return formatFallbackResultBody(semanticResult)
+}
+
+function formatFailureResultBody(errorMessage: string, details?: Record<string, unknown>) {
+  const lines = [`Tool failed: ${errorMessage}`]
+
+  if (details) {
+    for (const [key, value] of Object.entries(details)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        lines.push(`${key}: ${value}`)
+      }
+    }
+  }
+
+  return lines.join('\n')
 }
 
 function buildResultPresentation(
@@ -199,49 +255,232 @@ function buildResultPresentation(
   }
 }
 
-function formatFallbackResult(semanticResult: Record<string, unknown>) {
-  return JSON.stringify(semanticResult, null, 2)
-}
+function buildArgumentsSummary(toolName: string, argumentsText: string) {
+  const argumentsValue = parseArguments(argumentsText)
+  if (!argumentsValue) {
+    return undefined
+  }
 
-function formatSuccessResult(toolName: string, semanticResult: Record<string, unknown>) {
   if (toolName === 'list') {
-    return formatListResult(semanticResult)
-  }
-
-  if (toolName === 'read') {
-    return formatReadResult(semanticResult)
-  }
-
-  if (toolName === 'glob') {
-    return formatGlobResult(semanticResult)
-  }
-
-  if (toolName === 'grep') {
-    return formatGrepResult(semanticResult)
-  }
-
-  if (toolName === 'write' || toolName === 'edit') {
-    return formatMutationResult(semanticResult)
-  }
-
-  return formatFallbackResult(semanticResult)
-}
-
-function formatFailureResult(
-  errorMessage: string,
-  details?: Record<string, unknown>,
-) {
-  const lines = [`Tool failed: ${errorMessage}`]
-
-  if (details) {
-    for (const [key, value] of Object.entries(details)) {
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        lines.push(`${key}: ${value}`)
-      }
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      limit: readNumber(argumentsValue.limit) ?? undefined,
     }
   }
 
-  return lines.join('\n')
+  if (toolName === 'read') {
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      max_lines: readNumber(argumentsValue.max_lines) ?? undefined,
+      start_line: readNumber(argumentsValue.start_line) ?? undefined,
+    }
+  }
+
+  if (toolName === 'glob') {
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      max_results: readNumber(argumentsValue.max_results) ?? undefined,
+      pattern: readString(argumentsValue.pattern) ?? undefined,
+    }
+  }
+
+  if (toolName === 'grep') {
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      case_sensitive: readBoolean(argumentsValue.case_sensitive),
+      is_regex: readBoolean(argumentsValue.is_regex),
+      max_results: readNumber(argumentsValue.max_results) ?? undefined,
+      pattern: readString(argumentsValue.pattern) ?? undefined,
+    }
+  }
+
+  if (toolName === 'write') {
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+    }
+  }
+
+  if (toolName === 'edit') {
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      replace_all: readBoolean(argumentsValue.replace_all),
+    }
+  }
+
+  return undefined
+}
+
+function buildSuccessSummary(toolName: string, semanticResult: Record<string, unknown>) {
+  const subjectPath = readString(semanticResult.path) ?? 'unknown'
+  const truncated = readBoolean(semanticResult.truncated)
+
+  if (toolName === 'list') {
+    const entryCount = readNumber(semanticResult.entryCount) ?? readListEntries(semanticResult.entries).length
+    return `Listed ${subjectPath} with ${entryCount} visible entr${entryCount === 1 ? 'y' : 'ies'}${truncated ? ' (truncated)' : ''}.`
+  }
+
+  if (toolName === 'read') {
+    const startLine = readNumber(semanticResult.startLine) ?? 1
+    const endLine = readNumber(semanticResult.endLine) ?? startLine
+    return `Read ${subjectPath} lines ${startLine}-${endLine}${truncated ? ' (truncated)' : ''}.`
+  }
+
+  if (toolName === 'glob') {
+    const matchCount = readNumber(semanticResult.matchCount) ?? 0
+    const pattern = readString(semanticResult.pattern) ?? '*'
+    return `Found ${matchCount} path match${matchCount === 1 ? '' : 'es'} for ${pattern} in ${subjectPath}${truncated ? ' (truncated)' : ''}.`
+  }
+
+  if (toolName === 'grep') {
+    const matchCount = readNumber(semanticResult.matchCount) ?? 0
+    const pattern = readString(semanticResult.pattern) ?? ''
+    return `Found ${matchCount} search hit${matchCount === 1 ? '' : 's'} for ${pattern} in ${subjectPath}${truncated ? ' (truncated)' : ''}.`
+  }
+
+  if (toolName === 'write' || toolName === 'edit') {
+    return readString(semanticResult.message) ?? 'Tool completed successfully.'
+  }
+
+  return 'Tool completed successfully.'
+}
+
+function buildSubject(toolName: string, semanticResult: Record<string, unknown>) {
+  const subjectPath = readString(semanticResult.path)
+  if (!subjectPath) {
+    return undefined
+  }
+
+  const defaultKind =
+    toolName === 'list' ? 'directory' : toolName === 'glob' || toolName === 'grep' ? 'path' : 'file'
+  return {
+    kind: readString(semanticResult.targetKind) ?? defaultKind,
+    path: subjectPath,
+  }
+}
+
+function filterUndefinedEntries(input: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
+}
+
+function buildSuccessSemantics(toolName: string, semanticResult: Record<string, unknown>) {
+  const sharedSemantics = { authoritative: true }
+
+  if (toolName === 'list') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      entry_count: readNumber(semanticResult.entryCount) ?? readListEntries(semanticResult.entries).length,
+      total_visible_entry_count: readNumber(semanticResult.totalVisibleEntryCount) ?? undefined,
+    })
+  }
+
+  if (toolName === 'read') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      end_line: readNumber(semanticResult.endLine) ?? undefined,
+      language: inferFenceLanguage(readString(semanticResult.path) ?? ''),
+      line_count: readNumber(semanticResult.lineCount) ?? undefined,
+      start_line: readNumber(semanticResult.startLine) ?? undefined,
+    })
+  }
+
+  if (toolName === 'glob') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      match_count: readNumber(semanticResult.matchCount) ?? undefined,
+      pattern: readString(semanticResult.pattern) ?? undefined,
+      total_match_count: readNumber(semanticResult.totalMatchCount) ?? undefined,
+    })
+  }
+
+  if (toolName === 'grep') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      match_count: readNumber(semanticResult.matchCount) ?? undefined,
+      pattern: readString(semanticResult.pattern) ?? undefined,
+    })
+  }
+
+  if (toolName === 'write') {
+    const operation = readString(semanticResult.operation) ?? undefined
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      content_changed: readBoolean(semanticResult.contentChanged),
+      end_line_number: readNumber(semanticResult.endLineNumber) ?? undefined,
+      mutation_applied: operation === 'create' || operation === 'overwrite',
+      operation,
+      target_exists_after_call: true,
+      workspace_effect:
+        operation === 'create'
+          ? 'file_created'
+          : operation === 'overwrite'
+            ? 'file_overwritten'
+            : operation === 'noop'
+              ? 'file_already_matched'
+              : undefined,
+      start_line_number: readNumber(semanticResult.startLineNumber) ?? undefined,
+    })
+  }
+
+  if (toolName === 'edit') {
+    const operation = readString(semanticResult.operation) ?? undefined
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      content_changed: readBoolean(semanticResult.contentChanged),
+      end_line_number: readNumber(semanticResult.endLineNumber) ?? undefined,
+      mutation_applied: operation !== 'noop',
+      operation,
+      replacement_count: readNumber(semanticResult.replacementCount) ?? undefined,
+      start_line_number: readNumber(semanticResult.startLineNumber) ?? undefined,
+      target_exists_after_call: true,
+      workspace_effect: operation === 'noop' ? 'file_already_matched' : 'file_edited',
+    })
+  }
+
+  return {}
+}
+
+function buildSuccessMetadata(
+  toolCall: OpenAICompatibleToolCall,
+  semanticResult: Record<string, unknown>,
+): StructuredToolResultMetadata {
+  const argumentsSummary = buildArgumentsSummary(toolCall.name, toolCall.argumentsText)
+  const subject = buildSubject(toolCall.name, semanticResult)
+  const semantics = buildSuccessSemantics(toolCall.name, semanticResult)
+
+  return {
+    ...(argumentsSummary === undefined ? {} : { arguments: filterUndefinedEntries(argumentsSummary) }),
+    schema: 'echosphere.tool_result/v1',
+    ...(Object.keys(semantics).length === 0 ? {} : { semantics }),
+    status: 'success',
+    ...(subject === undefined ? {} : { subject }),
+    summary: buildSuccessSummary(toolCall.name, semanticResult),
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+    ...(readBoolean(semanticResult.truncated) ? { truncated: true } : {}),
+  }
+}
+
+function buildFailureMetadata(
+  toolCall: OpenAICompatibleToolCall,
+  errorMessage: string,
+  details?: Record<string, unknown>,
+): StructuredToolResultMetadata {
+  const argumentsSummary = buildArgumentsSummary(toolCall.name, toolCall.argumentsText)
+  const semantics = filterUndefinedEntries({
+    authoritative: true,
+    ...(details ? { details } : {}),
+    error_message: errorMessage,
+  })
+
+  return {
+    ...(argumentsSummary === undefined ? {} : { arguments: filterUndefinedEntries(argumentsSummary) }),
+    schema: 'echosphere.tool_result/v1',
+    ...(Object.keys(semantics).length === 0 ? {} : { semantics }),
+    status: 'error',
+    summary: errorMessage,
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+  }
 }
 
 export function buildStartedToolInvocation(toolCall: OpenAICompatibleToolCall, startedAt: number): ToolInvocationTrace {
@@ -260,7 +499,8 @@ export function buildSuccessfulToolArtifacts(
   startedAt: number,
   completedAt: number,
 ) {
-  const resultContent = formatSuccessResult(toolCall.name, semanticResult)
+  const resultBody = formatSuccessResultBody(toolCall.name, semanticResult)
+  const resultContent = formatStructuredToolResultContent(buildSuccessMetadata(toolCall, semanticResult), resultBody)
   const resultPresentation = buildResultPresentation(toolCall.name, semanticResult)
   const syntheticMessage: Message = {
     content: resultContent,
@@ -295,7 +535,8 @@ export function buildFailedToolArtifacts(
   completedAt: number,
   details?: Record<string, unknown>,
 ) {
-  const resultContent = formatFailureResult(errorMessage, details)
+  const resultBody = formatFailureResultBody(errorMessage, details)
+  const resultContent = formatStructuredToolResultContent(buildFailureMetadata(toolCall, errorMessage, details), resultBody)
   const syntheticMessage: Message = {
     content: resultContent,
     id: randomUUID(),
@@ -325,5 +566,91 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
     return null
   }
 
-  return ['Tool result context:', ...toolContents].join('\n\n')
+  const toolSummaryLines: string[] = []
+  const latestMutationStateByPath = new Map<string, { operation: string | null; path: string; toolName: string }>()
+
+  for (const toolContent of toolContents) {
+    const parsedResult = parseStructuredToolResultContent(toolContent)
+    const metadata = parsedResult.metadata
+    if (!metadata) {
+      continue
+    }
+
+    const toolSummary = metadata.summary.trim()
+    if (toolSummary.length > 0) {
+      const statusPrefix = metadata.status === 'success' ? 'success' : 'failure'
+      toolSummaryLines.push(`- ${metadata.toolName} ${statusPrefix}: ${toolSummary}`)
+    }
+
+    if (metadata.status !== 'success') {
+      continue
+    }
+
+    if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
+      continue
+    }
+
+    const subjectPath = metadata.subject?.path
+    if (typeof subjectPath !== 'string' || subjectPath.trim().length === 0) {
+      continue
+    }
+
+    const normalizedPath = subjectPath.trim()
+    const semantics = metadata.semantics
+    const operation =
+      semantics && typeof semantics.operation === 'string' && semantics.operation.trim().length > 0
+        ? semantics.operation.trim()
+        : null
+
+    // Preserve latest-wins ordering for repeated mutations on the same path.
+    if (latestMutationStateByPath.has(normalizedPath)) {
+      latestMutationStateByPath.delete(normalizedPath)
+    }
+
+    latestMutationStateByPath.set(normalizedPath, {
+      operation,
+      path: normalizedPath,
+      toolName: metadata.toolName,
+    })
+  }
+
+  const latestMutationStateLines = Array.from(latestMutationStateByPath.values()).map((entry) => {
+    if (entry.toolName === 'write') {
+      if (entry.operation === 'create') {
+        return `- ${entry.path} now exists in the workspace after a successful write create.`
+      }
+
+      if (entry.operation === 'overwrite') {
+        return `- ${entry.path} now reflects the latest successful write content.`
+      }
+
+      if (entry.operation === 'noop') {
+        return `- ${entry.path} already matched the requested write content and remains unchanged.`
+      }
+    }
+
+    if (entry.toolName === 'edit') {
+      if (entry.operation === 'noop') {
+        return `- ${entry.path} already matched the requested edit outcome and remains unchanged.`
+      }
+
+      return `- ${entry.path} now reflects the latest successful edit changes.`
+    }
+
+    const operationSuffix = entry.operation ? ` (${entry.operation})` : ''
+    return `- ${entry.path}: ${entry.toolName}${operationSuffix}`
+  })
+  const mutationStateSummary =
+    latestMutationStateLines.length > 0
+      ? ['Latest acknowledged workspace file state:', ...latestMutationStateLines].join('\n')
+      : null
+  const toolSummarySection =
+    toolSummaryLines.length > 0 ? ['Acknowledged tool result summaries:', ...toolSummaryLines].join('\n') : null
+
+  return [
+    'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state.',
+    ...(toolSummarySection ? [toolSummarySection] : []),
+    ...(mutationStateSummary ? [mutationStateSummary] : []),
+    ...toolContents,
+  ].join('\n\n')
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChatInterface } from './pages/ChatInterface'
 import { SettingsInterface } from './pages/SettingsInterface'
 import { useAppSettings } from './hooks/useAppSettings'
+import { useChatMessages } from './hooks/useChatMessages'
 import { useDocumentTheme } from './hooks/useDocumentTheme'
 
 type AppScreen = 'chat' | 'settings'
@@ -9,6 +10,7 @@ type AppScreen = 'chat' | 'settings'
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('chat')
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
+  const chatMessages = useChatMessages(settings.language)
   const handleSidebarWidthChange = (sidebarWidth: number) => {
     void updateSettings({ sidebarWidth })
   }
@@ -39,9 +41,9 @@ export default function App() {
 
   return (
     <ChatInterface
+      chatMessages={chatMessages}
       settings={settings}
       onUpdateSettings={updateSettings}
-      language={settings.language}
       onSidebarWidthChange={handleSidebarWidthChange}
       sendMessageOnEnter={settings.sendMessageOnEnter}
       sidebarWidth={settings.sidebarWidth}
