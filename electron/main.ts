@@ -15,6 +15,7 @@ import type {
   ApiKeyProviderId,
   AppendConversationMessagesInput,
   AppSettings,
+  EstimateContextUsageInput,
   SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
@@ -42,6 +43,7 @@ import {
   removeApiKeyProvider,
   saveApiKeyProvider,
 } from './providers/service'
+import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -198,6 +200,9 @@ function registerHistoryHandlers() {
     startChatStream(event.sender, input),
   )
   ipcMain.handle('chat:stream:cancel', async (event, streamId: string) => cancelChatStream(event.sender, streamId))
+  ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) =>
+    estimateChatContextUsage(input),
+  )
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common

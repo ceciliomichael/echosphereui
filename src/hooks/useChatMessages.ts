@@ -104,6 +104,7 @@ export function useChatMessages(language: AppLanguage) {
     messages,
     selectedChatMode: draftChatMode,
     selectedFolderName: sessionState.selectedFolderName,
+    selectedFolderPath: sessionState.selectedFolderPath,
     selectConversation: conversationActions.selectConversation,
     selectFolder: conversationActions.selectFolder,
     setEditComposerAttachments: composerState.setEditComposerAttachments,

@@ -2,17 +2,19 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
+import type { ChatAttachment, ChatMode, ContextUsageEstimate, ReasoningEffort } from '../types/chat'
 import { Tooltip } from './Tooltip'
+import { ContextIndicator } from './chat/ContextIndicator'
 import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
 import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
-import type { ChatAttachment, ChatMode, ReasoningEffort } from '../types/chat'
 import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface ChatInputProps {
   attachments?: ChatAttachment[]
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
+  contextUsage?: ContextUsageEstimate
   disabled?: boolean
   focusSignal?: number
   isEditing?: boolean
@@ -61,6 +63,7 @@ export function ChatInput({
   disabled = false,
   onAbort,
   onAttachmentsChange,
+  contextUsage,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -303,7 +306,9 @@ export function ChatInput({
             </div>
           ) : null}
 
-          <div className="flex shrink-0 justify-end self-end">
+          <div className="flex shrink-0 items-center justify-end gap-2 self-end">
+            {contextUsage ? <ContextIndicator disabled={disabled && !canAbort} usage={contextUsage} /> : null}
+
             <Tooltip content={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}>
               <button
                 type="button"

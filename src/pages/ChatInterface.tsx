@@ -10,6 +10,7 @@ import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useProvidersState } from '../hooks/useProvidersState'
+import { useChatContextUsage } from '../hooks/useChatContextUsage'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppSettings } from '../types/chat'
 
@@ -62,6 +63,7 @@ export function ChatInterface({
     messages,
     selectedChatMode,
     selectedFolderName,
+    selectedFolderPath,
     setSelectedChatMode,
     setEditComposerValue,
     setEditComposerAttachments,
@@ -83,6 +85,12 @@ export function ChatInterface({
     providerLabel: chatRuntimeConfig.providerLabel,
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
   }
+  const contextUsage = useChatContextUsage({
+    agentContextRootPath: activeConversationRootPath ?? selectedFolderPath,
+    chatMode: selectedChatMode,
+    messages,
+    providerId: runtimeSelection.providerId,
+  })
   const {
     availableReasoningEfforts,
     modelOptions,
@@ -195,6 +203,7 @@ export function ChatInterface({
           <div className="chat-input-shell">
             <ChatInput
               attachments={mainComposerAttachments}
+              contextUsage={contextUsage}
               value={mainComposerValue}
               onAttachmentsChange={setMainComposerAttachments}
               onValueChange={setMainComposerValue}

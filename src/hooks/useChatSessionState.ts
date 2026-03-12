@@ -308,6 +308,7 @@ export function useChatSessionState(language: AppLanguage) {
     runningConversationIds,
     selectedFolderId,
     selectedFolderName: getSelectedFolderName(folderSummaries, selectedFolderId),
+    selectedFolderPath: selectedFolderId === null ? null : folderSummaries.find((folder) => folder.id === selectedFolderId)?.path ?? null,
     setError,
     setIsLoading,
     updateConversationRuntimeState,

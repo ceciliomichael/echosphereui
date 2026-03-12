@@ -223,6 +223,21 @@ export interface StartChatStreamResult {
   streamId: string
 }
 
+export interface EstimateContextUsageInput {
+  agentContextRootPath: string | null
+  chatMode: ChatMode
+  messages: Message[]
+  providerId: ChatProviderId
+}
+
+export interface ContextUsageEstimate {
+  historyTokens: number
+  maxTokens: number
+  systemPromptTokens: number
+  toolResultsTokens: number
+  totalTokens: number
+}
+
 export type ChatStreamEvent =
   | {
       streamId: string
@@ -325,6 +340,7 @@ export interface EchosphereModelsApi {
 
 export interface EchosphereChatApi {
   cancelStream: (streamId: string) => Promise<void>
+  estimateContextUsage: (input: EstimateContextUsageInput) => Promise<ContextUsageEstimate>
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
   startStream: (input: StartChatStreamInput) => Promise<StartChatStreamResult>
 }
