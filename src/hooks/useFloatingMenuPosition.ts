@@ -3,9 +3,11 @@ import { useLayoutEffect, useState, type CSSProperties, type RefObject } from 'r
 interface UseFloatingMenuPositionInput {
   anchorRef: RefObject<HTMLElement | null>
   isOpen: boolean
+  matchAnchorWidth?: boolean
   menuRef: RefObject<HTMLElement | null>
   minViewportMargin?: number
   offset?: number
+  preferredPlacement?: 'above' | 'below'
 }
 
 const DEFAULT_OFFSET = 6
@@ -14,9 +16,11 @@ const DEFAULT_VIEWPORT_MARGIN = 8
 export function useFloatingMenuPosition({
   anchorRef,
   isOpen,
+  matchAnchorWidth = true,
   menuRef,
   minViewportMargin = DEFAULT_VIEWPORT_MARGIN,
   offset = DEFAULT_OFFSET,
+  preferredPlacement = 'below',
 }: UseFloatingMenuPositionInput) {
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({
     left: 0,
@@ -47,7 +51,10 @@ export function useFloatingMenuPosition({
       const menuHeight = menuElement?.scrollHeight ?? menuRect?.height ?? 0
       const availableBelow = Math.max(viewportHeight - anchorRect.bottom - offset - minViewportMargin, 0)
       const availableAbove = Math.max(anchorRect.top - offset - minViewportMargin, 0)
-      const shouldOpenAbove = availableBelow < menuHeight && availableAbove > availableBelow
+      const shouldOpenAbove =
+        preferredPlacement === 'above'
+          ? availableAbove >= menuHeight
+          : availableBelow < menuHeight && availableAbove > availableBelow
       const maxHeight = Math.max(shouldOpenAbove ? availableAbove : availableBelow, 0)
       const unclampedLeft = anchorRect.left
       const maxLeft = Math.max(viewportWidth - menuWidth - minViewportMargin, minViewportMargin)
@@ -59,7 +66,7 @@ export function useFloatingMenuPosition({
       setMenuStyle({
         left,
         maxHeight,
-        minWidth: anchorRect.width,
+        minWidth: matchAnchorWidth ? anchorRect.width : undefined,
         top,
         visibility: 'visible',
       })
@@ -87,7 +94,7 @@ export function useFloatingMenuPosition({
       window.removeEventListener('resize', updateMenuPosition)
       window.removeEventListener('scroll', updateMenuPosition, true)
     }
-  }, [anchorRef, isOpen, menuRef, minViewportMargin, offset])
+  }, [anchorRef, isOpen, matchAnchorWidth, menuRef, minViewportMargin, offset, preferredPlacement])
 
   return menuStyle
 }
