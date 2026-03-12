@@ -1,7 +1,7 @@
 import { memo, useRef } from 'react'
 import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
-import type { AssistantWaitingIndicatorVariant, ChatMode, Message, ReasoningEffort } from '../types/chat'
+import type { AssistantWaitingIndicatorVariant, ChatAttachment, ChatMode, Message, ReasoningEffort } from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
@@ -12,6 +12,7 @@ interface MessageListProps {
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
   conversationId: string | null
+  composerAttachments: ChatAttachment[]
   composerValue: string
   composerFocusSignal?: number
   editingMessageId?: string | null
@@ -19,6 +20,7 @@ interface MessageListProps {
   messages: Message[]
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
@@ -39,6 +41,7 @@ interface MessageListProps {
 interface MessageRowProps {
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
+  composerAttachments: ChatAttachment[]
   composerFocusSignal?: number
   composerValue: string
   isEditing: boolean
@@ -47,6 +50,7 @@ interface MessageRowProps {
   message: Message
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
@@ -67,6 +71,7 @@ const MessageRow = memo(
   function MessageRow({
     chatModeOptions,
     chatModeSelectorDisabled,
+    composerAttachments,
     composerFocusSignal,
     composerValue,
     isEditing,
@@ -75,6 +80,7 @@ const MessageRow = memo(
     message,
     onCancelEditingMessage,
     onChatModeChange,
+    onComposerAttachmentsChange,
     onComposerValueChange,
     onEditUserMessage,
     onModelChange,
@@ -96,7 +102,9 @@ const MessageRow = memo(
           isEditing ? (
             <div className="-mx-4 w-[calc(100%+2rem)]">
               <ChatInput
+                attachments={composerAttachments}
                 value={composerValue}
+                onAttachmentsChange={onComposerAttachmentsChange}
                 onValueChange={onComposerValueChange}
                 onSend={onSendEditedMessage}
                 onCancelEdit={onCancelEditingMessage}
@@ -121,6 +129,7 @@ const MessageRow = memo(
           ) : (
             <div className="-mx-4 w-[calc(100%+2rem)]">
               <UserMessage
+                attachments={message.attachments}
                 content={message.content}
                 onEdit={onEditUserMessage ? () => onEditUserMessage(message.id) : undefined}
               />
@@ -162,6 +171,7 @@ const MessageRow = memo(
 
     return (
       previousProps.composerValue === nextProps.composerValue &&
+      previousProps.composerAttachments === nextProps.composerAttachments &&
       previousProps.composerFocusSignal === nextProps.composerFocusSignal &&
       previousProps.isSending === nextProps.isSending &&
       previousProps.chatModeSelectorDisabled === nextProps.chatModeSelectorDisabled &&
@@ -179,11 +189,13 @@ export function MessageList({
   chatModeOptions,
   chatModeSelectorDisabled,
   conversationId,
+  composerAttachments,
   messages,
   editingMessageId = null,
   onEditUserMessage,
   composerValue,
   onComposerValueChange,
+  onComposerAttachmentsChange,
   onSendEditedMessage,
   onCancelEditingMessage,
   onChatModeChange,
@@ -218,6 +230,7 @@ export function MessageList({
             key={msg.id}
             chatModeOptions={chatModeOptions}
             chatModeSelectorDisabled={chatModeSelectorDisabled}
+            composerAttachments={composerAttachments}
             composerFocusSignal={composerFocusSignal}
             composerValue={composerValue}
             isEditing={editingMessageId === msg.id}
@@ -226,6 +239,7 @@ export function MessageList({
             message={msg}
             onCancelEditingMessage={onCancelEditingMessage}
             onChatModeChange={onChatModeChange}
+            onComposerAttachmentsChange={onComposerAttachmentsChange}
             onComposerValueChange={onComposerValueChange}
             onEditUserMessage={onEditUserMessage}
             onModelChange={onModelChange}

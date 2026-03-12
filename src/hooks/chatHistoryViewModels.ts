@@ -1,6 +1,8 @@
 import type { AppLanguage } from '../lib/appSettings'
+import { getChatAttachmentSummary } from '../lib/chatAttachments'
 import { getConversationPreviewContent } from '../lib/chatMessageMetadata'
 import type {
+  ChatAttachment,
   ConversationFolderSummary,
   ConversationGroupPreview,
   ConversationPreview,
@@ -74,8 +76,27 @@ function formatUpdatedAtLabel(timestamp: number, language: AppLanguage) {
 
 export function getConversationTitle(seed: string) {
   const normalized = seed.trim().replace(/\s+/g, ' ')
+  if (normalized.length === 0) {
+    return 'New chat'
+  }
+
   const conciseTitle = normalized.split(' ').slice(0, 7).join(' ')
   return conciseTitle.length > 48 ? `${conciseTitle.slice(0, 45)}...` : conciseTitle
+}
+
+export function getConversationTitleFromInput(seed: string, attachments: readonly ChatAttachment[]) {
+  const normalized = seed.trim().replace(/\s+/g, ' ')
+  if (normalized.length > 0) {
+    return getConversationTitle(normalized)
+  }
+
+  const attachmentSummary = getChatAttachmentSummary(attachments)
+  if (!attachmentSummary) {
+    return 'New chat'
+  }
+
+  const prefixedTitle = `Attached ${attachmentSummary}`
+  return prefixedTitle.length > 48 ? `${prefixedTitle.slice(0, 45)}...` : prefixedTitle
 }
 
 function mapConversationPreview(

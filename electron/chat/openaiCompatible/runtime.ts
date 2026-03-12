@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import type {
   ChatCompletionChunk,
+  ChatCompletionContentPart,
+  ChatCompletionContentPartImage,
+  ChatCompletionContentPartText,
   ChatCompletionCreateParamsStreaming,
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions/completions'
 import type { ChatMode, Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
+import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
 import {
   buildOpenAIClient,
   hasNonEmptyString,
@@ -45,18 +49,40 @@ interface ToolCallAccumulator {
 }
 
 function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
-  if (!hasText(message.content)) {
-    return null
-  }
-
   if (message.role === 'user') {
+    const contentParts: ChatCompletionContentPart[] = []
+
+    for (const textBlock of getUserMessageTextBlocks(message)) {
+      contentParts.push({
+        text: textBlock,
+        type: 'text',
+      } satisfies ChatCompletionContentPartText)
+    }
+
+    for (const attachment of getUserMessageImageAttachments(message)) {
+      contentParts.push({
+        image_url: {
+          url: attachment.dataUrl,
+        },
+        type: 'image_url',
+      } satisfies ChatCompletionContentPartImage)
+    }
+
+    if (contentParts.length === 0) {
+      return null
+    }
+
     return {
-      content: message.content,
+      content: contentParts,
       role: 'user',
     }
   }
 
   if (message.role === 'assistant') {
+    if (!hasText(message.content)) {
+      return null
+    }
+
     return {
       content: message.content,
       role: 'assistant',

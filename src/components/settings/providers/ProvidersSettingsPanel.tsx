@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../../../types/chat'
-import { ApiKeyProviderAccordion } from './ApiKeyProviderAccordion'
+import { ApiKeyProviderAccordion, type ProviderActionFeedback } from './ApiKeyProviderAccordion'
 import { CodexProviderAccordion } from './CodexProviderAccordion'
 import {
   buildInitialDraftMap,
@@ -27,6 +27,7 @@ interface ProvidersSettingsPanelProps {
 
 type ExpandedProviderId = ApiKeyProviderId | 'codex' | null
 type ProviderValidationErrors = Partial<Record<ApiKeyProviderId, string>>
+type ProviderActionFeedbackMap = Partial<Record<ApiKeyProviderId, ProviderActionFeedback>>
 
 const PRIMARY_BUTTON_CLASS_NAME =
   'h-10 rounded-xl border border-[#d8d8d8] bg-white px-3.5 text-sm font-medium text-black transition-[background-color,border-color,box-shadow,transform,color] duration-150 hover:border-[#b8b8b8] hover:bg-[#e7e7e7] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white disabled:border-[#d8d8d8] disabled:text-black/55'
@@ -43,6 +44,7 @@ export function ProvidersSettingsPanel({
   const [expandedProviderId, setExpandedProviderId] = useState<ExpandedProviderId>('codex')
   const [providerDrafts, setProviderDrafts] = useState<ApiKeyProviderDraftMap>(() => buildInitialDraftMap())
   const [validationErrors, setValidationErrors] = useState<ProviderValidationErrors>({})
+  const [providerActionFeedback, setProviderActionFeedback] = useState<ProviderActionFeedbackMap>({})
 
   useEffect(() => {
     setProviderDrafts((currentValue) => {
@@ -101,6 +103,25 @@ export function ProvidersSettingsPanel({
     }))
   }
 
+  function setProviderFeedback(providerId: ApiKeyProviderId, feedback: ProviderActionFeedback | null) {
+    setProviderActionFeedback((currentValue) => {
+      const previousFeedback = currentValue[providerId]
+      const nextFeedback = feedback ?? undefined
+
+      if (
+        previousFeedback?.label === nextFeedback?.label &&
+        previousFeedback?.tone === nextFeedback?.tone
+      ) {
+        return currentValue
+      }
+
+      return {
+        ...currentValue,
+        [providerId]: nextFeedback,
+      }
+    })
+  }
+
   function updateProviderDraft(providerId: ApiKeyProviderId, input: Partial<ApiKeyProviderDraftMap[ApiKeyProviderId]>) {
     setProviderDrafts((currentValue) => ({
       ...currentValue,
@@ -110,6 +131,7 @@ export function ProvidersSettingsPanel({
       },
     }))
     setProviderValidationError(providerId, null)
+    setProviderFeedback(providerId, null)
   }
 
   function persistAdvancedDefaults(providerId: ApiKeyProviderId) {
@@ -135,6 +157,7 @@ export function ProvidersSettingsPanel({
     const inputBaseUrl = draft.baseUrl.trim()
     const fallbackBaseUrl = apiKeyProviderStatusById[providerId]?.baseUrl?.trim() ?? ''
     const hasStoredApiKey = Boolean(apiKeyProviderStatusById[providerId]?.hasApiKey)
+    const wasConfigured = Boolean(apiKeyProviderStatusById[providerId]?.configured)
     const resolvedBaseUrl = inputBaseUrl || fallbackBaseUrl
 
     if (!schema.apiKeyOptional && !apiKey && !hasStoredApiKey) {
@@ -164,25 +187,31 @@ export function ProvidersSettingsPanel({
       providerId,
     })
 
-    if (didSave && schema.showAdvancedDefaults) {
+    if (!didSave) {
+      setProviderFeedback(providerId, { label: 'Save failed', tone: 'error' })
+      return
+    }
+
+    setProviderFeedback(providerId, { label: wasConfigured ? 'Updated' : 'Saved', tone: 'success' })
+
+    if (schema.showAdvancedDefaults) {
       persistAdvancedDefaults(providerId)
     }
 
-    if (didSave) {
-      setProviderDrafts((currentValue) => ({
-        ...currentValue,
-        [providerId]: {
-          ...currentValue[providerId],
-          apiKey: '',
-          baseUrl: resolvedBaseUrl,
-        },
-      }))
-    }
+    setProviderDrafts((currentValue) => ({
+      ...currentValue,
+      [providerId]: {
+        ...currentValue[providerId],
+        apiKey: '',
+        baseUrl: resolvedBaseUrl,
+      },
+    }))
   }
 
   async function handleClearProvider(providerId: ApiKeyProviderId) {
     const didClear = await onRemoveApiKeyProvider(providerId)
     if (!didClear) {
+      setProviderFeedback(providerId, { label: 'Clear failed', tone: 'error' })
       return
     }
 
@@ -192,6 +221,7 @@ export function ProvidersSettingsPanel({
       [providerId]: fallbackDraftMap[providerId],
     }))
     setProviderValidationError(providerId, null)
+    setProviderFeedback(providerId, { label: 'Cleared', tone: 'success' })
   }
 
   return (
@@ -220,13 +250,12 @@ export function ProvidersSettingsPanel({
             return (
               <ApiKeyProviderAccordion
                 key={schema.id}
+                actionFeedback={providerActionFeedback[schema.id] ?? null}
                 draft={draft}
                 errorMessage={validationErrors[schema.id]}
                 isBusy={isBusy}
-                isClearing={operationState.isRemoving}
                 isExpanded={expandedProviderId === schema.id}
                 isFirst={false}
-                isSaving={operationState.isSaving}
                 onBaseUrlChange={(value) => updateProviderDraft(schema.id, { baseUrl: value })}
                 onClear={() => handleClearProvider(schema.id)}
                 onMaxTokensChange={(value) => updateProviderDraft(schema.id, { maxTokens: normalizeOptionalIntegerInput(value) })}

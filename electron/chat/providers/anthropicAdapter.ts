@@ -1,6 +1,11 @@
-import type { MessageParam, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'
+import type { ImageBlockParam, MessageParam, MessageStreamEvent, TextBlockParam } from '@anthropic-ai/sdk/resources/messages'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
+import {
+  getUserMessageImageAttachments,
+  getUserMessageTextBlocks,
+  parseInlineImageData,
+} from './messageAttachments'
 import {
   ANTHROPIC_DEFAULT_MAX_TOKENS,
   ANTHROPIC_MAX_RETRIES,
@@ -13,19 +18,68 @@ import {
   toAnthropicReasoningEffort,
 } from './anthropicShared'
 
+type AnthropicImageMimeType = 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp'
+
+const ANTHROPIC_SUPPORTED_IMAGE_MIME_TYPES = new Set<AnthropicImageMimeType>([
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+])
+
+function isAnthropicImageMimeType(value: string): value is AnthropicImageMimeType {
+  return ANTHROPIC_SUPPORTED_IMAGE_MIME_TYPES.has(value as AnthropicImageMimeType)
+}
+
 function toAnthropicMessage(message: Message): MessageParam | null {
   if (message.role === 'tool') {
     return null
   }
 
-  const content = message.content.trim()
-  if (content.length === 0) {
+  if (message.role === 'assistant') {
+    const content = message.content.trim()
+    if (content.length === 0) {
+      return null
+    }
+
+    return {
+      content,
+      role: 'assistant',
+    }
+  }
+
+  const contentBlocks: Array<TextBlockParam | ImageBlockParam> = getUserMessageTextBlocks(message).map((textBlock) => ({
+    text: textBlock,
+    type: 'text',
+  }))
+
+  for (const attachment of getUserMessageImageAttachments(message)) {
+    const inlineImage = parseInlineImageData(attachment)
+    if (!inlineImage || !isAnthropicImageMimeType(inlineImage.mimeType)) {
+      contentBlocks.push({
+        text: `[Attached image: ${attachment.fileName}]`,
+        type: 'text',
+      })
+      continue
+    }
+
+    contentBlocks.push({
+      source: {
+        data: inlineImage.base64Data,
+        media_type: inlineImage.mimeType as AnthropicImageMimeType,
+        type: 'base64',
+      },
+      type: 'image',
+    })
+  }
+
+  if (contentBlocks.length === 0) {
     return null
   }
 
   return {
-    content,
-    role: message.role === 'assistant' ? 'assistant' : 'user',
+    content: contentBlocks,
+    role: 'user',
   }
 }
 

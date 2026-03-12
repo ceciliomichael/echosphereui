@@ -47,7 +47,7 @@ export function ConversationFolderSection({
           className={[
             'flex h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-2xl border px-3 text-left transition-colors',
             group.folder.isSelected
-              ? 'border-border bg-[var(--sidebar-raised-surface)] shadow-sm'
+              ? 'border-border bg-[var(--sidebar-raised-surface)]'
               : 'border-transparent bg-[var(--sidebar-muted-surface-mix)] hover:border-border/60 hover:bg-[var(--sidebar-hover-surface)]',
           ].join(' ')}
         >

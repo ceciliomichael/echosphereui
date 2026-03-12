@@ -1,6 +1,11 @@
-import type { Content, GenerateContentResponse } from '@google/genai/web'
+import type { Content, GenerateContentResponse, Part } from '@google/genai/web'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
+import {
+  getUserMessageImageAttachments,
+  getUserMessageTextBlocks,
+  parseInlineImageData,
+} from './messageAttachments'
 import {
   buildGoogleClient,
   GOOGLE_MAX_RETRIES,
@@ -12,18 +17,44 @@ import {
   toGoogleThinkingLevel,
 } from './googleShared'
 
+function buildGoogleUserParts(message: Message): Part[] {
+  const parts: Part[] = []
+
+  for (const textBlock of getUserMessageTextBlocks(message)) {
+    parts.push({ text: textBlock })
+  }
+
+  for (const attachment of getUserMessageImageAttachments(message)) {
+    const inlineImage = parseInlineImageData(attachment)
+    if (!inlineImage) {
+      parts.push({ text: `[Attached image: ${attachment.fileName}]` })
+      continue
+    }
+
+    parts.push({
+      inlineData: {
+        data: inlineImage.base64Data,
+        mimeType: inlineImage.mimeType,
+      },
+    })
+  }
+
+  return parts
+}
+
 function toGoogleContent(message: Message): Content | null {
   if (message.role === 'tool') {
     return null
   }
 
-  const content = message.content.trim()
-  if (content.length === 0) {
+  const parts = message.role === 'assistant' ? [{ text: message.content }] : buildGoogleUserParts(message)
+  const hasVisiblePart = parts.some((part) => typeof part.text === 'string' || part.inlineData !== undefined)
+  if (!hasVisiblePart) {
     return null
   }
 
   return {
-    parts: [{ text: content }],
+    parts,
     role: message.role === 'assistant' ? 'model' : 'user',
   }
 }

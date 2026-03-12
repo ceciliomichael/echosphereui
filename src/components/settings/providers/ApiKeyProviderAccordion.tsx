@@ -3,14 +3,20 @@ import { ProviderAccordionItem } from './ProviderAccordionItem'
 import type { ApiKeyProviderSchema } from './providerSchemas'
 import type { ApiKeyProviderDraft } from './providerTypes'
 
+export type ProviderActionFeedbackTone = 'success' | 'error'
+
+export interface ProviderActionFeedback {
+  label: string
+  tone: ProviderActionFeedbackTone
+}
+
 interface ApiKeyProviderAccordionProps {
+  actionFeedback: ProviderActionFeedback | null
   draft: ApiKeyProviderDraft
   errorMessage: string | undefined
   isBusy: boolean
-  isClearing: boolean
   isExpanded: boolean
   isFirst?: boolean
-  isSaving: boolean
   onBaseUrlChange: (value: string) => void
   onClear: () => Promise<void>
   onMaxTokensChange: (value: string) => void
@@ -23,14 +29,18 @@ interface ApiKeyProviderAccordionProps {
   schema: ApiKeyProviderSchema
 }
 
+const feedbackBadgeClassNameByTone: Record<ProviderActionFeedbackTone, string> = {
+  error: 'border border-danger-border bg-danger-surface text-danger-foreground',
+  success: 'border border-accent bg-accent-soft text-accent-foreground',
+}
+
 export function ApiKeyProviderAccordion({
+  actionFeedback,
   draft,
   errorMessage,
   isBusy,
-  isClearing,
   isExpanded,
   isFirst = false,
-  isSaving,
   onBaseUrlChange,
   onClear,
   onMaxTokensChange,
@@ -142,25 +152,40 @@ export function ApiKeyProviderAccordion({
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-          {providerStatus?.configured ? (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {actionFeedback ? (
+            <span
+              role="status"
+              aria-live="polite"
+              className={[
+                'inline-flex min-h-8 items-center rounded-full px-3 text-xs font-medium',
+                feedbackBadgeClassNameByTone[actionFeedback.tone],
+              ].join(' ')}
+            >
+              {actionFeedback.label}
+            </span>
+          ) : null}
+
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {providerStatus?.configured ? (
+              <button
+                type="button"
+                onClick={() => void onClear()}
+                disabled={isBusy}
+                className={primaryButtonClassName}
+              >
+                Clear
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => void onClear()}
+              onClick={() => void onSave()}
               disabled={isBusy}
               className={primaryButtonClassName}
             >
-              {isClearing ? 'Clearing...' : 'Clear'}
+              {providerStatus?.configured ? 'Update' : 'Save'}
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void onSave()}
-            disabled={isBusy}
-            className={primaryButtonClassName}
-          >
-            {isSaving ? 'Saving...' : providerStatus?.configured ? 'Update' : 'Save'}
-          </button>
+          </div>
         </div>
       </div>
     </ProviderAccordionItem>

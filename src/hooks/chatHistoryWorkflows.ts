@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import type {
+  ChatAttachment,
   ChatMode,
   ConversationFolderSummary,
   ConversationRecord,
@@ -8,7 +9,7 @@ import type {
   ReasoningEffort,
   ChatProviderId,
 } from '../types/chat'
-import { getConversationTitle } from './chatHistoryViewModels'
+import { getConversationTitleFromInput } from './chatHistoryViewModels'
 
 export interface ChatHistorySnapshot {
   conversationSummaries: ConversationSummary[]
@@ -24,6 +25,7 @@ interface PersistUserTurnInput {
   reasoningEffort: ReasoningEffort
   selectedFolderId: string | null
   targetEditMessageId: string | null
+  attachments: ChatAttachment[]
   trimmedText: string
 }
 
@@ -37,9 +39,11 @@ function buildUserMessage(
   modelId: string,
   providerId: ChatProviderId,
   reasoningEffort: ReasoningEffort,
+  attachments: ChatAttachment[],
   forcedId?: string,
 ): Message {
   return {
+    attachments: attachments.length > 0 ? attachments : undefined,
     content: trimmedText,
     id: forcedId ?? uuidv4(),
     modelId,
@@ -88,6 +92,7 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
     input.modelId,
     input.providerId,
     input.reasoningEffort,
+    input.attachments,
     input.targetEditMessageId ?? undefined,
   )
 
@@ -109,7 +114,8 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
     const conversation = await window.echosphereHistory.replaceMessages({
       conversationId: currentConversation.id,
       messages: rewrittenMessages,
-      title: targetMessageIndex === 0 ? getConversationTitle(input.trimmedText) : undefined,
+      title:
+        targetMessageIndex === 0 ? getConversationTitleFromInput(input.trimmedText, input.attachments) : undefined,
     })
 
     return {
@@ -136,7 +142,7 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
   const conversation = await window.echosphereHistory.appendMessages({
     conversationId,
     messages: [userMessage],
-    title: shouldUpdateTitle ? getConversationTitle(input.trimmedText) : undefined,
+    title: shouldUpdateTitle ? getConversationTitleFromInput(input.trimmedText, input.attachments) : undefined,
   })
 
   return {

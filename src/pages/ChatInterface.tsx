@@ -46,6 +46,7 @@ export function ChatInterface({
     cancelEditingMessage,
     conversationGroups,
     createFolder,
+    editComposerAttachments,
     editComposerFocusSignal,
     editComposerValue,
     createConversation,
@@ -56,13 +57,16 @@ export function ChatInterface({
     isSending,
     isStreamingTextActive,
     isStreamingResponse,
+    mainComposerAttachments,
     mainComposerValue,
     messages,
     selectedChatMode,
     selectedFolderName,
     setSelectedChatMode,
     setEditComposerValue,
+    setEditComposerAttachments,
     setMainComposerValue,
+    setMainComposerAttachments,
     selectConversation,
     sendEditedMessage,
     sendNewMessage,
@@ -160,7 +164,9 @@ export function ChatInterface({
                 editingMessageId={editingMessageId}
                 onChatModeChange={setSelectedChatMode}
                 onEditUserMessage={startEditingMessage}
+                composerAttachments={editComposerAttachments}
                 composerValue={editComposerValue}
+                onComposerAttachmentsChange={setEditComposerAttachments}
                 onComposerValueChange={setEditComposerValue}
                 onSendEditedMessage={sendEditedMessage}
                 onCancelEditingMessage={cancelEditingMessage}
@@ -186,7 +192,9 @@ export function ChatInterface({
         <div className="flex shrink-0 justify-center pb-4">
           <div className="chat-input-shell">
             <ChatInput
+              attachments={mainComposerAttachments}
               value={mainComposerValue}
+              onAttachmentsChange={setMainComposerAttachments}
               onValueChange={setMainComposerValue}
               onSend={sendNewMessage}
               onAbort={abortStreamingResponse}

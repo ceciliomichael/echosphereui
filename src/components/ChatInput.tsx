@@ -1,13 +1,16 @@
-import { useEffect, useRef, type CSSProperties, type KeyboardEvent } from 'react'
-import { ArrowUp, Square } from 'lucide-react'
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent } from 'react'
+import { ArrowUp, Paperclip, Square } from 'lucide-react'
+import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
 import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
 import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
-import type { ChatMode, ReasoningEffort } from '../types/chat'
+import type { ChatAttachment, ChatMode, ReasoningEffort } from '../types/chat'
+import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface ChatInputProps {
+  attachments?: ChatAttachment[]
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
   disabled?: boolean
@@ -16,6 +19,7 @@ interface ChatInputProps {
   isStreaming?: boolean
   modelOptions?: readonly ModelSelectorOption[]
   onAbort?: () => void
+  onAttachmentsChange?: (attachments: ChatAttachment[]) => void
   onCancelEdit?: () => void
   onChatModeChange?: (mode: ChatMode) => void
   onModelChange?: (modelId: string) => void
@@ -33,6 +37,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({
+  attachments = [],
   value,
   onValueChange,
   onSend,
@@ -55,16 +60,21 @@ export function ChatInput({
   focusSignal,
   disabled = false,
   onAbort,
+  onAttachmentsChange,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const isInline = variant === 'inline'
+  const canManageAttachments = typeof onAttachmentsChange === 'function'
   const showChatModeSelector = chatModeOptions.length > 0 && typeof onChatModeChange === 'function'
   const showModelSelector = modelOptions.length > 0 && typeof onModelChange === 'function'
-  const showRuntimeControls = showChatModeSelector || showModelSelector
+  const showReasoningControl = showReasoningEffortSelector && typeof onReasoningEffortChange === 'function'
+  const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
   const canAbort = isStreaming && typeof onAbort === 'function'
 
-  const canSend = value.trim().length > 0 && !disabled
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
 
   function handleSend() {
     if (!canSend) return
@@ -94,6 +104,57 @@ export function ChatInput({
       e.preventDefault()
       onCancelEdit()
     }
+  }
+
+  async function handleAttachments(files: readonly File[]) {
+    if (!canManageAttachments || disabled || files.length === 0) {
+      return
+    }
+
+    const result = await readChatAttachmentsFromFiles(files, attachments.length)
+    if (result.attachments.length > 0) {
+      onAttachmentsChange?.([...attachments, ...result.attachments])
+      textareaRef.current?.focus()
+    }
+
+    setAttachmentError(result.errors[0] ?? null)
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    if (!canManageAttachments || disabled) {
+      return
+    }
+
+    const files = Array.from(event.clipboardData.files)
+    if (files.length === 0) {
+      return
+    }
+
+    event.preventDefault()
+    void handleAttachments(files)
+  }
+
+  function handleManualAttachClick() {
+    if (!canManageAttachments || disabled) {
+      return
+    }
+
+    fileInputRef.current?.click()
+  }
+
+  function handleFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    void handleAttachments(files)
+  }
+
+  function handleRemoveAttachment(attachmentId: string) {
+    if (!canManageAttachments) {
+      return
+    }
+
+    onAttachmentsChange?.(attachments.filter((attachment) => attachment.id !== attachmentId))
+    setAttachmentError(null)
   }
 
   function handleInput() {
@@ -156,12 +217,29 @@ export function ChatInput({
           </div>
         ) : null}
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={CHAT_ATTACHMENT_INPUT_ACCEPT}
+          onChange={handleFileInputChange}
+          className="hidden"
+          tabIndex={-1}
+        />
+
+        {attachments.length > 0 ? (
+          <div className="mb-3">
+            <AttachmentPillList attachments={attachments} onRemoveAttachment={handleRemoveAttachment} />
+          </div>
+        ) : null}
+
         <div>
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onInput={handleInput}
             placeholder={isEditing ? 'Edit your message...' : 'Type a message...'}
             disabled={disabled}
@@ -171,9 +249,25 @@ export function ChatInput({
           />
         </div>
 
+        {attachmentError ? <p className="mt-2 text-sm text-danger-foreground">{attachmentError}</p> : null}
+
         <div className="mt-3 flex items-end justify-between gap-3">
           {showRuntimeControls ? (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 md:flex-nowrap">
+              {canManageAttachments ? (
+                <Tooltip content="Attach files">
+                  <button
+                    type="button"
+                    onClick={handleManualAttachClick}
+                    disabled={disabled}
+                    aria-label="Attach files"
+                    className="group flex h-8 w-8 items-center justify-center bg-transparent text-foreground disabled:cursor-not-allowed disabled:text-disabled-foreground"
+                  >
+                    <Paperclip size={14} className="shrink-0 transition-colors duration-150 group-hover:text-foreground" />
+                  </button>
+                </Tooltip>
+              ) : null}
+
               {showChatModeSelector ? (
                 <ChatModeSelectorField
                   value={selectedChatMode}
@@ -192,7 +286,7 @@ export function ChatInput({
                 />
               ) : null}
 
-              {showReasoningEffortSelector && onReasoningEffortChange ? (
+              {showReasoningControl ? (
                 <ReasoningEffortBlock
                   options={reasoningEffortOptions}
                   value={reasoningEffort}

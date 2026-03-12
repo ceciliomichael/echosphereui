@@ -5,6 +5,27 @@ export type ChatMode = 'agent'
 export type UserMessageKind = 'human' | 'tool_result'
 export type ToolInvocationState = 'running' | 'completed' | 'failed'
 export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash'
+export type ChatAttachmentKind = 'image' | 'text'
+
+interface ChatAttachmentBase {
+  fileName: string
+  id: string
+  kind: ChatAttachmentKind
+  mimeType: string
+  sizeBytes: number
+}
+
+export interface ChatImageAttachment extends ChatAttachmentBase {
+  dataUrl: string
+  kind: 'image'
+}
+
+export interface ChatTextAttachment extends ChatAttachmentBase {
+  kind: 'text'
+  textContent: string
+}
+
+export type ChatAttachment = ChatImageAttachment | ChatTextAttachment
 
 export interface ToolInvocationTrace {
   argumentsText: string
@@ -17,6 +38,7 @@ export interface ToolInvocationTrace {
 }
 
 export interface Message {
+  attachments?: ChatAttachment[]
   id: string
   role: MessageRole
   content: string

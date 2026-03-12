@@ -25,7 +25,7 @@ export function SidebarPanel({
   onToggleSidebar,
 }: SidebarPanelProps) {
   const actionButtonClassName =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
   const footerButtonClassName =
     'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
 

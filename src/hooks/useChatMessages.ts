@@ -6,6 +6,7 @@ import { useChatSessionState } from './useChatSessionState'
 import type { AppLanguage } from '../lib/appSettings'
 import type {
   AssistantWaitingIndicatorVariant,
+  ChatAttachment,
   ChatMode,
   ChatProviderId,
   Message,
@@ -270,8 +271,12 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
   const {
     mainComposerValue,
     setMainComposerValue,
+    mainComposerAttachments,
+    setMainComposerAttachments,
     editComposerValue,
     setEditComposerValue,
+    editComposerAttachments,
+    setEditComposerAttachments,
     editingMessageId,
     editComposerFocusSignal,
     resetComposerState,
@@ -414,7 +419,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     beginEditingMessage(messageId)
   }, [beginEditingMessage, clearError])
 
-  async function persistAndStreamMessage(trimmedText: string, targetEditMessageId: string | null) {
+  async function persistAndStreamMessage(
+    trimmedText: string,
+    attachments: ChatAttachment[],
+    targetEditMessageId: string | null,
+  ) {
     if (!runtimeSelection.hasConfiguredProvider) {
       setError('No provider is configured. Configure a provider in Settings before sending messages.')
       return
@@ -561,6 +570,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         reasoningEffort: runtimeSelection.reasoningEffort,
         selectedFolderId,
         targetEditMessageId,
+        attachments,
         trimmedText,
       })
 
@@ -570,6 +580,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
         cancelEditingMessage()
       } else {
         setMainComposerValue('')
+        setMainComposerAttachments([])
       }
 
       appendAssistantDraft('placeholder')
@@ -751,11 +762,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
 
     const trimmedText = mainComposerValue.trim()
-    if (trimmedText.length === 0) {
+    if (trimmedText.length === 0 && mainComposerAttachments.length === 0) {
       return
     }
 
-    await persistAndStreamMessage(trimmedText, null)
+    await persistAndStreamMessage(trimmedText, mainComposerAttachments, null)
   }
 
   async function sendEditedMessage() {
@@ -764,11 +775,11 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     }
 
     const trimmedText = editComposerValue.trim()
-    if (trimmedText.length === 0) {
+    if (trimmedText.length === 0 && editComposerAttachments.length === 0) {
       return
     }
 
-    await persistAndStreamMessage(trimmedText, editingMessageId)
+    await persistAndStreamMessage(trimmedText, editComposerAttachments, editingMessageId)
   }
 
   const abortStreamingResponse = useCallback(async () => {
@@ -830,6 +841,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     createFolder,
     deleteConversation,
     editComposerFocusSignal,
+    editComposerAttachments,
     editComposerValue,
     editingMessageId,
     error,
@@ -839,6 +851,7 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     isStreamingTextActive,
     isStreamingResponse: activeStreamId !== null,
     mainComposerValue,
+    mainComposerAttachments,
     messages,
     selectedChatMode: draftChatMode,
     selectConversation,
@@ -850,7 +863,9 @@ export function useChatMessages(language: AppLanguage, runtimeSelection: ChatRun
     sendNewMessage,
     streamingAssistantMessageId,
     streamingWaitingIndicatorVariant,
+    setEditComposerAttachments,
     setEditComposerValue,
+    setMainComposerAttachments,
     setMainComposerValue,
     startEditingMessage,
   }

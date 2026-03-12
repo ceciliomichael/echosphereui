@@ -1,3 +1,4 @@
+import { isChatAttachment } from '../../src/lib/chatAttachments'
 import { getConversationPreviewContent } from '../../src/lib/chatMessageMetadata'
 import type {
   ChatMode,
@@ -68,6 +69,9 @@ function isMessage(value: unknown): value is Message {
   const hasValidToolInvocations =
     message.toolInvocations === undefined ||
     (Array.isArray(message.toolInvocations) && message.toolInvocations.every((entry) => isToolInvocationTrace(entry)))
+  const hasValidAttachments =
+    message.attachments === undefined ||
+    (Array.isArray(message.attachments) && message.attachments.every((attachment) => isChatAttachment(attachment)))
 
   return (
     typeof message.id === 'string' &&
@@ -82,7 +86,8 @@ function isMessage(value: unknown): value is Message {
     hasValidUserMessageKind &&
     hasValidToolCallId &&
     hasRequiredToolCallId &&
-    hasValidToolInvocations
+    hasValidToolInvocations &&
+    hasValidAttachments
   )
 }
 

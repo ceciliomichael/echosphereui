@@ -15,15 +15,15 @@ const TITLE_BAR_OVERLAY_HEIGHT = 36
 // Electron cannot read the renderer CSS variables before the window is painted.
 
 const LIGHT_WINDOW_THEME: WindowThemePalette = {
-  backgroundColor: '#E4EEE4',
-  overlayColor: '#E4EEE4',
+  backgroundColor: '#F0F0F0',
+  overlayColor: '#F0F0F0',
   symbolColor: '#101011',
 }
 
 const DARK_WINDOW_THEME: WindowThemePalette = {
-  backgroundColor: '#222222',
-  overlayColor: '#222222',
-  symbolColor: '#DFDFDF',
+  backgroundColor: '#141415',
+  overlayColor: '#141415',
+  symbolColor: '#E7E7E7',
 }
 
 export function syncNativeThemeSource(appearance: AppAppearance) {

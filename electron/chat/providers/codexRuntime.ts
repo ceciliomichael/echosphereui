@@ -18,6 +18,7 @@ import type {
   ProviderStreamRequest,
   StreamDeltaEvent,
 } from '../providerTypes'
+import { getUserMessageImageAttachments, getUserMessageTextBlocks } from './messageAttachments'
 
 export interface CodexFunctionToolDefinition {
   description: string
@@ -27,8 +28,10 @@ export interface CodexFunctionToolDefinition {
 }
 
 export interface CodexMessageContentItem {
-  text: string
-  type: 'input_text' | 'output_text'
+  detail?: 'auto'
+  image_url?: string
+  text?: string
+  type: 'input_text' | 'output_text' | 'input_image'
 }
 
 export interface CodexInputMessage {
@@ -136,20 +139,41 @@ function readNestedRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function toCodexInputMessage(message: Message): CodexInputMessage | null {
-  if (!hasText(message.content)) {
-    return null
-  }
-
   if (message.role === 'assistant') {
+    if (!hasText(message.content)) {
+      return null
+    }
+
     return {
       role: 'assistant',
       content: [{ text: message.content, type: 'output_text' }],
     }
   }
 
+  const content: CodexMessageContentItem[] = []
+
+  for (const textBlock of getUserMessageTextBlocks(message)) {
+    content.push({
+      text: textBlock,
+      type: 'input_text',
+    })
+  }
+
+  for (const attachment of getUserMessageImageAttachments(message)) {
+    content.push({
+      detail: 'auto',
+      image_url: attachment.dataUrl,
+      type: 'input_image',
+    })
+  }
+
+  if (content.length === 0) {
+    return null
+  }
+
   return {
     role: 'user',
-    content: [{ text: message.content, type: 'input_text' }],
+    content,
   }
 }
 

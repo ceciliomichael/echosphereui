@@ -1,12 +1,24 @@
+import type { ChatAttachment } from '../types/chat'
 import { chatMessageContentWidthClassName, chatMessageSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
+import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface UserMessageProps {
+  attachments?: readonly ChatAttachment[]
   content: string
   onEdit?: () => void
 }
 
-export function UserMessage({ content, onEdit }: UserMessageProps) {
+function UserMessageBody({ attachments = [], content }: Pick<UserMessageProps, 'attachments' | 'content'>) {
+  return (
+    <div className="space-y-2.5">
+      <AttachmentPillList attachments={attachments} />
+      {content.trim().length > 0 ? <div>{content}</div> : null}
+    </div>
+  )
+}
+
+export function UserMessage({ attachments, content, onEdit }: UserMessageProps) {
   const className = [
     chatMessageSurfaceClassName,
     chatMessageContentWidthClassName,
@@ -15,7 +27,11 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
   ].join(' ')
 
   if (!onEdit) {
-    return <div className={className}>{content}</div>
+    return (
+      <div className={className}>
+        <UserMessageBody attachments={attachments} content={content} />
+      </div>
+    )
   }
 
   return (
@@ -26,7 +42,7 @@ export function UserMessage({ content, onEdit }: UserMessageProps) {
         className={`${className} text-left`}
         aria-label="Edit message"
       >
-        {content}
+        <UserMessageBody attachments={attachments} content={content} />
       </button>
     </Tooltip>
   )

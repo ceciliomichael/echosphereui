@@ -1,6 +1,13 @@
-import type { ResponseIncludable } from 'openai/resources/responses/responses'
+import type {
+  EasyInputMessage,
+  ResponseIncludable,
+  ResponseInputImage,
+  ResponseInputMessageContentList,
+  ResponseInputText,
+} from 'openai/resources/responses/responses'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
+import { getUserMessageImageAttachments, getUserMessageTextBlocks } from './messageAttachments'
 import {
   buildOpenAIClient,
   hasText,
@@ -14,12 +21,6 @@ import {
 
 const OPENAI_REASONING_INCLUDE_FIELDS: ResponseIncludable[] = ['reasoning.encrypted_content' as ResponseIncludable]
 
-interface OpenAIInputMessage {
-  content: string
-  role: 'assistant' | 'user'
-  type: 'message'
-}
-
 interface OpenAIStreamEventPayload {
   [key: string]: unknown
   delta?: unknown
@@ -29,21 +30,47 @@ interface OpenAIStreamEventPayload {
   type?: unknown
 }
 
-function toOpenAIInputMessage(message: Message): OpenAIInputMessage | null {
+function buildOpenAIUserContent(message: Message): ResponseInputMessageContentList {
+  const content: ResponseInputMessageContentList = []
+
+  for (const textBlock of getUserMessageTextBlocks(message)) {
+    content.push({
+      text: textBlock,
+      type: 'input_text',
+    } satisfies ResponseInputText)
+  }
+
+  for (const attachment of getUserMessageImageAttachments(message)) {
+    content.push({
+      detail: 'auto',
+      image_url: attachment.dataUrl,
+      type: 'input_image',
+    } satisfies ResponseInputImage)
+  }
+
+  return content
+}
+
+function toOpenAIInputMessage(message: Message): EasyInputMessage | null {
   if (message.role === 'tool') {
     return null
   }
 
-  if (!hasText(message.content)) {
-    return null
-  }
-
   if (message.role === 'user') {
+    const content = buildOpenAIUserContent(message)
+    if (content.length === 0) {
+      return null
+    }
+
     return {
-      content: message.content,
+      content,
       role: 'user',
       type: 'message',
     }
+  }
+
+  if (!hasText(message.content)) {
+    return null
   }
 
   return {
@@ -54,7 +81,7 @@ function toOpenAIInputMessage(message: Message): OpenAIInputMessage | null {
 }
 
 function buildOpenAIInput(messages: Message[]) {
-  return messages.map(toOpenAIInputMessage).filter((value): value is OpenAIInputMessage => value !== null)
+  return messages.map(toOpenAIInputMessage).filter((value): value is EasyInputMessage => value !== null)
 }
 
 function extractReasoningTextFromOutputItem(payload: OpenAIStreamEventPayload): string | null {
