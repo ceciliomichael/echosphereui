@@ -156,6 +156,7 @@ export interface AppSettings {
   chatModelId: string
   chatReasoningEffort: ReasoningEffort
   language: AppLanguage
+  lastActiveConversationId: string | null
   sendMessageOnEnter: boolean
   sidebarWidth: number
 }
@@ -236,6 +237,24 @@ export interface ContextUsageEstimate {
   systemPromptTokens: number
   toolResultsTokens: number
   totalTokens: number
+}
+
+export interface GitBranchState {
+  branches: string[]
+  currentBranch: string | null
+  hasRepository: boolean
+  isDetachedHead: boolean
+  repoRootPath: string | null
+}
+
+export interface CheckoutGitBranchInput {
+  branchName: string
+  workspacePath: string
+}
+
+export interface CreateGitBranchInput {
+  branchName: string
+  workspacePath: string
 }
 
 export type ChatStreamEvent =
@@ -343,4 +362,10 @@ export interface EchosphereChatApi {
   estimateContextUsage: (input: EstimateContextUsageInput) => Promise<ContextUsageEstimate>
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
   startStream: (input: StartChatStreamInput) => Promise<StartChatStreamResult>
+}
+
+export interface EchosphereGitApi {
+  checkoutBranch: (input: CheckoutGitBranchInput) => Promise<GitBranchState>
+  createAndCheckoutBranch: (input: CreateGitBranchInput) => Promise<GitBranchState>
+  getBranches: (workspacePath: string) => Promise<GitBranchState>
 }

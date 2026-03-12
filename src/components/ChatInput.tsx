@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
-import type { ChatAttachment, ChatMode, ContextUsageEstimate, ReasoningEffort } from '../types/chat'
+import type { ChatAttachment, ChatMode, ContextUsageEstimate, GitBranchState, ReasoningEffort } from '../types/chat'
 import { Tooltip } from './Tooltip'
 import { ContextIndicator } from './chat/ContextIndicator'
 import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
+import { GitBranchSelectorField } from './chat/GitBranchSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
 import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
+import { RuntimeTargetSelectorField } from './chat/RuntimeTargetSelectorField'
 import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface ChatInputProps {
@@ -17,6 +19,10 @@ interface ChatInputProps {
   contextUsage?: ContextUsageEstimate
   disabled?: boolean
   focusSignal?: number
+  gitBranchError?: string | null
+  gitBranchLoading?: boolean
+  gitBranchState?: GitBranchState
+  gitBranchSwitching?: boolean
   isEditing?: boolean
   isStreaming?: boolean
   modelOptions?: readonly ModelSelectorOption[]
@@ -24,6 +30,9 @@ interface ChatInputProps {
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void
   onCancelEdit?: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onGitBranchCreate?: (branchName: string) => void
+  onGitBranchChange?: (branchName: string) => void
+  onGitBranchRefresh?: () => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSend: () => void
@@ -31,6 +40,7 @@ interface ChatInputProps {
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
+  showRuntimeTargetSelector?: boolean
   showReasoningEffortSelector?: boolean
   value: string
   onValueChange: (value: string) => void
@@ -64,6 +74,14 @@ export function ChatInput({
   onAbort,
   onAttachmentsChange,
   contextUsage,
+  gitBranchError = null,
+  gitBranchLoading = false,
+  gitBranchState,
+  gitBranchSwitching = false,
+  onGitBranchChange,
+  onGitBranchCreate,
+  onGitBranchRefresh,
+  showRuntimeTargetSelector = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -74,8 +92,12 @@ export function ChatInput({
   const showChatModeSelector = chatModeOptions.length > 0 && typeof onChatModeChange === 'function'
   const showModelSelector = modelOptions.length > 0 && typeof onModelChange === 'function'
   const showReasoningControl = showReasoningEffortSelector && typeof onReasoningEffortChange === 'function'
+  const showRuntimeTargetControl = variant === 'composer' && showRuntimeTargetSelector
+  const showGitBranchSelector = variant === 'composer' && typeof onGitBranchChange === 'function' && gitBranchState !== undefined
   const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
+  const showDetachedFooterControls = showRuntimeTargetControl || showGitBranchSelector
   const canAbort = isStreaming && typeof onAbort === 'function'
+  const gitBranchTooltip = gitBranchState?.hasRepository ? 'Switch branch' : 'Open a git-backed folder to view branches'
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
 
@@ -328,6 +350,39 @@ export function ChatInput({
           </div>
         </div>
       </div>
+
+      {showDetachedFooterControls ? (
+        <div className="mt-2 flex items-center justify-between gap-3 px-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {showRuntimeTargetControl ? (
+              <Tooltip content="Select runtime target" hideWhenTriggerExpanded>
+                <RuntimeTargetSelectorField triggerClassName="chat-footer-control-trigger" />
+              </Tooltip>
+            ) : null}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {showGitBranchSelector && gitBranchState ? (
+              <Tooltip content={gitBranchTooltip} hideWhenTriggerExpanded>
+                <GitBranchSelectorField
+                  branches={gitBranchState.branches}
+                  currentBranch={gitBranchState.currentBranch}
+                  disabled={disabled}
+                  errorMessage={gitBranchError}
+                  hasRepository={gitBranchState.hasRepository}
+                  isDetachedHead={gitBranchState.isDetachedHead}
+                  isLoading={gitBranchLoading}
+                  isSwitching={gitBranchSwitching}
+                  onChange={onGitBranchChange ?? (() => undefined)}
+                  onCreateBranch={onGitBranchCreate ?? (() => undefined)}
+                  onRefresh={onGitBranchRefresh}
+                  triggerClassName="chat-footer-control-trigger"
+                />
+              </Tooltip>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

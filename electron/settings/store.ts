@@ -38,6 +38,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     ? input.chatReasoningEffort
     : DEFAULT_APP_SETTINGS.chatReasoningEffort
   const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
+  const lastActiveConversationId =
+    typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
+      ? input.lastActiveConversationId.trim()
+      : DEFAULT_APP_SETTINGS.lastActiveConversationId
   const sendMessageOnEnter =
     typeof input?.sendMessageOnEnter === 'boolean'
       ? input.sendMessageOnEnter
@@ -48,6 +52,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     chatModelId,
     chatReasoningEffort,
     language,
+    lastActiveConversationId,
     sendMessageOnEnter,
     sidebarWidth,
   }

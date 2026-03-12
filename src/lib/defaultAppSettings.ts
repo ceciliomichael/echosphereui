@@ -7,6 +7,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chatModelId: '',
   chatReasoningEffort: 'medium',
   language: DEFAULT_APP_LANGUAGE,
+  lastActiveConversationId: null,
   sendMessageOnEnter: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 }

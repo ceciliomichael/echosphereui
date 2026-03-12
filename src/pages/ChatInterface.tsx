@@ -11,6 +11,7 @@ import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useProvidersState } from '../hooks/useProvidersState'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
+import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppSettings } from '../types/chat'
 
@@ -100,6 +101,8 @@ export function ChatInterface({
     setSelectedModelId,
     showReasoningEffortSelector,
   } = chatRuntimeConfig
+  const activeWorkspacePath = activeConversationRootPath ?? selectedFolderPath
+  const gitBranchState = useGitBranchState(activeWorkspacePath)
   const selectorOptions = useMemo(
     () =>
       modelOptions.map((option) => ({
@@ -213,7 +216,14 @@ export function ChatInterface({
               isStreaming={isStreamingResponse}
               sendOnEnter={sendMessageOnEnter}
               disabled={isLoading || isSending}
+              gitBranchError={gitBranchState.errorMessage}
+              gitBranchLoading={gitBranchState.isLoading}
+              gitBranchState={gitBranchState.branchState}
+              gitBranchSwitching={gitBranchState.isSwitching}
               onChatModeChange={setSelectedChatMode}
+              onGitBranchCreate={gitBranchState.createBranch}
+              onGitBranchChange={gitBranchState.changeBranch}
+              onGitBranchRefresh={gitBranchState.refresh}
               modelOptions={selectorOptions}
               selectedChatMode={selectedChatMode}
               selectedModelId={selectedModelId}
@@ -221,6 +231,7 @@ export function ChatInterface({
               reasoningEffort={reasoningEffort}
               reasoningEffortOptions={availableReasoningEfforts}
               onReasoningEffortChange={setReasoningEffort}
+              showRuntimeTargetSelector
               showReasoningEffortSelector={showReasoningEffortSelector}
             />
           </div>

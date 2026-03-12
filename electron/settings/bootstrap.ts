@@ -15,6 +15,10 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       ? candidate.chatReasoningEffort
       : DEFAULT_APP_SETTINGS.chatReasoningEffort,
     language: isAppLanguage(candidate?.language) ? candidate.language : DEFAULT_APP_SETTINGS.language,
+    lastActiveConversationId:
+      typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0
+        ? candidate.lastActiveConversationId.trim()
+        : DEFAULT_APP_SETTINGS.lastActiveConversationId,
     sendMessageOnEnter:
       typeof candidate?.sendMessageOnEnter === 'boolean'
         ? candidate.sendMessageOnEnter

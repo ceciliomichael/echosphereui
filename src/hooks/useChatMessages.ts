@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import { useChatComposerState } from './useChatComposerState'
 import { useChatConversationActions } from './useChatConversationActions'
@@ -9,7 +9,14 @@ import { useInitializeChatHistory } from './useInitializeChatHistory'
 import type { AppLanguage } from '../lib/appSettings'
 import type { ChatMode } from '../types/chat'
 
-export function useChatMessages(language: AppLanguage) {
+interface UseChatMessagesInput {
+  language: AppLanguage
+  preferredConversationId: string | null
+}
+
+export function useChatMessages(input: UseChatMessagesInput) {
+  const initialPreferredConversationIdRef = useRef(input.preferredConversationId)
+  const { language } = input
   const sessionState = useChatSessionState(language)
   const messages = sessionState.activeConversationState?.conversation.messages ?? []
   const isSending = sessionState.activeConversationState?.isSending ?? false
@@ -26,6 +33,7 @@ export function useChatMessages(language: AppLanguage) {
 
   useInitializeChatHistory({
     initializeHistory: sessionState.initializeHistory,
+    preferredConversationId: initialPreferredConversationIdRef.current,
     setError: sessionState.setError,
     setIsLoading: sessionState.setIsLoading,
   })

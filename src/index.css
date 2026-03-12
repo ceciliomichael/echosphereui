@@ -53,7 +53,7 @@
     --sidebar-item-active-surface: var(--color-surface);
     --sidebar-item-active-border: var(--color-border-muted);
     --user-message-hover-border: color-mix(in srgb, var(--color-action) 28%, var(--color-border));
-    --segmented-control-hover-surface: var(--color-surface-muted);
+    --segmented-control-hover-surface: color-mix(in srgb, var(--color-foreground) 5%, var(--color-surface));
     --segmented-control-active-surface: var(--color-surface);
     --dropdown-control-hover-surface: color-mix(in srgb, var(--color-foreground) 2%, var(--color-surface));
     --dropdown-control-hover-border: color-mix(in srgb, var(--color-foreground) 10%, var(--color-border));
@@ -252,6 +252,29 @@
     background-color: var(--color-surface-muted);
     color: var(--color-disabled-foreground);
     opacity: 0.8;
+  }
+
+  .chat-footer-control-trigger {
+    border-color: transparent;
+    background-color: transparent;
+    box-shadow: none;
+    padding-inline: 0.625rem;
+  }
+
+  .chat-footer-control-trigger:not(:disabled):hover {
+    border-color: transparent;
+    background-color: transparent;
+  }
+
+  .chat-footer-control-trigger[data-open='true'] {
+    border-color: transparent;
+    background-color: transparent;
+  }
+
+  .chat-footer-control-trigger:disabled {
+    border-color: transparent;
+    background-color: transparent;
+    box-shadow: none;
   }
 
   @media (min-width: 768px) {

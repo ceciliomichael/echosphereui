@@ -63,7 +63,7 @@ async function loadStoredConversationOrThrow(conversationId: string) {
   return conversation
 }
 
-export async function loadInitialChatHistory(): Promise<ChatHistorySnapshot> {
+export async function loadInitialChatHistory(preferredConversationId?: string | null): Promise<ChatHistorySnapshot> {
   const [conversationSummaries, folderSummaries] = await Promise.all([
     window.echosphereHistory.listConversations(),
     window.echosphereHistory.listFolders(),
@@ -77,7 +77,17 @@ export async function loadInitialChatHistory(): Promise<ChatHistorySnapshot> {
     }
   }
 
-  const initialConversation = await window.echosphereHistory.getConversation(conversationSummaries[0].id)
+  const normalizedPreferredConversationId = preferredConversationId?.trim() ?? ''
+  const initialConversationId =
+    normalizedPreferredConversationId.length > 0 &&
+    conversationSummaries.some((conversationSummary) => conversationSummary.id === normalizedPreferredConversationId)
+      ? normalizedPreferredConversationId
+      : conversationSummaries[0].id
+
+  let initialConversation = await window.echosphereHistory.getConversation(initialConversationId)
+  if (!initialConversation && initialConversationId !== conversationSummaries[0].id) {
+    initialConversation = await window.echosphereHistory.getConversation(conversationSummaries[0].id)
+  }
 
   return {
     conversationSummaries,

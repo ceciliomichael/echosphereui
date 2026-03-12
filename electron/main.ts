@@ -15,6 +15,8 @@ import type {
   ApiKeyProviderId,
   AppendConversationMessagesInput,
   AppSettings,
+  CheckoutGitBranchInput,
+  CreateGitBranchInput,
   EstimateContextUsageInput,
   SaveCustomModelInput,
   StartChatStreamInput,
@@ -45,6 +47,7 @@ import {
 } from './providers/service'
 import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
+import { checkoutGitBranch, createAndCheckoutGitBranch, getGitBranchState } from './git/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -202,6 +205,11 @@ function registerHistoryHandlers() {
   ipcMain.handle('chat:stream:cancel', async (event, streamId: string) => cancelChatStream(event.sender, streamId))
   ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) =>
     estimateChatContextUsage(input),
+  )
+  ipcMain.handle('git:getBranches', async (_event, workspacePath: string) => getGitBranchState(workspacePath))
+  ipcMain.handle('git:checkoutBranch', async (_event, input: CheckoutGitBranchInput) => checkoutGitBranch(input))
+  ipcMain.handle('git:createAndCheckoutBranch', async (_event, input: CreateGitBranchInput) =>
+    createAndCheckoutGitBranch(input),
   )
 }
 

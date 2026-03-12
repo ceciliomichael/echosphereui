@@ -7,6 +7,7 @@ import type {
   ChatStreamEvent,
   EstimateContextUsageInput,
   EchosphereChatApi,
+  EchosphereGitApi,
   EchosphereModelsApi,
   EchosphereProvidersApi,
   SaveApiKeyProviderInput,
@@ -90,8 +91,15 @@ const chatApi: EchosphereChatApi = {
   startStream: (input: StartChatStreamInput) => ipcRenderer.invoke('chat:stream:start', input),
 }
 
+const gitApi: EchosphereGitApi = {
+  checkoutBranch: (input) => ipcRenderer.invoke('git:checkoutBranch', input),
+  createAndCheckoutBranch: (input) => ipcRenderer.invoke('git:createAndCheckoutBranch', input),
+  getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
+}
+
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)
+contextBridge.exposeInMainWorld('echosphereGit', gitApi)
