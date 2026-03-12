@@ -6,10 +6,10 @@ import {
   parseSseResponseStream,
   type CodexRequestPayload,
 } from './codexRuntime'
+import { buildReplayableMessageHistory } from '../openaiCompatible/messageHistory'
 import {
   createToolExecutionScheduler,
   createToolExecutionTurnState,
-  filterHistoricalToolMessages,
 } from '../openaiCompatible/toolExecution'
 import { forceRefreshCodexAuthData, loadCodexAuthData } from './codexAuth'
 
@@ -60,7 +60,7 @@ async function streamCodexResponseWithTools(
   request: ProviderStreamRequest,
   context: ProviderStreamContext,
 ) {
-  const inMemoryMessages = filterHistoricalToolMessages(request.messages)
+  const inMemoryMessages = buildReplayableMessageHistory(request.messages)
   const turnState = createToolExecutionTurnState()
   const toolExecutionScheduler = createToolExecutionScheduler({
     agentContextRootPath: request.agentContextRootPath,

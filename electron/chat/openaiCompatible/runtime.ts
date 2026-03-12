@@ -21,11 +21,8 @@ import {
   readNestedRecord,
   readTextLikeValue,
 } from '../providers/openaiShared'
-import {
-  createToolExecutionScheduler,
-  createToolExecutionTurnState,
-  filterHistoricalToolMessages,
-} from './toolExecution'
+import { buildReplayableMessageHistory } from './messageHistory'
+import { createToolExecutionScheduler, createToolExecutionTurnState } from './toolExecution'
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 
@@ -311,7 +308,7 @@ export async function streamOpenAICompatibleResponseWithTools(
   request: StreamOpenAICompatibleResponseInput,
   context: ProviderStreamContext,
 ) {
-  const inMemoryMessages = filterHistoricalToolMessages(request.messages)
+  const inMemoryMessages = buildReplayableMessageHistory(request.messages)
   const turnState = createToolExecutionTurnState()
   const toolExecutionScheduler = createToolExecutionScheduler({
     agentContextRootPath: request.agentContextRootPath,

@@ -65,10 +65,6 @@ export function createToolExecutionTurnState(): ToolExecutionTurnState {
   return {}
 }
 
-export function filterHistoricalToolMessages(messages: Message[]) {
-  return messages.filter((message) => message.role !== 'tool')
-}
-
 export function resolveToolExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
   return getOpenAICompatibleToolDefinition(toolName)?.executionMode ?? 'exclusive'
 }
