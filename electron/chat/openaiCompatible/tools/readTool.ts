@@ -12,6 +12,7 @@ import { OpenAICompatibleToolError } from '../toolTypes'
 const DEFAULT_READ_LINE_COUNT = 250
 
 export const readTool: OpenAICompatibleToolDefinition = {
+  executionMode: 'parallel',
   name: 'read',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {

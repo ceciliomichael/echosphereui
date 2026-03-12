@@ -4,7 +4,9 @@ import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { PathLabel } from './PathLabel'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
+import { getPathBasename } from '../../lib/pathPresentation'
 
 interface ToolInvocationBlockProps {
   invocation: ToolInvocationTrace
@@ -13,15 +15,9 @@ interface ToolInvocationBlockProps {
 interface ReadToolResultViewModel {
   code: string
   endLineNumber: number
-  fileName: string
+  filePath: string
   language?: string
   startLineNumber: number
-}
-
-function getBasename(filePath: string) {
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0)
-  return pathSegments[pathSegments.length - 1] ?? filePath
 }
 
 function parseReadToolResult(resultContent: string): ReadToolResultViewModel | null {
@@ -33,13 +29,40 @@ function parseReadToolResult(resultContent: string): ReadToolResultViewModel | n
   return {
     code: match[5],
     endLineNumber: Number.parseInt(match[3], 10),
-    fileName: getBasename(match[1]),
+    filePath: match[1],
     language: match[4].trim().length > 0 ? match[4].trim() : undefined,
     startLineNumber: Number.parseInt(match[2], 10),
   }
 }
 
 const MIN_RUNNING_LABEL_DURATION_MS = 200
+
+function renderDiffCountSummary(invocation: ToolInvocationTrace) {
+  if (invocation.state !== 'completed' || invocation.resultPresentation?.kind !== 'file_diff') {
+    return null
+  }
+
+  const { addedLineCount = 0, removedLineCount = 0 } = invocation.resultPresentation
+
+  if (addedLineCount > 0 && removedLineCount > 0) {
+    return (
+      <>
+        <span className="text-emerald-500">{`+${addedLineCount}`}</span>
+        <span className="text-red-500">{`-${removedLineCount}`}</span>
+      </>
+    )
+  }
+
+  if (addedLineCount > 0) {
+    return <span className="text-emerald-500">{`+${addedLineCount}`}</span>
+  }
+
+  if (removedLineCount > 0) {
+    return <span className="text-red-500">{`-${removedLineCount}`}</span>
+  }
+
+  return null
+}
 
 export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocation }: ToolInvocationBlockProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -70,6 +93,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
   }, [invocation.startedAt, invocation.state])
 
   const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState)
+  const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
   const readResultPresentation =
@@ -82,7 +106,10 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className={displayedState === 'running' ? 'thinking-shimmer' : ''}>{headerLabel}</span>
+        <span className={`inline-flex items-center gap-1.5 ${displayedState === 'running' ? 'thinking-shimmer' : ''}`}>
+          <span>{headerLabel}</span>
+          {diffCountSummary ? <span className="inline-flex items-center gap-1">{diffCountSummary}</span> : null}
+        </span>
         <ChevronRight
           className={[
             'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
@@ -96,8 +123,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
           {diffResultPresentation ? (
             <DiffViewer
               contextLines={diffResultPresentation.contextLines}
-              endLineNumber={diffResultPresentation.endLineNumber}
-              fileName={getBasename(diffResultPresentation.fileName)}
+              filePath={diffResultPresentation.fileName}
               isStreaming={invocation.state === 'running'}
               newContent={diffResultPresentation.newContent}
               oldContent={diffResultPresentation.oldContent}
@@ -105,12 +131,16 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({ invocatio
             />
           ) : readResultPresentation ? (
             <div className="w-full text-left">
-              <p className="my-0 mb-1.5 text-[15px] leading-[1.52] text-foreground">
-                File {readResultPresentation.fileName} (lines {readResultPresentation.startLineNumber}-{readResultPresentation.endLineNumber})
+              <p className="my-0 mb-1.5 flex min-w-0 items-baseline gap-1 text-[15px] leading-[1.52] text-foreground">
+                <span className="shrink-0">File</span>
+                <PathLabel path={readResultPresentation.filePath} className="flex-1 text-left" />
+                <span className="shrink-0">
+                  (lines {readResultPresentation.startLineNumber}-{readResultPresentation.endLineNumber})
+                </span>
               </p>
               <CodeBlock
                 code={readResultPresentation.code}
-                fileName={readResultPresentation.fileName}
+                fileName={getPathBasename(readResultPresentation.filePath)}
                 language={readResultPresentation.language}
                 isStreaming={invocation.state === 'running'}
               />

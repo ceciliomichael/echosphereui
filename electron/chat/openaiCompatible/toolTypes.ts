@@ -7,6 +7,8 @@ export interface OpenAICompatibleToolCall {
   startedAt: number
 }
 
+export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel'
+
 export interface OpenAICompatibleToolExecutionContext {
   agentContextRootPath: string
   signal: AbortSignal
@@ -23,6 +25,7 @@ export class OpenAICompatibleToolError extends Error {
 }
 
 export interface OpenAICompatibleToolDefinition {
+  executionMode: OpenAICompatibleToolExecutionMode
   execute: (
     argumentsValue: Record<string, unknown>,
     context: OpenAICompatibleToolExecutionContext,

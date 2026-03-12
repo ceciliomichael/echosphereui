@@ -34,6 +34,8 @@ function isToolInvocationResultPresentation(value: unknown): value is ToolInvoca
     typeof presentation.fileName === 'string' &&
     (presentation.oldContent === null || typeof presentation.oldContent === 'string') &&
     typeof presentation.newContent === 'string' &&
+    (presentation.addedLineCount === undefined || typeof presentation.addedLineCount === 'number') &&
+    (presentation.removedLineCount === undefined || typeof presentation.removedLineCount === 'number') &&
     (presentation.startLineNumber === undefined || typeof presentation.startLineNumber === 'number') &&
     (presentation.endLineNumber === undefined || typeof presentation.endLineNumber === 'number') &&
     (presentation.contextLines === undefined || typeof presentation.contextLines === 'number')

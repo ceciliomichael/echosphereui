@@ -47,6 +47,7 @@ async function ensureGlobTargetExists(absolutePath: string) {
 }
 
 export const globTool: OpenAICompatibleToolDefinition = {
+  executionMode: 'parallel',
   name: 'glob',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {

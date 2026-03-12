@@ -3,11 +3,11 @@ import type { ChatProviderAdapter, ProviderStreamContext, ProviderStreamRequest 
 import {
   buildCodexPayload,
   buildInMemoryAssistantMessage,
-  executeCodexToolCall,
   parseSseResponseStream,
   type CodexRequestPayload,
 } from './codexRuntime'
 import {
+  createToolExecutionScheduler,
   createToolExecutionTurnState,
   filterHistoricalToolMessages,
 } from '../openaiCompatible/toolExecution'
@@ -62,11 +62,23 @@ async function streamCodexResponseWithTools(
 ) {
   const inMemoryMessages = filterHistoricalToolMessages(request.messages)
   const turnState = createToolExecutionTurnState()
+  const toolExecutionScheduler = createToolExecutionScheduler({
+    agentContextRootPath: request.agentContextRootPath,
+    context,
+    inMemoryMessages,
+    turnState,
+  })
 
   while (!context.signal.aborted) {
     const payload = await buildCodexPayload(request, inMemoryMessages)
     const response = await sendCodexStreamingRequest(payload, context.signal)
-    const turnResult = await parseSseResponseStream(response, context.emitDelta, context.signal)
+    const scheduledToolCallIds = new Set<string>()
+    const turnResult = await parseSseResponseStream(response, context.emitDelta, context.signal, {
+      onToolCallReady(toolCall) {
+        scheduledToolCallIds.add(toolCall.id)
+        toolExecutionScheduler.schedule(toolCall)
+      },
+    })
 
     if (turnResult.toolCalls.length === 0) {
       return
@@ -77,11 +89,17 @@ async function streamCodexResponseWithTools(
     }
 
     for (const toolCall of turnResult.toolCalls) {
-      await executeCodexToolCall(toolCall, context, request, inMemoryMessages, turnState)
-
-      if (context.signal.aborted) {
-        return
+      if (scheduledToolCallIds.has(toolCall.id)) {
+        continue
       }
+
+      toolExecutionScheduler.schedule(toolCall)
+    }
+
+    await toolExecutionScheduler.drain()
+
+    if (context.signal.aborted) {
+      return
     }
   }
 }

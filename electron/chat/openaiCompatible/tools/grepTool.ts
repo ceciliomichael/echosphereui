@@ -47,6 +47,7 @@ async function ensureSearchTargetExists(absolutePath: string) {
 }
 
 export const grepTool: OpenAICompatibleToolDefinition = {
+  executionMode: 'parallel',
   name: 'grep',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {

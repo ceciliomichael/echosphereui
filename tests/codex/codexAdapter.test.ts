@@ -124,3 +124,43 @@ test('parseSseResponseStream assembles native Codex tool calls from streamed fun
   assert.equal(deltaEvents.length, 2)
   assert.equal(deltaEvents.at(-1)?.argumentsText, '{"absolute_path":"C:\\\\repo"}')
 })
+
+test('parseSseResponseStream exposes tool calls as soon as arguments are finalized', async () => {
+  const streamEvents = [
+    'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_item_1","type":"function_call","call_id":"call_1","name":"read","arguments":""}}\n\n',
+    'data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_item_1","call_id":"call_1","delta":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\one.ts\\""}\n\n',
+    'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_item_1","call_id":"call_1","arguments":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\one.ts\\"}"}\n\n',
+    'data: {"type":"response.output_item.added","output_index":1,"item":{"id":"fc_item_2","type":"function_call","call_id":"call_2","name":"read","arguments":""}}\n\n',
+    'data: {"type":"response.function_call_arguments.delta","output_index":1,"item_id":"fc_item_2","call_id":"call_2","delta":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\two.ts\\""}\n\n',
+    'data: {"type":"response.function_call_arguments.done","output_index":1,"item_id":"fc_item_2","call_id":"call_2","arguments":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\two.ts\\"}"}\n\n',
+    'data: [DONE]\n\n',
+  ]
+  const readyToolCalls: string[] = []
+  let sawSecondToolArgumentDelta = false
+  let firstToolBecameReadyBeforeSecondDelta = false
+
+  const result = await parseSseResponseStream(
+    createSseResponse(streamEvents),
+    (event) => {
+      if (event.type === 'tool_invocation_delta' && event.invocationId === 'call_2') {
+        sawSecondToolArgumentDelta = true
+      }
+    },
+    new AbortController().signal,
+    {
+      onToolCallReady(toolCall) {
+        readyToolCalls.push(toolCall.id)
+        if (toolCall.id === 'call_1') {
+          firstToolBecameReadyBeforeSecondDelta = !sawSecondToolArgumentDelta
+        }
+      },
+    },
+  )
+
+  assert.equal(firstToolBecameReadyBeforeSecondDelta, true)
+  assert.deepEqual(readyToolCalls, ['call_1', 'call_2'])
+  assert.deepEqual(
+    result.toolCalls.map((toolCall) => toolCall.id),
+    ['call_1', 'call_2'],
+  )
+})

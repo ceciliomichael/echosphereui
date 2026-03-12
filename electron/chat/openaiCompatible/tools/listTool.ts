@@ -14,6 +14,7 @@ import { OpenAICompatibleToolError } from '../toolTypes'
 const DEFAULT_DIRECTORY_ENTRY_LIMIT = 200
 
 export const listTool: OpenAICompatibleToolDefinition = {
+  executionMode: 'parallel',
   name: 'list',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {

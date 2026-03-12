@@ -105,12 +105,14 @@ test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exp
 
   assert.equal(artifacts.syntheticMessage.content, 'Edited package.json successfully.')
   assert.deepEqual(artifacts.resultPresentation, {
+    addedLineCount: 1,
     contextLines: 3,
     endLineNumber: 12,
     fileName: 'package.json',
     kind: 'file_diff',
     newContent: '{\n  "name": "next"\n}',
     oldContent: '{\n  "name": "prev"\n}',
+    removedLineCount: 1,
     startLineNumber: 10,
   })
 })
@@ -132,11 +134,13 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for wri
 
   assert.equal(artifacts.syntheticMessage.content, 'Created src/app/page.tsx successfully.')
   assert.deepEqual(artifacts.resultPresentation, {
+    addedLineCount: 4,
     endLineNumber: 4,
     fileName: 'src/app/page.tsx',
     kind: 'file_diff',
     newContent: 'export default function Page() {\n  return null\n}\n',
     oldContent: null,
+    removedLineCount: 0,
     startLineNumber: 1,
   })
 })

@@ -10,6 +10,7 @@ import {
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 
 export const writeTool: OpenAICompatibleToolDefinition = {
+  executionMode: 'exclusive',
   name: 'write',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {

@@ -1,151 +1,16 @@
 import { memo, useMemo } from 'react'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
-
-function normalizeEscapedSequences(content: string) {
-  if (!content) {
-    return content
-  }
-
-  const hasActualNewlines = content.includes('\n')
-  const hasEscapedSequences = /\\[ntr]/.test(content)
-
-  if (!hasActualNewlines && hasEscapedSequences) {
-    return content.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r')
-  }
-
-  return content
-}
+import { computeDiffLines, type DiffLine } from '../../lib/textDiff'
+import { PathLabel } from './PathLabel'
 
 interface DiffViewerProps {
   contextLines?: number
-  endLineNumber?: number
-  fileName: string
+  filePath: string
   isStreaming?: boolean
   newContent: string
   oldContent: string | null | undefined
   startLineNumber?: number
   viewOnly?: boolean
-}
-
-interface DiffLine {
-  collapsedCount?: number
-  content: string
-  lineNumber: number | null
-  newLineNumber?: number
-  oldLineNumber?: number
-  type: 'added' | 'collapsed' | 'removed' | 'unchanged'
-}
-
-function computeDiff(oldContent: string | null | undefined, newContent: string, isStreaming = false, startLineNumber = 1) {
-  const normalizedNewContent = normalizeEscapedSequences(newContent)
-  const normalizedOldContent = oldContent ? normalizeEscapedSequences(oldContent) : oldContent
-
-  if (normalizedOldContent === null || normalizedOldContent === undefined) {
-    return normalizedNewContent.split('\n').map((line, index) => ({
-      content: line,
-      lineNumber: index + startLineNumber,
-      newLineNumber: index + startLineNumber,
-      oldLineNumber: undefined,
-      type: 'added' as const,
-    }))
-  }
-
-  const oldLines = normalizedOldContent.split('\n')
-  const newLines = normalizedNewContent.split('\n')
-  const diff: DiffLine[] = []
-
-  let oldIndex = 0
-  let newIndex = 0
-
-  while (oldIndex < oldLines.length || newIndex < newLines.length) {
-    const oldLine = oldLines[oldIndex]
-    const newLine = newLines[newIndex]
-
-    if (oldIndex >= oldLines.length) {
-      diff.push({
-        content: newLine,
-        lineNumber: newIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: undefined,
-        type: 'added',
-      })
-      newIndex += 1
-      continue
-    }
-
-    if (newIndex >= newLines.length) {
-      if (!isStreaming) {
-        diff.push({
-          content: oldLine,
-          lineNumber: oldIndex + startLineNumber,
-          newLineNumber: undefined,
-          oldLineNumber: oldIndex + startLineNumber,
-          type: 'removed',
-        })
-      }
-      oldIndex += 1
-      continue
-    }
-
-    if (oldLine === newLine) {
-      diff.push({
-        content: oldLine,
-        lineNumber: oldIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: oldIndex + startLineNumber,
-        type: 'unchanged',
-      })
-      oldIndex += 1
-      newIndex += 1
-      continue
-    }
-
-    const foundInOld = oldLines.slice(oldIndex + 1).indexOf(newLine)
-    const foundInNew = newLines.slice(newIndex + 1).indexOf(oldLine)
-
-    if (foundInOld !== -1 && (foundInNew === -1 || foundInOld <= foundInNew)) {
-      diff.push({
-        content: oldLine,
-        lineNumber: oldIndex + startLineNumber,
-        newLineNumber: undefined,
-        oldLineNumber: oldIndex + startLineNumber,
-        type: 'removed',
-      })
-      oldIndex += 1
-      continue
-    }
-
-    if (foundInNew !== -1) {
-      diff.push({
-        content: newLine,
-        lineNumber: newIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: undefined,
-        type: 'added',
-      })
-      newIndex += 1
-      continue
-    }
-
-    diff.push({
-      content: oldLine,
-      lineNumber: oldIndex + startLineNumber,
-      newLineNumber: undefined,
-      oldLineNumber: oldIndex + startLineNumber,
-      type: 'removed',
-    })
-    diff.push({
-      content: newLine,
-      lineNumber: newIndex + startLineNumber,
-      newLineNumber: newIndex + startLineNumber,
-      oldLineNumber: undefined,
-      type: 'added',
-    })
-    oldIndex += 1
-    newIndex += 1
-  }
-
-  return diff
 }
 
 function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | undefined) {
@@ -201,26 +66,33 @@ function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | und
   return result
 }
 
-function getLineBackgroundClassName(line: DiffLine, viewOnly: boolean) {
+function getLineContentClassName(line: DiffLine, viewOnly: boolean) {
   if (viewOnly || line.type === 'unchanged') {
-    return 'bg-transparent'
+    return 'bg-transparent text-foreground'
   }
 
   if (line.type === 'added') {
-    return 'bg-emerald-500/12'
+    return 'bg-emerald-500/18 text-emerald-950 dark:bg-emerald-500/24 dark:text-emerald-50'
   }
 
   if (line.type === 'removed') {
-    return 'bg-red-500/12'
+    return 'bg-red-500/18 text-red-950 dark:bg-red-500/24 dark:text-red-50'
   }
 
-  return 'bg-transparent'
+  return 'bg-transparent text-foreground'
+}
+
+function getLineGutterClassName() {
+  return 'bg-surface text-muted-foreground'
+}
+
+function getLineNumberDividerClassName() {
+  return 'bg-border/80'
 }
 
 const DiffViewerComponent = ({
   contextLines,
-  endLineNumber,
-  fileName,
+  filePath,
   isStreaming = false,
   newContent,
   oldContent,
@@ -228,11 +100,11 @@ const DiffViewerComponent = ({
   viewOnly = false,
 }: DiffViewerProps) => {
   const diffLines = useMemo(() => {
-    const diff = computeDiff(oldContent, newContent, isStreaming, startLineNumber)
+    const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
     return filterDiffWithContext(diff, contextLines)
   }, [contextLines, isStreaming, newContent, oldContent, startLineNumber])
 
-  const iconConfig = resolveFileIconConfig({ fileName })
+  const iconConfig = resolveFileIconConfig({ fileName: filePath })
   const FileIcon = iconConfig.icon
   const hasOldSide = !viewOnly && diffLines.some((line) => line.type !== 'collapsed' && line.oldLineNumber !== undefined)
 
@@ -243,14 +115,11 @@ const DiffViewerComponent = ({
           <span className="flex h-4 w-4 items-center justify-center">
             <FileIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
           </span>
-          <span className="truncate leading-[1] text-foreground">{fileName}</span>
+          <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
         </span>
-        {startLineNumber && endLineNumber ? (
-          <span className="ml-2 shrink-0 leading-[1]">{startLineNumber}-{endLineNumber}</span>
-        ) : null}
       </div>
 
-      <div className="overflow-auto bg-surface text-[12px] leading-5">
+      <div className="overflow-auto bg-surface font-mono text-[12px] leading-5">
         <div className="min-w-full w-fit">
           {diffLines.map((line, index) => {
             if (line.type === 'collapsed') {
@@ -265,22 +134,24 @@ const DiffViewerComponent = ({
             }
 
             return (
-              <div key={`${line.type}-${index}`} className={`flex min-h-5 ${getLineBackgroundClassName(line, viewOnly)}`}>
-                <div className="sticky left-0 z-10 shrink-0 border-r border-border bg-background/70 px-2 text-right text-subtle-foreground">
+              <div key={`${line.type}-${index}`} className="flex min-h-5 items-stretch">
+                <div className={`sticky left-0 z-10 flex shrink-0 px-2 text-right ${getLineGutterClassName()}`}>
                   {viewOnly || !hasOldSide ? (
-                    <span className="inline-block min-w-8">{line.newLineNumber ?? ''}</span>
+                    <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
                   ) : (
-                    <>
-                      <span className="inline-block min-w-8">{line.oldLineNumber ?? ''}</span>
-                      <span className="mx-1 inline-block text-border">|</span>
-                      <span className="inline-block min-w-8">{line.newLineNumber ?? ''}</span>
-                    </>
+                    <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
+                      <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
+                      <span className="flex h-full items-stretch justify-center" aria-hidden="true">
+                        <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
+                      </span>
+                      <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
+                    </span>
                   )}
                 </div>
 
-                <pre className="m-0 flex-1 overflow-visible px-3 py-0 whitespace-pre text-foreground">
+                <div className={`min-h-5 flex-1 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
                   {line.content.length > 0 ? line.content : ' '}
-                </pre>
+                </div>
               </div>
             )
           })}

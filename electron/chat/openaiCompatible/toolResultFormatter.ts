@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
+import { getDiffSummary } from '../../../src/lib/textDiff'
 import type { Message, ToolInvocationResultPresentation, ToolInvocationTrace } from '../../../src/types/chat'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 
@@ -183,12 +184,15 @@ function buildResultPresentation(
   const contextLines = readNumber(semanticResult.contextLines) ?? undefined
   const endLineNumber = readNumber(semanticResult.endLineNumber) ?? undefined
   const startLineNumber = readNumber(semanticResult.startLineNumber) ?? undefined
+  const { addedLineCount, removedLineCount } = getDiffSummary(oldContent, newContent)
 
   return {
+    addedLineCount,
     fileName,
     kind: 'file_diff',
     newContent,
     oldContent,
+    removedLineCount,
     ...(contextLines === undefined ? {} : { contextLines }),
     ...(endLineNumber === undefined ? {} : { endLineNumber }),
     ...(startLineNumber === undefined ? {} : { startLineNumber }),
@@ -308,6 +312,7 @@ export function buildFailedToolArtifacts(
       completedAt,
       id: toolCall.id,
       resultContent,
+      resultPresentation: undefined,
       startedAt,
       state: 'failed',
       toolName: toolCall.name,

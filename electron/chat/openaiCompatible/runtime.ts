@@ -22,8 +22,8 @@ import {
   readTextLikeValue,
 } from '../providers/openaiShared'
 import {
+  createToolExecutionScheduler,
   createToolExecutionTurnState,
-  executeToolCallWithPolicies,
   filterHistoricalToolMessages,
 } from './toolExecution'
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
@@ -313,6 +313,12 @@ export async function streamOpenAICompatibleResponseWithTools(
 ) {
   const inMemoryMessages = filterHistoricalToolMessages(request.messages)
   const turnState = createToolExecutionTurnState()
+  const toolExecutionScheduler = createToolExecutionScheduler({
+    agentContextRootPath: request.agentContextRootPath,
+    context,
+    inMemoryMessages,
+    turnState,
+  })
 
   while (!context.signal.aborted) {
     const turnResult = await streamOpenAICompatibleTurn(
@@ -336,11 +342,13 @@ export async function streamOpenAICompatibleResponseWithTools(
     }
 
     for (const toolCall of turnResult.toolCalls) {
-      await executeToolCallWithPolicies(toolCall, context, request.agentContextRootPath, inMemoryMessages, turnState)
+      toolExecutionScheduler.schedule(toolCall)
+    }
 
-      if (context.signal.aborted) {
-        return
-      }
+    await toolExecutionScheduler.drain()
+
+    if (context.signal.aborted) {
+      return
     }
   }
 }

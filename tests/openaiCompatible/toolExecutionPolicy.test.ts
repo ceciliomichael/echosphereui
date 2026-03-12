@@ -6,10 +6,14 @@ import test from 'node:test'
 import type { Message } from '../../src/types/chat'
 import type { StreamDeltaEvent } from '../../electron/chat/providerTypes'
 import {
+  createToolExecutionScheduler,
   createToolExecutionTurnState,
   executeToolCallWithPolicies,
 } from '../../electron/chat/openaiCompatible/toolExecution'
-import type { OpenAICompatibleToolCall } from '../../electron/chat/openaiCompatible/toolTypes'
+import type {
+  OpenAICompatibleToolCall,
+  OpenAICompatibleToolExecutionMode,
+} from '../../electron/chat/openaiCompatible/toolTypes'
 
 function createListToolCall(id: string, workspacePath: string): OpenAICompatibleToolCall {
   return {
@@ -91,4 +95,92 @@ test('executeToolCallWithPolicies allows rereading the same file without a synth
     assert.equal(inMemoryMessages.every((message) => !message.content.includes('Repeated identical read call blocked')), true)
     assert.equal(emittedEvents.every((event) => event.type !== 'tool_invocation_failed'), true)
   })
+})
+
+test('createToolExecutionScheduler runs parallel tool calls without serial buffering', async () => {
+  const emittedEvents: StreamDeltaEvent[] = []
+  const inMemoryMessages: Message[] = []
+  const turnState = createToolExecutionTurnState()
+  const startedToolCalls: string[] = []
+  const completedToolCalls: string[] = []
+  const context = {
+    emitDelta(event: StreamDeltaEvent) {
+      emittedEvents.push(event)
+    },
+    signal: new AbortController().signal,
+  }
+  const scheduler = createToolExecutionScheduler(
+    {
+      agentContextRootPath: 'C:\\workspace',
+      context,
+      inMemoryMessages,
+      turnState,
+    },
+    {
+      async executeToolCall(toolCall) {
+        startedToolCalls.push(toolCall.id)
+        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'read-1' ? 60 : 10))
+        completedToolCalls.push(toolCall.id)
+      },
+      resolveExecutionMode() {
+        return 'parallel'
+      },
+    },
+  )
+
+  const startTime = Date.now()
+  scheduler.schedule(createReadToolCall('read-1', 'C:\\workspace\\one.txt'))
+  scheduler.schedule(createReadToolCall('read-2', 'C:\\workspace\\two.txt'))
+  await scheduler.drain()
+  const elapsedMs = Date.now() - startTime
+
+  assert.deepEqual(startedToolCalls, ['read-1', 'read-2'])
+  assert.deepEqual(completedToolCalls, ['read-2', 'read-1'])
+  assert.equal(elapsedMs < 120, true)
+  assert.equal(emittedEvents.length, 0)
+})
+
+test('createToolExecutionScheduler keeps exclusive tool calls as ordering barriers', async () => {
+  const executionLog: string[] = []
+  const context = {
+    emitDelta(_event: StreamDeltaEvent) {},
+    signal: new AbortController().signal,
+  }
+  const scheduler = createToolExecutionScheduler(
+    {
+      agentContextRootPath: 'C:\\workspace',
+      context,
+      inMemoryMessages: [],
+      turnState: createToolExecutionTurnState(),
+    },
+    {
+      async executeToolCall(toolCall) {
+        executionLog.push(`start:${toolCall.id}`)
+        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'read-1' ? 30 : 5))
+        executionLog.push(`end:${toolCall.id}`)
+      },
+      resolveExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
+        return toolName === 'edit' ? 'exclusive' : 'parallel'
+      },
+    },
+  )
+
+  scheduler.schedule(createReadToolCall('read-1', 'C:\\workspace\\one.txt'))
+  scheduler.schedule({
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\file.txt', new_string: 'next', old_string: 'old' }),
+    id: 'edit-1',
+    name: 'edit',
+    startedAt: 1_700_000_000_000,
+  })
+  scheduler.schedule(createReadToolCall('read-2', 'C:\\workspace\\two.txt'))
+  await scheduler.drain()
+
+  assert.deepEqual(executionLog, [
+    'start:read-1',
+    'end:read-1',
+    'start:edit-1',
+    'end:edit-1',
+    'start:read-2',
+    'end:read-2',
+  ])
 })

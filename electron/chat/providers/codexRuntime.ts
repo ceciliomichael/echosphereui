@@ -79,6 +79,10 @@ export interface CodexStreamTurnResult {
   toolCalls: OpenAICompatibleToolCall[]
 }
 
+interface ParseSseResponseStreamOptions {
+  onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
+}
+
 interface ParsedReasoningEvent {
   delta: string
   isNewReasoningBlock?: boolean
@@ -537,12 +541,38 @@ function toToolCallList(toolCallsByOutputIndex: Map<number, CodexToolCallAccumul
     })
 }
 
+function emitCompletedToolCall(
+  outputIndex: number,
+  toolCallsByOutputIndex: Map<number, CodexToolCallAccumulator>,
+  completedToolCallOutputIndexes: Set<number>,
+  onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void,
+) {
+  if (!onToolCallReady || completedToolCallOutputIndexes.has(outputIndex)) {
+    return
+  }
+
+  const toolAccumulator = toolCallsByOutputIndex.get(outputIndex)
+  if (!toolAccumulator || !toolAccumulator.name.trim()) {
+    return
+  }
+
+  completedToolCallOutputIndexes.add(outputIndex)
+  onToolCallReady({
+    argumentsText: toolAccumulator.argumentsText,
+    id: toolAccumulator.id,
+    name: toolAccumulator.name,
+    startedAt: toolAccumulator.startedAt ?? Date.now(),
+  })
+}
+
 function handleStreamEventPayload(
   payload: CodexStreamEventPayload,
   emitDelta: (event: ParsedCodexStreamEvent) => void,
   toolCallsByOutputIndex: Map<number, CodexToolCallAccumulator>,
   referenceIndex: Map<string, number>,
   nextSyntheticOutputIndex: () => number,
+  completedToolCallOutputIndexes: Set<number>,
+  onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void,
 ) {
   const eventType = payload.type
   if (!hasText(eventType)) {
@@ -586,6 +616,16 @@ function handleStreamEventPayload(
       emitDelta,
     )
     if (handledToolCall) {
+      if (eventType === 'response.output_item.done') {
+        const item = readNestedRecord(payload.item)
+        const outputIndex = resolveAccumulatorOutputIndex(
+          payload,
+          item,
+          referenceIndex,
+          nextSyntheticOutputIndex,
+        )
+        emitCompletedToolCall(outputIndex, toolCallsByOutputIndex, completedToolCallOutputIndexes, onToolCallReady)
+      }
       return
     }
 
@@ -622,6 +662,9 @@ function handleStreamEventPayload(
       nextSyntheticOutputIndex,
       emitDelta,
     )
+    const item = readNestedRecord(payload.item)
+    const outputIndex = resolveAccumulatorOutputIndex(payload, item, referenceIndex, nextSyntheticOutputIndex)
+    emitCompletedToolCall(outputIndex, toolCallsByOutputIndex, completedToolCallOutputIndexes, onToolCallReady)
     return
   }
 
@@ -644,6 +687,7 @@ export async function parseSseResponseStream(
   response: Response,
   emitDelta: ProviderStreamContext['emitDelta'],
   signal: AbortSignal,
+  options: ParseSseResponseStreamOptions = {},
 ): Promise<CodexStreamTurnResult> {
   if (!response.body) {
     throw new Error('Codex returned an empty streaming response body.')
@@ -652,6 +696,7 @@ export async function parseSseResponseStream(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   const toolCallsByOutputIndex = new Map<number, CodexToolCallAccumulator>()
+  const completedToolCallOutputIndexes = new Set<number>()
   const referenceIndex = new Map<string, number>()
   let pendingBuffer = ''
   let assistantContent = ''
@@ -710,6 +755,8 @@ export async function parseSseResponseStream(
       toolCallsByOutputIndex,
       referenceIndex,
       nextSyntheticOutputIndex,
+      completedToolCallOutputIndexes,
+      options.onToolCallReady,
     )
   }
 

@@ -8,12 +8,14 @@ export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash'
 export type ChatAttachmentKind = 'image' | 'text'
 
 export interface FileDiffToolResultPresentation {
+  addedLineCount?: number
   contextLines?: number
   endLineNumber?: number
   fileName: string
   kind: 'file_diff'
   newContent: string
   oldContent: string | null
+  removedLineCount?: number
   startLineNumber?: number
 }
 
