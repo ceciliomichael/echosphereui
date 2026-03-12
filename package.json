@@ -8,7 +8,7 @@
     "build": "tsc && vite build && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts"
+    "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts tests/codex/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
