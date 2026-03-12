@@ -123,6 +123,7 @@ export async function executeToolCallWithPolicies(
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
       signal: context.signal,
+      workspaceCheckpointId: context.workspaceCheckpointId,
     })
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)

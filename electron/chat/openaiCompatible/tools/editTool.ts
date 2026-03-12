@@ -10,6 +10,7 @@ import {
 } from './filesystemToolUtils'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 import { OpenAICompatibleToolError } from '../toolTypes'
+import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoints'
 
 function getNearbySnippet(input: string, targetLine: number) {
   const lines = input.split('\n')
@@ -132,6 +133,10 @@ export const editTool: OpenAICompatibleToolDefinition = {
       singleEditStartLine + Math.max(oldLineCount, newLineCount) - 1
     const usesWholeFileDiff = replaceAll || occurrences > 1
     const contentChanged = normalizedContent !== nextContent
+
+    if (context.workspaceCheckpointId) {
+      await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
+    }
 
     await fs.writeFile(normalizedTargetPath, usesCrlf ? nextContent.replace(/\n/g, '\r\n') : nextContent, 'utf8')
 

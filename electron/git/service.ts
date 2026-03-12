@@ -83,20 +83,30 @@ async function resolveRepositoryRoot(workspacePath: string) {
 }
 
 async function readCurrentBranch(repoRootPath: string) {
-  const { stdout } = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRootPath)
-  const currentReference = stdout.trim()
-  if (currentReference === 'HEAD') {
-    const { stdout: detachedHeadOutput } = await runGit(['rev-parse', '--short', 'HEAD'], repoRootPath)
-    const detachedHeadSha = detachedHeadOutput.trim()
+  try {
+    const { stdout } = await runGit(['symbolic-ref', '--quiet', '--short', 'HEAD'], repoRootPath)
+    const branchName = stdout.trim()
+    return {
+      currentBranch: branchName.length > 0 ? branchName : null,
+      isDetachedHead: false,
+    }
+  } catch {
+    // `symbolic-ref` fails when HEAD is detached. In "unborn" repos (no commits yet),
+    // `rev-parse HEAD` can also fail, so treat that as "no current commit".
+  }
+
+  try {
+    const { stdout } = await runGit(['rev-parse', '--short', 'HEAD'], repoRootPath)
+    const detachedHeadSha = stdout.trim()
     return {
       currentBranch: detachedHeadSha.length > 0 ? `detached@${detachedHeadSha}` : null,
       isDetachedHead: true,
     }
-  }
-
-  return {
-    currentBranch: currentReference.length > 0 ? currentReference : null,
-    isDetachedHead: false,
+  } catch {
+    return {
+      currentBranch: null,
+      isDetachedHead: false,
+    }
   }
 }
 

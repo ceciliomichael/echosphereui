@@ -17,6 +17,7 @@ import type {
   AppSettings,
   CheckoutGitBranchInput,
   CreateGitBranchInput,
+  CreateWorkspaceCheckpointInput,
   EstimateContextUsageInput,
   SaveCustomModelInput,
   StartChatStreamInput,
@@ -49,6 +50,7 @@ import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
 import { checkoutGitBranch, createAndCheckoutGitBranch, getGitBranchState } from './git/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
+import { createWorkspaceCheckpoint, restoreWorkspaceCheckpoint } from './workspace/checkpoints'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -210,6 +212,12 @@ function registerHistoryHandlers() {
   ipcMain.handle('git:checkoutBranch', async (_event, input: CheckoutGitBranchInput) => checkoutGitBranch(input))
   ipcMain.handle('git:createAndCheckoutBranch', async (_event, input: CreateGitBranchInput) =>
     createAndCheckoutGitBranch(input),
+  )
+  ipcMain.handle('workspace:checkpoint:create', async (_event, input: CreateWorkspaceCheckpointInput) =>
+    createWorkspaceCheckpoint(input),
+  )
+  ipcMain.handle('workspace:checkpoint:restore', async (_event, checkpointId: string) =>
+    restoreWorkspaceCheckpoint(checkpointId),
   )
 }
 

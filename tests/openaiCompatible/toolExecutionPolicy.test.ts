@@ -55,6 +55,7 @@ test('executeToolCallWithPolicies allows repeating the same list call without a 
         emittedEvents.push(event)
       },
       signal: new AbortController().signal,
+      workspaceCheckpointId: null,
     }
 
     await executeToolCallWithPolicies(createListToolCall('call-1', workspacePath), context, workspacePath, inMemoryMessages, turnState)
@@ -84,6 +85,7 @@ test('executeToolCallWithPolicies allows rereading the same file without a synth
         emittedEvents.push(event)
       },
       signal: new AbortController().signal,
+      workspaceCheckpointId: null,
     }
 
     await executeToolCallWithPolicies(createReadToolCall('read-1', filePath), context, workspacePath, inMemoryMessages, turnState)
@@ -107,6 +109,7 @@ test('createToolExecutionScheduler runs parallel tool calls without serial buffe
       emittedEvents.push(event)
     },
     signal: new AbortController().signal,
+    workspaceCheckpointId: null,
   }
   const scheduler = createToolExecutionScheduler(
     {
@@ -145,6 +148,7 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
   const context = {
     emitDelta(_event: StreamDeltaEvent) {},
     signal: new AbortController().signal,
+    workspaceCheckpointId: null,
   }
   const scheduler = createToolExecutionScheduler(
     {
@@ -200,6 +204,7 @@ test('createToolExecutionScheduler still serializes path-exclusive tool calls fo
   const context = {
     emitDelta(_event: StreamDeltaEvent) {},
     signal: new AbortController().signal,
+    workspaceCheckpointId: null,
   }
   const scheduler = createToolExecutionScheduler(
     {

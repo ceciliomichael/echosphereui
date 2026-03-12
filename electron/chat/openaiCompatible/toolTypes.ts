@@ -12,6 +12,7 @@ export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel' | 'path
 export interface OpenAICompatibleToolExecutionContext {
   agentContextRootPath: string
   signal: AbortSignal
+  workspaceCheckpointId: string | null
 }
 
 export class OpenAICompatibleToolError extends Error {

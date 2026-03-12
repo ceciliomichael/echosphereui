@@ -62,10 +62,16 @@ export interface Message {
   reasoningContent?: string
   reasoningCompletedAt?: number
   reasoningEffort?: ReasoningEffort
+  runCheckpoint?: UserMessageRunCheckpoint
   timestamp: number
   toolCallId?: string
   toolInvocations?: ToolInvocationTrace[]
   userMessageKind?: UserMessageKind
+}
+
+export interface UserMessageRunCheckpoint {
+  createdAt: number
+  id: string
 }
 
 export interface ConversationSummary {
@@ -231,6 +237,10 @@ export interface EstimateContextUsageInput {
   providerId: ChatProviderId
 }
 
+export interface CreateWorkspaceCheckpointInput {
+  workspaceRootPath: string
+}
+
 export interface ContextUsageEstimate {
   historyTokens: number
   maxTokens: number
@@ -362,6 +372,11 @@ export interface EchosphereChatApi {
   estimateContextUsage: (input: EstimateContextUsageInput) => Promise<ContextUsageEstimate>
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
   startStream: (input: StartChatStreamInput) => Promise<StartChatStreamResult>
+}
+
+export interface EchosphereWorkspaceApi {
+  createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
+  restoreCheckpoint: (checkpointId: string) => Promise<void>
 }
 
 export interface EchosphereGitApi {

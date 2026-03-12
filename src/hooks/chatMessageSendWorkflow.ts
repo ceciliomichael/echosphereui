@@ -1,7 +1,11 @@
-import { persistAssistantTurn, persistUserTurn } from './chatHistoryWorkflows'
+import type { ConversationRecord, Message } from '../types/chat'
+import { persistConversationSnapshot, persistUserTurn } from './chatHistoryWorkflows'
 import { createChatAssistantDraftManager } from './chatAssistantDrafts'
 import { streamAssistantResponse, toErrorMessage } from './chatMessageRuntime'
 import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
+
+const STREAM_PROGRESS_PERSIST_DEBOUNCE_MS = 220
+const STREAM_PROGRESS_PERSIST_CHAR_FLUSH_THRESHOLD = 180
 
 function validateRuntimeSelection(input: PersistAndStreamMessageInput) {
   if (!input.runtimeSelection.hasConfiguredProvider) {
@@ -23,6 +27,100 @@ function validateRuntimeSelection(input: PersistAndStreamMessageInput) {
   return input.runtimeSelection.providerId
 }
 
+function createStreamProgressPersistenceController(input: {
+  conversationId: string
+  setError: (errorMessage: string | null) => void
+}) {
+  let pendingMessages: Message[] | null = null
+  let pendingFlushTimeoutId: number | null = null
+  let flushPromise: Promise<ConversationRecord | null> | null = null
+  let pendingDeltaCharCount = 0
+
+  const flushPendingMessages = () => {
+    if (flushPromise) {
+      return flushPromise
+    }
+
+    flushPromise = (async () => {
+      let latestSavedConversation: ConversationRecord | null = null
+
+      while (pendingMessages !== null) {
+        const messagesSnapshot = pendingMessages
+        pendingMessages = null
+        latestSavedConversation = await persistConversationSnapshot(input.conversationId, messagesSnapshot)
+      }
+
+      return latestSavedConversation
+    })()
+      .catch((caughtError) => {
+        console.error(caughtError)
+        input.setError(toErrorMessage(caughtError, 'Unable to save the latest assistant progress.'))
+        return null
+      })
+      .finally(() => {
+        flushPromise = null
+      })
+
+    return flushPromise
+  }
+
+  const queueSnapshot = (messages: Message[], options?: { immediate?: boolean }) => {
+    pendingMessages = [...messages]
+    pendingDeltaCharCount = options?.immediate ? 0 : pendingDeltaCharCount
+
+    if (options?.immediate) {
+      if (pendingFlushTimeoutId !== null) {
+        window.clearTimeout(pendingFlushTimeoutId)
+        pendingFlushTimeoutId = null
+      }
+
+      void flushPendingMessages()
+      return
+    }
+
+    if (pendingFlushTimeoutId !== null) {
+      return
+    }
+
+    pendingFlushTimeoutId = window.setTimeout(() => {
+      pendingFlushTimeoutId = null
+      void flushPendingMessages()
+    }, STREAM_PROGRESS_PERSIST_DEBOUNCE_MS)
+  }
+
+  const queueSnapshotWithHint = (
+    messages: Message[],
+    options?: { immediate?: boolean },
+    hint?: { deltaCharCount?: number },
+  ) => {
+    if (typeof hint?.deltaCharCount === 'number' && Number.isFinite(hint.deltaCharCount) && hint.deltaCharCount > 0) {
+      pendingDeltaCharCount += hint.deltaCharCount
+      if (pendingDeltaCharCount >= STREAM_PROGRESS_PERSIST_CHAR_FLUSH_THRESHOLD) {
+        queueSnapshot(messages, { immediate: true })
+        pendingDeltaCharCount = 0
+        return
+      }
+    }
+
+    queueSnapshot(messages, options)
+  }
+
+  const flush = async () => {
+    if (pendingFlushTimeoutId !== null) {
+      window.clearTimeout(pendingFlushTimeoutId)
+      pendingFlushTimeoutId = null
+    }
+
+    pendingDeltaCharCount = 0
+    return flushPendingMessages()
+  }
+
+  return {
+    flush,
+    queueSnapshot: queueSnapshotWithHint,
+  }
+}
+
 export async function persistAndStreamMessage(input: PersistAndStreamMessageInput) {
   const providerId = validateRuntimeSelection(input)
   if (!providerId) {
@@ -33,6 +131,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   const initiatingFolderId = input.selectedFolderId
   let conversationIdForCleanup = initiatingConversationId
   let draftManager: ReturnType<typeof createChatAssistantDraftManager> | null = null
+  let streamProgressPersistence: ReturnType<typeof createStreamProgressPersistenceController> | null = null
 
   input.clearError()
 
@@ -81,10 +180,19 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.setMainComposerAttachments([])
     }
 
+    streamProgressPersistence = createStreamProgressPersistenceController({
+      conversationId: conversation.id,
+      setError: input.setError,
+    })
+
     draftManager = createChatAssistantDraftManager({
       appendLocalMessage: input.appendLocalMessage,
       conversationId: conversation.id,
+      initialConversationMessages: conversation.messages,
       markTextStreamingPulse: input.markTextStreamingPulse,
+      onConversationMessagesUpdated: (messages, options, hint) => {
+        streamProgressPersistence?.queueSnapshot(messages, options, hint)
+      },
       providerId,
       removeLocalMessage: input.removeLocalMessage,
       runtimeSelection: input.runtimeSelection,
@@ -113,6 +221,10 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
 
     const streamedMessages = draftManager.finalizeStreamedMessages(streamedAssistant.wasAborted)
     if (streamedMessages === null) {
+      if (streamProgressPersistence) {
+        await streamProgressPersistence.flush()
+      }
+
       return
     }
 
@@ -124,11 +236,16 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.updateLocalMessage(conversation.id, message.id, () => message)
     }
 
+    const finalizedConversationMessages = [...conversation.messages, ...streamedMessages]
+    streamProgressPersistence?.queueSnapshot(finalizedConversationMessages, { immediate: true })
+
     if (!(conversation.id in input.conversationRuntimeStatesRef.current)) {
       return
     }
 
-    const savedConversation = await persistAssistantTurn(conversation.id, streamedMessages)
+    const savedConversation =
+      (await streamProgressPersistence?.flush()) ??
+      (await persistConversationSnapshot(conversation.id, finalizedConversationMessages))
     if (!(savedConversation.id in input.conversationRuntimeStatesRef.current)) {
       return
     }
@@ -139,6 +256,10 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     console.error(caughtError)
     if (draftManager) {
       draftManager.removeInsertedMessages()
+    }
+
+    if (streamProgressPersistence) {
+      await streamProgressPersistence.flush()
     }
 
     const providerLabel = input.runtimeSelection.providerLabel ?? 'the selected provider'

@@ -30,4 +30,5 @@ interface Window {
   echosphereModels: import('../src/types/chat').EchosphereModelsApi
   echosphereProviders: import('../src/types/chat').EchosphereProvidersApi
   echosphereSettings: import('../src/types/chat').EchosphereSettingsApi
+  echosphereWorkspace: import('../src/types/chat').EchosphereWorkspaceApi
 }

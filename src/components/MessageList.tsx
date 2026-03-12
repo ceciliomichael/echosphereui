@@ -15,14 +15,17 @@ interface MessageListProps {
   composerAttachments: ChatAttachment[]
   composerValue: string
   composerFocusSignal?: number
+  editComposerDirty?: boolean
   editingMessageId?: string | null
   isSending?: boolean
   messages: Message[]
+  onAbortStreamingResponse?: () => void
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
   onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
+  onRevertUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
@@ -45,15 +48,18 @@ interface MessageRowProps {
   composerAttachments: ChatAttachment[]
   composerFocusSignal?: number
   composerValue: string
+  editComposerDirty: boolean
   isEditing: boolean
   isSending: boolean
   isStreaming: boolean
   message: Message
+  onAbortStreamingResponse?: () => void
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
   onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
+  onRevertUserMessage?: (messageId: string) => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onSendEditedMessage: () => void
@@ -76,15 +82,18 @@ const MessageRow = memo(
     composerAttachments,
     composerFocusSignal,
     composerValue,
+    editComposerDirty,
     isEditing,
-    isSending,
+    isSending: _isSending,
     isStreaming,
     message,
+    onAbortStreamingResponse,
     onCancelEditingMessage,
     onChatModeChange,
     onComposerAttachmentsChange,
     onComposerValueChange,
     onEditUserMessage,
+    onRevertUserMessage,
     onModelChange,
     onReasoningEffortChange,
     onSendEditedMessage,
@@ -100,10 +109,10 @@ const MessageRow = memo(
     workspaceRootPath = null,
   }: MessageRowProps) {
     return (
-      <div className={message.role === 'user' ? 'flex min-w-0 justify-end' : 'flex min-w-0 justify-start'}>
+      <div className={message.role === 'user' ? 'flex w-full min-w-0 justify-start' : 'flex w-full min-w-0 justify-start'}>
         {message.role === 'user' ? (
           isEditing ? (
-            <div className="-mx-4 w-[calc(100%+2rem)]">
+            <div className="-mx-4 flex-1 min-w-0 w-[calc(100%+2rem)]">
               <ChatInput
                 attachments={composerAttachments}
                 value={composerValue}
@@ -117,8 +126,11 @@ const MessageRow = memo(
                 onChatModeChange={onChatModeChange}
                 sendOnEnter={sendMessageOnEnter}
                 variant="inline"
+                actionButtonMode={_isSending && !editComposerDirty ? 'abort' : 'send'}
                 focusSignal={composerFocusSignal}
-                disabled={isSending}
+                disabled={false}
+                isStreaming={_isSending && !editComposerDirty}
+                onAbort={onAbortStreamingResponse}
                 selectedChatMode={selectedChatMode}
                 modelOptions={modelOptions}
                 onModelChange={onModelChange}
@@ -130,10 +142,13 @@ const MessageRow = memo(
               />
             </div>
           ) : (
-            <div className="-mx-4 w-[calc(100%+2rem)]">
+            <div className="-mx-4 flex-1 min-w-0 w-[calc(100%+2rem)] max-w-full">
               <UserMessage
                 content={message.content}
                 onEdit={onEditUserMessage ? () => onEditUserMessage(message.id) : undefined}
+                onRevert={
+                  message.runCheckpoint && onRevertUserMessage ? () => onRevertUserMessage(message.id) : undefined
+                }
               />
             </div>
           )
@@ -193,9 +208,12 @@ export function MessageList({
   chatModeSelectorDisabled,
   conversationId,
   composerAttachments,
+  editComposerDirty = false,
   messages,
+  onAbortStreamingResponse,
   editingMessageId = null,
   onEditUserMessage,
+  onRevertUserMessage,
   composerValue,
   onComposerValueChange,
   onComposerAttachmentsChange,
@@ -237,15 +255,18 @@ export function MessageList({
             composerAttachments={composerAttachments}
             composerFocusSignal={composerFocusSignal}
             composerValue={composerValue}
+            editComposerDirty={editComposerDirty}
             isEditing={editingMessageId === msg.id}
             isSending={isSending}
             isStreaming={streamingAssistantMessageId === msg.id}
             message={msg}
+            onAbortStreamingResponse={onAbortStreamingResponse}
             onCancelEditingMessage={onCancelEditingMessage}
             onChatModeChange={onChatModeChange}
             onComposerAttachmentsChange={onComposerAttachmentsChange}
             onComposerValueChange={onComposerValueChange}
             onEditUserMessage={onEditUserMessage}
+            onRevertUserMessage={onRevertUserMessage}
             onModelChange={onModelChange}
             onReasoningEffortChange={onReasoningEffortChange}
             onSendEditedMessage={onSendEditedMessage}

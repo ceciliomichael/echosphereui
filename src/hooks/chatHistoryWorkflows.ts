@@ -8,6 +8,7 @@ import type {
   Message,
   ReasoningEffort,
   ChatProviderId,
+  UserMessageRunCheckpoint,
 } from '../types/chat'
 import { getConversationTitleFromInput } from './chatHistoryViewModels'
 
@@ -40,6 +41,7 @@ function buildUserMessage(
   providerId: ChatProviderId,
   reasoningEffort: ReasoningEffort,
   attachments: ChatAttachment[],
+  runCheckpoint: UserMessageRunCheckpoint,
   forcedId?: string,
 ): Message {
   return {
@@ -50,6 +52,7 @@ function buildUserMessage(
     providerId,
     reasoningEffort,
     role: 'user',
+    runCheckpoint,
     timestamp: Date.now(),
   }
 }
@@ -61,6 +64,12 @@ async function loadStoredConversationOrThrow(conversationId: string) {
   }
 
   return conversation
+}
+
+async function createRunCheckpoint(agentContextRootPath: string) {
+  return window.echosphereWorkspace.createCheckpoint({
+    workspaceRootPath: agentContextRootPath,
+  })
 }
 
 export async function loadInitialChatHistory(preferredConversationId?: string | null): Promise<ChatHistorySnapshot> {
@@ -97,21 +106,22 @@ export async function loadInitialChatHistory(preferredConversationId?: string | 
 }
 
 export async function persistUserTurn(input: PersistUserTurnInput): Promise<PersistUserTurnResult> {
-  const userMessage = buildUserMessage(
-    input.trimmedText,
-    input.modelId,
-    input.providerId,
-    input.reasoningEffort,
-    input.attachments,
-    input.targetEditMessageId ?? undefined,
-  )
-
   if (input.targetEditMessageId !== null) {
     if (!input.activeConversationId) {
       throw new Error('Cannot edit a message without an active conversation.')
     }
 
     const currentConversation = await loadStoredConversationOrThrow(input.activeConversationId)
+    const runCheckpoint = await createRunCheckpoint(currentConversation.agentContextRootPath)
+    const userMessage = buildUserMessage(
+      input.trimmedText,
+      input.modelId,
+      input.providerId,
+      input.reasoningEffort,
+      input.attachments,
+      runCheckpoint,
+      input.targetEditMessageId,
+    )
     const targetMessageIndex = currentConversation.messages.findIndex(
       (message) => message.id === input.targetEditMessageId && message.role === 'user',
     )
@@ -148,7 +158,20 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
     currentConversation = createdConversation
   }
 
-  const shouldUpdateTitle = Boolean(currentConversation && currentConversation.messages.length === 0)
+  if (!currentConversation) {
+    throw new Error(`Conversation not found: ${conversationId}`)
+  }
+
+  const shouldUpdateTitle = currentConversation.messages.length === 0
+  const runCheckpoint = await createRunCheckpoint(currentConversation.agentContextRootPath)
+  const userMessage = buildUserMessage(
+    input.trimmedText,
+    input.modelId,
+    input.providerId,
+    input.reasoningEffort,
+    input.attachments,
+    runCheckpoint,
+  )
   const conversation = await window.echosphereHistory.appendMessages({
     conversationId,
     messages: [userMessage],
@@ -165,5 +188,45 @@ export async function persistAssistantTurn(conversationId: string, messages: Mes
   return window.echosphereHistory.appendMessages({
     conversationId,
     messages,
+  })
+}
+
+export async function persistConversationSnapshot(conversationId: string, messages: Message[]) {
+  return window.echosphereHistory.replaceMessages({
+    conversationId,
+    messages,
+  })
+}
+
+export async function restoreWorkspaceCheckpointForMessage(conversationId: string, messageId: string) {
+  const conversation = await loadStoredConversationOrThrow(conversationId)
+  const targetMessageIndex = conversation.messages.findIndex(
+    (message) => message.id === messageId && message.role === 'user',
+  )
+
+  if (targetMessageIndex < 0) {
+    throw new Error(`Message not found: ${messageId}`)
+  }
+
+  const targetMessage = conversation.messages[targetMessageIndex]
+  const checkpointId = targetMessage.runCheckpoint?.id
+  if (!checkpointId) {
+    throw new Error('This message does not have a workspace checkpoint.')
+  }
+
+  await window.echosphereWorkspace.restoreCheckpoint(checkpointId)
+  return {
+    conversation,
+    targetMessage,
+    targetMessageIndex,
+  }
+}
+
+export async function revertConversationToMessage(conversationId: string, messageId: string) {
+  const { conversation, targetMessageIndex } = await restoreWorkspaceCheckpointForMessage(conversationId, messageId)
+
+  return window.echosphereHistory.replaceMessages({
+    conversationId,
+    messages: conversation.messages.slice(0, targetMessageIndex + 1),
   })
 }

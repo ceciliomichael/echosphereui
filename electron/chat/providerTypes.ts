@@ -56,6 +56,7 @@ export interface ProviderStreamRequest {
 export interface ProviderStreamContext {
   emitDelta: (event: StreamDeltaEvent) => void
   signal: AbortSignal
+  workspaceCheckpointId: string | null
 }
 
 export interface ChatProviderAdapter {

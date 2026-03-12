@@ -1,10 +1,12 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
+import { restoreWorkspaceCheckpointForMessage } from './chatHistoryWorkflows'
 import { persistAndStreamMessage } from './chatMessageSendWorkflow'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
 
 interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'runtimeSelection' | 'targetEditMessageId' | 'trimmedText' | 'attachments'> {
   activeConversationStateIsSending: boolean
+  beginEditingMessage: (messageId: string) => void
   editComposerAttachments: PersistAndStreamMessageInput['attachments']
   editComposerValue: string
   editingMessageId: string | null
@@ -13,10 +15,130 @@ interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'ru
   pendingDraftSendCount: number
 }
 
+type ConversationStateSnapshot =
+  | PersistAndStreamMessageInput['conversationRuntimeStatesRef']['current'][string]
+  | null
+
+function isMissingCheckpointError(error: unknown) {
+  return error instanceof Error && error.message === 'This message does not have a workspace checkpoint.'
+}
+
+function toActionErrorMessage(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  return fallbackMessage
+}
+
+function sleep(milliseconds: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, milliseconds)
+  })
+}
+
 export function useChatSendActions(input: UseChatSendActionsInput) {
+  const actionInFlightRef = useRef(false)
+
+  const getConversationState = useCallback(
+    (conversationId: string) => input.conversationRuntimeStatesRef.current[conversationId] ?? null,
+    [input.conversationRuntimeStatesRef],
+  )
+
+  const findActiveRunConversationId = useCallback(() => {
+    const activeConversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+    if (activeConversationId) {
+      return activeConversationId
+    }
+
+    const activeEntry = Object.values(input.conversationRuntimeStatesRef.current).find(
+      (conversationState) => conversationState.isSending || conversationState.activeStreamId !== null,
+    )
+
+    return activeEntry?.conversation.id ?? null
+  }, [input.activeConversationId, input.activeConversationIdRef, input.conversationRuntimeStatesRef])
+
+  const waitForConversationRunState = useCallback(
+    async (
+      conversationId: string,
+      predicate: (conversationState: ConversationStateSnapshot) => boolean,
+      timeoutMs = 4_000,
+    ) => {
+      const startedAt = Date.now()
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const conversationState = getConversationState(conversationId)
+        if (predicate(conversationState)) {
+          return conversationState
+        }
+
+        await sleep(25)
+      }
+
+      throw new Error('Timed out while waiting for the current run state to settle.')
+    },
+    [getConversationState],
+  )
+
+  const waitForAbortableConversationId = useCallback(async () => {
+    const immediateConversationId = findActiveRunConversationId()
+    if (immediateConversationId) {
+      return immediateConversationId
+    }
+
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < 4_000) {
+      const conversationId = findActiveRunConversationId()
+      if (conversationId) {
+        return conversationId
+      }
+
+      await sleep(25)
+    }
+
+    return null
+  }, [findActiveRunConversationId])
+
+  const abortActiveStreamIfNeeded = useCallback(async () => {
+    const conversationId = await waitForAbortableConversationId()
+    if (!conversationId) {
+      return
+    }
+
+    let conversationState = getConversationState(conversationId)
+    if (!conversationState) {
+      return
+    }
+
+    if (!conversationState?.isSending && conversationState?.activeStreamId === null) {
+      return
+    }
+
+    if (!conversationState?.activeStreamId && conversationState?.isSending) {
+      conversationState = await waitForConversationRunState(
+        conversationId,
+        (currentValue) => !currentValue?.isSending || currentValue.activeStreamId !== null,
+      )
+    }
+
+    const streamId = conversationState?.activeStreamId ?? null
+    if (streamId) {
+      await window.echosphereChat.cancelStream(streamId)
+    }
+
+    await waitForConversationRunState(
+      conversationId,
+      (currentValue) => currentValue?.isSending !== true && currentValue?.activeStreamId === null,
+    )
+  }, [getConversationState, waitForAbortableConversationId, waitForConversationRunState])
+
   const sendNewMessage = useCallback(
     async (runtimeSelection: ChatRuntimeSelection) => {
-      if (input.activeConversationStateIsSending || (input.activeConversationId === null && input.pendingDraftSendCount > 0)) {
+      if (
+        actionInFlightRef.current ||
+        input.activeConversationStateIsSending ||
+        (input.activeConversationId === null && input.pendingDraftSendCount > 0)
+      ) {
         return
       }
 
@@ -38,11 +160,8 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
 
   const sendEditedMessage = useCallback(
     async (runtimeSelection: ChatRuntimeSelection) => {
-      if (
-        input.editingMessageId === null ||
-        input.activeConversationStateIsSending ||
-        (input.activeConversationId === null && input.pendingDraftSendCount > 0)
-      ) {
+      const conversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+      if (actionInFlightRef.current || input.editingMessageId === null || conversationId === null) {
         return
       }
 
@@ -51,37 +170,88 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         return
       }
 
-      await persistAndStreamMessage({
-        ...input,
-        attachments: input.editComposerAttachments,
-        runtimeSelection,
-        targetEditMessageId: input.editingMessageId,
-        trimmedText,
-      })
+      actionInFlightRef.current = true
+
+      let setupSuccessful = false
+      try {
+        input.clearError()
+        await abortActiveStreamIfNeeded()
+        try {
+          await restoreWorkspaceCheckpointForMessage(conversationId, input.editingMessageId)
+        } catch (caughtError) {
+          if (!isMissingCheckpointError(caughtError)) {
+            throw caughtError
+          }
+        }
+        setupSuccessful = true
+      } catch (caughtError) {
+        console.error(caughtError)
+        input.setError(toActionErrorMessage(caughtError, 'Unable to resend your edit.'))
+      } finally {
+        actionInFlightRef.current = false
+      }
+
+      if (setupSuccessful) {
+        await persistAndStreamMessage({
+          ...input,
+          attachments: input.editComposerAttachments,
+          runtimeSelection,
+          targetEditMessageId: input.editingMessageId,
+          trimmedText,
+        })
+      }
     },
-    [input],
+    [abortActiveStreamIfNeeded, input],
   )
 
   const abortStreamingResponse = useCallback(async () => {
-    if (!input.activeConversationId) {
-      return
-    }
-
-    const streamId = input.conversationRuntimeStatesRef.current[input.activeConversationId]?.activeStreamId ?? null
-    if (!streamId) {
+    if (actionInFlightRef.current) {
       return
     }
 
     try {
-      await window.echosphereChat.cancelStream(streamId)
+      await abortActiveStreamIfNeeded()
     } catch (caughtError) {
       console.error(caughtError)
       input.setError('Unable to stop the current response.')
     }
-  }, [input])
+  }, [abortActiveStreamIfNeeded, input])
+
+  const revertUserMessage = useCallback(
+    async (messageId: string) => {
+      const conversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+      if (actionInFlightRef.current || !conversationId) {
+        return
+      }
+
+      actionInFlightRef.current = true
+
+      try {
+        input.clearError()
+        await abortActiveStreamIfNeeded()
+        try {
+          await restoreWorkspaceCheckpointForMessage(conversationId, messageId)
+        } catch (caughtError) {
+          if (!isMissingCheckpointError(caughtError)) {
+            throw caughtError
+          }
+        }
+
+        input.beginEditingMessage(messageId)
+      } catch (caughtError) {
+        console.error(caughtError)
+        input.cancelEditingMessage()
+        input.setError(toActionErrorMessage(caughtError, 'Unable to revert to that checkpoint.'))
+      } finally {
+        actionInFlightRef.current = false
+      }
+    },
+    [abortActiveStreamIfNeeded, input],
+  )
 
   return {
     abortStreamingResponse,
+    revertUserMessage,
     sendEditedMessage,
     sendNewMessage,
   }

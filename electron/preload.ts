@@ -14,8 +14,10 @@ import type {
   SaveCustomModelInput,
   CreateConversationFolderInput,
   CreateConversationInput,
+  CreateWorkspaceCheckpointInput,
   EchosphereHistoryApi,
   EchosphereSettingsApi,
+  EchosphereWorkspaceApi,
   ReplaceConversationMessagesInput,
   StartChatStreamInput,
 } from '../src/types/chat'
@@ -97,9 +99,15 @@ const gitApi: EchosphereGitApi = {
   getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
 }
 
+const workspaceApi: EchosphereWorkspaceApi = {
+  createCheckpoint: (input: CreateWorkspaceCheckpointInput) => ipcRenderer.invoke('workspace:checkpoint:create', input),
+  restoreCheckpoint: (checkpointId: string) => ipcRenderer.invoke('workspace:checkpoint:restore', checkpointId),
+}
+
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)
 contextBridge.exposeInMainWorld('echosphereGit', gitApi)
+contextBridge.exposeInMainWorld('echosphereWorkspace', workspaceApi)

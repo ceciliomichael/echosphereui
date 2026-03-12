@@ -7,6 +7,7 @@ import type {
   ConversationSummary,
   ToolInvocationResultPresentation,
   Message,
+  UserMessageRunCheckpoint,
 } from '../../src/types/chat'
 
 export interface MessageLogEntry {
@@ -60,6 +61,15 @@ function isToolInvocationTrace(value: unknown) {
   )
 }
 
+function isUserMessageRunCheckpoint(value: unknown): value is UserMessageRunCheckpoint {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const checkpoint = value as Partial<UserMessageRunCheckpoint>
+  return typeof checkpoint.id === 'string' && typeof checkpoint.createdAt === 'number'
+}
+
 function isMessage(value: unknown): value is Message {
   if (!value || typeof value !== 'object') {
     return false
@@ -93,6 +103,8 @@ function isMessage(value: unknown): value is Message {
   const hasValidAttachments =
     message.attachments === undefined ||
     (Array.isArray(message.attachments) && message.attachments.every((attachment) => isChatAttachment(attachment)))
+  const hasValidRunCheckpoint =
+    message.runCheckpoint === undefined || isUserMessageRunCheckpoint(message.runCheckpoint)
 
   return (
     typeof message.id === 'string' &&
@@ -108,7 +120,8 @@ function isMessage(value: unknown): value is Message {
     hasValidToolCallId &&
     hasRequiredToolCallId &&
     hasValidToolInvocations &&
-    hasValidAttachments
+    hasValidAttachments &&
+    hasValidRunCheckpoint
   )
 }
 
@@ -142,7 +155,10 @@ export function normalizeConversationRecord(
     agentContextRootPath:
       typeof conversation.agentContextRootPath === 'string' ? conversation.agentContextRootPath.trim() : '',
     folderId: typeof conversation.folderId === 'string' ? conversation.folderId : null,
-    messages,
+    messages: messages.map((message) => ({
+      ...message,
+      ...(message.runCheckpoint ? { runCheckpoint: message.runCheckpoint } : {}),
+    })),
   }
 }
 

@@ -156,16 +156,27 @@ export async function appendStoredMessages(input: AppendConversationMessagesInpu
     throw new Error(`Conversation not found: ${input.conversationId}`)
   }
 
+  const existingMessageIds = new Set(existingConversation.messages.map((message) => message.id))
+  const uniqueMessages = input.messages.filter((message) => !existingMessageIds.has(message.id))
+
+  const nextTitle = input.title?.trim() ? input.title.trim() : existingConversation.title
+  const hasTitleChange = nextTitle !== existingConversation.title
+
+  if (uniqueMessages.length === 0 && !hasTitleChange) {
+    return existingConversation
+  }
+
   const nextConversation: ConversationRecord = {
     ...existingConversation,
-    title: input.title?.trim() ? input.title.trim() : existingConversation.title,
-    updatedAt: input.messages.at(-1)?.timestamp ?? Date.now(),
-    messages: [...existingConversation.messages, ...input.messages],
+    title: nextTitle,
+    updatedAt:
+      uniqueMessages.at(-1)?.timestamp ?? (hasTitleChange ? Date.now() : existingConversation.updatedAt),
+    messages: uniqueMessages.length === 0 ? existingConversation.messages : [...existingConversation.messages, ...uniqueMessages],
   }
 
   await Promise.all([
     writeConversationFile(nextConversation),
-    appendMessagesToLog(input.conversationId, input.messages),
+    appendMessagesToLog(input.conversationId, uniqueMessages),
   ])
 
   return nextConversation
@@ -178,6 +189,9 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
     throw new Error(`Conversation not found: ${input.conversationId}`)
   }
 
+  const existingMessageIds = new Set(existingConversation.messages.map((message) => message.id))
+  const newMessages = input.messages.filter((message) => !existingMessageIds.has(message.id))
+
   const nextConversation: ConversationRecord = {
     ...existingConversation,
     title: input.title?.trim() ? input.title.trim() : existingConversation.title,
@@ -185,10 +199,13 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
     messages: input.messages,
   }
 
-  await writeConversationFile(nextConversation)
+  await Promise.all([
+    writeConversationFile(nextConversation),
+    appendMessagesToLog(input.conversationId, newMessages),
+  ])
+
   return nextConversation
 }
-
 export async function deleteStoredConversation(conversationId: string) {
   await deleteConversationFile(conversationId)
 }

@@ -8,6 +8,7 @@ const STREAM_EVENT_CHANNEL = 'chat:stream:event'
 interface ActiveStream {
   abortController: AbortController
   ownerWebContentsId: number
+  settledPromise: Promise<void>
 }
 
 const activeStreams = new Map<string, ActiveStream>()
@@ -47,14 +48,33 @@ function ensureWebContentsCleanup(webContents: WebContents) {
   })
 }
 
+function getLatestHumanUserCheckpointId(input: StartChatStreamInput) {
+  for (let index = input.messages.length - 1; index >= 0; index -= 1) {
+    const message = input.messages[index]
+    if (message.role !== 'user' || message.userMessageKind === 'tool_result') {
+      continue
+    }
+
+    return message.runCheckpoint?.id ?? null
+  }
+
+  return null
+}
+
 export function startChatStream(webContents: WebContents, input: StartChatStreamInput): StartChatStreamResult {
   ensureWebContentsCleanup(webContents)
 
   const streamId = randomUUID()
   const abortController = new AbortController()
+  const workspaceCheckpointId = getLatestHumanUserCheckpointId(input)
+  let resolveSettledPromise: () => void = () => {}
+  const settledPromise = new Promise<void>((resolve) => {
+    resolveSettledPromise = resolve
+  })
   activeStreams.set(streamId, {
     abortController,
     ownerWebContentsId: webContents.id,
+    settledPromise,
   })
 
   setTimeout(() => {
@@ -82,6 +102,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
               })
             },
             signal: abortController.signal,
+            workspaceCheckpointId,
           },
         )
 
@@ -103,6 +124,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
         })
       } finally {
         activeStreams.delete(streamId)
+        resolveSettledPromise()
       }
     })()
   }, 0)
@@ -112,7 +134,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
   }
 }
 
-export function cancelChatStream(webContents: WebContents, streamId: string) {
+export async function cancelChatStream(webContents: WebContents, streamId: string) {
   const activeStream = activeStreams.get(streamId)
   if (!activeStream) {
     return
@@ -127,5 +149,5 @@ export function cancelChatStream(webContents: WebContents, streamId: string) {
     type: 'aborted',
   })
   activeStream.abortController.abort()
-  activeStreams.delete(streamId)
+  await activeStream.settledPromise
 }

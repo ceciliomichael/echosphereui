@@ -13,6 +13,7 @@ import { RuntimeTargetSelectorField } from './chat/RuntimeTargetSelectorField'
 import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface ChatInputProps {
+  actionButtonMode?: 'auto' | 'abort' | 'send'
   attachments?: ChatAttachment[]
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
@@ -49,6 +50,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({
+  actionButtonMode = 'auto',
   attachments = [],
   value,
   onValueChange,
@@ -96,15 +98,12 @@ export function ChatInput({
   const showGitBranchSelector = variant === 'composer' && typeof onGitBranchChange === 'function' && gitBranchState !== undefined
   const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
   const showDetachedFooterControls = showRuntimeTargetControl || showGitBranchSelector
-  const canAbort = isStreaming && typeof onAbort === 'function'
+  const resolvedActionButtonMode =
+    actionButtonMode === 'auto' ? (isStreaming && typeof onAbort === 'function' ? 'abort' : 'send') : actionButtonMode
+  const canAbort = resolvedActionButtonMode === 'abort' && typeof onAbort === 'function'
   const gitBranchTooltip = gitBranchState?.hasRepository ? 'Switch branch' : 'Open a git-backed folder to view branches'
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
-
-  function handleSend() {
-    if (!canSend) return
-    onSend()
-  }
 
   function handleAbort() {
     if (!canAbort) {
@@ -114,15 +113,29 @@ export function ChatInput({
     onAbort()
   }
 
+  function handleSend() {
+    if (!canSend) return
+    onSend()
+  }
+
+  function handlePrimaryAction() {
+    if (canAbort) {
+      handleAbort()
+      return
+    }
+
+    handleSend()
+  }
+
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (sendOnEnter && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      handlePrimaryAction()
     }
 
     if (!sendOnEnter && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      handleSend()
+      handlePrimaryAction()
     }
 
     if (e.key === 'Escape' && isEditing && onCancelEdit) {
@@ -268,6 +281,7 @@ export function ChatInput({
             onInput={handleInput}
             placeholder={isEditing ? 'Edit your message...' : 'Type a message...'}
             disabled={disabled}
+            spellCheck={false}
             rows={1}
             className="min-h-[28px] max-h-[150px] w-full resize-none border-none bg-transparent text-[15px] leading-6 text-foreground outline-none placeholder:text-subtle-foreground focus:outline-none focus:ring-0"
             style={{ fieldSizing: 'content' } as CSSProperties}
@@ -334,7 +348,7 @@ export function ChatInput({
             <Tooltip content={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}>
               <button
                 type="button"
-                onClick={canAbort ? handleAbort : handleSend}
+                onClick={handlePrimaryAction}
                 disabled={canAbort ? false : !canSend}
                 aria-label={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}
                 className={[

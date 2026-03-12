@@ -9,6 +9,7 @@ import {
 } from './filesystemToolUtils'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 import { OpenAICompatibleToolError } from '../toolTypes'
+import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoints'
 
 export const writeTool: OpenAICompatibleToolDefinition = {
   executionMode: 'path-exclusive',
@@ -33,6 +34,10 @@ export const writeTool: OpenAICompatibleToolDefinition = {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error
       }
+    }
+
+    if (context.workspaceCheckpointId) {
+      await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
     }
 
     await ensureFileParentDirectory(normalizedTargetPath)

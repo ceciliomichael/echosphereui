@@ -23,7 +23,13 @@ type StreamedMessageOrderEntry =
 interface CreateChatAssistantDraftManagerInput {
   appendLocalMessage: (conversationId: string, message: Message) => void
   conversationId: string
+  initialConversationMessages: Message[]
   markTextStreamingPulse: (conversationId: string) => void
+  onConversationMessagesUpdated: (
+    messages: Message[],
+    options?: { immediate?: boolean },
+    hint?: { deltaCharCount?: number },
+  ) => void
   providerId: NonNullable<ChatRuntimeSelection['providerId']>
   removeLocalMessage: (conversationId: string, messageId: string) => void
   runtimeSelection: ChatRuntimeSelection
@@ -65,14 +71,64 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
   const draftAssistantMessages = new Map<string, Message>()
   const toolInvocationMessageIds = new Map<string, string>()
   const waitingIndicatorVariantByDraftId = new Map<string, AssistantWaitingIndicatorVariant>()
+  let conversationMessagesSnapshot = [...input.initialConversationMessages]
   let activeAssistantDraftId: string | null = null
   let activeAssistantDraftKind: DraftAssistantMessageKind | null = null
   let reasoningDraftAssistantId: string | null = null
   let assistantDraftCount = 0
 
+  const notifyConversationMessagesUpdated = (options?: { immediate?: boolean }, hint?: { deltaCharCount?: number }) => {
+    input.onConversationMessagesUpdated([...conversationMessagesSnapshot], options, hint)
+  }
+
+  const appendSnapshotMessage = (
+    message: Message,
+    options?: { immediate?: boolean },
+    hint?: { deltaCharCount?: number },
+  ) => {
+    conversationMessagesSnapshot = [...conversationMessagesSnapshot, message]
+    notifyConversationMessagesUpdated(options, hint)
+  }
+
+  const updateSnapshotMessage = (
+    messageId: string,
+    nextMessage: Message,
+    options?: { immediate?: boolean },
+    hint?: { deltaCharCount?: number },
+  ) => {
+    let wasUpdated = false
+    conversationMessagesSnapshot = conversationMessagesSnapshot.map((message) => {
+      if (message.id !== messageId) {
+        return message
+      }
+
+      wasUpdated = true
+      return nextMessage
+    })
+
+    if (wasUpdated) {
+      notifyConversationMessagesUpdated(options, hint)
+    }
+  }
+
+  const removeSnapshotMessage = (messageId: string) => {
+    const nextMessages = conversationMessagesSnapshot.filter((message) => message.id !== messageId)
+    const wasUpdated = nextMessages.length !== conversationMessagesSnapshot.length
+    conversationMessagesSnapshot = nextMessages
+    return wasUpdated
+  }
+
   const removeInsertedMessages = () => {
+    let hasConversationSnapshotChanges = false
     for (const messageId of insertedMessageIds) {
       input.removeLocalMessage(input.conversationId, messageId)
+      if (removeSnapshotMessage(messageId)) {
+        hasConversationSnapshotChanges = true
+      }
+    }
+
+    if (hasConversationSnapshotChanges) {
+      notifyConversationMessagesUpdated({ immediate: true })
     }
   }
 
@@ -109,6 +165,10 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     waitingIndicatorVariantByDraftId.set(draftAssistantMessage.id, assistantDraftCount === 1 ? 'thinking' : 'splash')
     activeAssistantDraftId = draftAssistantMessage.id
     activeAssistantDraftKind = kind
+    conversationMessagesSnapshot = [...conversationMessagesSnapshot, draftAssistantMessage]
+    if (kind !== 'placeholder') {
+      notifyConversationMessagesUpdated()
+    }
     updateStreamingIndicatorState(draftAssistantMessage.id)
 
     return draftAssistantMessage.id
@@ -126,10 +186,13 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
   const updateDraftAssistantMessage = (
     draftAssistantId: string,
     updater: (message: Message) => Message,
+    options?: { immediate?: boolean },
+    hint?: { deltaCharCount?: number },
   ) => {
     const nextValue = updater(getDraftAssistantMessage(draftAssistantId))
     draftAssistantMessages.set(draftAssistantId, nextValue)
     input.updateLocalMessage(input.conversationId, draftAssistantId, () => nextValue)
+    updateSnapshotMessage(draftAssistantId, nextValue, options, hint)
   }
 
   const completeReasoningDraft = (completedAt = Date.now()) => {
@@ -199,13 +262,14 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     nextValue:
       | Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>
       | Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
+    options?: { immediate?: boolean },
   ) => {
     updateDraftAssistantMessage(draftAssistantId, (message) => ({
       ...message,
       toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) =>
         buildToolInvocationState(invocationId, nextValue, currentValue, message, state),
       ),
-    }))
+    }), options)
   }
 
   return {
@@ -221,7 +285,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       updateDraftAssistantMessage(draftAssistantId, (message) => ({
         ...message,
         content: message.content + delta,
-      }))
+      }), undefined, { deltaCharCount: delta.length })
     },
     handleReasoningDelta(delta: string) {
       const draftAssistantId = ensureAssistantDraft('content')
@@ -231,7 +295,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       updateDraftAssistantMessage(draftAssistantId, (message) => ({
         ...message,
         reasoningContent: (message.reasoningContent ?? '') + delta,
-      }))
+      }), undefined, { deltaCharCount: delta.length })
     },
     handleSyntheticToolMessage(syntheticMessage: Message) {
       input.appendLocalMessage(input.conversationId, syntheticMessage)
@@ -240,6 +304,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
         kind: 'message',
         message: syntheticMessage,
       })
+      appendSnapshotMessage(syntheticMessage, { immediate: true })
     },
     handleStreamStarted(streamId: string) {
       input.updateConversationRuntimeState(input.conversationId, {
@@ -259,7 +324,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       activeAssistantDraftId = draftAssistantId
       activeAssistantDraftKind = 'tool'
       updateStreamingIndicatorState(draftAssistantId)
-      updateToolInvocation(draftAssistantId, invocationId, 'completed', nextValue)
+      updateToolInvocation(draftAssistantId, invocationId, 'completed', nextValue, { immediate: true })
     },
     handleToolInvocationDelta(
       invocationId: string,
@@ -268,6 +333,11 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       input.stopTextStreaming(input.conversationId)
       const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
       toolInvocationMessageIds.set(invocationId, draftAssistantId)
+      const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
+      const currentArgumentsTextLength =
+        draftAssistantMessage.toolInvocations?.find((invocation) => invocation.id === invocationId)?.argumentsText
+          .length ?? 0
+      const deltaCharCount = Math.max(0, nextValue.argumentsText.length - currentArgumentsTextLength)
       updateDraftAssistantMessage(draftAssistantId, (message) => ({
         ...message,
         toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
@@ -279,7 +349,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
           state: currentValue?.state ?? 'running',
           toolName: nextValue.toolName,
         })),
-      }))
+      }), undefined, { deltaCharCount })
     },
     handleToolInvocationFailed(
       invocationId: string,
@@ -294,7 +364,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       activeAssistantDraftId = draftAssistantId
       activeAssistantDraftKind = 'tool'
       updateStreamingIndicatorState(draftAssistantId)
-      updateToolInvocation(draftAssistantId, invocationId, 'failed', nextValue)
+      updateToolInvocation(draftAssistantId, invocationId, 'failed', nextValue, { immediate: true })
     },
     handleToolInvocationStarted(
       invocationId: string,
@@ -304,7 +374,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       input.stopTextStreaming(input.conversationId)
       const draftAssistantId = ensureAssistantDraft('tool')
       toolInvocationMessageIds.set(invocationId, draftAssistantId)
-      updateToolInvocation(draftAssistantId, invocationId, 'running', nextValue)
+      updateToolInvocation(draftAssistantId, invocationId, 'running', nextValue, { immediate: true })
     },
     finalizeStreamedMessages(wasAborted: boolean) {
       completeReasoningDraft()

@@ -20,7 +20,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const sessionState = useChatSessionState(language)
   const messages = sessionState.activeConversationState?.conversation.messages ?? []
   const isSending = sessionState.activeConversationState?.isSending ?? false
-  const composerState = useChatComposerState(messages, isSending)
+  const composerState = useChatComposerState(messages)
   const [draftChatMode, setDraftChatMode] = useState<ChatMode>('agent')
   const [pendingDraftSendCount, setPendingDraftSendCount] = useState(0)
 
@@ -60,6 +60,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     activeConversationStateIsSending: isSending,
     applyConversation: sessionState.applyConversation,
     appendLocalMessage: sessionState.appendLocalMessage,
+    beginEditingMessage: composerState.startEditingMessage,
     cancelEditingMessage: composerState.cancelEditingMessage,
     clearError: sessionState.clearError,
     clearTextStreamingIdleTimeout: streamingState.clearTextStreamingIdleTimeout,
@@ -103,9 +104,10 @@ export function useChatMessages(input: UseChatMessagesInput) {
     editingMessageId: composerState.editingMessageId,
     error: sessionState.error,
     isEditingMessage: composerState.editingMessageId !== null,
+    isEditComposerDirty: composerState.isEditComposerDirty,
     isLoading: sessionState.isLoading,
     isSending: sessionState.activeConversationState?.isSending ?? isActiveDraftSending,
-    isStreamingResponse: sessionState.activeConversationState?.activeStreamId !== null,
+    isStreamingResponse: sessionState.activeConversationState?.isSending ?? isActiveDraftSending,
     isStreamingTextActive: sessionState.activeConversationState?.isStreamingTextActive ?? false,
     mainComposerAttachments: composerState.mainComposerAttachments,
     mainComposerValue: composerState.mainComposerValue,
@@ -124,6 +126,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     streamingAssistantMessageId: sessionState.activeConversationState?.streamingAssistantMessageId ?? null,
     streamingWaitingIndicatorVariant: sessionState.activeConversationState?.streamingWaitingIndicatorVariant ?? null,
     abortStreamingResponse: sendActions.abortStreamingResponse,
+    revertUserMessage: sendActions.revertUserMessage,
     sendEditedMessage: sendActions.sendEditedMessage,
     sendNewMessage: sendActions.sendNewMessage,
   }

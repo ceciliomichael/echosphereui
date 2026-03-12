@@ -55,6 +55,7 @@ export function ChatInterface({
     deleteConversation,
     editingMessageId,
     error,
+    isEditComposerDirty,
     isLoading,
     isSending,
     isStreamingTextActive,
@@ -62,6 +63,7 @@ export function ChatInterface({
     mainComposerAttachments,
     mainComposerValue,
     messages,
+    revertUserMessage,
     selectedChatMode,
     selectedFolderName,
     selectedFolderPath,
@@ -174,13 +176,16 @@ export function ChatInterface({
                 messages={messages}
                 chatModeOptions={chatModeOptions}
                 editingMessageId={editingMessageId}
+                editComposerDirty={isEditComposerDirty}
                 onChatModeChange={setSelectedChatMode}
                 onEditUserMessage={startEditingMessage}
+                onRevertUserMessage={revertUserMessage}
                 composerAttachments={editComposerAttachments}
                 composerValue={editComposerValue}
                 onComposerAttachmentsChange={setEditComposerAttachments}
                 onComposerValueChange={setEditComposerValue}
                 onSendEditedMessage={() => void sendEditedMessage(runtimeSelection)}
+                onAbortStreamingResponse={abortStreamingResponse}
                 onCancelEditingMessage={cancelEditingMessage}
                 composerFocusSignal={editComposerFocusSignal}
                 isSending={isSending}
