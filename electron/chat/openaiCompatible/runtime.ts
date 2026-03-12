@@ -8,7 +8,7 @@ import type {
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions/completions'
 import type { ChatMode, Message, ReasoningEffort } from '../../../src/types/chat'
-import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
+import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
 import {
