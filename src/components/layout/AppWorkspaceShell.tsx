@@ -6,6 +6,7 @@ interface AppWorkspaceShellProps {
   onSidebarWidthChange: (sidebarWidth: number) => void
   sidebar: ReactNode
   sidebarWidth: number
+  floatingControls?: ReactNode
   children: ReactNode
 }
 
@@ -14,6 +15,7 @@ export function AppWorkspaceShell({
   onSidebarWidthChange,
   sidebar,
   sidebarWidth,
+  floatingControls,
   children,
 }: AppWorkspaceShellProps) {
   return (
@@ -27,6 +29,8 @@ export function AppWorkspaceShell({
       >
         <span className="select-none">EchoSphere</span>
       </div>
+
+      {floatingControls ? <div className="relative z-40">{floatingControls}</div> : null}
 
       <ResizableSidebarPanel
         isSidebarOpen={isSidebarOpen}

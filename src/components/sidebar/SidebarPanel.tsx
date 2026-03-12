@@ -1,4 +1,4 @@
-import { FolderPlus, PanelLeft, Settings } from 'lucide-react'
+import { FolderPlus, Settings } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { ConversationHistoryList } from './ConversationHistoryList'
@@ -11,7 +11,6 @@ interface SidebarPanelProps {
   onOpenSettings: () => void
   onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
-  onToggleSidebar: () => void
 }
 
 export function SidebarPanel({
@@ -22,28 +21,16 @@ export function SidebarPanel({
   onOpenSettings,
   onSelectConversation,
   onSelectFolder,
-  onToggleSidebar,
 }: SidebarPanelProps) {
   const actionButtonClassName =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all duration-150 ease-out hover:scale-110 hover:text-foreground'
   const footerButtonClassName =
     'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
 
   return (
     <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] px-4 pb-5 pt-3 md:px-5">
       <div className="pb-4">
-        <div className="flex items-center justify-between gap-3">
-          <Tooltip content="Collapse sidebar" side="right">
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className={actionButtonClassName}
-              aria-label="Collapse sidebar"
-            >
-              <PanelLeft size={18} strokeWidth={2.2} />
-            </button>
-          </Tooltip>
-        </div>
+        <div className="h-10" aria-hidden="true" />
 
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">

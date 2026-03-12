@@ -5,6 +5,7 @@ import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
 import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
+import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
@@ -135,6 +136,15 @@ export function ChatInterface({
     <AppWorkspaceShell
       isSidebarOpen={isSidebarOpen}
       onSidebarWidthChange={onSidebarWidthChange}
+      floatingControls={
+        <WorkspaceFloatingControls
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((currentValue) => !currentValue)}
+          newThreadButton={{
+            onClick: () => void createConversation(),
+          }}
+        />
+      }
       sidebar={
         <SidebarPanel
           conversationGroups={conversationGroups}
@@ -144,7 +154,6 @@ export function ChatInterface({
           onOpenSettings={onOpenSettings}
           onSelectConversation={selectConversation}
           onSelectFolder={selectFolder}
-          onToggleSidebar={() => setIsSidebarOpen(false)}
         />
       }
       sidebarWidth={sidebarWidth}
@@ -153,7 +162,6 @@ export function ChatInterface({
         <ChatHeader
           title={activeConversationTitle}
           isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen((currentValue) => !currentValue)}
         />
 
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-hidden">

@@ -1,38 +1,21 @@
-import { ArrowLeft, PanelLeft, Settings2 } from 'lucide-react'
-import { Tooltip } from '../Tooltip'
+import { ArrowLeft, Settings2 } from 'lucide-react'
 import { SETTINGS_ITEMS, type SettingsItemId } from './settingsItems'
 
 interface SettingsSidebarPanelProps {
   activeItemId: SettingsItemId
   onBackToApp: () => void
   onSelectItem: (itemId: SettingsItemId) => void
-  onToggleSidebar: () => void
 }
 
 export function SettingsSidebarPanel({
   activeItemId,
   onBackToApp,
   onSelectItem,
-  onToggleSidebar,
 }: SettingsSidebarPanelProps) {
-  const actionButtonClassName =
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--sidebar-raised-surface)] text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
-
   return (
     <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] px-4 pb-5 pt-3 md:px-5">
       <div className="pb-4">
-        <div className="flex items-center justify-between gap-3">
-          <Tooltip content="Collapse sidebar" side="right">
-            <button
-              type="button"
-              onClick={onToggleSidebar}
-              className={actionButtonClassName}
-              aria-label="Collapse sidebar"
-            >
-              <PanelLeft size={18} strokeWidth={2.2} />
-            </button>
-          </Tooltip>
-        </div>
+        <div className="h-10" aria-hidden="true" />
 
         <button
           type="button"

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspaceHeader } from '../components/layout/WorkspaceHeader'
+import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SettingsContent } from '../components/settings/SettingsContent'
 import { SettingsSidebarPanel } from '../components/settings/SettingsSidebarPanel'
@@ -47,12 +48,17 @@ export function SettingsInterface({
     <AppWorkspaceShell
       isSidebarOpen={isSidebarOpen}
       onSidebarWidthChange={onSidebarWidthChange}
+      floatingControls={
+        <WorkspaceFloatingControls
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((currentValue) => !currentValue)}
+        />
+      }
       sidebar={
         <SettingsSidebarPanel
           activeItemId={activeItemId}
           onBackToApp={onBackToApp}
           onSelectItem={setActiveItemId}
-          onToggleSidebar={() => setIsSidebarOpen(false)}
         />
       }
       sidebarWidth={sidebarWidth}
@@ -61,8 +67,7 @@ export function SettingsInterface({
         <WorkspaceHeader
           title={activeItemLabel}
           isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen((currentValue) => !currentValue)}
-          openSidebarLabel="Open settings navigation"
+          leadingPaddingClassName={isSidebarOpen ? '' : 'pl-[72px] md:pl-[76px]'}
         />
         <SettingsContent
           activeItemId={activeItemId}

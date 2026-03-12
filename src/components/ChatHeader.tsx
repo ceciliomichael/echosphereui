@@ -3,16 +3,14 @@ import { WorkspaceHeader } from './layout/WorkspaceHeader'
 interface ChatHeaderProps {
   title: string
   isSidebarOpen: boolean
-  onToggleSidebar: () => void
 }
 
-export function ChatHeader({ title, isSidebarOpen, onToggleSidebar }: ChatHeaderProps) {
+export function ChatHeader({ title, isSidebarOpen }: ChatHeaderProps) {
   return (
     <WorkspaceHeader
       title={title}
       isSidebarOpen={isSidebarOpen}
-      onToggleSidebar={onToggleSidebar}
-      openSidebarLabel="Open history"
+      leadingPaddingClassName={isSidebarOpen ? '' : 'pl-[132px] md:pl-[136px]'}
     />
   )
 }
