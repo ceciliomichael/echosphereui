@@ -305,6 +305,31 @@ export interface GitDiffSnapshot {
   hasRepository: boolean
 }
 
+export type GitCommitAction = 'commit' | 'commit-and-push' | 'commit-and-create-pr'
+
+export interface GitCommitInput {
+  action: GitCommitAction
+  includeUnstaged: boolean
+  message: string
+  workspacePath: string
+}
+
+export interface GitCommitResult {
+  commitHash: string
+  message: string
+  success: boolean
+}
+
+export interface GitStatusResult {
+  addedLineCount: number
+  changedFileCount: number
+  hasRepository: boolean
+  removedLineCount: number
+  stagedFileCount: number
+  unstagedFileCount: number
+  untrackedFileCount: number
+}
+
 export type ChatStreamEvent =
   | {
       streamId: string
@@ -422,7 +447,9 @@ export interface EchosphereWorkspaceApi {
 
 export interface EchosphereGitApi {
   checkoutBranch: (input: CheckoutGitBranchInput) => Promise<GitBranchState>
+  commit: (input: GitCommitInput) => Promise<GitCommitResult>
   createAndCheckoutBranch: (input: CreateGitBranchInput) => Promise<GitBranchState>
-  getDiffs: (workspacePath: string) => Promise<GitDiffSnapshot>
   getBranches: (workspacePath: string) => Promise<GitBranchState>
+  getDiffs: (workspacePath: string) => Promise<GitDiffSnapshot>
+  getStatus: (workspacePath: string) => Promise<GitStatusResult>
 }

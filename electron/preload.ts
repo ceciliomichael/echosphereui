@@ -10,6 +10,7 @@ import type {
   EchosphereGitApi,
   EchosphereModelsApi,
   EchosphereProvidersApi,
+  GitCommitInput,
   SaveApiKeyProviderInput,
   SaveCustomModelInput,
   CreateConversationFolderInput,
@@ -99,9 +100,11 @@ const chatApi: EchosphereChatApi = {
 
 const gitApi: EchosphereGitApi = {
   checkoutBranch: (input) => ipcRenderer.invoke('git:checkoutBranch', input),
+  commit: (input: GitCommitInput) => ipcRenderer.invoke('git:commit', input),
   createAndCheckoutBranch: (input) => ipcRenderer.invoke('git:createAndCheckoutBranch', input),
-  getDiffs: (workspacePath: string) => ipcRenderer.invoke('git:getDiffs', workspacePath),
   getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
+  getDiffs: (workspacePath: string) => ipcRenderer.invoke('git:getDiffs', workspacePath),
+  getStatus: (workspacePath: string) => ipcRenderer.invoke('git:getStatus', workspacePath),
 }
 
 const workspaceApi: EchosphereWorkspaceApi = {

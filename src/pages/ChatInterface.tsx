@@ -1,23 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GitCommitHorizontal } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
+import { CommitModal } from '../components/commit/CommitModal'
 import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { ConversationDiffPanel, type DiffPanelScope } from '../components/chat/ConversationDiffPanel'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
+import { Tooltip } from '../components/Tooltip'
 import { DiffPanelSegmentedToggle } from '../components/ui/SegmentedField'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useProvidersState } from '../hooks/useProvidersState'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
 import { useGitBranchState } from '../hooks/useGitBranchState'
+import { useGitCommit } from '../hooks/useGitCommit'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
-import type { AppSettings } from '../types/chat'
+import type { AppSettings, GitCommitAction } from '../types/chat'
 
 interface ChatInterfaceProps {
   chatMessages: ChatMessagesController
@@ -57,6 +61,7 @@ export function ChatInterface({
   sidebarWidth,
 }: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [isCommitModalOpen, setIsCommitModalOpen] = useState(false)
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
     providersState: providersState.providersState,
@@ -153,6 +158,39 @@ export function ChatInterface({
     hasRepository,
     workspacePath: activeWorkspacePath,
   })
+  const gitCommitState = useGitCommit({
+    hasRepository,
+    workspacePath: activeWorkspacePath,
+  })
+
+  const handleOpenCommitModal = useCallback(() => {
+    if (!hasRepository) {
+      return
+    }
+
+    gitCommitState.resetResult()
+    void gitCommitState.refreshStatus()
+    setIsCommitModalOpen(true)
+  }, [gitCommitState, hasRepository])
+
+  const handleCloseCommitModal = useCallback(() => {
+    setIsCommitModalOpen(false)
+  }, [])
+
+  const handleCommit = useCallback(
+    async (input: {
+      action: GitCommitAction
+      includeUnstaged: boolean
+      message: string
+    }) => {
+      await gitCommitState.commit(input)
+      setIsCommitModalOpen(false)
+      // Refresh diffs and branch state after commit
+      void refreshGitDiffSnapshot({ forceRefresh: true })
+      void gitBranchState.refresh()
+    },
+    [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
+  )
   const previousWorkspacePathRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -226,19 +264,36 @@ export function ChatInterface({
           title={activeConversationTitle}
           isSidebarOpen={isSidebarOpen}
           trailingContent={
-            <DiffPanelSegmentedToggle
-              isOpen={isDiffPanelOpen}
-              disabled={!hasRepository}
-              onToggle={() => {
-                if (!hasRepository) {
-                  return
-                }
+            <div className="flex items-center gap-1">
+              <Tooltip content={hasRepository ? 'Commit changes' : 'Open a git-backed folder to commit'} side="bottom">
+                <button
+                  type="button"
+                  disabled={!hasRepository}
+                  onClick={handleOpenCommitModal}
+                  className={[
+                    'inline-flex h-10 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors',
+                    !hasRepository ? 'cursor-not-allowed opacity-60' : 'hover:bg-surface-muted hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <GitCommitHorizontal size={16} className="shrink-0" />
+                  <span className="hidden md:inline">Commit</span>
+                </button>
+              </Tooltip>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <DiffPanelSegmentedToggle
+                isOpen={isDiffPanelOpen}
+                disabled={!hasRepository}
+                onToggle={() => {
+                  if (!hasRepository) {
+                    return
+                  }
 
-                onDiffPanelOpenChange(!isDiffPanelOpen)
-              }}
-              totalAddedLineCount={gitDiffSnapshot.totalAddedLineCount}
-              totalRemovedLineCount={gitDiffSnapshot.totalRemovedLineCount}
-            />
+                  onDiffPanelOpenChange(!isDiffPanelOpen)
+                }}
+                totalAddedLineCount={gitDiffSnapshot.totalAddedLineCount}
+                totalRemovedLineCount={gitDiffSnapshot.totalRemovedLineCount}
+              />
+            </div>
           }
           onRenameTitle={(nextTitle) => {
             if (!activeConversationId) {
@@ -350,6 +405,22 @@ export function ChatInterface({
           />
         </div>
       </WorkspacePanel>
+
+      {isCommitModalOpen ? (
+        <CommitModal
+          branchState={gitBranchState.branchState}
+          diffSnapshot={gitDiffSnapshot}
+          errorMessage={gitCommitState.errorMessage}
+          isCommitting={gitCommitState.isCommitting}
+          isLoadingStatus={gitCommitState.isLoadingStatus}
+          isSwitchingBranch={gitBranchState.isSwitching}
+          onBranchChange={gitBranchState.changeBranch}
+          onBranchCreate={gitBranchState.createBranch}
+          onClose={handleCloseCommitModal}
+          onCommit={handleCommit}
+          status={gitCommitState.status}
+        />
+      ) : null}
     </AppWorkspaceShell>
   )
 }

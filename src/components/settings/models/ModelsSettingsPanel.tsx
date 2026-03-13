@@ -7,6 +7,7 @@ import type { ModelToggleState } from './modelTypes'
 import { buildModelProviderSections, isProviderConfigured } from './modelViewUtils'
 import { PROVIDER_SECTIONS } from './modelCatalog'
 import { DropdownField } from '../../ui/DropdownField'
+import { Switch } from '../../ui/Switch'
 import { PRIMARY_ACTION_BUTTON_CLASS_NAME } from '../shared/actionButtonStyles'
 
 interface ModelsSettingsPanelProps {
@@ -275,8 +276,6 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                 <label className="text-sm font-medium text-foreground">Reasoning support</label>
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={customModelDraft.reasoningCapable}
                   onClick={() =>
                     setCustomModelDraft((currentValue) => ({
                       ...currentValue,
@@ -287,19 +286,16 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                   className="flex h-11 w-full items-center justify-between rounded-xl border border-border bg-surface px-3 text-sm text-foreground transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span>{customModelDraft.reasoningCapable ? 'Enabled' : 'Disabled'}</span>
-                  <span
-                    className={[
-                      'relative h-6 w-11 rounded-full transition-colors',
-                      customModelDraft.reasoningCapable ? 'bg-emerald-500' : 'bg-border',
-                    ].join(' ')}
-                  >
-                    <span
-                      className={[
-                        'absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform',
-                        customModelDraft.reasoningCapable ? 'translate-x-5' : 'translate-x-0',
-                      ].join(' ')}
-                    />
-                  </span>
+                  <Switch
+                    checked={customModelDraft.reasoningCapable}
+                    disabled={isCustomModelsLoading}
+                    onChange={(checked) =>
+                      setCustomModelDraft((currentValue) => ({
+                        ...currentValue,
+                        reasoningCapable: checked,
+                      }))
+                    }
+                  />
                 </button>
               </div>
             </div>

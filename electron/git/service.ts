@@ -2,12 +2,16 @@ import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { shell } from 'electron'
 import type {
   CheckoutGitBranchInput,
   CreateGitBranchInput,
   GitBranchState,
+  GitCommitInput,
+  GitCommitResult,
   GitDiffSnapshot,
   GitFileDiff,
+  GitStatusResult,
 } from '../../src/types/chat'
 
 const execFileAsync = promisify(execFile)
@@ -325,4 +329,184 @@ export async function createAndCheckoutGitBranch(input: CreateGitBranchInput): P
   }
 
   return getGitBranchState(repoRootPath)
+}
+
+export async function getGitStatus(workspacePath: string): Promise<GitStatusResult> {
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    return {
+      addedLineCount: 0,
+      changedFileCount: 0,
+      hasRepository: false,
+      removedLineCount: 0,
+      stagedFileCount: 0,
+      unstagedFileCount: 0,
+      untrackedFileCount: 0,
+    }
+  }
+
+  const [stagedResult, unstagedResult, untrackedResult] = await Promise.all([
+    runGit(['diff', '--cached', '--name-only', '-z', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
+    runGit(['diff', '--name-only', '-z', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
+    runGit(['ls-files', '--others', '--exclude-standard', '-z', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
+  ])
+
+  const stagedFiles = splitNullDelimitedOutput(stagedResult.stdout)
+  const unstagedFiles = splitNullDelimitedOutput(unstagedResult.stdout)
+  const untrackedFiles = splitNullDelimitedOutput(untrackedResult.stdout)
+  const allChangedFiles = new Set([...stagedFiles, ...unstagedFiles, ...untrackedFiles])
+
+  let addedLineCount = 0
+  let removedLineCount = 0
+
+  try {
+    const [stagedNumstat, unstagedNumstat] = await Promise.all([
+      runGit(['diff', '--cached', '--numstat', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
+      runGit(['diff', '--numstat', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
+    ])
+
+    const processedFiles = new Set<string>()
+
+    for (const numstatOutput of [stagedNumstat.stdout, unstagedNumstat.stdout]) {
+      for (const line of numstatOutput.split(/\r?\n/)) {
+        const trimmedLine = line.trim()
+        if (trimmedLine.length === 0) {
+          continue
+        }
+
+        const parts = trimmedLine.split(/\t/)
+        if (parts.length < 3) {
+          continue
+        }
+
+        const fileName = parts[2]
+        if (processedFiles.has(fileName)) {
+          continue
+        }
+
+        processedFiles.add(fileName)
+        const added = parseInt(parts[0], 10)
+        const removed = parseInt(parts[1], 10)
+
+        if (!isNaN(added)) {
+          addedLineCount += added
+        }
+
+        if (!isNaN(removed)) {
+          removedLineCount += removed
+        }
+      }
+    }
+  } catch {
+    // numstat calculation is best-effort
+  }
+
+  return {
+    addedLineCount,
+    changedFileCount: allChangedFiles.size,
+    hasRepository: true,
+    removedLineCount,
+    stagedFileCount: stagedFiles.length,
+    unstagedFileCount: unstagedFiles.length,
+    untrackedFileCount: untrackedFiles.length,
+  }
+}
+
+async function getRemoteUrl(repoRootPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await runGit(['remote', 'get-url', 'origin'], repoRootPath)
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+function remoteUrlToHttpsBase(remoteUrl: string): string | null {
+  // SSH format: git@github.com:user/repo.git
+  const sshMatch = remoteUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/)
+  if (sshMatch) {
+    return `https://${sshMatch[1]}/${sshMatch[2]}`
+  }
+
+  // HTTPS format: https://github.com/user/repo.git
+  const httpsMatch = remoteUrl.match(/^https?:\/\/(.+?)(?:\.git)?$/)
+  if (httpsMatch) {
+    return `https://${httpsMatch[1]}`
+  }
+
+  return null
+}
+
+export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult> {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  // Stage all changes if requested
+  if (input.includeUnstaged) {
+    try {
+      await runGit(['add', '-A'], repoRootPath)
+    } catch (error) {
+      throw new Error(`Failed to stage changes: ${getErrorMessage(error)}`)
+    }
+  }
+
+  // Commit
+  const commitArgs = ['commit']
+  if (input.message.trim().length > 0) {
+    commitArgs.push('-m', input.message.trim())
+  } else {
+    commitArgs.push('--allow-empty-message', '-m', '')
+  }
+
+  let commitHash = ''
+  try {
+    await runGit(commitArgs, repoRootPath)
+    const { stdout } = await runGit(['rev-parse', '--short', 'HEAD'], repoRootPath)
+    commitHash = stdout.trim()
+  } catch (error) {
+    throw new Error(`Failed to commit: ${getErrorMessage(error)}`)
+  }
+
+  const effectiveMessage = input.message.trim().length > 0 ? input.message.trim() : '(empty commit message)'
+
+  // Push if needed
+  if (input.action === 'commit-and-push' || input.action === 'commit-and-create-pr') {
+    try {
+      const { stdout: branchStdout } = await runGit(['symbolic-ref', '--short', 'HEAD'], repoRootPath)
+      const currentBranch = branchStdout.trim()
+
+      await runGit(['push', '-u', 'origin', currentBranch], repoRootPath)
+
+      // Open PR creation page if requested
+      if (input.action === 'commit-and-create-pr') {
+        const remoteUrl = await getRemoteUrl(repoRootPath)
+        if (remoteUrl) {
+          const httpsBase = remoteUrlToHttpsBase(remoteUrl)
+          if (httpsBase) {
+            const prUrl = `${httpsBase}/compare/${encodeURIComponent(currentBranch)}?expand=1`
+            void shell.openExternal(prUrl)
+          }
+        }
+      }
+    } catch (error) {
+      if (isGitUnavailable(error)) {
+        throw new Error('Git is not available in the current environment.')
+      }
+
+      throw new Error(`Committed successfully but failed to push: ${getErrorMessage(error)}`)
+    }
+  }
+
+  return {
+    commitHash,
+    message: effectiveMessage,
+    success: true,
+  }
 }

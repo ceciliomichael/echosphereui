@@ -19,6 +19,7 @@ import type {
   CreateGitBranchInput,
   CreateWorkspaceCheckpointInput,
   EstimateContextUsageInput,
+  GitCommitInput,
   SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
@@ -51,7 +52,7 @@ import {
 } from './providers/service'
 import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
-import { checkoutGitBranch, createAndCheckoutGitBranch, getGitBranchState, getGitDiffSnapshot } from './git/service'
+import { checkoutGitBranch, createAndCheckoutGitBranch, getGitBranchState, getGitDiffSnapshot, getGitStatus, gitCommit } from './git/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
 import { createWorkspaceCheckpoint, restoreWorkspaceCheckpoint } from './workspace/checkpoints'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -223,6 +224,8 @@ function registerHistoryHandlers() {
   ipcMain.handle('git:createAndCheckoutBranch', async (_event, input: CreateGitBranchInput) =>
     createAndCheckoutGitBranch(input),
   )
+  ipcMain.handle('git:commit', async (_event, input: GitCommitInput) => gitCommit(input))
+  ipcMain.handle('git:getStatus', async (_event, workspacePath: string) => getGitStatus(workspacePath))
   ipcMain.handle('workspace:checkpoint:create', async (_event, input: CreateWorkspaceCheckpointInput) =>
     createWorkspaceCheckpoint(input),
   )

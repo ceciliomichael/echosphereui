@@ -14,44 +14,14 @@ interface ModelsProviderSectionProps {
   onToggleModel: (modelId: string) => void
 }
 
+import { Switch } from '../../ui/Switch'
+
 function getProviderStatusLabel(configured: boolean, isProviderStateLoading: boolean) {
   if (isProviderStateLoading) {
     return 'Checking'
   }
 
   return configured ? 'Configured' : 'Not configured'
-}
-
-interface ModelToggleControlProps {
-  checked: boolean
-  disabled: boolean
-  label: string
-  onToggle: () => void
-}
-
-function ModelToggleControl({ checked, disabled, label, onToggle }: ModelToggleControlProps) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={`Enable ${label}`}
-      disabled={disabled}
-      onClick={onToggle}
-      className={[
-        'relative h-6 w-11 rounded-full transition-colors focus:outline-none focus-visible:outline-none',
-        checked ? 'bg-emerald-500' : 'bg-border',
-        disabled ? 'cursor-not-allowed opacity-50' : '',
-      ].join(' ')}
-    >
-      <span
-        className={[
-          'absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform',
-          checked ? 'translate-x-5' : 'translate-x-0',
-        ].join(' ')}
-      />
-    </button>
-  )
 }
 
 export function ModelsProviderSection({
@@ -121,11 +91,11 @@ export function ModelsProviderSection({
                     <Trash2 size={14} />
                   </button>
                 ) : null}
-                <ModelToggleControl
+                <Switch
                   checked={isEnabled}
                   disabled={!canToggleModels}
-                  label={model.label}
-                  onToggle={() => onToggleModel(model.id)}
+                  label={`Enable ${model.label}`}
+                  onChange={() => onToggleModel(model.id)}
                 />
               </div>
             </div>
