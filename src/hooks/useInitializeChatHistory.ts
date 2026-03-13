@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { loadGitBranchState, prefetchGitBranchStates } from '../lib/gitBranchStateCache'
+import { prefetchGitDiffSnapshots } from '../lib/gitDiffSnapshotCache'
 import { loadInitialChatHistory } from './chatHistoryWorkflows'
 
 interface UseInitializeChatHistoryInput {
@@ -36,10 +37,12 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
         }
 
         initializeHistory(snapshot)
-        void prefetchGitBranchStates([
+        const workspacePaths = [
           ...snapshot.folderSummaries.map((folderSummary) => folderSummary.path),
           ...snapshot.conversationSummaries.map((conversationSummary) => conversationSummary.agentContextRootPath),
-        ])
+        ]
+        void prefetchGitBranchStates(workspacePaths)
+        void prefetchGitDiffSnapshots(workspacePaths)
       } catch (caughtError) {
         console.error(caughtError)
         if (isMounted) {

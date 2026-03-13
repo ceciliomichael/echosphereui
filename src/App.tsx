@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DiffPanelScope } from './components/chat/ConversationDiffPanel'
 import { ChatInterface } from './pages/ChatInterface'
 import { SettingsInterface } from './pages/SettingsInterface'
 import { useAppSettings } from './hooks/useAppSettings'
@@ -11,6 +12,8 @@ const CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST = '__clear_last_active_conversation
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('chat')
   const [isDiffPanelOpen, setIsDiffPanelOpen] = useState(false)
+  const [diffPanelSelectedScope, setDiffPanelSelectedScope] = useState<DiffPanelScope>('unstaged')
+  const [diffPanelExpandedFilePaths, setDiffPanelExpandedFilePaths] = useState<string[]>([])
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
   const [diffPanelWidth, setDiffPanelWidth] = useState(settings.diffPanelWidth)
   const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
@@ -133,8 +136,12 @@ export default function App() {
     <ChatInterface
       chatMessages={chatMessages}
       diffPanelWidth={diffPanelWidth}
+      diffPanelExpandedFilePaths={diffPanelExpandedFilePaths}
+      diffPanelSelectedScope={diffPanelSelectedScope}
       isDiffPanelOpen={isDiffPanelOpen}
+      onDiffPanelExpandedFilePathsChange={setDiffPanelExpandedFilePaths}
       onDiffPanelOpenChange={setIsDiffPanelOpen}
+      onDiffPanelSelectedScopeChange={setDiffPanelSelectedScope}
       onDiffPanelWidthChange={handleDiffPanelWidthChange}
       onDiffPanelWidthCommit={handleDiffPanelWidthCommit}
       settings={settings}

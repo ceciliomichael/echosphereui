@@ -12,13 +12,17 @@ interface DiffViewerProps {
   filePath: string
   headerClassName?: string
   headerTrailingContent?: ReactNode
+  isExpanded?: boolean
   isStreaming?: boolean
   layout?: 'card' | 'stacked'
   newContent: string
+  onExpandedChange?: (nextValue: boolean) => void
   oldContent: string | null | undefined
   startLineNumber?: number
   viewOnly?: boolean
 }
+
+const DEFAULT_DIFF_CONTEXT_LINES = 5
 
 function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | undefined) {
   if (contextLines === undefined) {
@@ -100,19 +104,22 @@ function getLineNumberDividerClassName() {
 const DiffViewerComponent = ({
   className,
   collapsible = false,
-  contextLines,
+  contextLines = DEFAULT_DIFF_CONTEXT_LINES,
   defaultExpanded = true,
   filePath,
   headerClassName,
   headerTrailingContent,
+  isExpanded: expandedProp,
   isStreaming = false,
   layout = 'card',
   newContent,
+  onExpandedChange,
   oldContent,
   startLineNumber = 1,
   viewOnly = false,
 }: DiffViewerProps) => {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
+  const isExpanded = expandedProp ?? internalExpanded
   const diffLines = useMemo(() => {
     const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
     return filterDiffWithContext(diff, contextLines)
@@ -162,7 +169,13 @@ const DiffViewerComponent = ({
         <button
           type="button"
           aria-expanded={isExpanded}
-          onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          onClick={() => {
+            const nextExpanded = !isExpanded
+            if (expandedProp === undefined) {
+              setInternalExpanded(nextExpanded)
+            }
+            onExpandedChange?.(nextExpanded)
+          }}
           className={[
             'group flex w-full items-center justify-between bg-surface px-4 py-3 text-[12px] text-muted-foreground',
             isExpanded ? 'border-b border-border' : '',
@@ -189,15 +202,7 @@ const DiffViewerComponent = ({
               <div className={`shrink-0 ${getLineGutterClassName()}`}>
                 {diffLines.map((line, index) => {
                   if (line.type === 'collapsed') {
-                    return (
-                      <div
-                        key={`gutter-collapsed-${index}`}
-                        className="border-y border-border bg-background/60 px-2 py-1.5 text-[11px]"
-                        aria-hidden="true"
-                      >
-                        {' '}
-                      </div>
-                    )
+                    return null
                   }
 
                   return (
@@ -222,14 +227,7 @@ const DiffViewerComponent = ({
                 <div className="min-w-full w-fit">
                   {diffLines.map((line, index) => {
                     if (line.type === 'collapsed') {
-                      return (
-                        <div
-                          key={`content-collapsed-${index}`}
-                          className="border-y border-border bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground"
-                        >
-                          {line.collapsedCount} unchanged lines
-                        </div>
-                      )
+                      return null
                     }
 
                     return (

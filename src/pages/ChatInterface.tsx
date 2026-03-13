@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
 import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
-import { ConversationDiffPanel } from '../components/chat/ConversationDiffPanel'
+import { ConversationDiffPanel, type DiffPanelScope } from '../components/chat/ConversationDiffPanel'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
@@ -16,14 +16,18 @@ import { useProvidersState } from '../hooks/useProvidersState'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
 import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
-import { buildConversationDiffSnapshot } from '../lib/chatDiffs'
+import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
 import type { AppSettings } from '../types/chat'
 
 interface ChatInterfaceProps {
   chatMessages: ChatMessagesController
   diffPanelWidth: number
   isDiffPanelOpen: boolean
+  diffPanelExpandedFilePaths: readonly string[]
+  diffPanelSelectedScope: DiffPanelScope
   onDiffPanelOpenChange: (nextValue: boolean) => void
+  onDiffPanelExpandedFilePathsChange: (nextFilePaths: string[]) => void
+  onDiffPanelSelectedScopeChange: (nextScope: DiffPanelScope) => void
   onDiffPanelWidthChange: (nextWidth: number) => void
   onDiffPanelWidthCommit: (nextWidth: number) => void
   onOpenSettings: () => void
@@ -38,7 +42,11 @@ export function ChatInterface({
   chatMessages,
   diffPanelWidth,
   isDiffPanelOpen,
+  diffPanelExpandedFilePaths,
+  diffPanelSelectedScope,
   onDiffPanelOpenChange,
+  onDiffPanelExpandedFilePathsChange,
+  onDiffPanelSelectedScopeChange,
   onDiffPanelWidthChange,
   onDiffPanelWidthCommit,
   onOpenSettings,
@@ -140,10 +148,49 @@ export function ChatInterface({
       ] satisfies ChatModeOption[],
     [],
   )
-  const conversationDiffSnapshot = useMemo(() => buildConversationDiffSnapshot(messages), [messages])
+  const hasRepository = gitBranchState.branchState.hasRepository
+  const { refresh: refreshGitDiffSnapshot, snapshot: gitDiffSnapshot } = useGitDiffSnapshot({
+    hasRepository,
+    workspacePath: activeWorkspacePath,
+  })
+  const previousWorkspacePathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!hasRepository && isDiffPanelOpen) {
+      onDiffPanelOpenChange(false)
+    }
+  }, [hasRepository, isDiffPanelOpen, onDiffPanelOpenChange])
+
+  useEffect(() => {
+    if (!hasRepository) {
+      return
+    }
+
+    const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+    const workspacePathKey = normalizedWorkspacePath.length > 0 ? normalizedWorkspacePath : null
+    const workspaceChanged = previousWorkspacePathRef.current !== workspacePathKey
+    previousWorkspacePathRef.current = workspacePathKey
+
+    void refreshGitDiffSnapshot({
+      forceRefresh: !workspaceChanged,
+      silent: true,
+    })
+  }, [
+    activeWorkspacePath,
+    gitBranchState.branchState.currentBranch,
+    hasRepository,
+    messages.length,
+    refreshGitDiffSnapshot,
+  ])
 
   useWorkspaceKeyboardShortcuts({
-    onToggleDiffPanel: () => onDiffPanelOpenChange(!isDiffPanelOpen),
+    onToggleDiffPanel: () => {
+      if (!hasRepository) {
+        return
+      }
+
+      onDiffPanelOpenChange(!isDiffPanelOpen)
+    },
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
   })
@@ -181,9 +228,16 @@ export function ChatInterface({
           trailingContent={
             <DiffPanelSegmentedToggle
               isOpen={isDiffPanelOpen}
-              onToggle={() => onDiffPanelOpenChange(!isDiffPanelOpen)}
-              totalAddedLineCount={conversationDiffSnapshot.totalAddedLineCount}
-              totalRemovedLineCount={conversationDiffSnapshot.totalRemovedLineCount}
+              disabled={!hasRepository}
+              onToggle={() => {
+                if (!hasRepository) {
+                  return
+                }
+
+                onDiffPanelOpenChange(!isDiffPanelOpen)
+              }}
+              totalAddedLineCount={gitDiffSnapshot.totalAddedLineCount}
+              totalRemovedLineCount={gitDiffSnapshot.totalRemovedLineCount}
             />
           }
           onRenameTitle={(nextTitle) => {
@@ -284,11 +338,15 @@ export function ChatInterface({
 
           <ConversationDiffPanel
             currentBranch={gitBranchState.branchState.currentBranch}
-            fileDiffs={conversationDiffSnapshot.fileDiffs}
+            expandedFilePaths={diffPanelExpandedFilePaths}
+            fileDiffs={gitDiffSnapshot.fileDiffs}
             isOpen={isDiffPanelOpen}
+            onExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
+            onSelectedScopeChange={onDiffPanelSelectedScopeChange}
             width={diffPanelWidth}
             onWidthChange={onDiffPanelWidthChange}
             onWidthCommit={onDiffPanelWidthCommit}
+            selectedScope={diffPanelSelectedScope}
           />
         </div>
       </WorkspacePanel>

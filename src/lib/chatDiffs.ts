@@ -1,5 +1,5 @@
 import { getDiffSummary } from './textDiff'
-import type { FileDiffToolResultPresentation, Message } from '../types/chat'
+import type { FileDiffToolResultPresentation, GitFileDiff, Message } from '../types/chat'
 
 export interface ConversationFileDiff {
   addedLineCount: number
@@ -33,6 +33,38 @@ function normalizeFileDiff(result: FileDiffToolResultPresentation): Conversation
   }
 }
 
+function normalizeRawFileDiff(result: GitFileDiff): ConversationFileDiff {
+  const computedSummary = getDiffSummary(result.oldContent, result.newContent)
+
+  return {
+    addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
+    fileName: result.fileName,
+    newContent: result.newContent,
+    oldContent: result.oldContent,
+    removedLineCount: result.removedLineCount ?? computedSummary.removedLineCount,
+  }
+}
+
+export function buildFileDiffSnapshot(fileDiffs: readonly GitFileDiff[]): ConversationDiffSnapshot {
+  const normalizedFileDiffs = fileDiffs
+    .map((fileDiff) => normalizeRawFileDiff(fileDiff))
+    .sort((left, right) => left.fileName.localeCompare(right.fileName, undefined, { sensitivity: 'base' }))
+
+  let totalAddedLineCount = 0
+  let totalRemovedLineCount = 0
+
+  for (const diff of normalizedFileDiffs) {
+    totalAddedLineCount += diff.addedLineCount
+    totalRemovedLineCount += diff.removedLineCount
+  }
+
+  return {
+    fileDiffs: normalizedFileDiffs,
+    totalAddedLineCount,
+    totalRemovedLineCount,
+  }
+}
+
 export function buildConversationDiffSnapshot(messages: readonly Message[]): ConversationDiffSnapshot {
   const latestDiffByFile = new Map<string, ConversationFileDiff>()
 
@@ -50,21 +82,5 @@ export function buildConversationDiffSnapshot(messages: readonly Message[]): Con
     }
   }
 
-  const fileDiffs = Array.from(latestDiffByFile.values()).sort((left, right) =>
-    left.fileName.localeCompare(right.fileName, undefined, { sensitivity: 'base' }),
-  )
-
-  let totalAddedLineCount = 0
-  let totalRemovedLineCount = 0
-
-  for (const diff of fileDiffs) {
-    totalAddedLineCount += diff.addedLineCount
-    totalRemovedLineCount += diff.removedLineCount
-  }
-
-  return {
-    fileDiffs,
-    totalAddedLineCount,
-    totalRemovedLineCount,
-  }
+  return buildFileDiffSnapshot(Array.from(latestDiffByFile.values()))
 }

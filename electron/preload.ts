@@ -100,6 +100,7 @@ const chatApi: EchosphereChatApi = {
 const gitApi: EchosphereGitApi = {
   checkoutBranch: (input) => ipcRenderer.invoke('git:checkoutBranch', input),
   createAndCheckoutBranch: (input) => ipcRenderer.invoke('git:createAndCheckoutBranch', input),
+  getDiffs: (workspacePath: string) => ipcRenderer.invoke('git:getDiffs', workspacePath),
   getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
 }
 

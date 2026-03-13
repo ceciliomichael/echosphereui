@@ -16,6 +16,7 @@ interface SegmentedFieldProps {
 }
 
 interface DiffPanelSegmentedToggleProps {
+  disabled?: boolean
   isOpen: boolean
   onToggle: () => void
   totalAddedLineCount: number
@@ -66,22 +67,33 @@ export function SegmentedField({
 }
 
 export function DiffPanelSegmentedToggle({
+  disabled = false,
   isOpen,
   onToggle,
   totalAddedLineCount,
   totalRemovedLineCount,
 }: DiffPanelSegmentedToggleProps) {
+  const tooltipLabel = disabled ? 'Open a git-backed folder to view diffs' : isOpen ? 'Hide diff panel' : 'Show diff panel'
+
   return (
-    <Tooltip content={isOpen ? 'Hide diff panel' : 'Show diff panel'} side="bottom">
+    <Tooltip content={tooltipLabel} side="bottom">
       <button
         type="button"
+        disabled={disabled}
         aria-expanded={isOpen}
         onClick={onToggle}
-        className="inline-flex h-10 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className={[
+          'inline-flex h-10 items-center gap-1.5 text-sm text-muted-foreground transition-colors',
+          disabled ? 'cursor-not-allowed opacity-60' : 'hover:text-foreground',
+        ].join(' ')}
       >
         <GitCompareArrows size={16} className="shrink-0" />
-        <span className="text-emerald-600 dark:text-emerald-400">{`+${totalAddedLineCount}`}</span>
-        <span className="text-red-600 dark:text-red-400">{`-${totalRemovedLineCount}`}</span>
+        {disabled ? null : (
+          <>
+            <span className="text-emerald-600 dark:text-emerald-400">{`+${totalAddedLineCount}`}</span>
+            <span className="text-red-600 dark:text-red-400">{`-${totalRemovedLineCount}`}</span>
+          </>
+        )}
       </button>
     </Tooltip>
   )

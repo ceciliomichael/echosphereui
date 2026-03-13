@@ -292,6 +292,19 @@ export interface CreateGitBranchInput {
   workspacePath: string
 }
 
+export interface GitFileDiff {
+  addedLineCount?: number
+  fileName: string
+  newContent: string
+  oldContent: string | null
+  removedLineCount?: number
+}
+
+export interface GitDiffSnapshot {
+  fileDiffs: GitFileDiff[]
+  hasRepository: boolean
+}
+
 export type ChatStreamEvent =
   | {
       streamId: string
@@ -410,5 +423,6 @@ export interface EchosphereWorkspaceApi {
 export interface EchosphereGitApi {
   checkoutBranch: (input: CheckoutGitBranchInput) => Promise<GitBranchState>
   createAndCheckoutBranch: (input: CreateGitBranchInput) => Promise<GitBranchState>
+  getDiffs: (workspacePath: string) => Promise<GitDiffSnapshot>
   getBranches: (workspacePath: string) => Promise<GitBranchState>
 }

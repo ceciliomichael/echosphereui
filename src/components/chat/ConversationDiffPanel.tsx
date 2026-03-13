@@ -8,14 +8,18 @@ import { DiffViewer } from './DiffViewer'
 
 interface ConversationDiffPanelProps {
   currentBranch: string | null
+  expandedFilePaths: readonly string[]
   fileDiffs: readonly ConversationFileDiff[]
   isOpen: boolean
+  onExpandedFilePathsChange: (nextFilePaths: string[]) => void
+  onSelectedScopeChange: (nextScope: DiffPanelScope) => void
   onWidthChange: (nextWidth: number) => void
   onWidthCommit?: (nextWidth: number) => void
+  selectedScope: DiffPanelScope
   width: number
 }
 
-type DiffPanelScope = 'branch' | 'last_turn' | 'staged' | 'unstaged'
+export type DiffPanelScope = 'branch' | 'last_turn' | 'staged' | 'unstaged'
 
 interface DiffScopeOption {
   description: string | null
@@ -25,10 +29,14 @@ interface DiffScopeOption {
 
 export function ConversationDiffPanel({
   currentBranch,
+  expandedFilePaths,
   fileDiffs,
   isOpen,
+  onExpandedFilePathsChange,
+  onSelectedScopeChange,
   onWidthChange,
   onWidthCommit,
+  selectedScope,
   width,
 }: ConversationDiffPanelProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -39,7 +47,6 @@ export function ConversationDiffPanel({
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false)
   const [highlightedScope, setHighlightedScope] = useState<DiffPanelScope>('unstaged')
-  const [selectedScope, setSelectedScope] = useState<DiffPanelScope>('unstaged')
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const widthRef = useRef(width)
   const onWidthChangeRef = useRef(onWidthChange)
@@ -62,6 +69,7 @@ export function ConversationDiffPanel({
           : 'Last turn'
   const selectedScopeCount = selectedScope === 'unstaged' ? fileDiffs.length : selectedScope === 'staged' ? 0 : null
   const visiblePanelWidth = isOpen ? width : 0
+  const expandedFilePathSet = useMemo(() => new Set(expandedFilePaths), [expandedFilePaths])
 
   const scopeOptions = useMemo(
     () =>
@@ -199,6 +207,14 @@ export function ConversationDiffPanel({
     setHighlightedScope(selectedScope)
   }, [isScopeMenuOpen, selectedScope])
 
+  useEffect(() => {
+    const availableFilePathSet = new Set(fileDiffs.map((fileDiff) => fileDiff.fileName))
+    const nextExpandedFilePaths = expandedFilePaths.filter((filePath) => availableFilePathSet.has(filePath))
+    if (nextExpandedFilePaths.length !== expandedFilePaths.length) {
+      onExpandedFilePathsChange(nextExpandedFilePaths)
+    }
+  }, [expandedFilePaths, fileDiffs, onExpandedFilePathsChange])
+
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     dragStateRef.current = {
       pointerId: event.pointerId,
@@ -212,8 +228,25 @@ export function ConversationDiffPanel({
   }
 
   function handleSelectScope(nextScope: DiffPanelScope) {
-    setSelectedScope(nextScope)
+    onSelectedScopeChange(nextScope)
     setIsScopeMenuOpen(false)
+  }
+
+  function handleFileExpandedChange(fileName: string, isExpanded: boolean) {
+    if (isExpanded) {
+      if (expandedFilePathSet.has(fileName)) {
+        return
+      }
+
+      onExpandedFilePathsChange([...expandedFilePaths, fileName])
+      return
+    }
+
+    if (!expandedFilePathSet.has(fileName)) {
+      return
+    }
+
+    onExpandedFilePathsChange(expandedFilePaths.filter((existingFileName) => existingFileName !== fileName))
   }
 
   function renderScopeOption(option: DiffScopeOption) {
@@ -331,7 +364,7 @@ export function ConversationDiffPanel({
           <div className="flex flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
             {selectedScope === 'staged'
               ? 'No staged file diffs available.'
-              : 'Run an edit or write tool call to populate diffs.'}
+              : 'No changed files were detected for this branch.'}
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -341,7 +374,9 @@ export function ConversationDiffPanel({
                 collapsible
                 defaultExpanded={false}
                 filePath={diff.fileName}
+                isExpanded={expandedFilePathSet.has(diff.fileName)}
                 newContent={diff.newContent}
+                onExpandedChange={(nextValue) => handleFileExpandedChange(diff.fileName, nextValue)}
                 oldContent={diff.oldContent}
                 contextLines={diff.contextLines}
                 layout="stacked"
