@@ -5,7 +5,6 @@ import { FaGithub } from 'react-icons/fa'
 import type { GitBranchState, GitCommitAction, GitStatusResult } from '../../types/chat'
 import type { ConversationDiffSnapshot } from '../../lib/chatDiffs'
 import { Switch } from '../ui/Switch'
-import { Tooltip } from '../Tooltip'
 
 type CommitNextStep = GitCommitAction
 
@@ -51,6 +50,7 @@ interface CommitModalProps {
     action: GitCommitAction
     includeUnstaged: boolean
     message: string
+    preferredBranchName?: string
   }) => Promise<void>
   status: GitStatusResult | null
 }
@@ -113,6 +113,7 @@ export function CommitModal({
           action: selectedAction,
           includeUnstaged,
           message: commitMessage,
+          preferredBranchName: targetBranch.length > 0 ? targetBranch : undefined,
         })
       } catch (error) {
         setLocalError(error instanceof Error ? error.message : 'Failed to commit')
@@ -128,25 +129,11 @@ export function CommitModal({
   const removedLineCount = diffSnapshot.totalRemovedLineCount
   const hasChanges = changedFileCount > 0 || addedLineCount > 0 || removedLineCount > 0
   const disableActionSelection = isSubmitting || isCommitting || isSwitchingBranch
-  const effectiveBranch = commitBranchName.trim() || branchState.currentBranch || ''
-  const normalizedEffectiveBranch = effectiveBranch.toLowerCase()
-  const normalizedDefaultBranch = branchState.defaultBranch?.toLowerCase() ?? null
-  const isDefaultBranch = normalizedDefaultBranch
-    ? normalizedEffectiveBranch === normalizedDefaultBranch
-    : normalizedEffectiveBranch === 'main' || normalizedEffectiveBranch === 'master'
-  const canCreatePr = effectiveBranch.length > 0 && !isDefaultBranch && !branchState.isDetachedHead
   const disableSubmit =
     isSubmitting ||
     isCommitting ||
     isSwitchingBranch ||
-    (!hasChanges && !isLoadingStatus) ||
-    (selectedAction === 'commit-and-create-pr' && !canCreatePr)
-
-  useEffect(() => {
-    if (selectedAction === 'commit-and-create-pr' && !canCreatePr) {
-      setSelectedAction('commit')
-    }
-  }, [canCreatePr, selectedAction])
+    (!hasChanges && !isLoadingStatus)
 
   const actionLabel =
     selectedAction === 'commit'
@@ -215,7 +202,7 @@ export function CommitModal({
                   value={commitBranchName}
                   onChange={(e) => setCommitBranchName(e.target.value.replace(/[^A-Za-z0-9_.-/]/g, ''))}
                   disabled={disableSubmit}
-                  placeholder="Optional (leaving blank uses current)"
+                  placeholder="Optional (leave blank to auto-create a PR branch when needed)"
                   className="h-10 w-full rounded-xl border border-border bg-surface pl-8 pr-3 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:border-border focus:outline-none focus:ring-0"
                 />
               </div>
@@ -286,10 +273,11 @@ export function CommitModal({
             <div className="w-full overflow-hidden rounded-xl border border-border divide-y divide-border">
               {COMMIT_NEXT_STEPS.map((step) => {
                 const isSelected = step.value === selectedAction
-                const isPrAction = step.value === 'commit-and-create-pr'
-                const isDisabled = disableActionSelection || (isPrAction && !canCreatePr)
-                const button = (
+                const isDisabled = disableActionSelection
+
+                return (
                   <button
+                    key={step.value}
                     type="button"
                     onClick={() => {
                       if (isDisabled) {
@@ -307,27 +295,6 @@ export function CommitModal({
                     <span className="shrink-0">{step.icon}</span>
                     <span className="truncate">{step.label}</span>
                   </button>
-                )
-
-                if (isPrAction && !canCreatePr && !disableActionSelection) {
-                  return (
-                    <Tooltip
-                      key={step.value}
-                      align="center"
-                      content="Checkout a feature branch before creating a PR."
-                      fullWidthTrigger
-                      noWrap
-                      side="top"
-                    >
-                      {button}
-                    </Tooltip>
-                  )
-                }
-
-                return (
-                  <div key={step.value} className="flex w-full">
-                    {button}
-                  </div>
                 )
               })}
             </div>
