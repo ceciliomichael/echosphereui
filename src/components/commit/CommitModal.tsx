@@ -258,7 +258,7 @@ export function CommitModal({
               ref={textareaRef}
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
-              placeholder="Leave blank to auto-generate using the active model and staged diff"
+              placeholder="Leave blank to auto-generate a detailed commit message (title + description) using the active model and staged diff"
               rows={3}
               className="w-full resize-none rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-subtle-foreground"
             />
