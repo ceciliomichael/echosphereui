@@ -23,7 +23,10 @@ import {
   OPENAI_REQUEST_TIMEOUT_MS,
   readTextLikeValue,
 } from '../chat/providers/openaiShared'
-import { buildFallbackCommitMessage, normalizeGeneratedCommitMessage } from './commitMessageFormatting'
+import {
+  buildFallbackCommitMessageWithDescription,
+  normalizeGeneratedCommitMessageWithDescription,
+} from './commitMessageFormatting'
 
 const CODEX_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const CODEX_VERSION_HEADER = '0.101.0'
@@ -33,14 +36,16 @@ const MAX_PROMPT_DIFF_LINES = 420
 const MAX_PROMPT_DIFF_CHARS = 18_000
 const COMMIT_MESSAGE_SYSTEM_PROMPT = [
   'You are an expert software engineer writing git commit messages.',
-  'Write one strong Conventional Commit subject line only.',
+  'Write a complete commit message with a strong subject and useful description.',
   'Requirements:',
-  '- Use format: type(scope?): concise imperative summary',
+  '- First line must use: type(scope?): concise imperative summary',
   '- Prefer one of: feat, fix, refactor, perf, docs, test, build, ci, chore',
-  '- Keep it specific to the diff, no generic wording',
-  '- Maximum 72 characters',
-  '- No body, no markdown, no quotes, no backticks',
-  '- Output exactly one line',
+  '- Keep the subject specific to the diff, no generic wording',
+  '- Subject must be <= 72 characters',
+  '- After a blank line, add a short description body (2-5 lines)',
+  '- Body can be bullets or short paragraphs, but must be concrete and reviewer-friendly',
+  '- Never mention merge requests, MRs, or "create PR" in the commit message',
+  '- No markdown code fences, no quotes, no backticks',
 ].join('\n')
 
 interface ActiveModelSelection {
@@ -119,8 +124,9 @@ function buildCommitMessagePrompt(input: { diffText: string; numstatText: string
   const normalizedNumstat = input.numstatText.trim().length > 0 ? input.numstatText.trim() : '(unavailable)'
 
   const promptText = [
-    'Generate the best possible commit subject for this staged diff.',
-    'Focus on user-visible behavior, bug fixes, architecture, or tests that actually changed.',
+    'Generate the best possible commit message for this staged diff.',
+    'Focus on user-visible behavior, bug fixes, architecture, and tests that actually changed.',
+    'Return a subject plus short body with clear implementation context.',
     '',
     'Staged numstat:',
     normalizedNumstat,
@@ -162,7 +168,7 @@ async function generateWithOpenAIChatCompletion(
 
   const buildRequest = (includeReasoningEffort: boolean): ChatCompletionCreateParamsNonStreaming => {
     const payload: ChatCompletionCreateParamsNonStreaming = {
-      max_tokens: 120,
+      max_tokens: 260,
       messages,
       model: selection.modelId,
       store: false,
@@ -196,7 +202,7 @@ async function generateWithAnthropic(selection: ActiveModelSelection, promptText
   const resolvedModelId = resolveAnthropicModelId(selection.modelId)
   const supportsReasoningEffort = anthropicModelSupportsReasoningEffort(resolvedModelId)
   const response = await client.messages.create({
-    max_tokens: 180,
+    max_tokens: 320,
     messages: [
       {
         content: promptText,
@@ -357,12 +363,15 @@ export async function generateCommitMessageFromDiff(input: GenerateCommitMessage
   })
 
   if (!input.selection) {
-    return buildFallbackCommitMessage(promptContext.touchedFiles)
+    return buildFallbackCommitMessageWithDescription(promptContext.touchedFiles)
   }
 
   try {
     const rawModelOutput = await generateRawCommitMessage(input.selection, promptContext.promptText)
-    const normalizedMessage = normalizeGeneratedCommitMessage(rawModelOutput)
+    const normalizedMessage = normalizeGeneratedCommitMessageWithDescription(
+      rawModelOutput,
+      promptContext.touchedFiles,
+    )
     if (normalizedMessage.length > 0) {
       return normalizedMessage
     }
@@ -370,5 +379,5 @@ export async function generateCommitMessageFromDiff(input: GenerateCommitMessage
     console.warn('Failed to generate AI commit message; using fallback message instead.', error)
   }
 
-  return buildFallbackCommitMessage(promptContext.touchedFiles)
+  return buildFallbackCommitMessageWithDescription(promptContext.touchedFiles)
 }

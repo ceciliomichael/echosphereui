@@ -14,6 +14,7 @@ import type {
   GitFileDiff,
   GitStatusResult,
 } from '../../src/types/chat'
+import { extractCommitSubjectLine, normalizeGeneratedCommitMessageWithDescription } from './commitMessageFormatting'
 
 const execFileAsync = promisify(execFile)
 const GIT_EXECUTION_OPTIONS = {
@@ -170,6 +171,80 @@ async function readDefaultBranch(repoRootPath: string) {
   } catch {
     return null
   }
+}
+
+async function hasOriginRemote(repoRootPath: string) {
+  try {
+    await runGit(['remote', 'get-url', 'origin'], repoRootPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function fetchOrigin(repoRootPath: string) {
+  if (!(await hasOriginRemote(repoRootPath))) {
+    return false
+  }
+
+  await runGit(['fetch', '--prune', 'origin'], repoRootPath)
+  return true
+}
+
+async function hasRemoteTrackingBranch(repoRootPath: string, branchName: string) {
+  try {
+    await runGit(['show-ref', '--verify', '--quiet', `refs/remotes/origin/${branchName}`], repoRootPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function readCurrentUpstreamBranch(repoRootPath: string) {
+  try {
+    const { stdout } = await runGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], repoRootPath)
+    const upstreamBranch = stdout.trim()
+    return upstreamBranch.length > 0 ? upstreamBranch : null
+  } catch {
+    return null
+  }
+}
+
+function isFastForwardOnlyPullFailure(error: unknown) {
+  const normalizedMessage = getErrorMessage(error).toLowerCase()
+  return (
+    normalizedMessage.includes('not possible to fast-forward') ||
+    normalizedMessage.includes('cannot fast-forward') ||
+    normalizedMessage.includes('divergent branches')
+  )
+}
+
+function isWorkingTreeConflictFailure(error: unknown) {
+  const normalizedMessage = getErrorMessage(error).toLowerCase()
+  return (
+    normalizedMessage.includes('would be overwritten by checkout') ||
+    normalizedMessage.includes('your local changes to the following files would be overwritten') ||
+    normalizedMessage.includes('please commit your changes or stash them')
+  )
+}
+
+async function syncCheckedOutBranchWithRemote(repoRootPath: string, branchName: string) {
+  const hasRemote = await fetchOrigin(repoRootPath)
+  if (!hasRemote) {
+    return
+  }
+
+  let upstreamBranch = await readCurrentUpstreamBranch(repoRootPath)
+  if (!upstreamBranch && (await hasRemoteTrackingBranch(repoRootPath, branchName))) {
+    await runGit(['branch', '--set-upstream-to', `origin/${branchName}`, branchName], repoRootPath)
+    upstreamBranch = `origin/${branchName}`
+  }
+
+  if (!upstreamBranch) {
+    return
+  }
+
+  await runGit(['pull', '--ff-only', '--no-rebase'], repoRootPath)
 }
 
 function normalizeForGitPathspec(filePath: string) {
@@ -343,9 +418,22 @@ export async function checkoutGitBranch(input: CheckoutGitBranchInput): Promise<
 
   try {
     await runGit(['checkout', '--quiet', branchName], repoRootPath)
+    await syncCheckedOutBranchWithRemote(repoRootPath, branchName)
   } catch (error) {
     if (isGitUnavailable(error)) {
       throw new Error('Git is not available in the current environment.')
+    }
+
+    if (isWorkingTreeConflictFailure(error)) {
+      throw new Error(
+        'Cannot switch branches because local changes would be overwritten. Commit, stash, or discard changes first.',
+      )
+    }
+
+    if (isFastForwardOnlyPullFailure(error)) {
+      throw new Error(
+        `Switched to '${branchName}' but it cannot be fast-forwarded from origin. Resolve divergence (merge/rebase) before continuing.`,
+      )
     }
 
     throw new Error(getErrorMessage(error))
@@ -712,7 +800,8 @@ function deriveBranchSummaryFromTouchedFiles(touchedFiles: readonly string[]) {
 }
 
 function buildAutonomousBranchBaseName(commitMessage: string, stagedNumstatText: string) {
-  const normalizedMessage = commitMessage.trim()
+  const commitSubject = extractCommitSubjectLine(commitMessage)
+  const normalizedMessage = commitSubject.length > 0 ? commitSubject : commitMessage.trim()
   const conventionalMatch = CONVENTIONAL_COMMIT_SUBJECT_PATTERN.exec(normalizedMessage)
   const branchType = sanitizeBranchSegment(conventionalMatch?.[1] ?? DEFAULT_AUTONOMOUS_BRANCH_TYPE, 16)
   const summaryFromMessage = sanitizeBranchSegment(conventionalMatch?.[2] ?? normalizedMessage)
@@ -778,6 +867,68 @@ function isDefaultBranchName(branchName: string, defaultBranch: string | null) {
   }
 
   return normalizedBranchName === 'main' || normalizedBranchName === 'master'
+}
+
+async function checkPotentialConflictsWithDefaultBranch(
+  repoRootPath: string,
+  currentBranch: string,
+  defaultBranch: string,
+) {
+  try {
+    const { stdout: mergeBaseStdout } = await runGit(
+      ['merge-base', currentBranch, `origin/${defaultBranch}`],
+      repoRootPath,
+    )
+    const mergeBaseSha = mergeBaseStdout.trim()
+    if (mergeBaseSha.length === 0) {
+      return false
+    }
+
+    const { stdout: mergeTreeStdout } = await runGit(
+      ['merge-tree', mergeBaseSha, currentBranch, `origin/${defaultBranch}`],
+      repoRootPath,
+    )
+
+    return mergeTreeStdout.includes('<<<<<<<')
+  } catch {
+    // `merge-tree` availability and output can vary by git version; treat as non-blocking when unavailable.
+    return false
+  }
+}
+
+async function ensureBranchReadyForPullRequest(
+  repoRootPath: string,
+  currentBranch: string,
+  defaultBranch: string | null,
+) {
+  if (!defaultBranch || isDefaultBranchName(currentBranch, defaultBranch)) {
+    return
+  }
+
+  const hasRemote = await fetchOrigin(repoRootPath)
+  if (!hasRemote || !(await hasRemoteTrackingBranch(repoRootPath, defaultBranch))) {
+    return
+  }
+
+  try {
+    await runGit(['merge-base', '--is-ancestor', `origin/${defaultBranch}`, currentBranch], repoRootPath)
+  } catch {
+    const hasPotentialConflicts = await checkPotentialConflictsWithDefaultBranch(
+      repoRootPath,
+      currentBranch,
+      defaultBranch,
+    )
+
+    if (hasPotentialConflicts) {
+      throw new Error(
+        `Branch '${currentBranch}' likely conflicts with '${defaultBranch}'. Rebase or merge '${defaultBranch}' into '${currentBranch}' before creating a PR.`,
+      )
+    }
+
+    throw new Error(
+      `Branch '${currentBranch}' is not up to date with '${defaultBranch}'. Rebase or merge '${defaultBranch}' before creating a PR.`,
+    )
+  }
 }
 
 async function reserveUniqueLocalBranchName(repoRootPath: string, baseBranchName: string) {
@@ -856,9 +1007,9 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
   const stagedDiffText = await readStagedDiffText(repoRootPath)
   const stagedNumstatText = await readStagedNumstatText(repoRootPath)
   const trimmedMessage = input.message.trim()
-  const effectiveCommitMessage =
+  const generatedCommitMessage =
     trimmedMessage.length > 0
-      ? trimmedMessage
+      ? null
       : await (async () => {
           const { generateCommitMessageFromDiff } = await import('./commitMessageGenerator')
           return generateCommitMessageFromDiff({
@@ -874,6 +1025,13 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
                 : null,
           })
         })()
+  const effectiveCommitMessage =
+    trimmedMessage.length > 0
+      ? trimmedMessage
+      : normalizeGeneratedCommitMessageWithDescription(
+          generatedCommitMessage ?? '',
+          parseTouchedFilesFromNumstat(stagedNumstatText),
+        )
 
   let activeBranchName = await readSymbolicHeadBranchName(repoRootPath)
   const preferredBranchName = input.preferredBranchName?.trim() ?? ''
@@ -936,6 +1094,14 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
       }
 
       activeBranchName = currentBranch
+
+      if (input.action === 'commit-and-create-pr') {
+        await ensureBranchReadyForPullRequest(
+          repoRootPath,
+          currentBranch,
+          await resolveDefaultBranchName(repoRootPath),
+        )
+      }
 
       await runGit(['push', '-u', 'origin', currentBranch], repoRootPath)
 

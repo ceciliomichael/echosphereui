@@ -100,3 +100,24 @@ test('gitCommit respects preferredBranchName when creating PR commits', async ()
     assert.equal(currentBranchStdout.trim(), 'feat/custom-branch')
   })
 })
+
+test('gitCommit keeps manual commit messages exactly as provided', async () => {
+  await withTemporaryDirectory(async (tempRootPath) => {
+    const repoPath = path.join(tempRootPath, 'repo-manual-message')
+    await fs.mkdir(repoPath)
+    await runGit(['init', '-b', 'main'], repoPath)
+    await runGit(['config', 'user.name', 'Test User'], repoPath)
+    await runGit(['config', 'user.email', 'test@example.com'], repoPath)
+
+    await fs.writeFile(path.join(repoPath, 'README.md'), 'hello\n', 'utf8')
+    await gitCommit({
+      action: 'commit',
+      includeUnstaged: true,
+      message: 'fix: tighten commit pipeline formatting',
+      workspacePath: repoPath,
+    })
+
+    const { stdout } = await runGit(['log', '-1', '--pretty=%B'], repoPath)
+    assert.equal(stdout.trim(), 'fix: tighten commit pipeline formatting')
+  })
+})

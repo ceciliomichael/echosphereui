@@ -1,12 +1,77 @@
 const MAX_COMMIT_SUBJECT_LENGTH = 72
 const CONVENTIONAL_PREFIX_PATTERN = /^(feat|fix|docs|style|refactor|test|build|ci|perf|chore)(\([^)]+\))?!?:\s+\S/u
 
-export function normalizeGeneratedCommitMessage(rawMessage: string) {
-  const firstLine = rawMessage
-    .replace(/```[\s\S]*?```/gu, '')
+function stripCodeFences(rawMessage: string) {
+  return rawMessage.replace(/```[\s\S]*?```/gu, '')
+}
+
+function ensureTrailingSentencePunctuation(text: string) {
+  const trimmedText = text.trim()
+  if (trimmedText.length === 0) {
+    return ''
+  }
+
+  return /[.!?]$/u.test(trimmedText) ? trimmedText : `${trimmedText}.`
+}
+
+function summarizeTouchedFilesForDescription(touchedFiles: readonly string[]) {
+  if (touchedFiles.length === 0) {
+    return 'Update project files included in this commit'
+  }
+
+  if (touchedFiles.length === 1) {
+    return `Update ${touchedFiles[0]}`
+  }
+
+  const topFiles = touchedFiles.slice(0, 3).join(', ')
+  const remainingCount = touchedFiles.length - Math.min(touchedFiles.length, 3)
+  if (remainingCount <= 0) {
+    return `Update ${topFiles}`
+  }
+
+  return `Update ${topFiles} and ${remainingCount} more file${remainingCount === 1 ? '' : 's'}`
+}
+
+function normalizeDescriptionPoint(rawValue: string) {
+  const withoutBullets = rawValue.replace(/^[-*]\s+/u, '')
+  const withoutInlineLabel = withoutBullets.replace(/^(what|why|description|details)\s*[:：]\s*/iu, '')
+  const withoutMarkdown = withoutInlineLabel.replace(/[`*_#>]/gu, '')
+  const normalizedWhitespace = withoutMarkdown.replace(/\s+/gu, ' ').trim()
+  if (normalizedWhitespace.length === 0) {
+    return ''
+  }
+
+  if (/merge requests?/iu.test(normalizedWhitespace)) {
+    return ''
+  }
+
+  return ensureTrailingSentencePunctuation(normalizedWhitespace)
+}
+
+function buildStructuredCommitDescription(input: {
+  fallbackTouchedFiles: readonly string[]
+  normalizedPoints: readonly string[]
+}) {
+  const fallbackLine = ensureTrailingSentencePunctuation(
+    summarizeTouchedFilesForDescription(input.fallbackTouchedFiles),
+  )
+  const descriptionPoints = input.normalizedPoints.slice(0, 4)
+  if (descriptionPoints.length === 0) {
+    return `- ${fallbackLine}`
+  }
+
+  return descriptionPoints.map((point) => `- ${point}`).join('\n')
+}
+
+export function extractCommitSubjectLine(rawMessage: string) {
+  return stripCodeFences(rawMessage)
     .split(/\r?\n/u)
     .map((line) => line.trim())
-    .find((line) => line.length > 0)
+    .find((line) => line.length > 0) ?? ''
+}
+
+export function normalizeGeneratedCommitMessage(rawMessage: string) {
+  const firstLine = extractCommitSubjectLine(rawMessage)
 
   if (!firstLine) {
     return ''
@@ -57,4 +122,41 @@ export function buildFallbackCommitMessage(touchedFiles: readonly string[]) {
   return touchedFiles.length === 1
     ? `chore: update ${touchedFiles[0]}`
     : `chore: update ${touchedFiles.length} files`
+}
+
+export function buildFallbackCommitDescription(touchedFiles: readonly string[]) {
+  return buildStructuredCommitDescription({
+    fallbackTouchedFiles: touchedFiles,
+    normalizedPoints: [],
+  })
+}
+
+export function buildFallbackCommitMessageWithDescription(touchedFiles: readonly string[]) {
+  return `${buildFallbackCommitMessage(touchedFiles)}\n\n${buildFallbackCommitDescription(touchedFiles)}`
+}
+
+export function normalizeGeneratedCommitMessageWithDescription(
+  rawMessage: string,
+  touchedFiles: readonly string[],
+) {
+  const subject = normalizeGeneratedCommitMessage(rawMessage)
+  if (subject.length === 0) {
+    return buildFallbackCommitMessageWithDescription(touchedFiles)
+  }
+
+  const rawLines = stripCodeFences(rawMessage).split(/\r?\n/u)
+  const firstNonEmptyLineIndex = rawLines.findIndex((line) => line.trim().length > 0)
+  const bodyLines = firstNonEmptyLineIndex >= 0 ? rawLines.slice(firstNonEmptyLineIndex + 1) : []
+  const normalizedPoints = bodyLines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => normalizeDescriptionPoint(line))
+    .filter((line) => line.length > 0)
+
+  const description = buildStructuredCommitDescription({
+    fallbackTouchedFiles: touchedFiles,
+    normalizedPoints,
+  })
+
+  return `${subject}\n\n${description}`
 }
