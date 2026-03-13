@@ -35,6 +35,7 @@ import {
   listStoredConversations,
   listStoredFolders,
   replaceStoredMessages,
+  updateStoredConversationTitle,
 } from './history/store'
 import { getStoredSettings, updateStoredSettings } from './settings/store'
 import { serializeInitialSettingsArg } from './settings/bootstrap'
@@ -177,6 +178,9 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('history:replaceMessages', async (_event, input: ReplaceConversationMessagesInput) =>
     replaceStoredMessages(input),
+  )
+  ipcMain.handle('history:updateTitle', async (_event, conversationId: string, title: string) =>
+    updateStoredConversationTitle(conversationId, title),
   )
   ipcMain.handle('history:delete', async (_event, conversationId: string) =>
     deleteStoredConversation(conversationId),

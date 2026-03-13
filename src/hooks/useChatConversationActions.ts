@@ -19,6 +19,7 @@ interface UseChatConversationActionsInput {
   resetComposerState: () => void
   selectedFolderId: string | null
   setError: (errorMessage: string | null) => void
+  upsertConversation: (conversation: ConversationRecord) => void
 }
 
 export function useChatConversationActions(input: UseChatConversationActionsInput) {
@@ -36,6 +37,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     resetComposerState,
     selectedFolderId,
     setError,
+    upsertConversation,
   } = input
 
   const resetDraft = useCallback(
@@ -197,6 +199,21 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     createConversation,
     createFolder,
     deleteConversation,
+    renameConversationTitle: async (conversationId: string, title: string) => {
+      clearError()
+
+      try {
+        const conversation = await window.echosphereHistory.updateConversationTitle(conversationId, title)
+        upsertConversation(conversation)
+        if (conversationId === activeConversationId) {
+          applyConversation(conversation)
+        }
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to rename that thread.')
+        throw caughtError
+      }
+    },
     selectConversation,
     selectFolder,
     startEditingMessage,

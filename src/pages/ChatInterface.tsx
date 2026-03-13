@@ -65,6 +65,7 @@ export function ChatInterface({
     mainComposerValue,
     messages,
     revertUserMessage,
+    renameConversationTitle,
     selectedChatMode,
     selectedFolderName,
     selectedFolderPath,
@@ -162,6 +163,13 @@ export function ChatInterface({
         <ChatHeader
           title={activeConversationTitle}
           isSidebarOpen={isSidebarOpen}
+          onRenameTitle={(nextTitle) => {
+            if (!activeConversationId) {
+              return
+            }
+
+            return renameConversationTitle(activeConversationId, nextTitle)
+          }}
         />
 
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-hidden">

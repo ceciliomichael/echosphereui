@@ -344,6 +344,7 @@ export interface EchosphereHistoryApi {
   openFolderPath: (folderPath: string) => Promise<void>
   appendMessages: (input: AppendConversationMessagesInput) => Promise<ConversationRecord>
   replaceMessages: (input: ReplaceConversationMessagesInput) => Promise<ConversationRecord>
+  updateConversationTitle: (conversationId: string, title: string) => Promise<ConversationRecord>
   deleteConversation: (conversationId: string) => Promise<void>
 }
 

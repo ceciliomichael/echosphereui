@@ -1,5 +1,5 @@
 interface WorkspaceHeaderProps {
-  title: string
+  title: React.ReactNode
   isSidebarOpen: boolean
   leadingPaddingClassName?: string
   leadingContent?: React.ReactNode
@@ -19,14 +19,18 @@ export function WorkspaceHeader({
         leadingPaddingClassName ?? '',
       ].join(' ')}
     >
-      <div className="flex min-w-0 items-center">
+      <div className="flex min-w-0 flex-1 items-center">
         {leadingContent ? (
           <div className={['flex shrink-0 items-center', leadingContentClassName ?? 'mr-4'].join(' ')}>
             {leadingContent}
           </div>
         ) : null}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        <div className="min-w-0 flex-1">
+          {typeof title === 'string' ? (
+            <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+          ) : (
+            title
+          )}
         </div>
       </div>
     </header>

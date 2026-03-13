@@ -52,6 +52,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     resetComposerState: composerState.resetComposerState,
     selectedFolderId: sessionState.selectedFolderId,
     setError: sessionState.setError,
+    upsertConversation: sessionState.upsertConversation,
   })
 
   const sendActions = useChatSendActions({
@@ -117,6 +118,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     selectedFolderPath: sessionState.selectedFolderPath,
     selectConversation: conversationActions.selectConversation,
     selectFolder: conversationActions.selectFolder,
+    renameConversationTitle: conversationActions.renameConversationTitle,
     setEditComposerAttachments: composerState.setEditComposerAttachments,
     setEditComposerValue: composerState.setEditComposerValue,
     setMainComposerAttachments: composerState.setMainComposerAttachments,

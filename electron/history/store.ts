@@ -206,6 +206,33 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
 
   return nextConversation
 }
+
+export async function updateStoredConversationTitle(conversationId: string, title: string) {
+  const existingConversation = await getStoredConversation(conversationId)
+
+  if (!existingConversation) {
+    throw new Error(`Conversation not found: ${conversationId}`)
+  }
+
+  const nextTitle = title.trim()
+  if (nextTitle.length === 0) {
+    return existingConversation
+  }
+
+  const boundedTitle = nextTitle.length > 120 ? nextTitle.slice(0, 120) : nextTitle
+  if (boundedTitle === existingConversation.title) {
+    return existingConversation
+  }
+
+  const nextConversation: ConversationRecord = {
+    ...existingConversation,
+    title: boundedTitle,
+    updatedAt: Date.now(),
+  }
+
+  await writeConversationFile(nextConversation)
+  return nextConversation
+}
 export async function deleteStoredConversation(conversationId: string) {
   await deleteConversationFile(conversationId)
 }
