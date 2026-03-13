@@ -316,14 +316,17 @@ export interface GitCommitInput {
   includeUnstaged: boolean
   modelId?: string
   message: string
+  preferredBranchName?: string
   providerId?: ChatProviderId
   reasoningEffort?: ReasoningEffort
   workspacePath: string
 }
 
 export interface GitCommitResult {
+  branchName: string | null
   commitHash: string
   message: string
+  prUrl: string | null
   success: boolean
 }
 

@@ -14,6 +14,7 @@ interface UseGitCommitResult {
     action: GitCommitAction
     includeUnstaged: boolean
     message: string
+    preferredBranchName?: string
   }) => Promise<GitCommitResult>
   errorMessage: string | null
   isCommitting: boolean
@@ -91,6 +92,7 @@ export function useGitCommit({
     action: GitCommitAction
     includeUnstaged: boolean
     message: string
+    preferredBranchName?: string
   }): Promise<GitCommitResult> => {
     const normalizedPath = workspacePath?.trim() ?? ''
     if (normalizedPath.length === 0) {
@@ -106,6 +108,7 @@ export function useGitCommit({
         includeUnstaged: input.includeUnstaged,
         message: input.message,
         modelId: modelId.trim(),
+        preferredBranchName: input.preferredBranchName,
         providerId: providerId ?? undefined,
         reasoningEffort,
         workspacePath: normalizedPath,

@@ -186,6 +186,7 @@ export function ChatInterface({
       action: GitCommitAction
       includeUnstaged: boolean
       message: string
+      preferredBranchName?: string
     }) => {
       await gitCommitState.commit(input)
       setIsCommitModalOpen(false)

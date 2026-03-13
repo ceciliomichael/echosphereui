@@ -642,6 +642,197 @@ async function readStagedNumstatText(repoRootPath: string) {
   return stdout
 }
 
+const CONVENTIONAL_COMMIT_SUBJECT_PATTERN = /^(feat|fix|docs|style|refactor|test|build|ci|perf|chore)(?:\([^)]+\))?!?:\s*(.+)$/iu
+const DEFAULT_AUTONOMOUS_BRANCH_TYPE = 'chore'
+const AUTONOMOUS_BRANCH_MAX_LENGTH = 72
+const AUTONOMOUS_BRANCH_SEGMENT_MAX_LENGTH = 52
+
+function trimInvalidBranchTail(value: string) {
+  return value.replace(/[./-]+$/gu, '')
+}
+
+function sanitizeBranchSegment(value: string, maxLength = AUTONOMOUS_BRANCH_SEGMENT_MAX_LENGTH) {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/-+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+
+  return trimInvalidBranchTail(normalized.slice(0, maxLength))
+}
+
+function parseTouchedFilesFromNumstat(numstatText: string) {
+  const touchedFiles = new Set<string>()
+
+  for (const line of numstatText.split(/\r?\n/u)) {
+    const trimmedLine = line.trim()
+    if (trimmedLine.length === 0) {
+      continue
+    }
+
+    const parts = trimmedLine.split(/\t/u)
+    if (parts.length < 3) {
+      continue
+    }
+
+    const rawPath = parts.slice(2).join('\t').trim()
+    if (rawPath.length === 0) {
+      continue
+    }
+
+    // Handle rename notations like `old/path.ts => new/path.ts`.
+    const renamedTargetPath = rawPath.includes('=>') ? rawPath.split('=>').at(-1)?.trim() ?? rawPath : rawPath
+    const normalizedPath = normalizeGitFilePath(renamedTargetPath.replace(/[{}]/gu, '').replace(/^"+|"+$/gu, ''))
+    if (normalizedPath.length > 0) {
+      touchedFiles.add(normalizedPath)
+    }
+  }
+
+  return Array.from(touchedFiles)
+}
+
+function deriveBranchSummaryFromTouchedFiles(touchedFiles: readonly string[]) {
+  if (touchedFiles.length === 0) {
+    return 'update-changes'
+  }
+
+  const firstFile = touchedFiles[0]
+  const firstFileBaseName = path.posix.basename(firstFile).replace(/\.[^.]+$/u, '')
+  const normalizedFirstName = sanitizeBranchSegment(firstFileBaseName, 24)
+
+  if (touchedFiles.length === 1) {
+    return normalizedFirstName.length > 0 ? `update-${normalizedFirstName}` : 'update-file'
+  }
+
+  if (normalizedFirstName.length > 0) {
+    return `update-${normalizedFirstName}-and-${touchedFiles.length - 1}-more`
+  }
+
+  return `update-${touchedFiles.length}-files`
+}
+
+function buildAutonomousBranchBaseName(commitMessage: string, stagedNumstatText: string) {
+  const normalizedMessage = commitMessage.trim()
+  const conventionalMatch = CONVENTIONAL_COMMIT_SUBJECT_PATTERN.exec(normalizedMessage)
+  const branchType = sanitizeBranchSegment(conventionalMatch?.[1] ?? DEFAULT_AUTONOMOUS_BRANCH_TYPE, 16)
+  const summaryFromMessage = sanitizeBranchSegment(conventionalMatch?.[2] ?? normalizedMessage)
+  const summary =
+    summaryFromMessage.length > 0
+      ? summaryFromMessage
+      : deriveBranchSummaryFromTouchedFiles(parseTouchedFilesFromNumstat(stagedNumstatText))
+
+  const normalizedType = branchType.length > 0 ? branchType : DEFAULT_AUTONOMOUS_BRANCH_TYPE
+  const baseName = `${normalizedType}/${summary}`
+  const boundedName = trimInvalidBranchTail(baseName.slice(0, AUTONOMOUS_BRANCH_MAX_LENGTH))
+
+  return boundedName.length > 0 ? boundedName : `${DEFAULT_AUTONOMOUS_BRANCH_TYPE}/update-changes`
+}
+
+async function doesLocalBranchExist(repoRootPath: string, branchName: string) {
+  try {
+    await runGit(['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], repoRootPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function checkoutOrCreateBranch(repoRootPath: string, branchName: string) {
+  await validateBranchName(branchName, repoRootPath)
+
+  if (await doesLocalBranchExist(repoRootPath, branchName)) {
+    await runGit(['checkout', '--quiet', branchName], repoRootPath)
+    return branchName
+  }
+
+  await runGit(['checkout', '--quiet', '-b', branchName], repoRootPath)
+  return branchName
+}
+
+async function resolveDefaultBranchName(repoRootPath: string) {
+  const remoteDefaultBranch = await readDefaultBranch(repoRootPath)
+  if (remoteDefaultBranch) {
+    return remoteDefaultBranch
+  }
+
+  const localBranches = await readLocalBranches(repoRootPath).catch((): string[] => [])
+  if (localBranches.includes('main')) {
+    return 'main'
+  }
+
+  if (localBranches.includes('master')) {
+    return 'master'
+  }
+
+  return null
+}
+
+function isDefaultBranchName(branchName: string, defaultBranch: string | null) {
+  const normalizedBranchName = branchName.trim().toLowerCase()
+  if (normalizedBranchName.length === 0) {
+    return false
+  }
+
+  if (defaultBranch && normalizedBranchName === defaultBranch.trim().toLowerCase()) {
+    return true
+  }
+
+  return normalizedBranchName === 'main' || normalizedBranchName === 'master'
+}
+
+async function reserveUniqueLocalBranchName(repoRootPath: string, baseBranchName: string) {
+  const normalizedBaseName = trimInvalidBranchTail(baseBranchName.trim())
+  if (normalizedBaseName.length === 0) {
+    throw new Error('Failed to derive an automatic branch name.')
+  }
+
+  await validateBranchName(normalizedBaseName, repoRootPath)
+  if (!(await doesLocalBranchExist(repoRootPath, normalizedBaseName))) {
+    return normalizedBaseName
+  }
+
+  for (let suffix = 2; suffix <= 99; suffix += 1) {
+    const suffixText = `-${suffix}`
+    const baseBudget = AUTONOMOUS_BRANCH_MAX_LENGTH - suffixText.length
+    const truncatedBase = trimInvalidBranchTail(normalizedBaseName.slice(0, Math.max(1, baseBudget)))
+    const candidate = trimInvalidBranchTail(`${truncatedBase}${suffixText}`)
+    if (candidate.length === 0) {
+      continue
+    }
+
+    try {
+      await validateBranchName(candidate, repoRootPath)
+      if (!(await doesLocalBranchExist(repoRootPath, candidate))) {
+        return candidate
+      }
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('Failed to allocate a unique automatic branch name for this commit.')
+}
+
+async function createAutonomousFeatureBranch(
+  repoRootPath: string,
+  effectiveCommitMessage: string,
+  stagedNumstatText: string,
+) {
+  const baseBranchName = buildAutonomousBranchBaseName(effectiveCommitMessage, stagedNumstatText)
+  const uniqueBranchName = await reserveUniqueLocalBranchName(repoRootPath, baseBranchName)
+  return checkoutOrCreateBranch(repoRootPath, uniqueBranchName)
+}
+
+async function readSymbolicHeadBranchName(repoRootPath: string) {
+  try {
+    const { stdout } = await runGit(['symbolic-ref', '--quiet', '--short', 'HEAD'], repoRootPath)
+    const branchName = stdout.trim()
+    return branchName.length > 0 ? branchName : null
+  } catch {
+    return null
+  }
+}
+
 export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult> {
   const workspacePath = input.workspacePath.trim()
   if (workspacePath.length === 0) {
@@ -662,6 +853,8 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
     }
   }
 
+  const stagedDiffText = await readStagedDiffText(repoRootPath)
+  const stagedNumstatText = await readStagedNumstatText(repoRootPath)
   const trimmedMessage = input.message.trim()
   const effectiveCommitMessage =
     trimmedMessage.length > 0
@@ -669,8 +862,8 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
       : await (async () => {
           const { generateCommitMessageFromDiff } = await import('./commitMessageGenerator')
           return generateCommitMessageFromDiff({
-            diffText: await readStagedDiffText(repoRootPath),
-            numstatText: await readStagedNumstatText(repoRootPath),
+            diffText: stagedDiffText,
+            numstatText: stagedNumstatText,
             selection:
               input.providerId && input.modelId
                 ? {
@@ -681,6 +874,44 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
                 : null,
           })
         })()
+
+  let activeBranchName = await readSymbolicHeadBranchName(repoRootPath)
+  const preferredBranchName = input.preferredBranchName?.trim() ?? ''
+
+  try {
+    if (input.action === 'commit-and-create-pr') {
+      const defaultBranchName = await resolveDefaultBranchName(repoRootPath)
+
+      if (preferredBranchName.length > 0) {
+        if (isDefaultBranchName(preferredBranchName, defaultBranchName)) {
+          activeBranchName = await createAutonomousFeatureBranch(repoRootPath, effectiveCommitMessage, stagedNumstatText)
+        } else {
+          activeBranchName = await checkoutOrCreateBranch(repoRootPath, preferredBranchName)
+        }
+      } else {
+        const currentBranchState = await readCurrentBranch(repoRootPath)
+        const shouldAutoCreateFeatureBranch =
+          currentBranchState.isDetachedHead ||
+          currentBranchState.currentBranch === null ||
+          (currentBranchState.currentBranch !== null &&
+            isDefaultBranchName(currentBranchState.currentBranch, defaultBranchName))
+
+        if (shouldAutoCreateFeatureBranch) {
+          activeBranchName = await createAutonomousFeatureBranch(repoRootPath, effectiveCommitMessage, stagedNumstatText)
+        } else {
+          activeBranchName = currentBranchState.currentBranch
+        }
+      }
+    } else if (preferredBranchName.length > 0) {
+      activeBranchName = await checkoutOrCreateBranch(repoRootPath, preferredBranchName)
+    }
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to prepare branch for commit: ${getErrorMessage(error)}`)
+  }
 
   // Commit
   const commitArgs = ['commit']
@@ -696,10 +927,15 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
   }
 
   // Push if needed
+  let prUrl: string | null = null
   if (input.action === 'commit-and-push' || input.action === 'commit-and-create-pr') {
     try {
-      const { stdout: branchStdout } = await runGit(['symbolic-ref', '--short', 'HEAD'], repoRootPath)
-      const currentBranch = branchStdout.trim()
+      const currentBranch = await readSymbolicHeadBranchName(repoRootPath)
+      if (!currentBranch) {
+        throw new Error('Cannot push from detached HEAD. Checkout a branch first.')
+      }
+
+      activeBranchName = currentBranch
 
       await runGit(['push', '-u', 'origin', currentBranch], repoRootPath)
 
@@ -709,7 +945,13 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
         if (remoteUrl) {
           const httpsBase = remoteUrlToHttpsBase(remoteUrl)
           if (httpsBase) {
-            const prUrl = `${httpsBase}/compare/${encodeURIComponent(currentBranch)}?expand=1`
+            const defaultBranchName = await resolveDefaultBranchName(repoRootPath)
+            const compareRef =
+              defaultBranchName && defaultBranchName !== currentBranch
+                ? `${encodeURIComponent(defaultBranchName)}...${encodeURIComponent(currentBranch)}`
+                : encodeURIComponent(currentBranch)
+
+            prUrl = `${httpsBase}/compare/${compareRef}?expand=1`
             void openExternalUrl(prUrl)
           }
         }
@@ -724,8 +966,10 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
   }
 
   return {
+    branchName: activeBranchName,
     commitHash,
     message: effectiveCommitMessage,
+    prUrl,
     success: true,
   }
 }
