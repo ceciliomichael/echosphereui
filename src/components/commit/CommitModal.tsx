@@ -166,7 +166,7 @@ export function CommitModal({
             aria-label="Close commit dialog"
             disabled={isCommitting}
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X size={16} />
           </button>
@@ -182,7 +182,7 @@ export function CommitModal({
                   Current: {branchState.currentBranch ?? 'No branch'}
                 </span>
               </span>
-              <div className="relative flex-1 max-w-[17rem]">
+              <div className="relative min-w-0 flex-1">
                 <div className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-muted-foreground">
                   {isSwitchingBranch ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -196,7 +196,7 @@ export function CommitModal({
                   onChange={(e) => setCommitBranchName(e.target.value.replace(/[^A-Za-z0-9_.-/]/g, ''))}
                   disabled={disableSubmit}
                   placeholder="Optional (leaving blank uses current)"
-                  className="h-10 w-full rounded-lg border border-border bg-surface pl-8 pr-3 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:border-[var(--color-action)] focus:outline-none focus:ring-1 focus:ring-[var(--color-action)]"
+                  className="h-10 w-full rounded-xl border border-border bg-surface pl-8 pr-3 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:border-border focus:outline-none focus:ring-0"
                 />
               </div>
             </div>
