@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GitCommitAction, GitCommitResult, GitStatusResult } from '../types/chat'
+import type { ChatProviderId, GitCommitAction, GitCommitResult, GitStatusResult, ReasoningEffort } from '../types/chat'
 
 interface UseGitCommitInput {
   hasRepository: boolean
+  modelId: string
+  providerId: ChatProviderId | null
+  reasoningEffort: ReasoningEffort
   workspacePath: string | null | undefined
 }
 
@@ -31,7 +34,13 @@ const EMPTY_STATUS: GitStatusResult = {
   untrackedFileCount: 0,
 }
 
-export function useGitCommit({ hasRepository, workspacePath }: UseGitCommitInput): UseGitCommitResult {
+export function useGitCommit({
+  hasRepository,
+  modelId,
+  providerId,
+  reasoningEffort,
+  workspacePath,
+}: UseGitCommitInput): UseGitCommitResult {
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(false)
   const [isCommitting, setIsCommitting] = useState(false)
@@ -96,6 +105,9 @@ export function useGitCommit({ hasRepository, workspacePath }: UseGitCommitInput
         action: input.action,
         includeUnstaged: input.includeUnstaged,
         message: input.message,
+        modelId: modelId.trim(),
+        providerId: providerId ?? undefined,
+        reasoningEffort,
         workspacePath: normalizedPath,
       })
 
@@ -108,7 +120,7 @@ export function useGitCommit({ hasRepository, workspacePath }: UseGitCommitInput
     } finally {
       setIsCommitting(false)
     }
-  }, [workspacePath])
+  }, [modelId, providerId, reasoningEffort, workspacePath])
 
   const resetResult = useCallback(() => {
     setLastCommitResult(null)

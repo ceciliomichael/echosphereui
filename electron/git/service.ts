@@ -2,7 +2,6 @@ import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { shell } from 'electron'
 import type {
   CheckoutGitBranchInput,
   CreateGitBranchInput,
@@ -437,6 +436,28 @@ function remoteUrlToHttpsBase(remoteUrl: string): string | null {
   return null
 }
 
+async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const electronModule = await import('electron')
+    const shellApi = electronModule?.shell
+    if (shellApi && typeof shellApi.openExternal === 'function') {
+      await shellApi.openExternal(url)
+    }
+  } catch {
+    // Best effort: opening a browser is optional and unavailable in non-Electron runtimes (tests/CLI).
+  }
+}
+
+async function readStagedDiffText(repoRootPath: string) {
+  const { stdout } = await runGit(['diff', '--cached', '--no-color', '--unified=3', '--', '.'], repoRootPath)
+  return stdout
+}
+
+async function readStagedNumstatText(repoRootPath: string) {
+  const { stdout } = await runGit(['diff', '--cached', '--numstat', '--', '.'], repoRootPath)
+  return stdout
+}
+
 export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult> {
   const workspacePath = input.workspacePath.trim()
   if (workspacePath.length === 0) {
@@ -457,13 +478,29 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
     }
   }
 
+  const trimmedMessage = input.message.trim()
+  const effectiveCommitMessage =
+    trimmedMessage.length > 0
+      ? trimmedMessage
+      : await (async () => {
+          const { generateCommitMessageFromDiff } = await import('./commitMessageGenerator')
+          return generateCommitMessageFromDiff({
+            diffText: await readStagedDiffText(repoRootPath),
+            numstatText: await readStagedNumstatText(repoRootPath),
+            selection:
+              input.providerId && input.modelId
+                ? {
+                    modelId: input.modelId,
+                    providerId: input.providerId,
+                    reasoningEffort: input.reasoningEffort ?? 'medium',
+                  }
+                : null,
+          })
+        })()
+
   // Commit
   const commitArgs = ['commit']
-  if (input.message.trim().length > 0) {
-    commitArgs.push('-m', input.message.trim())
-  } else {
-    commitArgs.push('--allow-empty-message', '-m', '')
-  }
+  commitArgs.push('-m', effectiveCommitMessage)
 
   let commitHash = ''
   try {
@@ -473,8 +510,6 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
   } catch (error) {
     throw new Error(`Failed to commit: ${getErrorMessage(error)}`)
   }
-
-  const effectiveMessage = input.message.trim().length > 0 ? input.message.trim() : '(empty commit message)'
 
   // Push if needed
   if (input.action === 'commit-and-push' || input.action === 'commit-and-create-pr') {
@@ -491,7 +526,7 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
           const httpsBase = remoteUrlToHttpsBase(remoteUrl)
           if (httpsBase) {
             const prUrl = `${httpsBase}/compare/${encodeURIComponent(currentBranch)}?expand=1`
-            void shell.openExternal(prUrl)
+            void openExternalUrl(prUrl)
           }
         }
       }
@@ -506,7 +541,7 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
 
   return {
     commitHash,
-    message: effectiveMessage,
+    message: effectiveCommitMessage,
     success: true,
   }
 }

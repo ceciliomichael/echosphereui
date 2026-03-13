@@ -32,12 +32,6 @@ function readBooleanField(input: Record<string, unknown>, fieldName: string) {
   return value
 }
 
-function readNumberField(input: Record<string, unknown>, fieldName: string) {
-  const value = input[fieldName]
-  assert.equal(typeof value, 'number', `${fieldName} must be a number.`)
-  return value
-}
-
 function readMatches(input: Record<string, unknown>) {
   const matches = input.matches
   assert.ok(Array.isArray(matches), 'matches must be an array.')

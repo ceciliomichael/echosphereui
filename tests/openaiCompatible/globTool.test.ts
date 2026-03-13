@@ -15,12 +15,6 @@ function buildExecutionContext(agentContextRootPath: string) {
   }
 }
 
-function readNumberField(input: Record<string, unknown>, fieldName: string) {
-  const value = input[fieldName]
-  assert.equal(typeof value, 'number', `${fieldName} must be a number.`)
-  return value
-}
-
 function readBooleanField(input: Record<string, unknown>, fieldName: string) {
   const value = input[fieldName]
   assert.equal(typeof value, 'boolean', `${fieldName} must be a boolean.`)

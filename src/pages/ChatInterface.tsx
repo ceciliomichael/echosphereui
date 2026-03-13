@@ -160,6 +160,9 @@ export function ChatInterface({
   })
   const gitCommitState = useGitCommit({
     hasRepository,
+    modelId: runtimeSelection.modelId,
+    providerId: runtimeSelection.providerId,
+    reasoningEffort: runtimeSelection.reasoningEffort,
     workspacePath: activeWorkspacePath,
   })
 

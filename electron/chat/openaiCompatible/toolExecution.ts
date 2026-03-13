@@ -99,8 +99,9 @@ export async function executeToolCallWithPolicies(
   context: ProviderStreamContext,
   agentContextRootPath: string,
   inMemoryMessages: Message[],
-  _turnState: ToolExecutionTurnState,
+  turnState: ToolExecutionTurnState,
 ) {
+  void turnState
   const startedAt = toolCall.startedAt
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
 

@@ -146,7 +146,7 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
   const executionLog: string[] = []
   const completedToolCalls: string[] = []
   const context = {
-    emitDelta(_event: StreamDeltaEvent) {},
+    emitDelta() {},
     signal: new AbortController().signal,
     workspaceCheckpointId: null,
   }
@@ -202,7 +202,7 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
 test('createToolExecutionScheduler still serializes path-exclusive tool calls for the same file', async () => {
   const executionLog: string[] = []
   const context = {
-    emitDelta(_event: StreamDeltaEvent) {},
+    emitDelta() {},
     signal: new AbortController().signal,
     workspaceCheckpointId: null,
   }

@@ -310,7 +310,10 @@ export type GitCommitAction = 'commit' | 'commit-and-push' | 'commit-and-create-
 export interface GitCommitInput {
   action: GitCommitAction
   includeUnstaged: boolean
+  modelId?: string
   message: string
+  providerId?: ChatProviderId
+  reasoningEffort?: ReasoningEffort
   workspacePath: string
 }
 
