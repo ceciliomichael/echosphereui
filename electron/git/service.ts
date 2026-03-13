@@ -22,6 +22,11 @@ const GIT_EXECUTION_OPTIONS = {
   maxBuffer: 1024 * 1024,
   windowsHide: true,
 }
+const GH_EXECUTION_OPTIONS = {
+  encoding: 'utf8' as const,
+  maxBuffer: 1024 * 1024,
+  windowsHide: true,
+}
 
 interface GitCommandError extends Error {
   code?: number | string
@@ -66,6 +71,13 @@ function isRepositoryMissing(error: unknown) {
 async function runGit(args: string[], cwd: string) {
   return execFileAsync('git', args, {
     ...GIT_EXECUTION_OPTIONS,
+    cwd,
+  })
+}
+
+async function runGh(args: string[], cwd: string) {
+  return execFileAsync('gh', args, {
+    ...GH_EXECUTION_OPTIONS,
     cwd,
   })
 }
@@ -694,6 +706,196 @@ function remoteUrlToHttpsBase(remoteUrl: string): string | null {
   return null
 }
 
+interface GitHubRepositoryRef {
+  owner: string
+  repo: string
+}
+
+function parseGitHubRepositoryRef(remoteUrl: string): GitHubRepositoryRef | null {
+  const sshMatch = /^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/u.exec(remoteUrl)
+  if (sshMatch) {
+    return {
+      owner: sshMatch[1],
+      repo: sshMatch[2],
+    }
+  }
+
+  const httpsMatch = /^https?:\/\/github\.com\/([^/]+)\/(.+?)(?:\.git)?$/u.exec(remoteUrl)
+  if (httpsMatch) {
+    return {
+      owner: httpsMatch[1],
+      repo: httpsMatch[2],
+    }
+  }
+
+  const sshProtocolMatch = /^ssh:\/\/git@github\.com\/([^/]+)\/(.+?)(?:\.git)?$/u.exec(remoteUrl)
+  if (sshProtocolMatch) {
+    return {
+      owner: sshProtocolMatch[1],
+      repo: sshProtocolMatch[2],
+    }
+  }
+
+  return null
+}
+
+function getCommitMessageSubject(commitMessage: string) {
+  const firstLine = commitMessage
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+
+  return firstLine ?? 'chore: update repository changes'
+}
+
+function getCommitMessageBody(commitMessage: string) {
+  const lines = commitMessage.split(/\r?\n/u)
+  const firstNonEmptyLineIndex = lines.findIndex((line) => line.trim().length > 0)
+  if (firstNonEmptyLineIndex < 0) {
+    return 'Automated PR created by EchoSphere.'
+  }
+
+  const body = lines
+    .slice(firstNonEmptyLineIndex + 1)
+    .join('\n')
+    .trim()
+
+  return body.length > 0 ? body : 'Automated PR created by EchoSphere.'
+}
+
+function extractGitHubPullRequestUrl(text: string) {
+  const match = /(https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+)/u.exec(text)
+  return match ? match[1] : null
+}
+
+function isGhUnavailable(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const commandError = error as GitCommandError
+  const message = getErrorMessage(commandError).toLowerCase()
+  return commandError.code === 'ENOENT' || message.includes("'gh' is not recognized") || message.includes('command not found')
+}
+
+function isGhAuthError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase()
+  return message.includes('authentication') || message.includes('gh auth login') || message.includes('not logged into')
+}
+
+async function createOrGetGitHubPullRequest(input: {
+  baseBranchName: string
+  commitMessage: string
+  currentBranchName: string
+  repoRootPath: string
+  repositoryRef: GitHubRepositoryRef
+}) {
+  const repositorySlug = `${input.repositoryRef.owner}/${input.repositoryRef.repo}`
+  try {
+    const { stdout: existingPrStdout } = await runGh(
+      [
+        'pr',
+        'list',
+        '--state',
+        'open',
+        '--head',
+        input.currentBranchName,
+        '--base',
+        input.baseBranchName,
+        '--json',
+        'url',
+        '--limit',
+        '1',
+        '--repo',
+        repositorySlug,
+      ],
+      input.repoRootPath,
+    )
+
+    const parsedExistingPr = JSON.parse(existingPrStdout) as Array<{ url?: string }>
+    const existingUrl = parsedExistingPr[0]?.url?.trim()
+    if (existingUrl && existingUrl.length > 0) {
+      return existingUrl
+    }
+  } catch (error) {
+    if (isGhUnavailable(error)) {
+      throw new Error('GitHub CLI (`gh`) is required to auto-create PRs. Install `gh` and authenticate with `gh auth login`.')
+    }
+
+    if (isGhAuthError(error)) {
+      throw new Error('GitHub CLI is not authenticated. Run `gh auth login` to enable automatic PR creation.')
+    }
+
+    throw new Error(`Failed to check existing pull requests: ${getErrorMessage(error)}`)
+  }
+
+  try {
+    const { stdout: createPrStdout } = await runGh(
+      [
+        'pr',
+        'create',
+        '--base',
+        input.baseBranchName,
+        '--head',
+        input.currentBranchName,
+        '--title',
+        getCommitMessageSubject(input.commitMessage),
+        '--body',
+        getCommitMessageBody(input.commitMessage),
+        '--repo',
+        repositorySlug,
+      ],
+      input.repoRootPath,
+    )
+
+    const createdPrUrl = extractGitHubPullRequestUrl(createPrStdout)
+    if (createdPrUrl) {
+      return createdPrUrl
+    }
+  } catch (error) {
+    if (isGhUnavailable(error)) {
+      throw new Error('GitHub CLI (`gh`) is required to auto-create PRs. Install `gh` and authenticate with `gh auth login`.')
+    }
+
+    if (isGhAuthError(error)) {
+      throw new Error('GitHub CLI is not authenticated. Run `gh auth login` to enable automatic PR creation.')
+    }
+
+    throw new Error(`Failed to create pull request: ${getErrorMessage(error)}`)
+  }
+
+  try {
+    const { stdout: fallbackListStdout } = await runGh(
+      [
+        'pr',
+        'list',
+        '--state',
+        'open',
+        '--head',
+        input.currentBranchName,
+        '--base',
+        input.baseBranchName,
+        '--json',
+        'url',
+        '--limit',
+        '1',
+        '--repo',
+        repositorySlug,
+      ],
+      input.repoRootPath,
+    )
+    const parsedFallback = JSON.parse(fallbackListStdout) as Array<{ url?: string }>
+    const fallbackUrl = parsedFallback[0]?.url?.trim()
+    if (fallbackUrl && fallbackUrl.length > 0) {
+      return fallbackUrl
+    }
+  } catch {
+    // best effort fallback
+  }
+
+  return null
+}
+
 async function resolveAndValidateGitFilePath(repoRootPath: string, rawFilePath: string) {
   const normalizedFilePath = normalizeForGitPathspec(rawFilePath.trim())
   if (normalizedFilePath.length === 0) {
@@ -706,18 +908,6 @@ async function resolveAndValidateGitFilePath(repoRootPath: string, rawFilePath: 
   }
 
   return normalizedFilePath
-}
-
-async function openExternalUrl(url: string): Promise<void> {
-  try {
-    const electronModule = await import('electron')
-    const shellApi = electronModule?.shell
-    if (shellApi && typeof shellApi.openExternal === 'function') {
-      await shellApi.openExternal(url)
-    }
-  } catch {
-    // Best effort: opening a browser is optional and unavailable in non-Electron runtimes (tests/CLI).
-  }
 }
 
 async function readStagedDiffText(repoRootPath: string) {
@@ -1105,20 +1295,31 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
 
       await runGit(['push', '-u', 'origin', currentBranch], repoRootPath)
 
-      // Open PR creation page if requested
+      // Create PR if requested
       if (input.action === 'commit-and-create-pr') {
         const remoteUrl = await getRemoteUrl(repoRootPath)
         if (remoteUrl) {
-          const httpsBase = remoteUrlToHttpsBase(remoteUrl)
-          if (httpsBase) {
-            const defaultBranchName = await resolveDefaultBranchName(repoRootPath)
-            const compareRef =
-              defaultBranchName && defaultBranchName !== currentBranch
-                ? `${encodeURIComponent(defaultBranchName)}...${encodeURIComponent(currentBranch)}`
-                : encodeURIComponent(currentBranch)
+          const defaultBranchName = await resolveDefaultBranchName(repoRootPath)
+          const effectiveDefaultBranch = defaultBranchName ?? 'main'
+          const githubRepositoryRef = parseGitHubRepositoryRef(remoteUrl)
 
-            prUrl = `${httpsBase}/compare/${compareRef}?expand=1`
-            void openExternalUrl(prUrl)
+          if (githubRepositoryRef) {
+            prUrl = await createOrGetGitHubPullRequest({
+              baseBranchName: effectiveDefaultBranch,
+              commitMessage: effectiveCommitMessage,
+              currentBranchName: currentBranch,
+              repoRootPath,
+              repositoryRef: githubRepositoryRef,
+            })
+          } else {
+            const httpsBase = remoteUrlToHttpsBase(remoteUrl)
+            if (httpsBase) {
+              const compareRef =
+                effectiveDefaultBranch !== currentBranch
+                  ? `${encodeURIComponent(effectiveDefaultBranch)}...${encodeURIComponent(currentBranch)}`
+                  : encodeURIComponent(currentBranch)
+              prUrl = `${httpsBase}/compare/${compareRef}?expand=1`
+            }
           }
         }
       }
