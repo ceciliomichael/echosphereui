@@ -1,9 +1,13 @@
+import type { ReactNode } from 'react'
+
 interface WorkspaceHeaderProps {
-  title: React.ReactNode
+  title: ReactNode
   isSidebarOpen: boolean
   leadingPaddingClassName?: string
-  leadingContent?: React.ReactNode
+  leadingContent?: ReactNode
   leadingContentClassName?: string
+  trailingContent?: ReactNode
+  trailingContentClassName?: string
 }
 
 export function WorkspaceHeader({
@@ -11,11 +15,13 @@ export function WorkspaceHeader({
   leadingPaddingClassName,
   leadingContent,
   leadingContentClassName,
+  trailingContent,
+  trailingContentClassName,
 }: WorkspaceHeaderProps) {
   return (
     <header
       className={[
-        'flex h-16 shrink-0 items-center px-4 transition-[padding] duration-200 ease-out md:px-5',
+        'flex h-14 shrink-0 items-center border-b border-border px-4 transition-[padding] duration-200 ease-out md:px-5',
         leadingPaddingClassName ?? '',
       ].join(' ')}
     >
@@ -33,6 +39,9 @@ export function WorkspaceHeader({
           )}
         </div>
       </div>
+      {trailingContent ? (
+        <div className={['ml-3 flex shrink-0 items-center', trailingContentClassName ?? ''].join(' ')}>{trailingContent}</div>
+      ) : null}
     </header>
   )
 }

@@ -1,12 +1,19 @@
-import { memo, useMemo } from 'react'
+import { memo, useState, useMemo, type ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 import { computeDiffLines, type DiffLine } from '../../lib/textDiff'
 import { PathLabel } from './PathLabel'
 
 interface DiffViewerProps {
+  className?: string
+  collapsible?: boolean
   contextLines?: number
+  defaultExpanded?: boolean
   filePath: string
+  headerClassName?: string
+  headerTrailingContent?: ReactNode
   isStreaming?: boolean
+  layout?: 'card' | 'stacked'
   newContent: string
   oldContent: string | null | undefined
   startLineNumber?: number
@@ -91,14 +98,21 @@ function getLineNumberDividerClassName() {
 }
 
 const DiffViewerComponent = ({
+  className,
+  collapsible = false,
   contextLines,
+  defaultExpanded = true,
   filePath,
+  headerClassName,
+  headerTrailingContent,
   isStreaming = false,
+  layout = 'card',
   newContent,
   oldContent,
   startLineNumber = 1,
   viewOnly = false,
 }: DiffViewerProps) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const diffLines = useMemo(() => {
     const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
     return filterDiffWithContext(diff, contextLines)
@@ -107,56 +121,129 @@ const DiffViewerComponent = ({
   const iconConfig = resolveFileIconConfig({ fileName: filePath })
   const FileIcon = iconConfig.icon
   const hasOldSide = !viewOnly && diffLines.some((line) => line.type !== 'collapsed' && line.oldLineNumber !== undefined)
+  const headerContent = (
+    <>
+      <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
+        <span className="relative flex h-4 w-4 items-center justify-center">
+          <FileIcon
+            size={14}
+            style={{ color: iconConfig.color }}
+            aria-hidden="true"
+            className={collapsible ? 'transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0' : ''}
+          />
+          {collapsible ? (
+            <ChevronRight
+              size={15}
+              className={[
+                'absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100',
+                isExpanded ? 'rotate-90' : '',
+              ].join(' ')}
+            />
+          ) : null}
+        </span>
+        <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
+      </span>
+      {headerTrailingContent ? <span className="ml-3 inline-flex shrink-0 items-center">{headerTrailingContent}</span> : null}
+    </>
+  )
+
+  const isStackedLayout = layout === 'stacked'
 
   return (
-    <div className="my-2 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-      <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-2 text-[12px] text-muted-foreground">
-        <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
-          <span className="flex h-4 w-4 items-center justify-center">
-            <FileIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
-          </span>
-          <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
-        </span>
-      </div>
+    <div
+      className={[
+        isStackedLayout
+          ? 'my-0 w-full overflow-hidden rounded-none border-0 border-b border-border bg-surface shadow-none'
+          : 'my-2 w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm',
+        className ?? '',
+      ].join(' ')}
+    >
+      {collapsible ? (
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          className={[
+            'group flex w-full items-center justify-between bg-surface px-4 py-3 text-[12px] text-muted-foreground',
+            isExpanded ? 'border-b border-border' : '',
+            headerClassName ?? '',
+          ].join(' ')}
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div
+          className={[
+            'flex items-center justify-between border-b border-border bg-surface px-4 py-3 text-[12px] text-muted-foreground',
+            headerClassName ?? '',
+          ].join(' ')}
+        >
+          {headerContent}
+        </div>
+      )}
 
-      <div className="overflow-auto bg-surface font-mono text-[12px] leading-5">
-        <div className="min-w-full w-fit">
-          {diffLines.map((line, index) => {
-            if (line.type === 'collapsed') {
-              return (
-                <div
-                  key={`collapsed-${index}`}
-                  className="border-y border-border bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground"
-                >
-                  {line.collapsedCount} unchanged lines
-                </div>
-              )
-            }
+      {(!collapsible || isExpanded) && (
+        <div className={isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface'}>
+          <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
+            <div className="flex min-w-0 items-stretch">
+              <div className={`shrink-0 ${getLineGutterClassName()}`}>
+                {diffLines.map((line, index) => {
+                  if (line.type === 'collapsed') {
+                    return (
+                      <div
+                        key={`gutter-collapsed-${index}`}
+                        className="border-y border-border bg-background/60 px-2 py-1.5 text-[11px]"
+                        aria-hidden="true"
+                      >
+                        {' '}
+                      </div>
+                    )
+                  }
 
-            return (
-              <div key={`${line.type}-${index}`} className="flex min-h-5 items-stretch">
-                <div className={`sticky left-0 z-10 flex shrink-0 px-2 text-right ${getLineGutterClassName()}`}>
-                  {viewOnly || !hasOldSide ? (
-                    <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
-                  ) : (
-                    <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
-                      <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
-                      <span className="flex h-full items-stretch justify-center" aria-hidden="true">
-                        <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
-                      </span>
-                      <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
-                    </span>
-                  )}
-                </div>
+                  return (
+                    <div key={`gutter-${line.type}-${index}`} className="flex min-h-5 items-stretch px-2 text-right">
+                      {viewOnly || !hasOldSide ? (
+                        <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
+                      ) : (
+                        <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
+                          <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
+                          <span className="flex h-full items-stretch justify-center" aria-hidden="true">
+                            <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
+                          </span>
+                          <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
 
-                <div className={`min-h-5 flex-1 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
-                  {line.content.length > 0 ? line.content : ' '}
+              <div className="min-w-0 flex-1 overflow-x-auto bg-surface">
+                <div className="min-w-full w-fit">
+                  {diffLines.map((line, index) => {
+                    if (line.type === 'collapsed') {
+                      return (
+                        <div
+                          key={`content-collapsed-${index}`}
+                          className="border-y border-border bg-background/60 px-3 py-1.5 text-[11px] text-muted-foreground"
+                        >
+                          {line.collapsedCount} unchanged lines
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div key={`content-${line.type}-${index}`} className={`min-h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
+                        {line.content.length > 0 ? line.content : ' '}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            )
-          })}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -161,6 +161,7 @@ export interface AppSettings {
   appearance: AppAppearance
   chatModelId: string
   chatReasoningEffort: ReasoningEffort
+  diffPanelWidth: number
   language: AppLanguage
   lastActiveConversationId: string | null
   sendMessageOnEnter: boolean

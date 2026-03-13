@@ -1,5 +1,6 @@
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 import type { AppSettings } from '../../src/types/chat'
 
@@ -14,6 +15,10 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
     chatReasoningEffort: isReasoningEffort(candidate?.chatReasoningEffort)
       ? candidate.chatReasoningEffort
       : DEFAULT_APP_SETTINGS.chatReasoningEffort,
+    diffPanelWidth:
+      typeof candidate?.diffPanelWidth === 'number' && Number.isFinite(candidate.diffPanelWidth)
+        ? clampStoredDiffPanelWidth(candidate.diffPanelWidth)
+        : DEFAULT_APP_SETTINGS.diffPanelWidth,
     language: isAppLanguage(candidate?.language) ? candidate.language : DEFAULT_APP_SETTINGS.language,
     lastActiveConversationId:
       typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0

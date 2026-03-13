@@ -1,0 +1,362 @@
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Check, ChevronDown, Maximize2, Minimize2 } from 'lucide-react'
+import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
+import type { ConversationFileDiff } from '../../lib/chatDiffs'
+import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
+import { DiffViewer } from './DiffViewer'
+
+interface ConversationDiffPanelProps {
+  currentBranch: string | null
+  fileDiffs: readonly ConversationFileDiff[]
+  isOpen: boolean
+  onWidthChange: (nextWidth: number) => void
+  onWidthCommit?: (nextWidth: number) => void
+  width: number
+}
+
+type DiffPanelScope = 'branch' | 'last_turn' | 'staged' | 'unstaged'
+
+interface DiffScopeOption {
+  description: string | null
+  label: string
+  value: DiffPanelScope
+}
+
+export function ConversationDiffPanel({
+  currentBranch,
+  fileDiffs,
+  isOpen,
+  onWidthChange,
+  onWidthCommit,
+  width,
+}: ConversationDiffPanelProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const scopeContainerRef = useRef<HTMLDivElement | null>(null)
+  const scopeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const scopeMenuRef = useRef<HTMLDivElement | null>(null)
+  const [isResizing, setIsResizing] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false)
+  const [highlightedScope, setHighlightedScope] = useState<DiffPanelScope>('unstaged')
+  const [selectedScope, setSelectedScope] = useState<DiffPanelScope>('unstaged')
+  const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+  const widthRef = useRef(width)
+  const onWidthChangeRef = useRef(onWidthChange)
+  const onWidthCommitRef = useRef(onWidthCommit)
+  const menuStyle = useFloatingMenuPosition({
+    anchorRef: scopeButtonRef,
+    isOpen: isScopeMenuOpen,
+    menuRef: scopeMenuRef,
+  })
+
+  const branchLabel = currentBranch ? `${currentBranch} → origin/${currentBranch}` : 'No branch selected'
+  const displayedFileDiffs = selectedScope === 'staged' ? [] : fileDiffs
+  const selectedScopeLabel =
+    selectedScope === 'unstaged'
+      ? 'Unstaged'
+      : selectedScope === 'staged'
+        ? 'Staged'
+        : selectedScope === 'branch'
+          ? 'Branch'
+          : 'Last turn'
+  const selectedScopeCount = selectedScope === 'unstaged' ? fileDiffs.length : selectedScope === 'staged' ? 0 : null
+  const visiblePanelWidth = isOpen ? width : 0
+
+  const scopeOptions = useMemo(
+    () =>
+      [
+        {
+          description: `${fileDiffs.length}`,
+          label: 'Unstaged',
+          value: 'unstaged',
+        },
+        {
+          description: null,
+          label: 'Staged',
+          value: 'staged',
+        },
+        {
+          description: branchLabel,
+          label: 'Branch',
+          value: 'branch',
+        },
+        {
+          description: null,
+          label: 'Last turn',
+          value: 'last_turn',
+        },
+      ] satisfies readonly DiffScopeOption[],
+    [branchLabel, fileDiffs.length],
+  )
+
+  useEffect(() => {
+    widthRef.current = width
+  }, [width])
+
+  useEffect(() => {
+    onWidthChangeRef.current = onWidthChange
+  }, [onWidthChange])
+
+  useEffect(() => {
+    onWidthCommitRef.current = onWidthCommit
+  }, [onWidthCommit])
+
+  useEffect(() => {
+    if (isOpen) {
+      return
+    }
+
+    setIsFullscreen(false)
+    setIsScopeMenuOpen(false)
+  }, [isOpen])
+
+  useEffect(() => {
+    function clampPanelWidth() {
+      const parentWidth = panelRef.current?.parentElement?.clientWidth
+      if (!parentWidth) {
+        return
+      }
+
+      const clampedWidth = Math.min(getMaxDiffPanelWidth(parentWidth), Math.max(MIN_DIFF_PANEL_WIDTH, width))
+      if (clampedWidth !== width) {
+        onWidthChangeRef.current(clampedWidth)
+      }
+    }
+
+    clampPanelWidth()
+    window.addEventListener('resize', clampPanelWidth)
+    return () => window.removeEventListener('resize', clampPanelWidth)
+  }, [width])
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const dragState = dragStateRef.current
+      const parentWidth = panelRef.current?.parentElement?.clientWidth
+      if (!dragState || !parentWidth) {
+        return
+      }
+
+      const nextWidth = dragState.startWidth - (event.clientX - dragState.startX)
+      const clampedWidth = Math.min(
+        getMaxDiffPanelWidth(parentWidth),
+        Math.max(MIN_DIFF_PANEL_WIDTH, Math.round(nextWidth)),
+      )
+      widthRef.current = clampedWidth
+      onWidthChangeRef.current(clampedWidth)
+    }
+
+    function handlePointerUp(event: PointerEvent) {
+      if (dragStateRef.current?.pointerId !== event.pointerId) {
+        return
+      }
+
+      dragStateRef.current = null
+      setIsResizing(false)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      onWidthCommitRef.current?.(widthRef.current)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      dragStateRef.current = null
+      setIsResizing(false)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isScopeMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target
+      if (
+        target instanceof Node &&
+        !scopeContainerRef.current?.contains(target) &&
+        !scopeMenuRef.current?.contains(target)
+      ) {
+        setIsScopeMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [isScopeMenuOpen])
+
+  useEffect(() => {
+    if (!isScopeMenuOpen) {
+      return
+    }
+
+    setHighlightedScope(selectedScope)
+  }, [isScopeMenuOpen, selectedScope])
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startWidth: widthRef.current,
+      startX: event.clientX,
+    }
+
+    setIsResizing(true)
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+  }
+
+  function handleSelectScope(nextScope: DiffPanelScope) {
+    setSelectedScope(nextScope)
+    setIsScopeMenuOpen(false)
+  }
+
+  function renderScopeOption(option: DiffScopeOption) {
+    const isSelected = option.value === selectedScope
+    const isHighlighted = option.value === highlightedScope
+
+    return (
+      <button
+        key={option.value}
+        type="button"
+        role="option"
+        aria-selected={isSelected}
+        onMouseEnter={() => setHighlightedScope(option.value)}
+        onClick={() => handleSelectScope(option.value)}
+        className={[
+          'flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+          isHighlighted
+            ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+            : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+        ].join(' ')}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] leading-5">{option.label}</span>
+          {option.description ? (
+            <span className="mt-0.5 block truncate text-[11px] font-medium text-muted-foreground">{option.description}</span>
+          ) : null}
+        </span>
+        {isSelected ? <Check size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-foreground" /> : null}
+      </button>
+    )
+  }
+
+  return (
+    <div
+      ref={panelRef}
+      className={[
+        isFullscreen
+          ? 'absolute inset-0 z-30 flex h-full min-w-0 overflow-hidden'
+          : 'relative hidden h-full shrink-0 overflow-hidden md:flex',
+        isFullscreen || isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
+        isFullscreen || isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+      ].join(' ')}
+      style={isFullscreen ? undefined : { width: `${visiblePanelWidth}px` }}
+      aria-hidden={!isFullscreen && !isOpen}
+    >
+      {!isFullscreen && isOpen ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize diff panel"
+          onPointerDown={handleResizePointerDown}
+          className="absolute inset-y-0 left-0 z-20 w-3 -translate-x-1/2 cursor-col-resize"
+        />
+      ) : null}
+
+      <aside className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-[var(--workspace-panel-surface)]">
+        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+          <div ref={scopeContainerRef} className="relative w-fit max-w-full">
+            <button
+              ref={scopeButtonRef}
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={isScopeMenuOpen}
+              data-open={isScopeMenuOpen ? 'true' : 'false'}
+              onClick={() => setIsScopeMenuOpen((currentValue) => !currentValue)}
+              className="inline-flex h-8 items-center gap-2 text-sm text-foreground transition-colors hover:text-muted-foreground"
+            >
+              <span className="font-semibold">{selectedScopeLabel}</span>
+              {selectedScopeCount !== null ? (
+                <span className="text-sm font-semibold text-muted-foreground">{selectedScopeCount}</span>
+              ) : null}
+              <ChevronDown
+                size={14}
+                className={['text-muted-foreground transition-transform duration-200', isScopeMenuOpen ? 'rotate-180' : ''].join(
+                  ' ',
+                )}
+              />
+            </button>
+
+            {isScopeMenuOpen
+              ? createPortal(
+                  <div
+                    ref={scopeMenuRef}
+                    data-floating-menu-root="true"
+                    className="fixed z-40 w-[min(18rem,calc(100vw-1rem))] min-w-[10rem] overflow-hidden rounded-2xl border border-border bg-surface shadow-soft"
+                    style={menuStyle}
+                  >
+                    <div
+                      role="listbox"
+                      aria-label="Diff scopes"
+                      onMouseLeave={() => setHighlightedScope(selectedScope)}
+                      className="max-h-56 space-y-0 overflow-y-auto"
+                    >
+                      {scopeOptions.map((option) => renderScopeOption(option))}
+                    </div>
+                  </div>,
+                  document.body,
+                )
+              : null}
+          </div>
+
+          <button
+            type="button"
+            aria-label={isFullscreen ? 'Exit fullscreen diff panel' : 'Fullscreen diff panel'}
+            onClick={() => setIsFullscreen((currentValue) => !currentValue)}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+        </div>
+
+        <div className="h-px w-full bg-border" />
+
+        {displayedFileDiffs.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
+            {selectedScope === 'staged'
+              ? 'No staged file diffs available.'
+              : 'Run an edit or write tool call to populate diffs.'}
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {displayedFileDiffs.map((diff) => (
+              <DiffViewer
+                key={diff.fileName}
+                collapsible
+                defaultExpanded={false}
+                filePath={diff.fileName}
+                newContent={diff.newContent}
+                oldContent={diff.oldContent}
+                contextLines={diff.contextLines}
+                layout="stacked"
+                startLineNumber={diff.startLineNumber}
+                headerTrailingContent={
+                  <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs">
+                    <span className="text-emerald-600 dark:text-emerald-400">{`+${diff.addedLineCount}`}</span>
+                    <span className="text-red-600 dark:text-red-400">{`-${diff.removedLineCount}`}</span>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}

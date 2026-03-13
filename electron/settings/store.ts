@@ -4,6 +4,7 @@ import { app } from 'electron'
 import type { AppSettings } from '../../src/types/chat'
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
@@ -37,6 +38,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   const chatReasoningEffort = isReasoningEffort(input?.chatReasoningEffort)
     ? input.chatReasoningEffort
     : DEFAULT_APP_SETTINGS.chatReasoningEffort
+  const diffPanelWidth =
+    typeof input?.diffPanelWidth === 'number' && Number.isFinite(input.diffPanelWidth)
+      ? clampStoredDiffPanelWidth(input.diffPanelWidth)
+      : DEFAULT_APP_SETTINGS.diffPanelWidth
   const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
   const lastActiveConversationId =
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
@@ -51,6 +56,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     appearance,
     chatModelId,
     chatReasoningEffort,
+    diffPanelWidth,
     language,
     lastActiveConversationId,
     sendMessageOnEnter,

@@ -2,36 +2,50 @@ import { useEffect, useRef } from 'react'
 
 interface UseWorkspaceKeyboardShortcutsOptions {
   onToggleSidebar: () => void
+  onToggleDiffPanel?: () => void
   onCreateConversation?: () => void | Promise<void>
 }
 
 export function useWorkspaceKeyboardShortcuts({
   onToggleSidebar,
+  onToggleDiffPanel,
   onCreateConversation,
 }: UseWorkspaceKeyboardShortcutsOptions) {
   const toggleSidebarRef = useRef(onToggleSidebar)
+  const toggleDiffPanelRef = useRef(onToggleDiffPanel)
   const createConversationRef = useRef(onCreateConversation)
 
   useEffect(() => {
     toggleSidebarRef.current = onToggleSidebar
+    toggleDiffPanelRef.current = onToggleDiffPanel
     createConversationRef.current = onCreateConversation
-  }, [onCreateConversation, onToggleSidebar])
+  }, [onCreateConversation, onToggleDiffPanel, onToggleSidebar])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+      if (!event.ctrlKey || event.metaKey || event.shiftKey) {
         return
       }
 
       const key = event.key.toLowerCase()
 
       if (key === 'b') {
+        if (event.altKey) {
+          if (!toggleDiffPanelRef.current) {
+            return
+          }
+
+          event.preventDefault()
+          toggleDiffPanelRef.current()
+          return
+        }
+
         event.preventDefault()
         toggleSidebarRef.current()
         return
       }
 
-      if (key === 'n' && createConversationRef.current) {
+      if (!event.altKey && key === 'n' && createConversationRef.current) {
         event.preventDefault()
         void createConversationRef.current()
       }

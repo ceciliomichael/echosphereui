@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatInterface } from './pages/ChatInterface'
 import { SettingsInterface } from './pages/SettingsInterface'
 import { useAppSettings } from './hooks/useAppSettings'
@@ -10,7 +10,9 @@ const CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST = '__clear_last_active_conversation
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('chat')
+  const [isDiffPanelOpen, setIsDiffPanelOpen] = useState(false)
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
+  const [diffPanelWidth, setDiffPanelWidth] = useState(settings.diffPanelWidth)
   const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
   const persistingConversationIdRef = useRef<string | null>(null)
   const chatMessages = useChatMessages({
@@ -18,11 +20,28 @@ export default function App() {
     preferredConversationId: bootPreferredConversationId ?? null,
     shouldInitializeHistory: bootPreferredConversationId !== undefined,
   })
-  const handleSidebarWidthChange = (sidebarWidth: number) => {
+  const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
     void updateSettings({ sidebarWidth })
-  }
+  }, [updateSettings])
+  const handleDiffPanelWidthChange = useCallback((nextWidth: number) => {
+    setDiffPanelWidth(nextWidth)
+  }, [])
+  const handleDiffPanelWidthCommit = useCallback(
+    (nextWidth: number) => {
+      if (nextWidth === settings.diffPanelWidth) {
+        return
+      }
+
+      void updateSettings({ diffPanelWidth: nextWidth })
+    },
+    [settings.diffPanelWidth, updateSettings],
+  )
 
   useDocumentTheme(settings.appearance)
+
+  useEffect(() => {
+    setDiffPanelWidth(settings.diffPanelWidth)
+  }, [settings.diffPanelWidth])
 
   useEffect(() => {
     if (isLoading || bootPreferredConversationId !== undefined) {
@@ -113,6 +132,11 @@ export default function App() {
   return (
     <ChatInterface
       chatMessages={chatMessages}
+      diffPanelWidth={diffPanelWidth}
+      isDiffPanelOpen={isDiffPanelOpen}
+      onDiffPanelOpenChange={setIsDiffPanelOpen}
+      onDiffPanelWidthChange={handleDiffPanelWidthChange}
+      onDiffPanelWidthCommit={handleDiffPanelWidthCommit}
       settings={settings}
       onUpdateSettings={updateSettings}
       onSidebarWidthChange={handleSidebarWidthChange}
