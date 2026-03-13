@@ -5,6 +5,9 @@ export interface ConversationFileDiff {
   addedLineCount: number
   contextLines?: number
   fileName: string
+  isStaged: boolean
+  isUnstaged: boolean
+  isUntracked: boolean
   newContent: string
   oldContent: string | null
   removedLineCount: number
@@ -25,6 +28,9 @@ function normalizeFileDiff(result: FileDiffToolResultPresentation): Conversation
   return {
     addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
     fileName: result.fileName,
+    isStaged: false,
+    isUnstaged: false,
+    isUntracked: false,
     newContent: result.newContent,
     oldContent: result.oldContent,
     removedLineCount: result.removedLineCount ?? computedSummary.removedLineCount,
@@ -39,6 +45,9 @@ function normalizeRawFileDiff(result: GitFileDiff): ConversationFileDiff {
   return {
     addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
     fileName: result.fileName,
+    isStaged: result.isStaged,
+    isUnstaged: result.isUnstaged,
+    isUntracked: result.isUntracked,
     newContent: result.newContent,
     oldContent: result.oldContent,
     removedLineCount: result.removedLineCount ?? computedSummary.removedLineCount,

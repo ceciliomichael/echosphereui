@@ -9,6 +9,8 @@ import type {
   GitCommitInput,
   GitCommitResult,
   GitDiffSnapshot,
+  GitFileStageInput,
+  GitFileStageResult,
   GitFileDiff,
   GitStatusResult,
 } from '../../src/types/chat'
@@ -30,6 +32,7 @@ function createEmptyBranchState(): GitBranchState {
   return {
     branches: [],
     currentBranch: null,
+    defaultBranch: null,
     hasRepository: false,
     isDetachedHead: false,
     repoRootPath: null,
@@ -153,6 +156,26 @@ function normalizeGitFilePath(filePath: string) {
   return filePath.replace(/\\/g, '/')
 }
 
+async function readDefaultBranch(repoRootPath: string) {
+  try {
+    const { stdout } = await runGit(['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], repoRootPath)
+    const remoteHeadRef = stdout.trim()
+    const prefix = 'origin/'
+    if (!remoteHeadRef.startsWith(prefix)) {
+      return null
+    }
+
+    const defaultBranch = remoteHeadRef.slice(prefix.length).trim()
+    return defaultBranch.length > 0 ? defaultBranch : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeForGitPathspec(filePath: string) {
+  return normalizeGitFilePath(filePath).replace(/^\/+/, '')
+}
+
 function isWithinRepository(repoRootPath: string, candidatePath: string) {
   const normalizedRepoRoot = path.resolve(repoRootPath)
   const normalizedCandidate = path.resolve(candidatePath)
@@ -195,23 +218,42 @@ async function readHeadFile(repoRootPath: string, filePath: string) {
   }
 }
 
-async function listChangedFiles(repoRootPath: string) {
+interface ChangedFileSets {
+  allChangedFiles: string[]
+  stagedFileSet: Set<string>
+  unstagedFileSet: Set<string>
+  untrackedFileSet: Set<string>
+}
+
+async function readChangedFileSets(repoRootPath: string): Promise<ChangedFileSets> {
   const [unstagedResult, stagedResult, untrackedResult] = await Promise.all([
     runGit(['diff', '--name-only', '-z', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
     runGit(['diff', '--name-only', '-z', '--cached', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
     runGit(['ls-files', '--others', '--exclude-standard', '-z', '--', '.'], repoRootPath).catch(() => ({ stdout: '' })),
   ])
 
-  return Array.from(
-    new Set([
-      ...splitNullDelimitedOutput(unstagedResult.stdout),
-      ...splitNullDelimitedOutput(stagedResult.stdout),
-      ...splitNullDelimitedOutput(untrackedResult.stdout),
-    ]),
-  )
+  const unstagedFiles = splitNullDelimitedOutput(unstagedResult.stdout)
+  const stagedFiles = splitNullDelimitedOutput(stagedResult.stdout)
+  const untrackedFiles = splitNullDelimitedOutput(untrackedResult.stdout)
+
+  const stagedFileSet = new Set(stagedFiles.map((filePath) => normalizeGitFilePath(filePath)))
+  const unstagedFileSet = new Set(unstagedFiles.map((filePath) => normalizeGitFilePath(filePath)))
+  const untrackedFileSet = new Set(untrackedFiles.map((filePath) => normalizeGitFilePath(filePath)))
+  const allChangedFiles = Array.from(new Set([...unstagedFileSet, ...stagedFileSet, ...untrackedFileSet]))
+
+  return {
+    allChangedFiles,
+    stagedFileSet,
+    unstagedFileSet,
+    untrackedFileSet,
+  }
 }
 
-async function buildGitFileDiff(repoRootPath: string, filePath: string): Promise<GitFileDiff | null> {
+async function buildGitFileDiff(
+  repoRootPath: string,
+  filePath: string,
+  changedFileSets: Omit<ChangedFileSets, 'allChangedFiles'>,
+): Promise<GitFileDiff | null> {
   const [oldContent, newContent] = await Promise.all([
     readHeadFile(repoRootPath, filePath),
     readWorkingTreeFile(repoRootPath, filePath),
@@ -221,8 +263,12 @@ async function buildGitFileDiff(repoRootPath: string, filePath: string): Promise
     return null
   }
 
+  const normalizedFilePath = normalizeGitFilePath(filePath)
   return {
-    fileName: normalizeGitFilePath(filePath),
+    fileName: normalizedFilePath,
+    isStaged: changedFileSets.stagedFileSet.has(normalizedFilePath),
+    isUnstaged: changedFileSets.unstagedFileSet.has(normalizedFilePath),
+    isUntracked: changedFileSets.untrackedFileSet.has(normalizedFilePath),
     newContent,
     oldContent,
   }
@@ -234,14 +280,16 @@ export async function getGitBranchState(workspacePath: string): Promise<GitBranc
     return createEmptyBranchState()
   }
 
-  const [branchState, branches] = await Promise.all([
+  const [branchState, branches, defaultBranch] = await Promise.all([
     readCurrentBranch(repoRootPath),
     readLocalBranches(repoRootPath),
+    readDefaultBranch(repoRootPath),
   ])
 
   return {
     branches,
     currentBranch: branchState.currentBranch,
+    defaultBranch,
     hasRepository: true,
     isDetachedHead: branchState.isDetachedHead,
     repoRootPath,
@@ -257,9 +305,17 @@ export async function getGitDiffSnapshot(workspacePath: string): Promise<GitDiff
     }
   }
 
-  const changedFiles = await listChangedFiles(repoRootPath)
+  const changedFileSets = await readChangedFileSets(repoRootPath)
   const fileDiffs = (
-    await Promise.all(changedFiles.map((filePath) => buildGitFileDiff(repoRootPath, filePath)))
+    await Promise.all(
+      changedFileSets.allChangedFiles.map((filePath) =>
+        buildGitFileDiff(repoRootPath, filePath, {
+          stagedFileSet: changedFileSets.stagedFileSet,
+          untrackedFileSet: changedFileSets.untrackedFileSet,
+          unstagedFileSet: changedFileSets.unstagedFileSet,
+        }),
+      ),
+    )
   ).filter((fileDiff): fileDiff is GitFileDiff => fileDiff !== null)
 
   return {
@@ -411,6 +467,120 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatusResu
   }
 }
 
+async function isTrackedGitFile(repoRootPath: string, filePath: string) {
+  try {
+    await runGit(['ls-files', '--error-unmatch', '--', filePath], repoRootPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function discardGitFileChanges(input: GitFileStageInput): Promise<GitFileStageResult> {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  const filePath = await resolveAndValidateGitFilePath(repoRootPath, input.filePath)
+  const absoluteFilePath = path.resolve(repoRootPath, filePath)
+
+  try {
+    if (await isTrackedGitFile(repoRootPath, filePath)) {
+      await runGit(['restore', '--worktree', '--source=HEAD', '--', filePath], repoRootPath).catch(async () => {
+        await runGit(['checkout', '--', filePath], repoRootPath)
+      })
+    } else {
+      await fs.rm(absoluteFilePath, {
+        force: true,
+        recursive: true,
+      })
+    }
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to discard file changes: ${getErrorMessage(error)}`)
+  }
+
+  return {
+    filePath,
+    success: true,
+  }
+}
+
+export async function stageGitFile(input: GitFileStageInput): Promise<GitFileStageResult> {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  const filePath = await resolveAndValidateGitFilePath(repoRootPath, input.filePath)
+
+  try {
+    await runGit(['add', '--', filePath], repoRootPath)
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to stage file: ${getErrorMessage(error)}`)
+  }
+
+  return {
+    filePath,
+    success: true,
+  }
+}
+
+export async function unstageGitFile(input: GitFileStageInput): Promise<GitFileStageResult> {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  const filePath = await resolveAndValidateGitFilePath(repoRootPath, input.filePath)
+
+  try {
+    await runGit(['restore', '--staged', '--', filePath], repoRootPath)
+  } catch (error) {
+    try {
+      await runGit(['reset', '--', filePath], repoRootPath)
+    } catch (fallbackError) {
+      if (isGitUnavailable(fallbackError)) {
+        throw new Error('Git is not available in the current environment.')
+      }
+
+      throw new Error(`Failed to unstage file: ${getErrorMessage(fallbackError)}`)
+    }
+
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+  }
+
+  return {
+    filePath,
+    success: true,
+  }
+}
+
 async function getRemoteUrl(repoRootPath: string): Promise<string | null> {
   try {
     const { stdout } = await runGit(['remote', 'get-url', 'origin'], repoRootPath)
@@ -434,6 +604,20 @@ function remoteUrlToHttpsBase(remoteUrl: string): string | null {
   }
 
   return null
+}
+
+async function resolveAndValidateGitFilePath(repoRootPath: string, rawFilePath: string) {
+  const normalizedFilePath = normalizeForGitPathspec(rawFilePath.trim())
+  if (normalizedFilePath.length === 0) {
+    throw new Error('File path is required.')
+  }
+
+  const absoluteFilePath = path.resolve(repoRootPath, normalizedFilePath)
+  if (!isWithinRepository(repoRootPath, absoluteFilePath)) {
+    throw new Error('Invalid file path for this repository.')
+  }
+
+  return normalizedFilePath
 }
 
 async function openExternalUrl(url: string): Promise<void> {

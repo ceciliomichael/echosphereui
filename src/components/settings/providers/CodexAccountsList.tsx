@@ -61,7 +61,7 @@ export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAc
   }
 
   const switchButtonClassName =
-    'group inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-surface px-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60'
+    'group inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent bg-[#101011] px-3.5 text-sm font-medium text-white transition-colors hover:bg-[#1f1f22] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F7] dark:text-[#101011] dark:hover:bg-white'
 
   return (
     <div className="grid gap-3">
@@ -101,7 +101,10 @@ export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAc
                     onClick={() => void onSwitchAccount(account.accountId)}
                     className={switchButtonClassName}
                   >
-                    <RefreshCcw size={14} className="shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+                    <RefreshCcw
+                      size={14}
+                      className="shrink-0 text-white transition-colors group-hover:text-white dark:text-[#101011] dark:group-hover:text-[#101011]"
+                    />
                     Switch
                   </button>
                 ) : null}

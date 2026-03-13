@@ -20,6 +20,7 @@ import type {
   CreateWorkspaceCheckpointInput,
   EstimateContextUsageInput,
   GitCommitInput,
+  GitFileStageInput,
   SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
@@ -52,7 +53,17 @@ import {
 } from './providers/service'
 import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
-import { checkoutGitBranch, createAndCheckoutGitBranch, getGitBranchState, getGitDiffSnapshot, getGitStatus, gitCommit } from './git/service'
+import {
+  checkoutGitBranch,
+  createAndCheckoutGitBranch,
+  discardGitFileChanges,
+  getGitBranchState,
+  getGitDiffSnapshot,
+  getGitStatus,
+  gitCommit,
+  stageGitFile,
+  unstageGitFile,
+} from './git/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
 import { createWorkspaceCheckpoint, restoreWorkspaceCheckpoint } from './workspace/checkpoints'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -220,12 +231,15 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('git:getBranches', async (_event, workspacePath: string) => getGitBranchState(workspacePath))
   ipcMain.handle('git:getDiffs', async (_event, workspacePath: string) => getGitDiffSnapshot(workspacePath))
+  ipcMain.handle('git:discardFileChanges', async (_event, input: GitFileStageInput) => discardGitFileChanges(input))
   ipcMain.handle('git:checkoutBranch', async (_event, input: CheckoutGitBranchInput) => checkoutGitBranch(input))
   ipcMain.handle('git:createAndCheckoutBranch', async (_event, input: CreateGitBranchInput) =>
     createAndCheckoutGitBranch(input),
   )
   ipcMain.handle('git:commit', async (_event, input: GitCommitInput) => gitCommit(input))
   ipcMain.handle('git:getStatus', async (_event, workspacePath: string) => getGitStatus(workspacePath))
+  ipcMain.handle('git:stageFile', async (_event, input: GitFileStageInput) => stageGitFile(input))
+  ipcMain.handle('git:unstageFile', async (_event, input: GitFileStageInput) => unstageGitFile(input))
   ipcMain.handle('workspace:checkpoint:create', async (_event, input: CreateWorkspaceCheckpointInput) =>
     createWorkspaceCheckpoint(input),
   )

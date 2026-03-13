@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, GitBranch, GitCommitHorizontal, ArrowUp, X, Loader2 } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, ArrowUp, X, Loader2 } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import type { GitBranchState, GitCommitAction, GitStatusResult } from '../../types/chat'
 import type { ConversationDiffSnapshot } from '../../lib/chatDiffs'
 import { Switch } from '../ui/Switch'
+import { Tooltip } from '../Tooltip'
 
 type CommitNextStep = GitCommitAction
 
@@ -126,7 +127,26 @@ export function CommitModal({
   const addedLineCount = diffSnapshot.totalAddedLineCount
   const removedLineCount = diffSnapshot.totalRemovedLineCount
   const hasChanges = changedFileCount > 0 || addedLineCount > 0 || removedLineCount > 0
-  const disableSubmit = isSubmitting || isCommitting || isSwitchingBranch || (!hasChanges && !isLoadingStatus)
+  const disableActionSelection = isSubmitting || isCommitting || isSwitchingBranch
+  const effectiveBranch = commitBranchName.trim() || branchState.currentBranch || ''
+  const normalizedEffectiveBranch = effectiveBranch.toLowerCase()
+  const normalizedDefaultBranch = branchState.defaultBranch?.toLowerCase() ?? null
+  const isDefaultBranch = normalizedDefaultBranch
+    ? normalizedEffectiveBranch === normalizedDefaultBranch
+    : normalizedEffectiveBranch === 'main' || normalizedEffectiveBranch === 'master'
+  const canCreatePr = effectiveBranch.length > 0 && !isDefaultBranch && !branchState.isDetachedHead
+  const disableSubmit =
+    isSubmitting ||
+    isCommitting ||
+    isSwitchingBranch ||
+    (!hasChanges && !isLoadingStatus) ||
+    (selectedAction === 'commit-and-create-pr' && !canCreatePr)
+
+  useEffect(() => {
+    if (selectedAction === 'commit-and-create-pr' && !canCreatePr) {
+      setSelectedAction('commit')
+    }
+  }, [canCreatePr, selectedAction])
 
   const actionLabel =
     selectedAction === 'commit'
@@ -263,34 +283,51 @@ export function CommitModal({
           {/* Next steps */}
           <div className="px-6 pt-4 pb-2">
             <p className="mb-2 text-sm font-medium text-foreground">Next steps</p>
-            <div className="space-y-0.5">
+            <div className="w-full overflow-hidden rounded-xl border border-border divide-y divide-border">
               {COMMIT_NEXT_STEPS.map((step) => {
                 const isSelected = step.value === selectedAction
-                return (
+                const isPrAction = step.value === 'commit-and-create-pr'
+                const isDisabled = disableActionSelection || (isPrAction && !canCreatePr)
+                const button = (
                   <button
-                    key={step.value}
                     type="button"
-                    onClick={() => setSelectedAction(step.value)}
+                    onClick={() => {
+                      if (isDisabled) {
+                        return
+                      }
+                      setSelectedAction(step.value)
+                    }}
+                    disabled={isDisabled}
                     className={[
-                      'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
-                      isSelected
-                        ? 'bg-surface-muted'
-                        : 'hover:bg-surface-muted/60',
+                      'flex min-h-11 w-full items-center justify-start gap-2 px-3 text-left text-sm transition-colors',
+                      isSelected ? 'bg-surface-muted text-foreground' : 'bg-surface text-muted-foreground',
+                      isDisabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-surface-muted/70 hover:text-foreground',
                     ].join(' ')}
                   >
-                    <span className={[
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                      isSelected
-                        ? 'bg-[var(--color-action)] text-white'
-                        : 'bg-surface-muted text-muted-foreground',
-                    ].join(' ')}>
-                      {step.icon}
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm text-foreground">{step.label}</span>
-                    {isSelected ? (
-                      <Check size={16} className="shrink-0 text-foreground" />
-                    ) : null}
+                    <span className="shrink-0">{step.icon}</span>
+                    <span className="truncate">{step.label}</span>
                   </button>
+                )
+
+                if (isPrAction && !canCreatePr && !disableActionSelection) {
+                  return (
+                    <Tooltip
+                      key={step.value}
+                      align="center"
+                      content="Checkout a feature branch before creating a PR."
+                      fullWidthTrigger
+                      noWrap
+                      side="top"
+                    >
+                      {button}
+                    </Tooltip>
+                  )
+                }
+
+                return (
+                  <div key={step.value} className="flex w-full">
+                    {button}
+                  </div>
                 )
               })}
             </div>

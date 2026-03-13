@@ -62,6 +62,7 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false)
+  const [pendingFileActionPath, setPendingFileActionPath] = useState<string | null>(null)
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
     providersState: providersState.providersState,
@@ -204,6 +205,12 @@ export function ChatInterface({
 
   useEffect(() => {
     if (!hasRepository) {
+      setPendingFileActionPath(null)
+    }
+  }, [hasRepository])
+
+  useEffect(() => {
+    if (!hasRepository) {
       return
     }
 
@@ -235,6 +242,75 @@ export function ChatInterface({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
   })
+
+  const handleStageDiffFile = useCallback(
+    async (filePath: string) => {
+      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+      if (!hasRepository || normalizedWorkspacePath.length === 0) {
+        return
+      }
+
+      setPendingFileActionPath(filePath)
+      try {
+        await window.echosphereGit.stageFile({
+          filePath,
+          workspacePath: normalizedWorkspacePath,
+        })
+        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
+      } catch (error) {
+        console.error('Failed to stage file from diff panel', error)
+      } finally {
+        setPendingFileActionPath(null)
+      }
+    },
+    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
+  )
+
+  const handleUnstageDiffFile = useCallback(
+    async (filePath: string) => {
+      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+      if (!hasRepository || normalizedWorkspacePath.length === 0) {
+        return
+      }
+
+      setPendingFileActionPath(filePath)
+      try {
+        await window.echosphereGit.unstageFile({
+          filePath,
+          workspacePath: normalizedWorkspacePath,
+        })
+        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
+      } catch (error) {
+        console.error('Failed to unstage file from diff panel', error)
+      } finally {
+        setPendingFileActionPath(null)
+      }
+    },
+    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
+  )
+
+  const handleDiscardDiffFile = useCallback(
+    async (filePath: string) => {
+      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+      if (!hasRepository || normalizedWorkspacePath.length === 0) {
+        return
+      }
+
+      setPendingFileActionPath(filePath)
+      try {
+        await window.echosphereGit.discardFileChanges({
+          filePath,
+          workspacePath: normalizedWorkspacePath,
+        })
+        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
+      } catch (error) {
+        console.error('Failed to discard file changes from diff panel', error)
+      } finally {
+        setPendingFileActionPath(null)
+      }
+    },
+    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
+  )
 
   return (
     <AppWorkspaceShell
@@ -274,8 +350,8 @@ export function ChatInterface({
                   disabled={!hasRepository}
                   onClick={handleOpenCommitModal}
                   className={[
-                    'inline-flex h-10 items-center gap-1.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors',
-                    !hasRepository ? 'cursor-not-allowed opacity-60' : 'hover:bg-surface-muted hover:text-foreground',
+                    'inline-flex h-10 items-center gap-1.5 text-sm text-muted-foreground transition-colors',
+                    !hasRepository ? 'cursor-not-allowed opacity-60' : 'hover:text-foreground',
                   ].join(' ')}
                 >
                   <GitCommitHorizontal size={16} className="shrink-0" />
@@ -399,8 +475,12 @@ export function ChatInterface({
             expandedFilePaths={diffPanelExpandedFilePaths}
             fileDiffs={gitDiffSnapshot.fileDiffs}
             isOpen={isDiffPanelOpen}
+            onDiscardFile={handleDiscardDiffFile}
             onExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
+            onStageFile={handleStageDiffFile}
             onSelectedScopeChange={onDiffPanelSelectedScopeChange}
+            onUnstageFile={handleUnstageDiffFile}
+            pendingFileActionPath={pendingFileActionPath}
             width={diffPanelWidth}
             onWidthChange={onDiffPanelWidthChange}
             onWidthCommit={onDiffPanelWidthCommit}

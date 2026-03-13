@@ -211,6 +211,20 @@
     color: rgb(255 255 255 / 0.72);
   }
 
+  .provider-primary-action-button {
+    background-color: var(--color-action);
+    color: #fff;
+  }
+
+  .provider-primary-action-button:not(:disabled):hover {
+    background-color: var(--color-action-hover);
+  }
+
+  .provider-primary-action-button:disabled {
+    background-color: var(--color-disabled);
+    color: var(--color-disabled-foreground);
+  }
+
   .chat-runtime-control-trigger {
     display: inline-flex;
     height: 2rem;
@@ -323,6 +337,20 @@
   }
 
   :root[data-theme='dark'] .chat-send-button-disabled {
+    background-color: rgb(255 255 255 / 0.5);
+    color: rgb(23 23 23 / 0.72);
+  }
+
+  :root[data-theme='dark'] .provider-primary-action-button {
+    background-color: #fff;
+    color: var(--color-background);
+  }
+
+  :root[data-theme='dark'] .provider-primary-action-button:not(:disabled):hover {
+    background-color: #f2f2f2;
+  }
+
+  :root[data-theme='dark'] .provider-primary-action-button:disabled {
     background-color: rgb(255 255 255 / 0.5);
     color: rgb(23 23 23 / 0.72);
   }

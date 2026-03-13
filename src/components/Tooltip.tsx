@@ -17,10 +17,13 @@ interface TooltipChildProps {
 }
 
 interface TooltipProps {
+  align?: 'center' | 'left'
   children: ReactElement<TooltipChildProps>
   content: string
+  fullWidthTrigger?: boolean
   side?: 'top' | 'bottom' | 'left' | 'right'
   hideWhenTriggerExpanded?: boolean
+  noWrap?: boolean
 }
 
 const TOOLTIP_OFFSET = 6
@@ -42,7 +45,15 @@ function triggerHasExpandedDescendant(triggerElement: HTMLSpanElement | null) {
   )
 }
 
-export function Tooltip({ children, content, side = 'top', hideWhenTriggerExpanded = false }: TooltipProps) {
+export function Tooltip({
+  align = 'left',
+  children,
+  content,
+  fullWidthTrigger = false,
+  side = 'top',
+  hideWhenTriggerExpanded = false,
+  noWrap = false,
+}: TooltipProps) {
   const tooltipId = useId()
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const tooltipRef = useRef<HTMLDivElement | null>(null)
@@ -199,7 +210,7 @@ export function Tooltip({ children, content, side = 'top', hideWhenTriggerExpand
     <>
       <span
         ref={triggerRef}
-        className="inline-flex"
+        className={fullWidthTrigger ? 'flex w-full' : 'inline-flex'}
         onMouseEnter={() => {
           if (shouldSuppressTooltip) {
             setIsVisible(false)
@@ -227,7 +238,12 @@ export function Tooltip({ children, content, side = 'top', hideWhenTriggerExpand
               ref={tooltipRef}
               id={tooltipId}
               role="tooltip"
-              className="pointer-events-none fixed z-50 max-w-[min(18rem,calc(100vw-24px))] rounded-xl border border-tooltip-border bg-tooltip-surface px-3 py-2 text-xs font-medium text-tooltip-foreground shadow-soft transition-opacity duration-150 ease-out"
+              className={[
+                'pointer-events-none fixed z-50 rounded-xl border border-tooltip-border bg-tooltip-surface px-3 py-2 text-xs font-medium text-tooltip-foreground shadow-soft transition-opacity duration-150 ease-out',
+                noWrap ? 'w-max' : 'max-w-[min(18rem,calc(100vw-24px))]',
+                align === 'center' ? 'text-center' : 'text-left',
+                noWrap ? 'whitespace-nowrap' : '',
+              ].join(' ')}
               style={tooltipStyle}
             >
               {content}

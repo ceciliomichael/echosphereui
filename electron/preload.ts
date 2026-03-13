@@ -19,6 +19,7 @@ import type {
   EchosphereHistoryApi,
   EchosphereSettingsApi,
   EchosphereWorkspaceApi,
+  GitFileStageInput,
   ReplaceConversationMessagesInput,
   StartChatStreamInput,
 } from '../src/types/chat'
@@ -102,9 +103,12 @@ const gitApi: EchosphereGitApi = {
   checkoutBranch: (input) => ipcRenderer.invoke('git:checkoutBranch', input),
   commit: (input: GitCommitInput) => ipcRenderer.invoke('git:commit', input),
   createAndCheckoutBranch: (input) => ipcRenderer.invoke('git:createAndCheckoutBranch', input),
+  discardFileChanges: (input: GitFileStageInput) => ipcRenderer.invoke('git:discardFileChanges', input),
   getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
   getDiffs: (workspacePath: string) => ipcRenderer.invoke('git:getDiffs', workspacePath),
   getStatus: (workspacePath: string) => ipcRenderer.invoke('git:getStatus', workspacePath),
+  stageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:stageFile', input),
+  unstageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:unstageFile', input),
 }
 
 const workspaceApi: EchosphereWorkspaceApi = {

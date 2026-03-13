@@ -277,6 +277,7 @@ export interface ContextUsageEstimate {
 export interface GitBranchState {
   branches: string[]
   currentBranch: string | null
+  defaultBranch: string | null
   hasRepository: boolean
   isDetachedHead: boolean
   repoRootPath: string | null
@@ -295,6 +296,9 @@ export interface CreateGitBranchInput {
 export interface GitFileDiff {
   addedLineCount?: number
   fileName: string
+  isStaged: boolean
+  isUnstaged: boolean
+  isUntracked: boolean
   newContent: string
   oldContent: string | null
   removedLineCount?: number
@@ -331,6 +335,16 @@ export interface GitStatusResult {
   stagedFileCount: number
   unstagedFileCount: number
   untrackedFileCount: number
+}
+
+export interface GitFileStageInput {
+  filePath: string
+  workspacePath: string
+}
+
+export interface GitFileStageResult {
+  filePath: string
+  success: boolean
 }
 
 export type ChatStreamEvent =
@@ -452,7 +466,10 @@ export interface EchosphereGitApi {
   checkoutBranch: (input: CheckoutGitBranchInput) => Promise<GitBranchState>
   commit: (input: GitCommitInput) => Promise<GitCommitResult>
   createAndCheckoutBranch: (input: CreateGitBranchInput) => Promise<GitBranchState>
+  discardFileChanges: (input: GitFileStageInput) => Promise<GitFileStageResult>
   getBranches: (workspacePath: string) => Promise<GitBranchState>
   getDiffs: (workspacePath: string) => Promise<GitDiffSnapshot>
   getStatus: (workspacePath: string) => Promise<GitStatusResult>
+  stageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
+  unstageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
 }

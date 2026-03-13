@@ -11,6 +11,8 @@ interface DiffViewerProps {
   defaultExpanded?: boolean
   filePath: string
   headerClassName?: string
+  headerInlineContent?: ReactNode
+  headerRightContent?: ReactNode
   headerTrailingContent?: ReactNode
   isExpanded?: boolean
   isStreaming?: boolean
@@ -108,6 +110,8 @@ const DiffViewerComponent = ({
   defaultExpanded = true,
   filePath,
   headerClassName,
+  headerInlineContent,
+  headerRightContent,
   headerTrailingContent,
   isExpanded: expandedProp,
   isStreaming = false,
@@ -128,31 +132,33 @@ const DiffViewerComponent = ({
   const iconConfig = resolveFileIconConfig({ fileName: filePath })
   const FileIcon = iconConfig.icon
   const hasOldSide = !viewOnly && diffLines.some((line) => line.type !== 'collapsed' && line.oldLineNumber !== undefined)
-  const headerContent = (
-    <>
-      <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
-        <span className="relative flex h-4 w-4 items-center justify-center">
-          <FileIcon
-            size={14}
-            style={{ color: iconConfig.color }}
-            aria-hidden="true"
-            className={collapsible ? 'transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0' : ''}
+  const headerMainContent = (
+    <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
+      <span className="relative flex h-4 w-4 items-center justify-center">
+        <FileIcon
+          size={14}
+          style={{ color: iconConfig.color }}
+          aria-hidden="true"
+          className={collapsible ? 'transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0' : ''}
+        />
+        {collapsible ? (
+          <ChevronRight
+            size={15}
+            className={[
+              'absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100',
+              isExpanded ? 'rotate-90' : '',
+            ].join(' ')}
           />
-          {collapsible ? (
-            <ChevronRight
-              size={15}
-              className={[
-                'absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100',
-                isExpanded ? 'rotate-90' : '',
-              ].join(' ')}
-            />
-          ) : null}
-        </span>
-        <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
+        ) : null}
       </span>
-      {headerTrailingContent ? <span className="ml-3 inline-flex shrink-0 items-center">{headerTrailingContent}</span> : null}
-    </>
+      <span className="inline-flex min-w-0 items-center gap-2">
+        <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
+        {headerInlineContent ? <span className="inline-flex shrink-0 items-center">{headerInlineContent}</span> : null}
+        {headerTrailingContent ? <span className="inline-flex shrink-0 items-center">{headerTrailingContent}</span> : null}
+      </span>
+    </span>
   )
+  const hasRightHeaderContent = Boolean(headerRightContent)
 
   const isStackedLayout = layout === 'stacked'
 
@@ -166,24 +172,29 @@ const DiffViewerComponent = ({
       ].join(' ')}
     >
       {collapsible ? (
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          onClick={() => {
-            const nextExpanded = !isExpanded
-            if (expandedProp === undefined) {
-              setInternalExpanded(nextExpanded)
-            }
-            onExpandedChange?.(nextExpanded)
-          }}
+        <div
           className={[
             'group flex w-full items-center justify-between bg-surface px-4 py-3 text-[12px] text-muted-foreground',
             isExpanded ? 'border-b border-border' : '',
             headerClassName ?? '',
           ].join(' ')}
         >
-          {headerContent}
-        </button>
+          <button
+            type="button"
+            aria-expanded={isExpanded}
+            onClick={() => {
+              const nextExpanded = !isExpanded
+              if (expandedProp === undefined) {
+                setInternalExpanded(nextExpanded)
+              }
+              onExpandedChange?.(nextExpanded)
+            }}
+            className={hasRightHeaderContent ? 'group flex min-w-0 flex-1 items-center text-left' : 'group flex min-w-0 w-full items-center text-left'}
+          >
+            {headerMainContent}
+          </button>
+          {hasRightHeaderContent ? <span className="ml-3 inline-flex shrink-0 items-center">{headerRightContent}</span> : null}
+        </div>
       ) : (
         <div
           className={[
@@ -191,7 +202,8 @@ const DiffViewerComponent = ({
             headerClassName ?? '',
           ].join(' ')}
         >
-          {headerContent}
+          {headerMainContent}
+          {hasRightHeaderContent ? <span className="ml-3 inline-flex shrink-0 items-center">{headerRightContent}</span> : null}
         </div>
       )}
 

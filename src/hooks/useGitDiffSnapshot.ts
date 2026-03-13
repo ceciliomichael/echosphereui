@@ -34,6 +34,9 @@ function areDiffSnapshotsEqual(left: ConversationDiffSnapshot, right: Conversati
       leftFileDiff.fileName !== rightFileDiff.fileName ||
       leftFileDiff.addedLineCount !== rightFileDiff.addedLineCount ||
       leftFileDiff.removedLineCount !== rightFileDiff.removedLineCount ||
+      leftFileDiff.isStaged !== rightFileDiff.isStaged ||
+      leftFileDiff.isUnstaged !== rightFileDiff.isUnstaged ||
+      leftFileDiff.isUntracked !== rightFileDiff.isUntracked ||
       leftFileDiff.oldContent !== rightFileDiff.oldContent ||
       leftFileDiff.newContent !== rightFileDiff.newContent
     ) {
