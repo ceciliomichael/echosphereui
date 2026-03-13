@@ -1,8 +1,10 @@
 import type { ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../../src/types/chat'
 import {
+  addCodexAccountProviderWithOAuth,
   connectCodexProviderWithOAuth,
   disconnectCodexProvider,
   getCodexProviderStatus,
+  switchCodexAccount as switchCodexAccountInternal,
 } from './codex/service'
 import {
   readStoredApiKeyProviders,
@@ -29,8 +31,18 @@ export async function connectCodexWithOAuth(openExternal: (url: string) => Promi
   return buildProvidersState()
 }
 
+export async function addCodexAccountWithOAuth(openExternal: (url: string) => Promise<void>) {
+  await addCodexAccountProviderWithOAuth(openExternal)
+  return buildProvidersState()
+}
+
 export async function disconnectCodex() {
   await disconnectCodexProvider()
+  return buildProvidersState()
+}
+
+export async function switchCodexAccount(accountId: string) {
+  await switchCodexAccountInternal(accountId)
   return buildProvidersState()
 }
 

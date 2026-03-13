@@ -3,8 +3,10 @@ import type { ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '
 
 type ProvidersOperationKey =
   | null
+  | 'codex:add-account'
   | 'codex:connect'
   | 'codex:disconnect'
+  | `codex:switch:${string}`
   | `apikey:${ApiKeyProviderId}:remove`
   | `apikey:${ApiKeyProviderId}:save`
   | 'state:load'
@@ -53,6 +55,19 @@ export function useProvidersState() {
     }
   }, [])
 
+  const refreshInBackground = useCallback(async () => {
+    try {
+      const providersState = await window.echosphereProviders.getProvidersState()
+      setState((currentValue) => ({
+        ...currentValue,
+        isLoading: currentValue.activeOperation === 'state:load' ? false : currentValue.isLoading,
+        providersState,
+      }))
+    } catch (error) {
+      console.error('Failed to refresh provider settings', error)
+    }
+  }, [])
+
   useEffect(() => {
     void refresh()
   }, [refresh])
@@ -92,9 +107,20 @@ export function useProvidersState() {
     return runOperation('codex:connect', () => window.echosphereProviders.connectCodexWithOAuth())
   }, [runOperation])
 
+  const addCodexAccountWithOAuth = useCallback(async () => {
+    return runOperation('codex:add-account', () => window.echosphereProviders.addCodexAccountWithOAuth())
+  }, [runOperation])
+
   const disconnectCodex = useCallback(async () => {
     return runOperation('codex:disconnect', () => window.echosphereProviders.disconnectCodex())
   }, [runOperation])
+
+  const switchCodexAccount = useCallback(
+    async (accountId: string) => {
+      return runOperation(`codex:switch:${accountId}`, () => window.echosphereProviders.switchCodexAccount(accountId))
+    },
+    [runOperation],
+  )
 
   const saveApiKeyProvider = useCallback(
     async (input: SaveApiKeyProviderInput) => {
@@ -112,13 +138,16 @@ export function useProvidersState() {
 
   return {
     activeOperation: state.activeOperation,
+    addCodexAccountWithOAuth,
     connectCodexWithOAuth,
     disconnectCodex,
     errorMessage: state.errorMessage,
     isLoading: state.isLoading,
     providersState: state.providersState,
     refresh,
+    refreshInBackground,
     removeApiKeyProvider,
     saveApiKeyProvider,
+    switchCodexAccount,
   }
 }

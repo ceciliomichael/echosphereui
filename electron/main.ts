@@ -37,15 +37,17 @@ import {
   replaceStoredMessages,
   updateStoredConversationTitle,
 } from './history/store'
-import { getStoredSettings, updateStoredSettings } from './settings/store'
+import { flushStoredSettingsUpdates, getStoredSettings, updateStoredSettings } from './settings/store'
 import { serializeInitialSettingsArg } from './settings/bootstrap'
 import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
 import {
+  addCodexAccountWithOAuth,
   connectCodexWithOAuth,
   disconnectCodex,
   getProvidersState,
   removeApiKeyProvider,
   saveApiKeyProvider,
+  switchCodexAccount,
 } from './providers/service'
 import { estimateChatContextUsage } from './chat/contextUsage'
 import { cancelChatStream, startChatStream } from './chat/service'
@@ -80,6 +82,7 @@ app.commandLine.appendSwitch(
 let win: BrowserWindow | null
 const MIN_WINDOW_WIDTH = 960
 const MIN_WINDOW_HEIGHT = 680
+let isQuitFlushInProgress = false
 
 function getInitialWindowBounds() {
   const { workArea } = screen.getPrimaryDisplay()
@@ -196,8 +199,10 @@ function registerHistoryHandlers() {
     return nextSettings
   })
   ipcMain.handle('providers:state', async () => getProvidersState())
+  ipcMain.handle('providers:codex:addAccountOauth', async () => addCodexAccountWithOAuth(shell.openExternal))
   ipcMain.handle('providers:codex:connectOauth', async () => connectCodexWithOAuth(shell.openExternal))
   ipcMain.handle('providers:codex:disconnect', async () => disconnectCodex())
+  ipcMain.handle('providers:codex:switchAccount', async (_event, accountId: string) => switchCodexAccount(accountId))
   ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveApiKeyProvider(input))
   ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
     removeApiKeyProvider(providerId),
@@ -233,6 +238,22 @@ app.on('window-all-closed', () => {
     app.quit()
     win = null
   }
+})
+
+app.on('before-quit', (event) => {
+  if (isQuitFlushInProgress) {
+    return
+  }
+
+  event.preventDefault()
+  isQuitFlushInProgress = true
+  void flushStoredSettingsUpdates()
+    .catch((error) => {
+      console.error('Failed to flush settings updates on quit', error)
+    })
+    .finally(() => {
+      app.quit()
+    })
 })
 
 app.on('activate', () => {

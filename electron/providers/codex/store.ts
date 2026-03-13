@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { CodexProviderConnectionStatus } from '../../../src/types/chat'
+import type { CodexAccountSummary, CodexProviderConnectionStatus } from '../../../src/types/chat'
 import { parseCodexIdTokenClaims } from './jwt'
 
 interface CodexAuthTokens {
@@ -26,7 +26,7 @@ function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function parseStoredCodexAuthData(input: unknown): StoredCodexAuthData | null {
+export function parseStoredCodexAuthData(input: unknown): StoredCodexAuthData | null {
   if (!isRecord(input)) {
     return null
   }
@@ -115,12 +115,16 @@ export async function deleteStoredCodexAuthData() {
   }
 }
 
-export function toCodexProviderStatus(authData: StoredCodexAuthData | null): CodexProviderConnectionStatus {
+export function toCodexProviderStatus(
+  authData: StoredCodexAuthData | null,
+  accounts: CodexAccountSummary[],
+): CodexProviderConnectionStatus {
   if (!authData) {
     return {
       accountId: null,
       authFilePath: getCodexAuthFilePath(),
       email: null,
+      accounts,
       isAuthenticated: false,
       lastRefreshAt: null,
       tokenExpiresAt: null,
@@ -135,6 +139,7 @@ export function toCodexProviderStatus(authData: StoredCodexAuthData | null): Cod
     accountId,
     authFilePath: getCodexAuthFilePath(),
     email: tokenClaims.email,
+    accounts,
     isAuthenticated: true,
     lastRefreshAt: authData.last_refresh,
     tokenExpiresAt,

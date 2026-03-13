@@ -1,14 +1,20 @@
 import { ProviderAccordionItem } from './ProviderAccordionItem'
+import type { CodexAccountSummary } from '../../../types/chat'
+import { CodexAccountsList } from './CodexAccountsList'
 
 interface CodexProviderAccordionProps {
   accountId: string | null
+  accounts: CodexAccountSummary[]
   email: string | null
   isAuthenticated: boolean
   isBusy: boolean
+  isAddingAccount: boolean
   isConnecting: boolean
   isExpanded: boolean
   isFirst?: boolean
-  onAction: () => Promise<void>
+  onAddAccount: () => Promise<void>
+  onConnect: () => Promise<void>
+  onSwitchAccount: (accountId: string) => Promise<void>
   onToggle: () => void
   primaryButtonClassName: string
 }
@@ -23,20 +29,24 @@ function getActionLabel(isConnecting: boolean) {
 
 export function CodexProviderAccordion({
   accountId,
+  accounts,
   email,
   isAuthenticated,
   isBusy,
+  isAddingAccount,
   isConnecting,
   isExpanded,
   isFirst = false,
-  onAction,
+  onAddAccount,
+  onConnect,
+  onSwitchAccount,
   onToggle,
   primaryButtonClassName,
 }: CodexProviderAccordionProps) {
   return (
     <ProviderAccordionItem
-      title="Codex (OAuth)"
-      description="Connect Codex and use OAuth-managed access."
+      title={isAuthenticated && email ? email : 'Codex (OAuth)'}
+      description={isAuthenticated ? accountId ?? 'Account ID unavailable' : 'Connect Codex and use OAuth-managed access.'}
       statusLabel={isAuthenticated ? 'Connected' : 'Not Configured'}
       statusTone={isAuthenticated ? 'active' : 'inactive'}
       isExpanded={isExpanded}
@@ -46,25 +56,29 @@ export function CodexProviderAccordion({
         !isAuthenticated ? (
           <button
             type="button"
-            onClick={() => void onAction()}
+            onClick={() => void onConnect()}
             disabled={isBusy}
             className={primaryButtonClassName}
           >
             {getActionLabel(isConnecting)}
           </button>
-        ) : null
+        ) : (
+          <button
+            type="button"
+            onClick={() => void onAddAccount()}
+            disabled={isBusy}
+            className={primaryButtonClassName}
+          >
+            {isAddingAccount ? 'Adding account...' : 'Add account'}
+          </button>
+        )
       }
     >
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-          <p className="text-xs font-medium text-muted-foreground">Account ID</p>
-          <p className="mt-1 break-all text-sm text-foreground">{accountId ?? 'Not connected'}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-background px-3 py-2.5">
-          <p className="text-xs font-medium text-muted-foreground">Email</p>
-          <p className="mt-1 break-all text-sm text-foreground">{email ?? 'Not connected'}</p>
-        </div>
-      </div>
+      <CodexAccountsList
+        accounts={accounts}
+        isBusy={isBusy}
+        onSwitchAccount={onSwitchAccount}
+      />
     </ProviderAccordionItem>
   )
 }

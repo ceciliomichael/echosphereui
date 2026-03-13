@@ -69,11 +69,13 @@ const settingsApi: EchosphereSettingsApi = {
 
 const providersApi: EchosphereProvidersApi = {
   getProvidersState: () => ipcRenderer.invoke('providers:state'),
+  addCodexAccountWithOAuth: () => ipcRenderer.invoke('providers:codex:addAccountOauth'),
   connectCodexWithOAuth: () => ipcRenderer.invoke('providers:codex:connectOauth'),
   disconnectCodex: () => ipcRenderer.invoke('providers:codex:disconnect'),
   saveApiKeyProvider: (input: SaveApiKeyProviderInput) => ipcRenderer.invoke('providers:apikey:save', input),
   removeApiKeyProvider: (providerId: ApiKeyProviderId) =>
     ipcRenderer.invoke('providers:apikey:remove', providerId),
+  switchCodexAccount: (accountId: string) => ipcRenderer.invoke('providers:codex:switchAccount', accountId),
 }
 
 const modelsApi: EchosphereModelsApi = {

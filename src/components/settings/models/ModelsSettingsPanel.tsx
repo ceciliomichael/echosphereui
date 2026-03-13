@@ -7,6 +7,7 @@ import type { ModelToggleState } from './modelTypes'
 import { buildModelProviderSections, isProviderConfigured } from './modelViewUtils'
 import { PROVIDER_SECTIONS } from './modelCatalog'
 import { DropdownField } from '../../ui/DropdownField'
+import { PRIMARY_ACTION_BUTTON_CLASS_NAME } from '../shared/actionButtonStyles'
 
 interface ModelsSettingsPanelProps {
   isProvidersLoading: boolean
@@ -308,7 +309,7 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                 type="button"
                 onClick={() => void handleSaveCustomModel()}
                 disabled={isSavingCustomModel || isCustomModelsLoading || customProviderOptions.length === 0}
-                className="h-10 rounded-xl border border-[#d8d8d8] bg-white px-3.5 text-sm font-medium text-black transition-[background-color,border-color,box-shadow,transform,color] duration-150 hover:border-[#b8b8b8] hover:bg-[#e7e7e7] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white disabled:border-[#d8d8d8] disabled:text-black/55"
+                className={PRIMARY_ACTION_BUTTON_CLASS_NAME}
               >
                 {isSavingCustomModel ? 'Saving...' : 'Add model'}
               </button>

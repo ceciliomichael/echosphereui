@@ -92,3 +92,7 @@ export async function updateStoredSettings(input: Partial<AppSettings>) {
   await settingsUpdateQueue
   return nextSettings
 }
+
+export async function flushStoredSettingsUpdates() {
+  await settingsUpdateQueue.catch(() => undefined)
+}

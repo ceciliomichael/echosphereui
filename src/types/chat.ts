@@ -171,9 +171,33 @@ export interface CodexProviderConnectionStatus {
   accountId: string | null
   authFilePath: string
   email: string | null
+  accounts: CodexAccountSummary[]
   isAuthenticated: boolean
   lastRefreshAt: string | null
   tokenExpiresAt: string | null
+}
+
+export interface CodexUsageWindow {
+  usedPercent: number
+  limitWindowSeconds: number
+  resetAfterSeconds: number
+  resetAt: number
+}
+
+export interface CodexUsageSnapshot {
+  fetchedAt: string
+  primary: CodexUsageWindow | null
+  secondary: CodexUsageWindow | null
+}
+
+export interface CodexAccountSummary {
+  accountId: string
+  email: string | null
+  isActive: boolean
+  label: string
+  lastRefreshAt: string | null
+  tokenExpiresAt: string | null
+  usage: CodexUsageSnapshot | null
 }
 
 export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
@@ -356,10 +380,12 @@ export interface EchosphereSettingsApi {
 
 export interface EchosphereProvidersApi {
   getProvidersState: () => Promise<ProvidersState>
+  addCodexAccountWithOAuth: () => Promise<ProvidersState>
   connectCodexWithOAuth: () => Promise<ProvidersState>
   disconnectCodex: () => Promise<ProvidersState>
   removeApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<ProvidersState>
   saveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<ProvidersState>
+  switchCodexAccount: (accountId: string) => Promise<ProvidersState>
 }
 
 export interface EchosphereModelsApi {

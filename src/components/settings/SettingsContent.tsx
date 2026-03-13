@@ -29,9 +29,12 @@ interface SettingsContentProps {
     activeOperation: string | null
     errorMessage: string | null
     isLoading: boolean
+    onAddCodexAccountWithOAuth: () => Promise<boolean>
     onConnectCodexWithOAuth: () => Promise<boolean>
     onRemoveApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<boolean>
+    onRefreshProvidersState: () => Promise<void>
     onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
+    onSwitchCodexAccount: (accountId: string) => Promise<boolean>
     providersState: ProvidersState | null
   }
 }

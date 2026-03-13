@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { loadGitBranchState, prefetchGitBranchStates } from '../lib/gitBranchStateCache'
 import { loadInitialChatHistory } from './chatHistoryWorkflows'
 
 interface UseInitializeChatHistoryInput {
+  enabled: boolean
   initializeHistory: (snapshot: Awaited<ReturnType<typeof loadInitialChatHistory>>) => void
   preferredConversationId: string | null
   setError: (errorMessage: string | null) => void
@@ -10,9 +11,15 @@ interface UseInitializeChatHistoryInput {
 }
 
 export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
-  const { initializeHistory, preferredConversationId, setError, setIsLoading } = input
+  const { enabled, initializeHistory, preferredConversationId, setError, setIsLoading } = input
+  const didStartInitializationRef = useRef(false)
 
   useEffect(() => {
+    if (!enabled || didStartInitializationRef.current) {
+      return
+    }
+
+    didStartInitializationRef.current = true
     let isMounted = true
 
     async function initializeConversations() {
@@ -50,5 +57,5 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
     return () => {
       isMounted = false
     }
-  }, [initializeHistory, preferredConversationId, setError, setIsLoading])
+  }, [enabled, initializeHistory, preferredConversationId, setError, setIsLoading])
 }

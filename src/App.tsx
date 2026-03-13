@@ -11,16 +11,26 @@ const CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST = '__clear_last_active_conversation
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('chat')
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
+  const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
   const persistingConversationIdRef = useRef<string | null>(null)
   const chatMessages = useChatMessages({
     language: settings.language,
-    preferredConversationId: settings.lastActiveConversationId,
+    preferredConversationId: bootPreferredConversationId ?? null,
+    shouldInitializeHistory: bootPreferredConversationId !== undefined,
   })
   const handleSidebarWidthChange = (sidebarWidth: number) => {
     void updateSettings({ sidebarWidth })
   }
 
   useDocumentTheme(settings.appearance)
+
+  useEffect(() => {
+    if (isLoading || bootPreferredConversationId !== undefined) {
+      return
+    }
+
+    setBootPreferredConversationId(settings.lastActiveConversationId)
+  }, [bootPreferredConversationId, isLoading, settings.lastActiveConversationId])
 
   useEffect(() => {
     if (isLoading || chatMessages.isLoading) {

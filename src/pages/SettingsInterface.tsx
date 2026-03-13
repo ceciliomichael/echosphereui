@@ -89,9 +89,12 @@ export function SettingsInterface({
             activeOperation: providersState.activeOperation,
             errorMessage: providersState.errorMessage,
             isLoading: providersState.isLoading,
+            onAddCodexAccountWithOAuth: providersState.addCodexAccountWithOAuth,
             onConnectCodexWithOAuth: providersState.connectCodexWithOAuth,
             onRemoveApiKeyProvider: providersState.removeApiKeyProvider,
+            onRefreshProvidersState: providersState.refreshInBackground,
             onSaveApiKeyProvider: providersState.saveApiKeyProvider,
+            onSwitchCodexAccount: providersState.switchCodexAccount,
             providersState: providersState.providersState,
           }}
         />

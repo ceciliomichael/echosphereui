@@ -14,14 +14,18 @@ import { readProviderDefaults, writeProviderDefaults } from './providerLocalDefa
 import { API_KEY_PROVIDER_SCHEMAS, getApiKeyProviderSchema } from './providerSchemas'
 import type { ApiKeyProviderDraftMap } from './providerTypes'
 import { SettingsPanelLayout, SettingsSection } from '../shared/SettingsPanelPrimitives'
+import { PRIMARY_ACTION_BUTTON_CLASS_NAME } from '../shared/actionButtonStyles'
 
 interface ProvidersSettingsPanelProps {
   activeOperation: string | null
   errorMessage: string | null
   isLoading: boolean
+  onAddCodexAccountWithOAuth: () => Promise<boolean>
   onConnectCodexWithOAuth: () => Promise<boolean>
   onRemoveApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<boolean>
+  onRefreshProvidersState: () => Promise<void>
   onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
+  onSwitchCodexAccount: (accountId: string) => Promise<boolean>
   providersState: ProvidersState | null
 }
 
@@ -29,16 +33,16 @@ type ExpandedProviderId = ApiKeyProviderId | 'codex' | null
 type ProviderValidationErrors = Partial<Record<ApiKeyProviderId, string>>
 type ProviderActionFeedbackMap = Partial<Record<ApiKeyProviderId, ProviderActionFeedback>>
 
-const PRIMARY_BUTTON_CLASS_NAME =
-  'h-10 rounded-xl border border-[#d8d8d8] bg-white px-3.5 text-sm font-medium text-black transition-[background-color,border-color,box-shadow,transform,color] duration-150 hover:border-[#b8b8b8] hover:bg-[#e7e7e7] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white disabled:border-[#d8d8d8] disabled:text-black/55'
-
 export function ProvidersSettingsPanel({
   activeOperation,
   errorMessage,
   isLoading,
+  onAddCodexAccountWithOAuth,
   onConnectCodexWithOAuth,
   onRemoveApiKeyProvider,
+  onRefreshProvidersState,
   onSaveApiKeyProvider,
+  onSwitchCodexAccount,
   providersState,
 }: ProvidersSettingsPanelProps) {
   const [expandedProviderId, setExpandedProviderId] = useState<ExpandedProviderId>('codex')
@@ -86,15 +90,63 @@ export function ProvidersSettingsPanel({
   }, [providersState?.apiKeyProviders])
 
   const isCodexConnecting = activeOperation === 'codex:connect'
-  const codexBusy = isLoading || isCodexConnecting
+  const isCodexAddingAccount = activeOperation === 'codex:add-account'
+  const isCodexSwitchingAccount = Boolean(activeOperation?.startsWith('codex:switch:'))
+  const codexBusy = isLoading || isCodexConnecting || isCodexAddingAccount || isCodexSwitchingAccount
+  const codexIsAuthenticated = Boolean(codexStatus?.isAuthenticated)
+  const codexAccountCount = codexStatus?.accounts.length ?? 0
 
-  async function handleCodexAction() {
+  async function handleCodexConnect() {
     if (codexBusy) {
       return
     }
 
     await onConnectCodexWithOAuth()
   }
+
+  async function handleCodexAddAccount() {
+    if (codexBusy) {
+      return
+    }
+
+    await onAddCodexAccountWithOAuth()
+  }
+
+  async function handleCodexSwitchAccount(accountId: string) {
+    if (codexBusy) {
+      return
+    }
+
+    await onSwitchCodexAccount(accountId)
+  }
+
+  useEffect(() => {
+    if (expandedProviderId !== 'codex') {
+      return
+    }
+
+    if (!codexIsAuthenticated && codexAccountCount === 0) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (codexBusy) {
+        return
+      }
+
+      void onRefreshProvidersState()
+    }, 30_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [
+    codexBusy,
+    codexAccountCount,
+    codexIsAuthenticated,
+    expandedProviderId,
+    onRefreshProvidersState,
+  ])
 
   function setProviderValidationError(providerId: ApiKeyProviderId, message: string | null) {
     setValidationErrors((currentValue) => ({
@@ -230,15 +282,19 @@ export function ProvidersSettingsPanel({
         <div className="overflow-hidden rounded-2xl border border-border bg-surface">
           <CodexProviderAccordion
             accountId={codexStatus?.accountId ?? null}
+            accounts={codexStatus?.accounts ?? []}
             email={codexStatus?.email ?? null}
             isAuthenticated={Boolean(codexStatus?.isAuthenticated)}
             isBusy={codexBusy}
+            isAddingAccount={isCodexAddingAccount}
             isConnecting={isCodexConnecting}
             isExpanded={expandedProviderId === 'codex'}
             isFirst
-            onAction={handleCodexAction}
+            onAddAccount={handleCodexAddAccount}
+            onConnect={handleCodexConnect}
+            onSwitchAccount={handleCodexSwitchAccount}
             onToggle={() => setExpandedProviderId((currentValue) => (currentValue === 'codex' ? null : 'codex'))}
-            primaryButtonClassName={PRIMARY_BUTTON_CLASS_NAME}
+            primaryButtonClassName={PRIMARY_ACTION_BUTTON_CLASS_NAME}
           />
 
           {API_KEY_PROVIDER_SCHEMAS.map((schema) => {
@@ -265,7 +321,7 @@ export function ProvidersSettingsPanel({
                   setExpandedProviderId((currentValue) => (currentValue === schema.id ? null : schema.id))
                 }
                 onUpdateApiKey={(value) => updateProviderDraft(schema.id, { apiKey: value })}
-                primaryButtonClassName={PRIMARY_BUTTON_CLASS_NAME}
+                primaryButtonClassName={PRIMARY_ACTION_BUTTON_CLASS_NAME}
                 providerStatus={providerStatus}
                 schema={schema}
               />
