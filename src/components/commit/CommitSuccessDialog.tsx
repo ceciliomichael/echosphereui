@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, ExternalLink, X } from 'lucide-react'
+import { ExternalLink, X } from 'lucide-react'
 import type { GitCommitAction, GitCommitResult } from '../../types/chat'
 
 interface CommitSuccessDialogProps {
@@ -61,19 +61,14 @@ export function CommitSuccessDialog({ action, onClose, result }: CommitSuccessDi
         role="dialog"
         aria-modal="true"
         aria-labelledby="commit-success-title"
-        className="w-full max-w-xl rounded-2xl border border-border bg-surface p-6 shadow-soft"
+        className="w-full max-w-md rounded-xl border border-border bg-surface p-4 shadow-soft"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 size={20} />
-            </div>
-            <div className="min-w-0">
-              <h2 id="commit-success-title" className="text-lg font-semibold text-foreground">
-                {copy.title}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
-            </div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 id="commit-success-title" className="text-base font-semibold text-foreground">
+              {copy.title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
           </div>
           <button
             type="button"
@@ -85,7 +80,7 @@ export function CommitSuccessDialog({ action, onClose, result }: CommitSuccessDi
           </button>
         </div>
 
-        <div className="mt-5 rounded-xl border border-border bg-surface-muted px-4 py-3">
+        <div className="mt-3 rounded-lg border border-border bg-surface-muted px-3 py-2.5">
           <p className="text-sm text-foreground">
             Commit <span className="font-medium">{shortHash}</span>
             {result.branchName ? (
@@ -99,13 +94,13 @@ export function CommitSuccessDialog({ action, onClose, result }: CommitSuccessDi
         </div>
 
         {action === 'commit-and-create-pr' ? (
-          <div className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
+          <div className="mt-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-muted-foreground">
             {result.prUrl ? (
               <a
                 href={result.prUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-11 items-center gap-1.5 text-[#8771FF] transition-colors hover:text-[#6d5ed6]"
+                className="inline-flex items-center gap-1.5 text-[#8771FF] transition-colors hover:text-[#6d5ed6]"
               >
                 Open pull request
                 <ExternalLink size={14} />
@@ -115,16 +110,6 @@ export function CommitSuccessDialog({ action, onClose, result }: CommitSuccessDi
             )}
           </div>
         ) : null}
-
-        <div className="mt-5 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-surface-muted px-5 text-sm font-medium text-foreground transition-colors hover:bg-[var(--dropdown-option-active-surface)]"
-          >
-            Done
-          </button>
-        </div>
       </div>
     </div>,
     document.body,
