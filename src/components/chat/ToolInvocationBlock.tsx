@@ -4,9 +4,8 @@ import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import { PathLabel } from './PathLabel'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
-import { getPathBasename } from '../../lib/pathPresentation'
+import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
@@ -23,7 +22,7 @@ interface ReadToolResultViewModel {
 }
 
 function parseReadToolResult(resultContent: string): ReadToolResultViewModel | null {
-  const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
+  const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)(?: of \d+)?\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
   if (!match) {
     return null
   }
@@ -97,6 +96,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     }
   }, [invocation.startedAt, invocation.state])
 
+  const isRunning = displayedState === 'running'
   const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState, workspaceRootPath)
   const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
@@ -108,24 +108,40 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     invocation.resultContent ??
     ''
   const readResultPresentation = invocation.toolName === 'read' ? parseReadToolResult(resultBody) : null
+  const readResultDisplayPath =
+    workspaceRootPath && readResultPresentation
+      ? getRelativeDisplayPath(workspaceRootPath, readResultPresentation.filePath)
+      : readResultPresentation?.filePath
 
   return (
     <div className="w-full">
       <button
         type="button"
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
-        className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        disabled={isRunning}
+        onClick={() => {
+          if (isRunning) {
+            return
+          }
+
+          setIsOpen((currentValue) => !currentValue)
+        }}
+        className={[
+          'group flex items-center gap-1 text-sm text-muted-foreground transition-colors',
+          isRunning ? 'cursor-default opacity-90' : 'hover:text-foreground',
+        ].join(' ')}
       >
-        <span className={`inline-flex items-center gap-1.5 ${displayedState === 'running' ? 'thinking-shimmer' : ''}`}>
+        <span className={`inline-flex items-center gap-1.5 ${isRunning ? 'thinking-shimmer' : ''}`}>
           <span>{headerLabel}</span>
           {diffCountSummary ? <span className="inline-flex items-center gap-1">{diffCountSummary}</span> : null}
         </span>
-        <ChevronRight
-          className={[
-            'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
-            isOpen ? 'rotate-90' : '',
-          ].join(' ')}
-        />
+        {!isRunning ? (
+          <ChevronRight
+            className={[
+              'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
+              isOpen ? 'rotate-90' : '',
+            ].join(' ')}
+          />
+        ) : null}
       </button>
 
       {isOpen && invocation.resultContent ? (
@@ -138,21 +154,17 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               newContent={diffResultPresentation.newContent}
               oldContent={diffResultPresentation.oldContent}
               startLineNumber={diffResultPresentation.startLineNumber}
+              maxBodyHeightClassName="max-h-80"
             />
           ) : readResultPresentation ? (
             <div className="w-full text-left">
-              <p className="my-0 mb-1.5 flex min-w-0 items-baseline gap-1 text-[15px] leading-[1.52] text-foreground">
-                <span className="shrink-0">File</span>
-                <PathLabel path={readResultPresentation.filePath} className="min-w-0 max-w-full text-left" />
-                <span className="shrink-0">
-                  (lines {readResultPresentation.startLineNumber}-{readResultPresentation.endLineNumber})
-                </span>
-              </p>
               <CodeBlock
                 code={readResultPresentation.code}
-                fileName={getPathBasename(readResultPresentation.filePath)}
+                fileName={readResultDisplayPath}
                 language={readResultPresentation.language}
                 isStreaming={invocation.state === 'running'}
+                startLineNumber={readResultPresentation.startLineNumber}
+                maxBodyHeightClassName="max-h-80"
               />
             </div>
           ) : (

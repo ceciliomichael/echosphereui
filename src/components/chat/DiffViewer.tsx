@@ -17,6 +17,7 @@ interface DiffViewerProps {
   isExpanded?: boolean
   isStreaming?: boolean
   layout?: 'card' | 'stacked'
+  maxBodyHeightClassName?: string
   newContent: string
   onExpandedChange?: (nextValue: boolean) => void
   oldContent: string | null | undefined
@@ -116,6 +117,7 @@ const DiffViewerComponent = ({
   isExpanded: expandedProp,
   isStreaming = false,
   layout = 'card',
+  maxBodyHeightClassName,
   newContent,
   onExpandedChange,
   oldContent,
@@ -208,10 +210,18 @@ const DiffViewerComponent = ({
       )}
 
       {(!collapsible || isExpanded) && (
-        <div className={isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface'}>
+        <div
+          className={[
+            isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
+            maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
+            'overflow-x-scroll',
+          ]
+            .filter((value) => value.length > 0)
+            .join(' ')}
+        >
           <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
             <div className="flex min-w-0 items-stretch">
-              <div className={`shrink-0 ${getLineGutterClassName()}`}>
+              <div className={`sticky left-0 z-10 shrink-0 border-r border-border ${getLineGutterClassName()}`}>
                 {diffLines.map((line, index) => {
                   if (line.type === 'collapsed') {
                     return null
@@ -235,7 +245,7 @@ const DiffViewerComponent = ({
                 })}
               </div>
 
-              <div className="min-w-0 flex-1 overflow-x-auto bg-surface">
+              <div className="min-w-0 flex-1 bg-surface">
                 <div className="min-w-full w-fit">
                   {diffLines.map((line, index) => {
                     if (line.type === 'collapsed') {

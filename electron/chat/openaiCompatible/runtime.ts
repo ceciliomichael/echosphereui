@@ -23,7 +23,7 @@ import {
 } from '../providers/openaiShared'
 import { buildReplayableMessageHistory } from './messageHistory'
 import { collectToolCalls, type ToolCallAccumulator, toToolCallList } from './toolCallStreaming'
-import { createToolExecutionScheduler, createToolExecutionTurnState } from './toolExecution'
+import { createHydratedToolExecutionTurnState, createToolExecutionScheduler } from './toolExecution'
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 
@@ -244,7 +244,7 @@ export async function streamOpenAICompatibleResponseWithTools(
   context: ProviderStreamContext,
 ) {
   const inMemoryMessages = buildReplayableMessageHistory(request.messages)
-  const turnState = createToolExecutionTurnState()
+  const turnState = createHydratedToolExecutionTurnState(request.messages, request.agentContextRootPath)
   const toolExecutionScheduler = createToolExecutionScheduler({
     agentContextRootPath: request.agentContextRootPath,
     context,

@@ -59,7 +59,9 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
   if (toolName === 'edit') {
     return {
       absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      end_line: readNumber(argumentsValue.end_line) ?? undefined,
       replace_all: readBoolean(argumentsValue.replace_all),
+      start_line: readNumber(argumentsValue.start_line) ?? undefined,
     }
   }
 
@@ -78,7 +80,9 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
   if (toolName === 'read') {
     const startLine = readNumber(semanticResult.startLine) ?? 1
     const endLine = readNumber(semanticResult.endLine) ?? startLine
-    return `Read ${subjectPath} lines ${startLine}-${endLine}${truncated ? ' (truncated)' : ''}.`
+    const totalLineCount = readNumber(semanticResult.totalLineCount)
+    const remainingLineCount = readNumber(semanticResult.remainingLineCount)
+    return `Read ${subjectPath} lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''}${truncated ? ` (truncated${remainingLineCount !== null ? `, ${remainingLineCount} lines remaining` : ''})` : ''}.`
   }
 
   if (toolName === 'glob') {
@@ -129,9 +133,15 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     return filterUndefinedEntries({
       ...sharedSemantics,
       end_line: readNumber(semanticResult.endLine) ?? undefined,
+      has_more_lines: readBoolean(semanticResult.hasMoreLines),
       language: inferFenceLanguage(readString(semanticResult.path) ?? ''),
+      max_read_line_count: readNumber(semanticResult.maxReadLineCount) ?? undefined,
+      next_end_line: readNumber(semanticResult.nextEndLine) ?? undefined,
+      next_start_line: readNumber(semanticResult.nextStartLine) ?? undefined,
       line_count: readNumber(semanticResult.lineCount) ?? undefined,
+      remaining_line_count: readNumber(semanticResult.remainingLineCount) ?? undefined,
       start_line: readNumber(semanticResult.startLine) ?? undefined,
+      total_line_count: readNumber(semanticResult.totalLineCount) ?? undefined,
     })
   }
 

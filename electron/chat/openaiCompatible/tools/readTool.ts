@@ -80,16 +80,26 @@ export const readTool: OpenAICompatibleToolDefinition = {
     const safeStartLine = Math.max(1, Math.min(startLine, lines.length || 1))
     const safeEndLine = Math.min(lines.length || safeStartLine, safeStartLine + requestedLineCount - 1)
     const selectedLines = lines.slice(safeStartLine - 1, safeEndLine)
+    const hasMoreLines = safeEndLine < lines.length
+    const remainingLineCount = hasMoreLines ? lines.length - safeEndLine : 0
+    const nextStartLine = hasMoreLines ? safeEndLine + 1 : null
+    const nextEndLine = hasMoreLines ? Math.min(lines.length, safeEndLine + maxLines) : null
 
     return {
       content: selectedLines.join('\n'),
       endLine: safeEndLine,
+      hasMoreLines,
       lineCount: selectedLines.length,
+      maxReadLineCount: MAX_READ_LINE_COUNT,
+      nextEndLine,
+      nextStartLine,
       ok: true,
       path: toDisplayPath(relativePath),
+      remainingLineCount,
       startLine: safeStartLine,
       targetKind: 'file',
-      truncated: safeEndLine < lines.length,
+      totalLineCount: lines.length,
+      truncated: hasMoreLines,
     }
   },
   tool: {

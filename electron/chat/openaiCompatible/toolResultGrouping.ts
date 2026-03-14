@@ -6,6 +6,7 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   }
 
   const toolSummaryLines: string[] = []
+  const latestInspectionStateByKey = new Map<string, string>()
   const latestMutationStateByPath = new Map<string, { operation: string | null; path: string; toolName: string }>()
 
   for (const toolContent of toolContents) {
@@ -23,6 +24,47 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
 
     if (metadata.status !== 'success') {
       continue
+    }
+
+    if (metadata.toolName === 'list' || metadata.toolName === 'read' || metadata.toolName === 'glob' || metadata.toolName === 'grep') {
+      const subjectPath = metadata.subject?.path ?? '.'
+      const semantics = metadata.semantics
+      const inspectionStateKey =
+        metadata.toolName === 'glob' || metadata.toolName === 'grep'
+          ? `${metadata.toolName}:${subjectPath}:${typeof semantics?.pattern === 'string' ? semantics.pattern : ''}`
+          : `${metadata.toolName}:${subjectPath}`
+      let inspectionStateLine = `- ${toolSummary}`
+
+      if (metadata.toolName === 'list') {
+        const entryCount = typeof semantics?.entry_count === 'number' ? semantics.entry_count : null
+        if (entryCount !== null) {
+          inspectionStateLine = `- ${subjectPath} was last listed with ${entryCount} visible entr${entryCount === 1 ? 'y' : 'ies'}.`
+        }
+      } else if (metadata.toolName === 'read') {
+        const startLine = typeof semantics?.start_line === 'number' ? semantics.start_line : null
+        const endLine = typeof semantics?.end_line === 'number' ? semantics.end_line : null
+        if (startLine !== null && endLine !== null) {
+          inspectionStateLine = `- ${subjectPath} was last read at lines ${startLine}-${endLine}.`
+        }
+      } else if (metadata.toolName === 'glob') {
+        const matchCount = typeof semantics?.match_count === 'number' ? semantics.match_count : null
+        const pattern = typeof semantics?.pattern === 'string' ? semantics.pattern : 'the requested pattern'
+        if (matchCount !== null) {
+          inspectionStateLine = `- ${subjectPath} was last searched for paths matching ${pattern} with ${matchCount} match${matchCount === 1 ? '' : 'es'}.`
+        }
+      } else if (metadata.toolName === 'grep') {
+        const matchCount = typeof semantics?.match_count === 'number' ? semantics.match_count : null
+        const pattern = typeof semantics?.pattern === 'string' ? semantics.pattern : 'the requested pattern'
+        if (matchCount !== null) {
+          inspectionStateLine = `- ${subjectPath} was last content-searched for ${pattern} with ${matchCount} hit${matchCount === 1 ? '' : 's'}.`
+        }
+      }
+
+      if (latestInspectionStateByKey.has(inspectionStateKey)) {
+        latestInspectionStateByKey.delete(inspectionStateKey)
+      }
+
+      latestInspectionStateByKey.set(inspectionStateKey, inspectionStateLine)
     }
 
     if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
@@ -83,12 +125,17 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
     latestMutationStateLines.length > 0
       ? ['Latest acknowledged workspace file state:', ...latestMutationStateLines].join('\n')
       : null
+  const inspectionStateSummary =
+    latestInspectionStateByKey.size > 0
+      ? ['Latest acknowledged inspection state. Reuse these observations before repeating the same inspection call:', ...latestInspectionStateByKey.values()].join('\n')
+      : null
   const toolSummarySection =
     toolSummaryLines.length > 0 ? ['Acknowledged tool result summaries:', ...toolSummaryLines].join('\n') : null
 
   return [
-    'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state.',
+    'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state. Reuse the latest inspection state below before repeating the same inspection tool call.',
     ...(toolSummarySection ? [toolSummarySection] : []),
+    ...(inspectionStateSummary ? [inspectionStateSummary] : []),
     ...(mutationStateSummary ? [mutationStateSummary] : []),
     ...toolContents,
   ].join('\n\n')

@@ -3,12 +3,20 @@ import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
 import { getOpenAICompatibleToolDefinition } from './toolRegistry'
 import { buildFailedToolArtifacts, buildSuccessfulToolArtifacts } from './toolResultFormatter'
 import {
+  createToolExecutionTurnState,
+  getDuplicateInspectionCallError,
+  hydrateToolExecutionTurnStateFromMessages,
+  recordSuccessfulToolExecution,
+  type ToolExecutionTurnState,
+} from './toolExecutionTurnState'
+import {
   OpenAICompatibleToolError,
   type OpenAICompatibleToolCall,
   type OpenAICompatibleToolExecutionMode,
 } from './toolTypes'
 
-export interface ToolExecutionTurnState {}
+export { createToolExecutionTurnState } from './toolExecutionTurnState'
+export type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 interface ToolExecutionSchedulerInput {
   agentContextRootPath: string
@@ -62,12 +70,14 @@ function emitFailureEvent(
   inMemoryMessages.push(failedArtifacts.syntheticMessage)
 }
 
-export function createToolExecutionTurnState(): ToolExecutionTurnState {
-  return {}
-}
-
 export function resolveToolExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
   return getOpenAICompatibleToolDefinition(toolName)?.executionMode ?? 'exclusive'
+}
+
+export function createHydratedToolExecutionTurnState(messages: Message[], agentContextRootPath: string) {
+  const turnState = createToolExecutionTurnState()
+  hydrateToolExecutionTurnStateFromMessages(messages, agentContextRootPath, turnState)
+  return turnState
 }
 
 function normalizeExecutionResourceKey(absolutePath: string) {
@@ -121,6 +131,24 @@ export async function executeToolCallWithPolicies(
   }
 
   try {
+    const duplicateInspectionCallError = getDuplicateInspectionCallError(
+      toolCall,
+      argumentsValue,
+      agentContextRootPath,
+      turnState,
+    )
+    if (duplicateInspectionCallError) {
+      emitFailureEvent(
+        toolCall,
+        context,
+        inMemoryMessages,
+        duplicateInspectionCallError.message,
+        startedAt,
+        duplicateInspectionCallError.details,
+      )
+      return
+    }
+
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
       signal: context.signal,
@@ -128,6 +156,7 @@ export async function executeToolCallWithPolicies(
     })
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
+    recordSuccessfulToolExecution(toolCall, argumentsValue, semanticResult, agentContextRootPath, turnState)
 
     context.emitDelta({
       argumentsText: successfulArtifacts.toolInvocation.argumentsText,

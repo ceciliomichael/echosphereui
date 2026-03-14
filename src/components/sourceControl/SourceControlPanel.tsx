@@ -1,31 +1,15 @@
-import {
-  ArrowDownToLine,
-  ArrowUpToLine,
-  ChevronDown,
-  ChevronRight,
-  GitCommitHorizontal,
-  Loader2,
-  LocateFixed,
-  RefreshCw,
-  Upload,
-  type LucideIcon,
-} from 'lucide-react'
+import { GitCommitHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import type {
   GitHistoryCommitDetailsResult,
-  GitHistoryCommitFile,
   GitHistoryEntry,
   GitSyncAction,
 } from '../../types/chat'
-import { Tooltip } from '../Tooltip'
-import { Switch } from '../ui/Switch'
-import { CommitFileRow } from './CommitFileRow'
-import { CommitHistoryTooltipContent } from './CommitHistoryTooltipContent'
-import { GitGraphLane, GitGraphPlaceholder } from './historyGraph'
-import { computeSwimlanes, getSwimlaneIndentPx } from './historyGraphLayout'
-import { SourceControlDiffSection } from './SourceControlDiffSection'
+import { SourceControlChangesSection } from './SourceControlChangesSection'
+import { SourceControlHistorySection } from './SourceControlHistorySection'
+import { computeSwimlanes } from './historyGraphLayout'
 
 interface SourceControlPanelProps {
   fileDiffs: readonly ConversationFileDiff[]
@@ -44,30 +28,6 @@ interface SourceControlPanelProps {
   width: number
   workspacePath: string | null | undefined
 }
-
-interface SyncActionConfig {
-  action: GitSyncAction
-  icon: LucideIcon
-  label: string
-}
-
-const SYNC_ACTIONS: readonly SyncActionConfig[] = [
-  {
-    action: 'fetch-all',
-    icon: Upload,
-    label: 'Fetch all remotes',
-  },
-  {
-    action: 'pull',
-    icon: ArrowDownToLine,
-    label: 'Pull latest changes',
-  },
-  {
-    action: 'push',
-    icon: ArrowUpToLine,
-    label: 'Push current branch',
-  },
-]
 
 const HISTORY_PAGE_SIZE = 200
 
@@ -611,59 +571,28 @@ export function SourceControlPanel({
     }
   }
 
-  function renderCommitDetails(commitHash: string, files: readonly GitHistoryCommitFile[], laneColumnCount: number) {
-    const isLoadingCommitDetails = loadingCommitHashes.includes(commitHash)
-    const indentPx = getSwimlaneIndentPx(laneColumnCount)
-
-    if (isLoadingCommitDetails) {
-      return (
-        <div className="flex items-center gap-2 py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-          <Loader2 size={13} className="animate-spin" />
-          Loading files...
-        </div>
-      )
-    }
-
-    if (files.length === 0) {
-      return (
-        <div className="py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-          No changed files.
-        </div>
-      )
-    }
-
-    return (
-      <div className="flex flex-col">
-        {files.map((file) => (
-          <CommitFileRow key={`${commitHash}-${file.path}`} file={file} indentPx={indentPx} />
-        ))}
-      </div>
-    )
-  }
-
   return (
-    <>
-      <div
-        ref={panelRef}
-        className={[
-          'relative hidden h-full shrink-0 overflow-hidden md:flex',
-          isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
-          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
-        ].join(' ')}
-        style={{ width: `${visiblePanelWidth}px` }}
-        aria-hidden={!isOpen}
-      >
-        {isOpen ? (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize source control panel"
-            onPointerDown={handleResizePointerDown}
-            className="absolute inset-y-0 left-0 z-20 w-3 -translate-x-1/2 cursor-col-resize"
-          />
-        ) : null}
+    <div
+      ref={panelRef}
+      className={[
+        'relative hidden h-full shrink-0 overflow-hidden md:flex',
+        isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
+        isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+      ].join(' ')}
+      style={{ width: `${visiblePanelWidth}px` }}
+      aria-hidden={!isOpen}
+    >
+      {isOpen ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize source control panel"
+          onPointerDown={handleResizePointerDown}
+          className="absolute inset-y-0 left-0 z-20 w-3 -translate-x-1/2 cursor-col-resize"
+        />
+      ) : null}
 
-        <aside className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-[var(--workspace-panel-surface)]">
+      <aside className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-[var(--workspace-panel-surface)]">
         <div className="flex h-14 shrink-0 items-center justify-between px-4">
           <div className="flex min-w-0 items-center gap-2">
             <GitCommitHorizontal size={16} className="text-muted-foreground" />
@@ -680,380 +609,80 @@ export function SourceControlPanel({
             isHistoryResizing ? 'cursor-row-resize' : '',
           ].join(' ')}
         >
-          <section className={['border-b border-border', isChangesSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
-            <button
-              type="button"
-              onClick={() => {
-                const nextValue = !isChangesSectionOpen
-                setIsChangesSectionOpen(nextValue)
-                persistSectionOpen({ changes: nextValue })
-              }}
-              className="flex h-10 w-full items-center justify-between px-4 text-left"
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
-              <ChevronDown size={13} className={['text-muted-foreground transition-transform', isChangesSectionOpen ? '' : '-rotate-90'].join(' ')} />
-            </button>
-            <div className={['min-h-0 border-t border-border transition-[opacity] duration-200', isChangesSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0'].join(' ')}>
-              <div className="shrink-0 border-b border-border px-4 py-3">
-                <textarea
-                  value={commitMessage}
-                  onChange={(event) => setCommitMessage(event.target.value)}
-                  rows={3}
-                  placeholder="Commit message (leave empty to auto-generate with AI)"
-                  className="w-full resize-none rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-subtle-foreground"
-                />
+          <SourceControlChangesSection
+            commitActionControlsRef={commitActionControlsRef}
+            commitMessage={commitMessage}
+            expandedChangeFilePaths={expandedChangeFilePaths}
+            includeUnstaged={includeUnstaged}
+            isChangesSectionOpen={isChangesSectionOpen}
+            isCommitActionDisabled={isCommitActionDisabled}
+            isCommitActionMenuOpen={isCommitActionMenuOpen}
+            isCommitPrimaryBusy={isCommitPrimaryBusy}
+            isQuickCommitting={isQuickCommitting}
+            isStagedSectionOpen={isStagedSectionOpen}
+            isUnstagedSectionOpen={isUnstagedSectionOpen}
+            pendingFileActionPath={pendingFileActionPath}
+            quickCommitError={quickCommitError}
+            stagedFileDiffs={stagedFileDiffs}
+            syncError={syncError}
+            syncMessage={syncMessage}
+            unstagedFileDiffs={unstagedFileDiffs}
+            onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
+            onCommitMessageChange={setCommitMessage}
+            onDiscardFile={onDiscardFile}
+            onExpandedChange={handleChangeFileExpandedChange}
+            onIncludeUnstagedChange={setIncludeUnstaged}
+            onOpenCommitModal={onOpenCommitModal}
+            onQuickCommitSubmit={handleQuickCommitSubmit}
+            onStageFile={onStageFile}
+            onStagedSectionOpenChange={(nextValue) => {
+              setIsStagedSectionOpen(nextValue)
+              persistSectionOpen({ staged: nextValue })
+            }}
+            onToggleChangesSection={() => {
+              const nextValue = !isChangesSectionOpen
+              setIsChangesSectionOpen(nextValue)
+              persistSectionOpen({ changes: nextValue })
+            }}
+            onUnstageFile={onUnstageFile}
+            onUnstagedSectionOpenChange={(nextValue) => {
+              setIsUnstagedSectionOpen(nextValue)
+              persistSectionOpen({ unstaged: nextValue })
+            }}
+          />
 
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <Switch checked={includeUnstaged} onChange={setIncludeUnstaged} disabled={isQuickCommitting} />
-                    Include unstaged
-                  </label>
-
-                  <div className="inline-flex items-center gap-1.5">
-                    <div ref={commitActionControlsRef} className="relative inline-flex items-center">
-                      <button
-                        type="button"
-                        disabled={isCommitActionDisabled}
-                        onClick={() => void handleQuickCommitSubmit('commit')}
-                        className={[
-                          'inline-flex h-8 min-w-[66px] items-center justify-center rounded-l-lg rounded-r-none pl-2 text-xs font-medium transition-colors',
-                          isCommitPrimaryBusy ? 'pr-2' : 'pr-1',
-                          isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
-                        ].join(' ')}
-                      >
-                        {isQuickCommitting ? 'Committing' : pendingSyncAction === 'push' ? 'Pushing' : 'Commit'}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Commit actions"
-                        aria-haspopup="menu"
-                        aria-expanded={isCommitActionMenuOpen}
-                        disabled={isCommitActionDisabled}
-                        onClick={() => {
-                          setIsCommitActionMenuOpen((currentValue) => !currentValue)
-                        }}
-                        className={[
-                          'inline-flex h-8 w-8 items-center justify-center rounded-l-none rounded-r-lg border-l border-white/15 text-xs transition-colors',
-                          isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
-                        ].join(' ')}
-                      >
-                        <ChevronDown size={13} />
-                      </button>
-                      {isCommitActionMenuOpen ? (
-                        <div
-                          role="menu"
-                          aria-label="Commit actions"
-                          className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[160px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => void handleQuickCommitSubmit('commit')}
-                            className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
-                          >
-                            Commit
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => void handleQuickCommitSubmit('commit-and-push')}
-                            className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
-                          >
-                            Commit and push
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onOpenCommitModal}
-                      className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-surface px-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Advanced
-                    </button>
-                  </div>
-                </div>
-
-                {quickCommitError ? <p className="mt-2 text-xs text-danger-foreground">{quickCommitError}</p> : null}
-                {syncError ? <p className="mt-2 text-xs text-danger-foreground">{syncError}</p> : null}
-                {!syncError && syncMessage ? <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p> : null}
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {stagedFileDiffs.length > 0 ? (
-                  <section className="shrink-0 border-b border-border">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextValue = !isStagedSectionOpen
-                        setIsStagedSectionOpen(nextValue)
-                        persistSectionOpen({ staged: nextValue })
-                      }}
-                      className="flex h-10 w-full items-center justify-between px-4 text-left"
-                    >
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Staged Changes</span>
-                      <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-                    </button>
-                    <div className={['transition-[opacity] duration-200', isStagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
-                      <SourceControlDiffSection
-                        sectionClassName="border-b-0"
-                        title=""
-                        scope="staged"
-                        diffs={stagedFileDiffs}
-                        emptyLabel="No staged files."
-                        expandedFilePaths={expandedChangeFilePaths}
-                        pendingFileActionPath={pendingFileActionPath}
-                        onDiscardFile={onDiscardFile}
-                        onExpandedChange={handleChangeFileExpandedChange}
-                        onStageFile={onStageFile}
-                        onUnstageFile={onUnstageFile}
-                      />
-                    </div>
-                  </section>
-                ) : null}
-
-                <section className={['border-border', isUnstagedSectionOpen ? 'border-b-0' : 'border-b'].join(' ')}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextValue = !isUnstagedSectionOpen
-                      setIsUnstagedSectionOpen(nextValue)
-                      persistSectionOpen({ unstaged: nextValue })
-                    }}
-                    className="flex h-10 w-full items-center justify-between px-4 text-left"
-                  >
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
-                    <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-                  </button>
-                  <div className={['transition-[opacity] duration-200', isUnstagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
-                    <SourceControlDiffSection
-                      sectionClassName="border-b-0"
-                      title=""
-                      scope="unstaged"
-                      diffs={unstagedFileDiffs}
-                      emptyLabel="No unstaged files."
-                      expandedFilePaths={expandedChangeFilePaths}
-                      pendingFileActionPath={pendingFileActionPath}
-                      onDiscardFile={onDiscardFile}
-                      onExpandedChange={handleChangeFileExpandedChange}
-                      onStageFile={onStageFile}
-                      onUnstageFile={onUnstageFile}
-                    />
-                  </div>
-                </section>
-              </div>
-            </div>
-          </section>
-
-          <section
-            className={[
-              'border-b border-border',
-              isHistorySectionOpen ? 'min-h-0 shrink-0 flex flex-1 flex-col' : 'shrink-0',
-            ].join(' ')}
-            style={
-              isHistorySectionOpen && historyHeight !== null
-                ? {
-                    flex: '0 0 auto',
-                    height: `${historyHeight}px`,
-                  }
-                : undefined
-            }
-          >
-            <div
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Resize history section"
-              onPointerDown={handleHistoryResizePointerDown}
-              className={[
-                'h-1 w-full bg-transparent',
-                isHistorySectionOpen ? 'cursor-row-resize' : 'cursor-default',
-              ].join(' ')}
-            />
-            <div
-              role="button"
-              tabIndex={0}
-              aria-expanded={isHistorySectionOpen}
-              onClick={() => {
-                const nextValue = !isHistorySectionOpen
-                setIsHistorySectionOpen(nextValue)
-                persistSectionOpen({ history: nextValue })
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') {
-                  return
-                }
-
-                event.preventDefault()
-                const nextValue = !isHistorySectionOpen
-                setIsHistorySectionOpen(nextValue)
-                persistSectionOpen({ history: nextValue })
-              }}
-              className="flex h-10 cursor-pointer items-center justify-between px-4"
-            >
-              <span className="inline-flex items-center gap-2 text-left">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">History</span>
-                <ChevronDown
-                  size={13}
-                  className={['text-muted-foreground transition-transform', isHistorySectionOpen ? '' : '-rotate-90'].join(' ')}
-                />
-              </span>
-              <div className="inline-flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
-                {SYNC_ACTIONS.map((config) => {
-                  const Icon = config.icon
-                  const isPending = pendingSyncAction === config.action
-
-                  return (
-                    <Tooltip key={config.action} content={config.label} side="top">
-                      <button
-                        type="button"
-                        aria-label={config.label}
-                        disabled={!hasWorkspacePath || pendingSyncAction !== null}
-                        onClick={() => void handleSyncAction(config.action)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isPending ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
-                      </button>
-                    </Tooltip>
-                  )
-                })}
-
-                <Tooltip content="Refresh source control" side="top">
-                  <button
-                    type="button"
-                    aria-label="Refresh source control"
-                    disabled={!hasWorkspacePath || pendingSyncAction !== null}
-                    onClick={() => void handleRefreshPanel()}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {pendingSyncAction === 'refresh' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                  </button>
-                </Tooltip>
-
-                <Tooltip content="Go to HEAD commit" side="top">
-                  <button
-                    type="button"
-                    aria-label="Go to HEAD commit"
-                    disabled={!headHash}
-                    onClick={() => void handleGoToCurrentCommit()}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <LocateFixed size={13} />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-
-            <div className={['min-h-0 flex-1 overflow-y-auto border-t border-border transition-[opacity] duration-200', isHistorySectionOpen ? 'opacity-100' : 'hidden opacity-0'].join(' ')}>
-              {isLoadingHistory ? (
-                <div className="flex h-32 items-center justify-center text-[12px] text-muted-foreground">
-                  <Loader2 size={14} className="mr-2 animate-spin" />
-                  Loading history...
-                </div>
-              ) : historyEntries.length === 0 ? (
-                <div className="px-4 py-3">
-                  <div className="flex min-h-16 items-center text-[12px] text-muted-foreground">No commits yet.</div>
-                </div>
-              ) : (
-                <div>
-                  {historyViewModels.map((viewModel) => {
-                    const { entry } = viewModel
-                    const isExpanded = expandedCommitHashes.includes(entry.hash)
-                    const isSelected = selectedCommitHash === entry.hash
-                    const commitDetails = commitDetailsByHash[entry.hash]
-                    const isLoadingDetails = loadingCommitHashes.includes(entry.hash)
-                    const continuationColumns =
-                      viewModel.outputSwimlanes.length > 0 ? viewModel.outputSwimlanes : viewModel.inputSwimlanes
-
-                    return (
-                      <div key={entry.hash}>
-                        <Tooltip
-                          content={
-                            <CommitHistoryTooltipContent
-                              entry={entry}
-                              details={commitDetails}
-                              isLoadingDetails={isLoadingDetails}
-                            />
-                          }
-                          side="right"
-                          fullWidthTrigger
-                          interactive
-                          hideDelayMs={220}
-                          panelClassName="!max-w-[min(42rem,calc(100vw-24px))] !border-0 !bg-transparent !p-0 !text-left !shadow-none"
-                        >
-                          <button
-                            type="button"
-                            ref={(node) => {
-                              historyRowRefMap.current.set(entry.hash, node)
-                            }}
-                            onClick={() => handleCommitExpandedToggle(entry.hash)}
-                            onMouseEnter={() => {
-                              void loadCommitDetails(entry.hash)
-                            }}
-                            onFocus={() => {
-                              void loadCommitDetails(entry.hash)
-                            }}
-                            className={[
-                              'flex h-[50px] w-full items-center gap-0 text-left transition-colors',
-                              isSelected ? 'bg-surface-muted' : 'hover:bg-surface-muted/50',
-                            ].join(' ')}
-                          >
-                            <GitGraphLane viewModel={viewModel} />
-
-                            <span className="min-w-0 flex-1 py-1.5 pr-2">
-                              <span className="flex items-center gap-1.5">
-                                <span className="min-w-0 shrink truncate text-[13px] font-medium leading-5 text-foreground">
-                                  {entry.subject.length > 0 ? entry.subject : '(no subject)'}
-                                </span>
-                                <span className="ml-auto shrink-0 pl-2 text-subtle-foreground">
-                                  {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                                </span>
-                              </span>
-                            </span>
-                          </button>
-                        </Tooltip>
-
-                        {isExpanded ? (
-                          <div className="relative flex bg-surface-muted/10">
-                            <div className="z-10 min-w-0 flex-1">
-                              {renderCommitDetails(entry.hash, commitDetails?.files ?? [], continuationColumns.length)}
-                            </div>
-                            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-fit">
-                              <GitGraphPlaceholder columns={continuationColumns} />
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-
-                  {historyError ? <p className="px-4 py-2 text-xs text-danger-foreground">{historyError}</p> : null}
-
-                  {hasMoreHistory ? (
-                    <div className="px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={isLoadingMoreHistory}
-                        onClick={() => void loadMoreHistory()}
-                        className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-border bg-surface-muted/50 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isLoadingMoreHistory ? (
-                          <>
-                            <Loader2 size={13} className="mr-1.5 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          'Load more commits'
-                        )}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          </section>
+          <SourceControlHistorySection
+            commitDetailsByHash={commitDetailsByHash}
+            expandedCommitHashes={expandedCommitHashes}
+            hasMoreHistory={hasMoreHistory}
+            hasWorkspacePath={hasWorkspacePath}
+            headHash={headHash}
+            historyEntries={historyEntries}
+            historyError={historyError}
+            historyHeight={historyHeight}
+            historyRowRefMap={historyRowRefMap}
+            historyViewModels={historyViewModels}
+            isHistorySectionOpen={isHistorySectionOpen}
+            isLoadingHistory={isLoadingHistory}
+            isLoadingMoreHistory={isLoadingMoreHistory}
+            loadingCommitHashes={loadingCommitHashes}
+            pendingSyncAction={pendingSyncAction}
+            selectedCommitHash={selectedCommitHash}
+            onGoToCurrentCommit={handleGoToCurrentCommit}
+            onHistoryResizePointerDown={handleHistoryResizePointerDown}
+            onLoadCommitDetails={loadCommitDetails}
+            onLoadMoreHistory={loadMoreHistory}
+            onRefreshPanel={handleRefreshPanel}
+            onSyncAction={handleSyncAction}
+            onToggleCommitExpanded={handleCommitExpandedToggle}
+            onToggleHistorySection={() => {
+              const nextValue = !isHistorySectionOpen
+              setIsHistorySectionOpen(nextValue)
+              persistSectionOpen({ history: nextValue })
+            }}
+          />
         </div>
-        </aside>
-      </div>
-    </>
+      </aside>
+    </div>
   )
 }

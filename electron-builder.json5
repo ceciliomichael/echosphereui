@@ -1,9 +1,9 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.echosphere.app",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "Echosphere",
   "directories": {
     "output": "release/${version}"
   },
@@ -27,6 +27,7 @@
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
+    "executableName": "Echosphere",
     "target": [
       {
         "target": "nsis",

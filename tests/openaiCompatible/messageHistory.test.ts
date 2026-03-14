@@ -82,11 +82,15 @@ test('buildReplayableMessageHistory converts persisted tool messages into synthe
   assert.equal(replayableMessages[1]?.role, 'user')
   assert.equal(replayableMessages[1]?.userMessageKind, 'tool_result')
   assert.match(replayableMessages[1]?.content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
+  assert.match(replayableMessages[1]?.content ?? '', /Reuse the latest inspection state below before repeating the same inspection tool call\./u)
   assert.match(
     replayableMessages[1]?.content ?? '',
     /For each mutated path, the latest successful mutation below is the current workspace state\./u,
   )
   assert.match(replayableMessages[1]?.content ?? '', /Acknowledged tool result summaries:/u)
+  assert.match(replayableMessages[1]?.content ?? '', /Latest acknowledged inspection state\./u)
+  assert.match(replayableMessages[1]?.content ?? '', /- \. was last listed with 2 visible entries\./u)
+  assert.match(replayableMessages[1]?.content ?? '', /- package\.json was last read at lines 1-3\./u)
   assert.match(replayableMessages[1]?.content ?? '', /- list success: Listed \. with 2 visible entries\./u)
   assert.match(replayableMessages[1]?.content ?? '', /- read success: Read package\.json lines 1-3\./u)
   assert.match(replayableMessages[1]?.content ?? '', /"toolName": "list"/u)
@@ -189,6 +193,7 @@ test('buildReplayableMessageHistory also converts tool messages appended after a
   assert.equal(toolContextMessage?.role, 'user')
   assert.equal(toolContextMessage?.userMessageKind, 'tool_result')
   assert.match(toolContextMessage?.content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
+  assert.match(toolContextMessage?.content ?? '', /Reuse the latest inspection state below before repeating the same inspection tool call\./u)
   assert.match(
     toolContextMessage?.content ?? '',
     /For each mutated path, the latest successful mutation below is the current workspace state\./u,
