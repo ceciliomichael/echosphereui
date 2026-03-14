@@ -14,15 +14,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import type {
-  GitCommitAction,
-  GitCommitResult,
   GitHistoryCommitDetailsResult,
   GitHistoryCommitFile,
   GitHistoryEntry,
   GitSyncAction,
 } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
-import { CommitSuccessDialog } from '../commit/CommitSuccessDialog'
 import { Switch } from '../ui/Switch'
 import { CommitFileRow } from './CommitFileRow'
 import { CommitHistoryTooltipContent } from './CommitHistoryTooltipContent'
@@ -35,7 +32,7 @@ interface SourceControlPanelProps {
   isOpen: boolean
   onDiscardFile: (filePath: string) => Promise<void>
   onOpenCommitModal: () => void
-  onQuickCommit: (input: { includeUnstaged: boolean; message: string }) => Promise<GitCommitResult>
+  onQuickCommit: (input: { includeUnstaged: boolean; message: string }) => Promise<void>
   onRefreshAll: () => Promise<void>
   onSectionOpenChange: (nextValue: Record<'changes' | 'commit' | 'history' | 'staged' | 'unstaged', boolean>) => void
   onStageFile: (filePath: string) => Promise<void>
@@ -52,11 +49,6 @@ interface SyncActionConfig {
   action: GitSyncAction
   icon: LucideIcon
   label: string
-}
-
-interface CommitSuccessDialogState {
-  action: GitCommitAction
-  result: GitCommitResult
 }
 
 const SYNC_ACTIONS: readonly SyncActionConfig[] = [
@@ -120,7 +112,6 @@ export function SourceControlPanel({
   const [quickCommitError, setQuickCommitError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
-  const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
   const [pendingSyncAction, setPendingSyncAction] = useState<GitSyncAction | 'refresh' | null>(null)
   const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([])
   const [headHash, setHeadHash] = useState<string | null>(null)
@@ -429,6 +420,18 @@ export function SourceControlPanel({
     }
   }, [isCommitActionMenuOpen])
 
+  useEffect(() => {
+    if (!syncMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSyncMessage((currentValue) => (currentValue === syncMessage ? null : currentValue))
+    }, 3000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [syncMessage])
+
   const loadCommitDetails = useCallback(
     async (commitHash: string) => {
       if (!hasWorkspacePath || commitDetailsByHash[commitHash] || loadingCommitHashes.includes(commitHash)) {
@@ -507,7 +510,7 @@ export function SourceControlPanel({
     setSyncMessage(null)
 
     try {
-      const commitResult = await onQuickCommit({
+      await onQuickCommit({
         includeUnstaged,
         message: commitMessage,
       })
@@ -522,11 +525,6 @@ export function SourceControlPanel({
       } else {
         await refreshHistory()
       }
-
-      setCommitSuccessDialog({
-        action: action === 'commit-and-push' ? 'commit-and-push' : 'commit',
-        result: commitResult,
-      })
     } catch (error) {
       setQuickCommitError(error instanceof Error ? error.message : 'Failed to commit changes.')
     } finally {
@@ -1053,13 +1051,6 @@ export function SourceControlPanel({
         </div>
         </aside>
       </div>
-      {commitSuccessDialog ? (
-        <CommitSuccessDialog
-          action={commitSuccessDialog.action}
-          result={commitSuccessDialog.result}
-          onClose={() => setCommitSuccessDialog(null)}
-        />
-      ) : null}
     </>
   )
 }

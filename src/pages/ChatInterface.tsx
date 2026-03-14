@@ -369,14 +369,13 @@ export function ChatInterface({
 
   const handleQuickCommit = useCallback(
     async (input: { includeUnstaged: boolean; message: string }) => {
-      const commitResult = await gitCommitState.commit({
+      await gitCommitState.commit({
         action: 'commit',
         includeUnstaged: input.includeUnstaged,
         message: input.message,
       })
 
       await Promise.all([refreshGitDiffSnapshot({ forceRefresh: true }), gitBranchState.refresh(), gitCommitState.refreshStatus()])
-      return commitResult
     },
     [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
   )
