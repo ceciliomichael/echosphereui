@@ -147,6 +147,7 @@ export function SourceControlPanel({
     !isQuickCommitting &&
     (includeUnstaged ? totalChangedFileCount > 0 : stagedFileDiffs.length > 0)
   const isCommitActionDisabled = !canQuickCommit || pendingSyncAction !== null
+  const isCommitPrimaryBusy = isQuickCommitting || pendingSyncAction === 'push'
 
   const historyViewModels = useMemo(() => computeSwimlanes(historyEntries), [historyEntries])
 
@@ -716,6 +717,7 @@ export function SourceControlPanel({
                         onClick={() => void handleQuickCommitSubmit('commit')}
                         className={[
                           'inline-flex h-8 min-w-[66px] items-center justify-center rounded-l-lg rounded-r-none pl-2 text-xs font-medium transition-colors',
+                          isCommitPrimaryBusy ? 'pr-2' : 'pr-1',
                           isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
                         ].join(' ')}
                       >
