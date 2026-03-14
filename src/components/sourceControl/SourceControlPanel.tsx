@@ -91,6 +91,7 @@ export function SourceControlPanel({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const panelBodyRef = useRef<HTMLDivElement | null>(null)
   const historyRowRefMap = useRef(new Map<string, HTMLButtonElement | null>())
+  const commitActionControlsRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const historyResizeStateRef = useRef<{
     containerHeight: number
@@ -107,6 +108,7 @@ export function SourceControlPanel({
   const [commitMessage, setCommitMessage] = useState('')
   const [includeUnstaged, setIncludeUnstaged] = useState(true)
   const [isQuickCommitting, setIsQuickCommitting] = useState(false)
+  const [isCommitActionMenuOpen, setIsCommitActionMenuOpen] = useState(false)
   const [quickCommitError, setQuickCommitError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -144,6 +146,7 @@ export function SourceControlPanel({
   const canQuickCommit =
     !isQuickCommitting &&
     (includeUnstaged ? totalChangedFileCount > 0 : stagedFileDiffs.length > 0)
+  const isCommitActionDisabled = !canQuickCommit || pendingSyncAction !== null
 
   const historyViewModels = useMemo(() => computeSwimlanes(historyEntries), [historyEntries])
 
@@ -388,6 +391,35 @@ export function SourceControlPanel({
     void refreshHistory()
   }, [isOpen, refreshHistory, normalizedWorkspacePath])
 
+  useEffect(() => {
+    if (!isCommitActionMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+      if (!commitActionControlsRef.current?.contains(target)) {
+        setIsCommitActionMenuOpen(false)
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsCommitActionMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isCommitActionMenuOpen])
+
   const loadCommitDetails = useCallback(
     async (commitHash: string) => {
       if (!hasWorkspacePath || commitDetailsByHash[commitHash] || loadingCommitHashes.includes(commitHash)) {
@@ -449,13 +481,15 @@ export function SourceControlPanel({
     }
   }
 
-  async function handleQuickCommitSubmit() {
-    if (!canQuickCommit) {
+  async function handleQuickCommitSubmit(action: 'commit' | 'commit-and-push' = 'commit') {
+    if (isCommitActionDisabled) {
       return
     }
 
     setIsQuickCommitting(true)
+    setIsCommitActionMenuOpen(false)
     setQuickCommitError(null)
+    setSyncMessage(null)
 
     try {
       await onQuickCommit({
@@ -464,9 +498,12 @@ export function SourceControlPanel({
       })
 
       setCommitMessage('')
-      setSyncMessage('Committed changes.')
       setSyncError(null)
       await refreshHistory()
+
+      if (action === 'commit-and-push') {
+        await handleSyncAction('push')
+      }
     } catch (error) {
       setQuickCommitError(error instanceof Error ? error.message : 'Failed to commit changes.')
     } finally {
@@ -649,17 +686,59 @@ export function SourceControlPanel({
                   </label>
 
                   <div className="inline-flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={isQuickCommitting || !canQuickCommit}
-                      onClick={() => void handleQuickCommitSubmit()}
-                      className={[
-                        'inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-medium transition-colors',
-                        isQuickCommitting || !canQuickCommit ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
-                      ].join(' ')}
-                    >
-                      {isQuickCommitting ? 'Committing...' : 'Commit'}
-                    </button>
+                    <div ref={commitActionControlsRef} className="relative inline-flex items-center">
+                      <button
+                        type="button"
+                        disabled={isCommitActionDisabled}
+                        onClick={() => void handleQuickCommitSubmit('commit')}
+                        className={[
+                          'inline-flex h-8 items-center justify-center rounded-l-lg rounded-r-none pl-3 pr-0 text-xs font-medium transition-colors',
+                          isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
+                        ].join(' ')}
+                      >
+                        {isQuickCommitting ? 'Committing...' : pendingSyncAction === 'push' ? 'Pushing...' : 'Commit'}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Commit actions"
+                        aria-haspopup="menu"
+                        aria-expanded={isCommitActionMenuOpen}
+                        disabled={isCommitActionDisabled}
+                        onClick={() => {
+                          setIsCommitActionMenuOpen((currentValue) => !currentValue)
+                        }}
+                        className={[
+                          'inline-flex h-8 w-8 items-center justify-center rounded-l-none rounded-r-lg border-l border-white/15 text-xs transition-colors',
+                          isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
+                        ].join(' ')}
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                      {isCommitActionMenuOpen ? (
+                        <div
+                          role="menu"
+                          aria-label="Commit actions"
+                          className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[160px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void handleQuickCommitSubmit('commit')}
+                            className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
+                          >
+                            Commit
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void handleQuickCommitSubmit('commit-and-push')}
+                            className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
+                          >
+                            Commit and push
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={onOpenCommitModal}

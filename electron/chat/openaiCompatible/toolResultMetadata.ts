@@ -26,6 +26,7 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
   if (toolName === 'read') {
     return {
       absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      end_line: readNumber(argumentsValue.end_line) ?? undefined,
       max_lines: readNumber(argumentsValue.max_lines) ?? undefined,
       start_line: readNumber(argumentsValue.start_line) ?? undefined,
     }
