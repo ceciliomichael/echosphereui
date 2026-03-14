@@ -21,54 +21,50 @@ function toLanguageLabel(language: string | undefined, resolvedLabel: string) {
   if (!language || language.trim().length === 0) {
     return 'Text'
   }
-
   if (resolvedLabel !== 'Code') {
     return resolvedLabel
   }
-
   const normalized = language.trim()
   return normalized.length <= 4 ? normalized.toUpperCase() : normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
-function tokenizeCode(code: string): TokenizedCode {
+function tokenizeCode(code: string, startLineNumber = 1): TokenizedCode {
   const normalizedCode = code.replace(/\n$/, '')
   const lines = normalizedCode.length === 0 ? [''] : normalizedCode.split('\n')
-  const gutterWidthCh = Math.max(String(lines.length).length + 1, 3)
-
-  return {
-    gutterWidthCh,
-    lines,
-  }
+  const lastLineNumber = startLineNumber + lines.length - 1
+  const gutterWidthCh = Math.max(String(lastLineNumber).length + 1, 3)
+  return { gutterWidthCh, lines }
 }
 
 interface CodeRowsProps {
   code: string
-  maxBodyHeightClassName?: string
-  startLineNumber?: number
+  startLineNumber: number
 }
 
-const CodeRows = memo(function CodeRows({ code, maxBodyHeightClassName, startLineNumber = 1 }: CodeRowsProps) {
-  const tokenizedCode = useMemo(() => tokenizeCode(code), [code])
+const CodeRows = memo(function CodeRows({ code, startLineNumber }: CodeRowsProps) {
+  const tokenizedCode = useMemo(() => tokenizeCode(code, startLineNumber), [code, startLineNumber])
 
   return (
     <div className="flex min-w-0 bg-surface">
-      <div className="shrink-0 border-r border-border bg-background/70">
+      <div className="shrink-0 border-r border-border bg-surface">
         <pre className="m-0 py-2 text-[12px] leading-5 text-subtle-foreground">
           <code className="block">
-            {tokenizedCode.lines.map((_, index) => (
-              <div
-                key={`line-number-${index + 1}`}
-                className="select-none px-2 text-right"
-                style={{ minWidth: `${tokenizedCode.gutterWidthCh}ch` }}
-              >
-                {index + 1}
-              </div>
-            ))}
+            {tokenizedCode.lines.map((_, index) => {
+              const lineNumber = startLineNumber + index
+              return (
+                <div
+                  key={`line-number-${lineNumber}`}
+                  className="select-none px-2 text-right"
+                  style={{ minWidth: `${tokenizedCode.gutterWidthCh}ch` }}
+                >
+                  {lineNumber}
+                </div>
+              )
+            })}
           </code>
         </pre>
       </div>
-
-      <div className="min-w-0 flex-1 overflow-x-auto">
+      <div className="min-w-0 flex-1 bg-surface">
         <pre className="m-0 min-w-full bg-transparent px-3 py-2 text-[12px] leading-5 text-foreground">
           <code className="block w-fit min-w-full bg-transparent">
             {tokenizedCode.lines.map((line, index) => (
@@ -83,7 +79,14 @@ const CodeRows = memo(function CodeRows({ code, maxBodyHeightClassName, startLin
   )
 })
 
-export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isStreaming = false }: CodeBlockProps) {
+export const CodeBlock = memo(function CodeBlock({
+  code,
+  fileName,
+  language,
+  isStreaming = false,
+  maxBodyHeightClassName,
+  startLineNumber = 1,
+}: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false)
   const iconConfig = resolveFileIconConfig({ fileName, languageId: language })
   const titleLabel = fileName ?? toLanguageLabel(language, iconConfig.label)
@@ -93,11 +96,9 @@ export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isS
     if (!isCopied) {
       return
     }
-
     const timeoutId = window.setTimeout(() => {
       setIsCopied(false)
     }, 1400)
-
     return () => {
       window.clearTimeout(timeoutId)
     }
@@ -114,7 +115,7 @@ export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isS
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-      <div className="relative flex items-center border-b border-border bg-surface px-3 py-2 pr-11 text-[12px] text-muted-foreground">
+      <div className="relative flex items-center border-b border-border bg-surface px-3 py-3 pr-11 text-[12px] text-muted-foreground">
         <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
           <span className="flex h-4 w-4 items-center justify-center">
             <LanguageIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
@@ -123,7 +124,6 @@ export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isS
             {titleLabel}
           </span>
         </span>
-
         <button
           type="button"
           onClick={handleCopy}
@@ -134,8 +134,18 @@ export const CodeBlock = memo(function CodeBlock({ code, fileName, language, isS
           {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
-
-      <CodeRows code={code} key={isStreaming ? `streaming:${code.length}` : 'static'} />
+      <div
+        className={[
+          'overflow-x-scroll',
+          maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
+        ]
+          .filter((value) => value.length > 0)
+          .join(' ')}
+      >
+        <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
+          <CodeRows code={code} startLineNumber={startLineNumber} key={isStreaming ? `streaming:${code.length}` : 'static'} />
+        </div>
+      </div>
     </div>
   )
 })
