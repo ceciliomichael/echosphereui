@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { GitCommitHorizontal } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
@@ -11,8 +11,8 @@ import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
+import { SourceControlPanel } from '../components/sourceControl/SourceControlPanel'
 import { Tooltip } from '../components/Tooltip'
-import { DiffPanelSegmentedToggle } from '../components/ui/SegmentedField'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useProvidersState } from '../hooks/useProvidersState'
@@ -23,13 +23,17 @@ import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShor
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
 import type { AppSettings, GitCommitAction } from '../types/chat'
 
+export type RightPanelTab = 'diff' | 'source-control'
+
 interface ChatInterfaceProps {
   chatMessages: ChatMessagesController
   diffPanelWidth: number
-  isDiffPanelOpen: boolean
+  isRightPanelOpen: boolean
+  rightPanelTab: RightPanelTab
   diffPanelExpandedFilePaths: readonly string[]
   diffPanelSelectedScope: DiffPanelScope
-  onDiffPanelOpenChange: (nextValue: boolean) => void
+  onRightPanelOpenChange: (nextValue: boolean) => void
+  onRightPanelTabChange: (nextTab: RightPanelTab) => void
   onDiffPanelExpandedFilePathsChange: (nextFilePaths: string[]) => void
   onDiffPanelSelectedScopeChange: (nextScope: DiffPanelScope) => void
   onDiffPanelWidthChange: (nextWidth: number) => void
@@ -45,10 +49,12 @@ interface ChatInterfaceProps {
 export function ChatInterface({
   chatMessages,
   diffPanelWidth,
-  isDiffPanelOpen,
+  isRightPanelOpen,
+  rightPanelTab,
   diffPanelExpandedFilePaths,
   diffPanelSelectedScope,
-  onDiffPanelOpenChange,
+  onRightPanelOpenChange,
+  onRightPanelTabChange,
   onDiffPanelExpandedFilePathsChange,
   onDiffPanelSelectedScopeChange,
   onDiffPanelWidthChange,
@@ -155,6 +161,8 @@ export function ChatInterface({
     [],
   )
   const hasRepository = gitBranchState.branchState.hasRepository
+  const isDiffPanelOpen = isRightPanelOpen && rightPanelTab === 'diff'
+  const isSourceControlPanelOpen = isRightPanelOpen && rightPanelTab === 'source-control'
   const { refresh: refreshGitDiffSnapshot, snapshot: gitDiffSnapshot } = useGitDiffSnapshot({
     hasRepository,
     workspacePath: activeWorkspacePath,
@@ -172,10 +180,14 @@ export function ChatInterface({
       return
     }
 
+    if (isRightPanelOpen && rightPanelTab === 'source-control') {
+      onRightPanelOpenChange(false)
+    }
+
     gitCommitState.resetResult()
     void gitCommitState.refreshStatus()
     setIsCommitModalOpen(true)
-  }, [gitCommitState, hasRepository])
+  }, [gitCommitState, hasRepository, isRightPanelOpen, onRightPanelOpenChange, rightPanelTab])
 
   const handleCloseCommitModal = useCallback(() => {
     setIsCommitModalOpen(false)
@@ -199,10 +211,10 @@ export function ChatInterface({
   const previousWorkspacePathRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!hasRepository && isDiffPanelOpen) {
-      onDiffPanelOpenChange(false)
+    if (!hasRepository && isRightPanelOpen) {
+      onRightPanelOpenChange(false)
     }
-  }, [hasRepository, isDiffPanelOpen, onDiffPanelOpenChange])
+  }, [hasRepository, isRightPanelOpen, onRightPanelOpenChange])
 
   useEffect(() => {
     if (!hasRepository) {
@@ -238,7 +250,13 @@ export function ChatInterface({
         return
       }
 
-      onDiffPanelOpenChange(!isDiffPanelOpen)
+      if (isDiffPanelOpen) {
+        onRightPanelOpenChange(false)
+        return
+      }
+
+      onRightPanelTabChange('diff')
+      onRightPanelOpenChange(true)
     },
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
     onCreateConversation: createConversation,
@@ -313,6 +331,40 @@ export function ChatInterface({
     [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
   )
 
+  const handleOpenRightPanelTab = useCallback(
+    (tab: RightPanelTab) => {
+      if (!hasRepository) {
+        return
+      }
+
+      if (isRightPanelOpen && rightPanelTab === tab) {
+        onRightPanelOpenChange(false)
+        return
+      }
+
+      onRightPanelTabChange(tab)
+      onRightPanelOpenChange(true)
+    },
+    [hasRepository, isRightPanelOpen, onRightPanelOpenChange, onRightPanelTabChange, rightPanelTab],
+  )
+
+  const handleRefreshGitUi = useCallback(async () => {
+    await Promise.all([refreshGitDiffSnapshot({ forceRefresh: true, silent: true }), gitBranchState.refresh()])
+  }, [gitBranchState, refreshGitDiffSnapshot])
+
+  const handleQuickCommit = useCallback(
+    async (input: { includeUnstaged: boolean; message: string }) => {
+      await gitCommitState.commit({
+        action: 'commit',
+        includeUnstaged: input.includeUnstaged,
+        message: input.message,
+      })
+
+      await Promise.all([refreshGitDiffSnapshot({ forceRefresh: true }), gitBranchState.refresh(), gitCommitState.refreshStatus()])
+    },
+    [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
+  )
+
   return (
     <AppWorkspaceShell
       isSidebarOpen={isSidebarOpen}
@@ -360,19 +412,42 @@ export function ChatInterface({
                 </button>
               </Tooltip>
               <div className="mx-1 h-5 w-px bg-border" />
-              <DiffPanelSegmentedToggle
-                isOpen={isDiffPanelOpen}
-                disabled={!hasRepository}
-                onToggle={() => {
-                  if (!hasRepository) {
-                    return
-                  }
-
-                  onDiffPanelOpenChange(!isDiffPanelOpen)
-                }}
-                totalAddedLineCount={gitDiffSnapshot.totalAddedLineCount}
-                totalRemovedLineCount={gitDiffSnapshot.totalRemovedLineCount}
-              />
+              <Tooltip content={hasRepository ? 'Toggle Source Control panel' : 'Open a git-backed folder'} side="bottom">
+                <button
+                  type="button"
+                  disabled={!hasRepository}
+                  onClick={() => handleOpenRightPanelTab('source-control')}
+                  className={[
+                    'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
+                    isSourceControlPanelOpen ? 'text-foreground' : 'text-muted-foreground',
+                    !hasRepository ? 'cursor-not-allowed opacity-60' : 'hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <GitBranch size={16} className="shrink-0" />
+                  <span className="hidden md:inline">Source Control</span>
+                </button>
+              </Tooltip>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <Tooltip content={hasRepository ? 'Toggle Diff panel' : 'Open a git-backed folder'} side="bottom">
+                <button
+                  type="button"
+                  disabled={!hasRepository}
+                  onClick={() => handleOpenRightPanelTab('diff')}
+                  className={[
+                    'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
+                    isDiffPanelOpen ? 'text-foreground' : 'text-muted-foreground',
+                    !hasRepository ? 'cursor-not-allowed opacity-60' : 'hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <GitCompareArrows size={16} className="shrink-0" />
+                  {hasRepository ? (
+                    <>
+                      <span className="text-emerald-600 dark:text-emerald-400">{`+${gitDiffSnapshot.totalAddedLineCount}`}</span>
+                      <span className="text-red-600 dark:text-red-400">{`-${gitDiffSnapshot.totalRemovedLineCount}`}</span>
+                    </>
+                  ) : null}
+                </button>
+              </Tooltip>
             </div>
           }
           onRenameTitle={(nextTitle) => {
@@ -486,6 +561,26 @@ export function ChatInterface({
             onWidthChange={onDiffPanelWidthChange}
             onWidthCommit={onDiffPanelWidthCommit}
             selectedScope={diffPanelSelectedScope}
+          />
+
+          <SourceControlPanel
+            fileDiffs={gitDiffSnapshot.fileDiffs}
+            isOpen={isSourceControlPanelOpen}
+            onDiscardFile={handleDiscardDiffFile}
+            onOpenCommitModal={handleOpenCommitModal}
+            onQuickCommit={handleQuickCommit}
+            onRefreshAll={handleRefreshGitUi}
+            onSectionOpenChange={(sourceControlSectionOpen) => {
+              void onUpdateSettings({ sourceControlSectionOpen })
+            }}
+            onStageFile={handleStageDiffFile}
+            onUnstageFile={handleUnstageDiffFile}
+            pendingFileActionPath={pendingFileActionPath}
+            onWidthCommit={onDiffPanelWidthCommit}
+            onWidthChange={onDiffPanelWidthChange}
+            sectionOpen={settings.sourceControlSectionOpen}
+            workspacePath={activeWorkspacePath}
+            width={diffPanelWidth}
           />
         </div>
       </WorkspacePanel>

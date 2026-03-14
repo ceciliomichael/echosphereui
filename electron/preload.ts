@@ -11,6 +11,8 @@ import type {
   EchosphereModelsApi,
   EchosphereProvidersApi,
   GitCommitInput,
+  GitHistoryCommitDetailsInput,
+  GitHistoryPageInput,
   SaveApiKeyProviderInput,
   SaveCustomModelInput,
   CreateConversationFolderInput,
@@ -20,6 +22,7 @@ import type {
   EchosphereSettingsApi,
   EchosphereWorkspaceApi,
   GitFileStageInput,
+  GitSyncInput,
   ReplaceConversationMessagesInput,
   StartChatStreamInput,
 } from '../src/types/chat'
@@ -105,8 +108,11 @@ const gitApi: EchosphereGitApi = {
   createAndCheckoutBranch: (input) => ipcRenderer.invoke('git:createAndCheckoutBranch', input),
   discardFileChanges: (input: GitFileStageInput) => ipcRenderer.invoke('git:discardFileChanges', input),
   getBranches: (workspacePath: string) => ipcRenderer.invoke('git:getBranches', workspacePath),
+  getHistoryCommitDetails: (input: GitHistoryCommitDetailsInput) => ipcRenderer.invoke('git:getHistoryCommitDetails', input),
   getDiffs: (workspacePath: string) => ipcRenderer.invoke('git:getDiffs', workspacePath),
+  getHistoryPage: (input: GitHistoryPageInput) => ipcRenderer.invoke('git:getHistoryPage', input),
   getStatus: (workspacePath: string) => ipcRenderer.invoke('git:getStatus', workspacePath),
+  sync: (input: GitSyncInput) => ipcRenderer.invoke('git:sync', input),
   stageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:stageFile', input),
   unstageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:unstageFile', input),
 }

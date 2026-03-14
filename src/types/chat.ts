@@ -166,7 +166,13 @@ export interface AppSettings {
   lastActiveConversationId: string | null
   sendMessageOnEnter: boolean
   sidebarWidth: number
+  sourceControlSectionOrder: SourceControlSectionId[]
+  sourceControlSectionOpen: Record<SourceControlSectionOpenId, boolean>
+  sourceControlSectionSizes: Record<SourceControlSectionId, number>
 }
+
+export type SourceControlSectionId = 'commit' | 'changes' | 'history'
+export type SourceControlSectionOpenId = SourceControlSectionId | 'staged' | 'unstaged'
 
 export interface CodexProviderConnectionStatus {
   accountId: string | null
@@ -350,6 +356,66 @@ export interface GitFileStageResult {
   success: boolean
 }
 
+export type GitSyncAction = 'fetch-all' | 'pull' | 'push'
+
+export interface GitSyncInput {
+  action: GitSyncAction
+  workspacePath: string
+}
+
+export interface GitSyncResult {
+  action: GitSyncAction
+  branchName: string | null
+  message: string
+  success: boolean
+}
+
+export interface GitHistoryPageInput {
+  limit: number
+  offset: number
+  workspacePath: string
+}
+
+export interface GitHistoryEntry {
+  authorName: string
+  authoredAt: string
+  authoredRelativeTime: string
+  graphPrefix: string
+  hash: string
+  isHead: boolean
+  parentIds: string[]
+  refs: string[]
+  shortHash: string
+  subject: string
+}
+
+export interface GitHistoryPageResult {
+  entries: GitHistoryEntry[]
+  hasMore: boolean
+  hasRepository: boolean
+  headHash: string | null
+}
+
+export interface GitHistoryCommitDetailsInput {
+  commitHash: string
+  workspacePath: string
+}
+
+export interface GitHistoryCommitFile {
+  path: string
+  status: string
+}
+
+export interface GitHistoryCommitDetailsResult {
+  changedFileCount: number
+  commitHash: string
+  deletions: number
+  files: GitHistoryCommitFile[]
+  hasRepository: boolean
+  insertions: number
+  messageBody: string
+}
+
 export type ChatStreamEvent =
   | {
       streamId: string
@@ -471,8 +537,11 @@ export interface EchosphereGitApi {
   createAndCheckoutBranch: (input: CreateGitBranchInput) => Promise<GitBranchState>
   discardFileChanges: (input: GitFileStageInput) => Promise<GitFileStageResult>
   getBranches: (workspacePath: string) => Promise<GitBranchState>
+  getHistoryCommitDetails: (input: GitHistoryCommitDetailsInput) => Promise<GitHistoryCommitDetailsResult>
   getDiffs: (workspacePath: string) => Promise<GitDiffSnapshot>
+  getHistoryPage: (input: GitHistoryPageInput) => Promise<GitHistoryPageResult>
   getStatus: (workspacePath: string) => Promise<GitStatusResult>
+  sync: (input: GitSyncInput) => Promise<GitSyncResult>
   stageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
   unstageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
 }

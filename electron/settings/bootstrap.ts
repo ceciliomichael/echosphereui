@@ -3,8 +3,76 @@ import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 import type { AppSettings } from '../../src/types/chat'
+import type { SourceControlSectionId } from '../../src/types/chat'
 
 const INITIAL_SETTINGS_ARG_PREFIX = '--echosphere-initial-settings='
+const SOURCE_CONTROL_SECTION_IDS: readonly SourceControlSectionId[] = ['commit', 'changes', 'history']
+
+function isSourceControlSectionId(value: string): value is SourceControlSectionId {
+  return SOURCE_CONTROL_SECTION_IDS.includes(value as SourceControlSectionId)
+}
+
+function sanitizeSourceControlSectionOrder(value: unknown): SourceControlSectionId[] {
+  if (!Array.isArray(value)) {
+    return DEFAULT_APP_SETTINGS.sourceControlSectionOrder
+  }
+
+  const filtered = value
+    .map((item) => (typeof item === 'string' ? item : ''))
+    .filter((item): item is SourceControlSectionId => isSourceControlSectionId(item))
+  const unique = Array.from(new Set(filtered))
+  for (const sectionId of SOURCE_CONTROL_SECTION_IDS) {
+    if (!unique.includes(sectionId)) {
+      unique.push(sectionId)
+    }
+  }
+
+  return unique
+}
+
+function sanitizeSourceControlSectionSizes(value: unknown): Record<SourceControlSectionId, number> {
+  const candidate = value as Partial<Record<SourceControlSectionId, number>> | null | undefined
+  return {
+    changes:
+      typeof candidate?.changes === 'number' && Number.isFinite(candidate.changes) && candidate.changes > 0
+        ? candidate.changes
+        : DEFAULT_APP_SETTINGS.sourceControlSectionSizes.changes,
+    commit:
+      typeof candidate?.commit === 'number' && Number.isFinite(candidate.commit) && candidate.commit > 0
+        ? candidate.commit
+        : DEFAULT_APP_SETTINGS.sourceControlSectionSizes.commit,
+    history:
+      typeof candidate?.history === 'number' && Number.isFinite(candidate.history) && candidate.history > 0
+        ? candidate.history
+        : DEFAULT_APP_SETTINGS.sourceControlSectionSizes.history,
+  }
+}
+
+function sanitizeSourceControlSectionOpen(value: unknown): AppSettings['sourceControlSectionOpen'] {
+  const candidate = value as Partial<AppSettings['sourceControlSectionOpen']> | null | undefined
+  return {
+    changes:
+      typeof candidate?.changes === 'boolean'
+        ? candidate.changes
+        : DEFAULT_APP_SETTINGS.sourceControlSectionOpen.changes,
+    commit:
+      typeof candidate?.commit === 'boolean'
+        ? candidate.commit
+        : DEFAULT_APP_SETTINGS.sourceControlSectionOpen.commit,
+    history:
+      typeof candidate?.history === 'boolean'
+        ? candidate.history
+        : DEFAULT_APP_SETTINGS.sourceControlSectionOpen.history,
+    staged:
+      typeof candidate?.staged === 'boolean'
+        ? candidate.staged
+        : DEFAULT_APP_SETTINGS.sourceControlSectionOpen.staged,
+    unstaged:
+      typeof candidate?.unstaged === 'boolean'
+        ? candidate.unstaged
+        : DEFAULT_APP_SETTINGS.sourceControlSectionOpen.unstaged,
+  }
+}
 
 function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   const candidate = input as Partial<AppSettings> | null | undefined
@@ -32,6 +100,9 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.sidebarWidth === 'number' && Number.isFinite(candidate.sidebarWidth)
         ? Math.max(DEFAULT_APP_SETTINGS.sidebarWidth, candidate.sidebarWidth)
         : DEFAULT_APP_SETTINGS.sidebarWidth,
+    sourceControlSectionOrder: sanitizeSourceControlSectionOrder(candidate?.sourceControlSectionOrder),
+    sourceControlSectionOpen: sanitizeSourceControlSectionOpen(candidate?.sourceControlSectionOpen),
+    sourceControlSectionSizes: sanitizeSourceControlSectionSizes(candidate?.sourceControlSectionSizes),
   }
 }
 

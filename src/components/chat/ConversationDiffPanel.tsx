@@ -67,17 +67,21 @@ export function ConversationDiffPanel({
   })
 
   const branchLabel = currentBranch ? `${currentBranch} → origin/${currentBranch}` : 'No branch selected'
+  const isUnstagedLikeFileDiff = useMemo(
+    () => (fileDiff: ConversationFileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked),
+    [],
+  )
   const displayedFileDiffs = useMemo(() => {
     if (selectedScope === 'staged') {
       return fileDiffs.filter((fileDiff) => fileDiff.isStaged)
     }
 
     if (selectedScope === 'unstaged') {
-      return fileDiffs.filter((fileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked)
+      return fileDiffs.filter((fileDiff) => isUnstagedLikeFileDiff(fileDiff))
     }
 
     return fileDiffs
-  }, [fileDiffs, selectedScope])
+  }, [fileDiffs, isUnstagedLikeFileDiff, selectedScope])
   const selectedScopeLabel =
     selectedScope === 'unstaged'
       ? 'Unstaged'
@@ -87,8 +91,8 @@ export function ConversationDiffPanel({
           ? 'Branch'
           : 'Last turn'
   const unstagedFileCount = useMemo(
-    () => fileDiffs.filter((fileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked).length,
-    [fileDiffs],
+    () => fileDiffs.filter((fileDiff) => isUnstagedLikeFileDiff(fileDiff)).length,
+    [fileDiffs, isUnstagedLikeFileDiff],
   )
   const stagedFileCount = useMemo(() => fileDiffs.filter((fileDiff) => fileDiff.isStaged).length, [fileDiffs])
   const selectedScopeCount = selectedScope === 'unstaged' ? unstagedFileCount : selectedScope === 'staged' ? stagedFileCount : null
@@ -274,11 +278,11 @@ export function ConversationDiffPanel({
   }
 
   function canStageFile(fileDiff: ConversationFileDiff) {
-    return fileDiff.isUnstaged || fileDiff.isUntracked
+    return isUnstagedLikeFileDiff(fileDiff)
   }
 
   function canDiscardFile(fileDiff: ConversationFileDiff) {
-    return fileDiff.isUnstaged || fileDiff.isUntracked
+    return isUnstagedLikeFileDiff(fileDiff)
   }
 
   function canUnstageFile(fileDiff: ConversationFileDiff) {

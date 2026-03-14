@@ -12,4 +12,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   lastActiveConversationId: null,
   sendMessageOnEnter: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+  sourceControlSectionOrder: ['commit', 'changes', 'history'],
+  sourceControlSectionOpen: {
+    changes: true,
+    commit: true,
+    history: true,
+    staged: true,
+    unstaged: true,
+  },
+  sourceControlSectionSizes: {
+    changes: 1,
+    commit: 1,
+    history: 1,
+  },
 }

@@ -9,10 +9,18 @@ import type {
   GitCommitInput,
   GitCommitResult,
   GitDiffSnapshot,
+  GitHistoryCommitDetailsInput,
+  GitHistoryCommitDetailsResult,
+  GitHistoryEntry,
+  GitHistoryPageInput,
+  GitHistoryPageResult,
   GitFileStageInput,
   GitFileStageResult,
   GitFileDiff,
   GitStatusResult,
+  GitSyncAction,
+  GitSyncInput,
+  GitSyncResult,
 } from '../../src/types/chat'
 import { extractCommitSubjectLine, normalizeGeneratedCommitMessageWithDescription } from './commitMessageFormatting'
 
@@ -259,6 +267,16 @@ async function syncCheckedOutBranchWithRemote(repoRootPath: string, branchName: 
   await runGit(['pull', '--ff-only', '--no-rebase'], repoRootPath)
 }
 
+async function readHeadCommitHash(repoRootPath: string) {
+  try {
+    const { stdout } = await runGit(['rev-parse', 'HEAD'], repoRootPath)
+    const commitHash = stdout.trim()
+    return commitHash.length > 0 ? commitHash : null
+  } catch {
+    return null
+  }
+}
+
 function normalizeForGitPathspec(filePath: string) {
   return normalizeGitFilePath(filePath).replace(/^\/+/, '')
 }
@@ -283,8 +301,14 @@ async function readWorkingTreeFile(repoRootPath: string, filePath: string) {
 
     return fileContent.toString('utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    const errorCode = (error as NodeJS.ErrnoException).code
+    if (errorCode === 'ENOENT') {
       return ''
+    }
+    if (errorCode === 'EISDIR' || errorCode === 'EPERM' || errorCode === 'EACCES') {
+      // Directory entries (for example gitlinks/submodules) or unreadable files
+      // should not fail the entire diff snapshot request.
+      return null
     }
 
     throw error
@@ -564,6 +588,286 @@ export async function getGitStatus(workspacePath: string): Promise<GitStatusResu
     stagedFileCount: stagedFiles.length,
     unstagedFileCount: unstagedFiles.length,
     untrackedFileCount: untrackedFiles.length,
+  }
+}
+
+function parseDecoratedRefs(refText: string) {
+  return refText
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+}
+
+function parseGitHistoryLine(line: string, headHash: string | null): GitHistoryEntry | null {
+  const separatorIndex = line.indexOf('\u001f')
+  if (separatorIndex < 0) {
+    return null
+  }
+
+  const graphPrefix = line.slice(0, separatorIndex).replace(/\s+$/u, '')
+  const payload = line.slice(separatorIndex + 1)
+  const fields = payload.split('\u001f')
+  if (fields.length < 8) {
+    return null
+  }
+
+  const [hash, shortHash, parentIdsRaw, authorName, authoredAt, authoredRelativeTime, subject, refText] = fields
+  const normalizedHash = hash.trim()
+  if (normalizedHash.length === 0) {
+    return null
+  }
+
+  const parentIds = parentIdsRaw
+    .trim()
+    .split(/\s+/)
+    .filter((id) => id.length > 0)
+
+  return {
+    authorName: authorName.trim(),
+    authoredAt: authoredAt.trim(),
+    authoredRelativeTime: authoredRelativeTime.trim(),
+    graphPrefix,
+    hash: normalizedHash,
+    isHead: headHash !== null && normalizedHash === headHash,
+    parentIds,
+    refs: parseDecoratedRefs(refText),
+    shortHash: shortHash.trim(),
+    subject: subject.trim(),
+  }
+}
+
+export async function getGitHistoryPage(input: GitHistoryPageInput): Promise<GitHistoryPageResult> {
+  const workspacePath = input.workspacePath.trim()
+  const limit = Number.isFinite(input.limit) ? Math.max(1, Math.min(500, Math.round(input.limit))) : 200
+  const offset = Number.isFinite(input.offset) ? Math.max(0, Math.round(input.offset)) : 0
+
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    return {
+      entries: [],
+      hasMore: false,
+      hasRepository: false,
+      headHash: null,
+    }
+  }
+
+  const headHash = await readHeadCommitHash(repoRootPath)
+  const maxEntriesToRead = limit + 1
+  const logFormat = '%x1f%H%x1f%h%x1f%P%x1f%an%x1f%aI%x1f%ar%x1f%s%x1f%D'
+
+  let historyStdout = ''
+  try {
+    const { stdout } = await runGit(
+      [
+        'log',
+        '--graph',
+        '--decorate=short',
+        '--date=iso-strict',
+        '--pretty=format:' + logFormat,
+        '--all',
+        '--no-color',
+        `--skip=${offset}`,
+        `-n${maxEntriesToRead}`,
+      ],
+      repoRootPath,
+    )
+    historyStdout = stdout
+  } catch (error) {
+    const message = getErrorMessage(error).toLowerCase()
+    if (message.includes('does not have any commits yet')) {
+      return {
+        entries: [],
+        hasMore: false,
+        hasRepository: true,
+        headHash,
+      }
+    }
+
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to load git history: ${getErrorMessage(error)}`)
+  }
+
+  const parsedEntries = historyStdout
+    .split(/\r?\n/u)
+    .map((line) => parseGitHistoryLine(line, headHash))
+    .filter((entry): entry is GitHistoryEntry => entry !== null)
+
+  return {
+    entries: parsedEntries.slice(0, limit),
+    hasMore: parsedEntries.length > limit,
+    hasRepository: true,
+    headHash,
+  }
+}
+
+export async function getGitHistoryCommitDetails(
+  input: GitHistoryCommitDetailsInput,
+): Promise<GitHistoryCommitDetailsResult> {
+  const workspacePath = input.workspacePath.trim()
+  const commitHash = input.commitHash.trim()
+
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  if (commitHash.length === 0) {
+    throw new Error('Commit hash is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    return {
+      changedFileCount: 0,
+      commitHash,
+      deletions: 0,
+      files: [],
+      hasRepository: false,
+      insertions: 0,
+      messageBody: '',
+    }
+  }
+
+  try {
+    const [{ stdout: filesStdout }, { stdout: bodyStdout }, { stdout: shortStatStdout }] = await Promise.all([
+      runGit(
+      ['show', '--format=', '--name-status', '--find-renames', '--no-color', '-m', '--first-parent', commitHash],
+      repoRootPath,
+      ),
+      runGit(['log', '-1', '--format=%B', '--no-color', commitHash], repoRootPath),
+      runGit(['show', '--format=', '--shortstat', '--no-color', '-m', '--first-parent', commitHash], repoRootPath),
+    ])
+
+    const files = filesStdout
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [status = 'M', ...pathParts] = line.split(/\t+/u)
+        const rawPath = pathParts.at(-1) ?? ''
+        return {
+          path: normalizeGitFilePath(rawPath.trim()),
+          status: status.trim().length > 0 ? status.trim() : 'M',
+        }
+      })
+      .filter((file) => file.path.length > 0)
+
+    const shortStatLine = shortStatStdout
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
+
+    const filesChangedMatch = /(\d+)\s+files?\s+changed/iu.exec(shortStatLine ?? '')
+    const insertionsMatch = /(\d+)\s+insertions?\(\+\)/iu.exec(shortStatLine ?? '')
+    const deletionsMatch = /(\d+)\s+deletions?\(-\)/iu.exec(shortStatLine ?? '')
+    const changedFileCount = filesChangedMatch ? Number.parseInt(filesChangedMatch[1], 10) : files.length
+    const insertions = insertionsMatch ? Number.parseInt(insertionsMatch[1], 10) : 0
+    const deletions = deletionsMatch ? Number.parseInt(deletionsMatch[1], 10) : 0
+
+    return {
+      changedFileCount,
+      commitHash,
+      deletions,
+      files,
+      hasRepository: true,
+      insertions,
+      messageBody: bodyStdout.trim(),
+    }
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to load commit details: ${getErrorMessage(error)}`)
+  }
+}
+
+export async function gitSync(input: GitSyncInput): Promise<GitSyncResult> {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  const action: GitSyncAction = input.action
+  let branchName = await readSymbolicHeadBranchName(repoRootPath)
+  let message = ''
+
+  try {
+    if (action === 'fetch-all') {
+      await runGit(['fetch', '--all', '--prune'], repoRootPath)
+      message = 'Fetched all remotes.'
+    } else if (action === 'pull') {
+      if (!branchName) {
+        throw new Error('Cannot pull from detached HEAD. Checkout a branch first.')
+      }
+
+      let upstreamBranch = await readCurrentUpstreamBranch(repoRootPath)
+      if (!upstreamBranch && (await hasRemoteTrackingBranch(repoRootPath, branchName))) {
+        await runGit(['branch', '--set-upstream-to', `origin/${branchName}`, branchName], repoRootPath)
+        upstreamBranch = `origin/${branchName}`
+      }
+
+      if (!upstreamBranch) {
+        throw new Error(
+          `No upstream is configured for '${branchName}'. Push once or set an upstream before pulling.`,
+        )
+      }
+
+      await runGit(['pull', '--ff-only', '--no-rebase'], repoRootPath)
+      message = `Pulled latest changes into '${branchName}'.`
+    } else if (action === 'push') {
+      if (!branchName) {
+        throw new Error('Cannot push from detached HEAD. Checkout a branch first.')
+      }
+
+      const upstreamBranch = await readCurrentUpstreamBranch(repoRootPath)
+      if (upstreamBranch) {
+        await runGit(['push'], repoRootPath)
+      } else if (await hasOriginRemote(repoRootPath)) {
+        await runGit(['push', '-u', 'origin', branchName], repoRootPath)
+      } else {
+        throw new Error("Remote 'origin' is not configured for this repository.")
+      }
+
+      message = `Pushed '${branchName}' to remote.`
+    } else {
+      throw new Error(`Unsupported sync action: ${String(action)}`)
+    }
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    if (action === 'pull' && isFastForwardOnlyPullFailure(error)) {
+      throw new Error('Pull failed because the branch cannot be fast-forwarded. Rebase or merge first.')
+    }
+
+    if (action === 'pull' && isWorkingTreeConflictFailure(error)) {
+      throw new Error(
+        'Pull failed because local changes would be overwritten. Commit, stash, or discard changes first.',
+      )
+    }
+
+    throw new Error(`Failed to ${action}: ${getErrorMessage(error)}`)
+  }
+
+  branchName = await readSymbolicHeadBranchName(repoRootPath)
+  return {
+    action,
+    branchName,
+    message,
+    success: true,
   }
 }
 

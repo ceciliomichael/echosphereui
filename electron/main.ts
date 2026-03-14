@@ -20,7 +20,10 @@ import type {
   CreateWorkspaceCheckpointInput,
   EstimateContextUsageInput,
   GitCommitInput,
+  GitHistoryCommitDetailsInput,
+  GitHistoryPageInput,
   GitFileStageInput,
+  GitSyncInput,
   SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
@@ -59,7 +62,10 @@ import {
   discardGitFileChanges,
   getGitBranchState,
   getGitDiffSnapshot,
+  getGitHistoryCommitDetails,
+  getGitHistoryPage,
   getGitStatus,
+  gitSync,
   gitCommit,
   stageGitFile,
   unstageGitFile,
@@ -231,12 +237,17 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('git:getBranches', async (_event, workspacePath: string) => getGitBranchState(workspacePath))
   ipcMain.handle('git:getDiffs', async (_event, workspacePath: string) => getGitDiffSnapshot(workspacePath))
+  ipcMain.handle('git:getHistoryCommitDetails', async (_event, input: GitHistoryCommitDetailsInput) =>
+    getGitHistoryCommitDetails(input),
+  )
+  ipcMain.handle('git:getHistoryPage', async (_event, input: GitHistoryPageInput) => getGitHistoryPage(input))
   ipcMain.handle('git:discardFileChanges', async (_event, input: GitFileStageInput) => discardGitFileChanges(input))
   ipcMain.handle('git:checkoutBranch', async (_event, input: CheckoutGitBranchInput) => checkoutGitBranch(input))
   ipcMain.handle('git:createAndCheckoutBranch', async (_event, input: CreateGitBranchInput) =>
     createAndCheckoutGitBranch(input),
   )
   ipcMain.handle('git:commit', async (_event, input: GitCommitInput) => gitCommit(input))
+  ipcMain.handle('git:sync', async (_event, input: GitSyncInput) => gitSync(input))
   ipcMain.handle('git:getStatus', async (_event, workspacePath: string) => getGitStatus(workspacePath))
   ipcMain.handle('git:stageFile', async (_event, input: GitFileStageInput) => stageGitFile(input))
   ipcMain.handle('git:unstageFile', async (_event, input: GitFileStageInput) => unstageGitFile(input))
