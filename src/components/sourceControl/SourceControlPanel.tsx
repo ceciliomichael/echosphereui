@@ -14,12 +14,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import type {
+  GitCommitAction,
+  GitCommitResult,
   GitHistoryCommitDetailsResult,
   GitHistoryCommitFile,
   GitHistoryEntry,
   GitSyncAction,
 } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
+import { CommitSuccessDialog } from '../commit/CommitSuccessDialog'
 import { Switch } from '../ui/Switch'
 import { CommitFileRow } from './CommitFileRow'
 import { CommitHistoryTooltipContent } from './CommitHistoryTooltipContent'
@@ -32,7 +35,7 @@ interface SourceControlPanelProps {
   isOpen: boolean
   onDiscardFile: (filePath: string) => Promise<void>
   onOpenCommitModal: () => void
-  onQuickCommit: (input: { includeUnstaged: boolean; message: string }) => Promise<void>
+  onQuickCommit: (input: { includeUnstaged: boolean; message: string }) => Promise<GitCommitResult>
   onRefreshAll: () => Promise<void>
   onSectionOpenChange: (nextValue: Record<'changes' | 'commit' | 'history' | 'staged' | 'unstaged', boolean>) => void
   onStageFile: (filePath: string) => Promise<void>
@@ -49,6 +52,11 @@ interface SyncActionConfig {
   action: GitSyncAction
   icon: LucideIcon
   label: string
+}
+
+interface CommitSuccessDialogState {
+  action: GitCommitAction
+  result: GitCommitResult
 }
 
 const SYNC_ACTIONS: readonly SyncActionConfig[] = [
@@ -112,6 +120,7 @@ export function SourceControlPanel({
   const [quickCommitError, setQuickCommitError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
   const [pendingSyncAction, setPendingSyncAction] = useState<GitSyncAction | 'refresh' | null>(null)
   const [historyEntries, setHistoryEntries] = useState<GitHistoryEntry[]>([])
   const [headHash, setHeadHash] = useState<string | null>(null)
@@ -445,9 +454,9 @@ export function SourceControlPanel({
     [commitDetailsByHash, hasWorkspacePath, loadingCommitHashes, normalizedWorkspacePath],
   )
 
-  async function handleSyncAction(action: GitSyncAction) {
+  async function performSyncAction(action: GitSyncAction): Promise<boolean> {
     if (!hasWorkspacePath) {
-      return
+      return false
     }
 
     setPendingSyncAction(action)
@@ -460,11 +469,17 @@ export function SourceControlPanel({
       })
       setSyncMessage(result.message)
       await Promise.all([onRefreshAll(), refreshHistory()])
+      return true
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : `Failed to ${action}.`)
+      return false
     } finally {
       setPendingSyncAction(null)
     }
+  }
+
+  async function handleSyncAction(action: GitSyncAction) {
+    await performSyncAction(action)
   }
 
   async function handleRefreshPanel() {
@@ -492,18 +507,26 @@ export function SourceControlPanel({
     setSyncMessage(null)
 
     try {
-      await onQuickCommit({
+      const commitResult = await onQuickCommit({
         includeUnstaged,
         message: commitMessage,
       })
 
       setCommitMessage('')
       setSyncError(null)
-      await refreshHistory()
-
       if (action === 'commit-and-push') {
-        await handleSyncAction('push')
+        const isPushSuccessful = await performSyncAction('push')
+        if (!isPushSuccessful) {
+          return
+        }
+      } else {
+        await refreshHistory()
       }
+
+      setCommitSuccessDialog({
+        action: action === 'commit-and-push' ? 'commit-and-push' : 'commit',
+        result: commitResult,
+      })
     } catch (error) {
       setQuickCommitError(error instanceof Error ? error.message : 'Failed to commit changes.')
     } finally {
@@ -619,27 +642,28 @@ export function SourceControlPanel({
   }
 
   return (
-    <div
-      ref={panelRef}
-      className={[
-        'relative hidden h-full shrink-0 overflow-hidden md:flex',
-        isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
-        isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
-      ].join(' ')}
-      style={{ width: `${visiblePanelWidth}px` }}
-      aria-hidden={!isOpen}
-    >
-      {isOpen ? (
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize source control panel"
-          onPointerDown={handleResizePointerDown}
-          className="absolute inset-y-0 left-0 z-20 w-3 -translate-x-1/2 cursor-col-resize"
-        />
-      ) : null}
+    <>
+      <div
+        ref={panelRef}
+        className={[
+          'relative hidden h-full shrink-0 overflow-hidden md:flex',
+          isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+        ].join(' ')}
+        style={{ width: `${visiblePanelWidth}px` }}
+        aria-hidden={!isOpen}
+      >
+        {isOpen ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize source control panel"
+            onPointerDown={handleResizePointerDown}
+            className="absolute inset-y-0 left-0 z-20 w-3 -translate-x-1/2 cursor-col-resize"
+          />
+        ) : null}
 
-      <aside className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-[var(--workspace-panel-surface)]">
+        <aside className="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-[var(--workspace-panel-surface)]">
         <div className="flex h-14 shrink-0 items-center justify-between px-4">
           <div className="flex min-w-0 items-center gap-2">
             <GitCommitHorizontal size={16} className="text-muted-foreground" />
@@ -1027,7 +1051,15 @@ export function SourceControlPanel({
             </div>
           </section>
         </div>
-      </aside>
-    </div>
+        </aside>
+      </div>
+      {commitSuccessDialog ? (
+        <CommitSuccessDialog
+          action={commitSuccessDialog.action}
+          result={commitSuccessDialog.result}
+          onClose={() => setCommitSuccessDialog(null)}
+        />
+      ) : null}
+    </>
   )
 }
