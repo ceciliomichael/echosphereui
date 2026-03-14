@@ -1,31 +1,15 @@
-import {
-  ArrowDownToLine,
-  ArrowUpToLine,
-  ChevronDown,
-  ChevronRight,
-  GitCommitHorizontal,
-  Loader2,
-  LocateFixed,
-  RefreshCw,
-  Upload,
-  type LucideIcon,
-} from 'lucide-react'
+import { GitCommitHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import type {
   GitHistoryCommitDetailsResult,
-  GitHistoryCommitFile,
   GitHistoryEntry,
   GitSyncAction,
 } from '../../types/chat'
-import { Tooltip } from '../Tooltip'
-import { Switch } from '../ui/Switch'
-import { CommitFileRow } from './CommitFileRow'
-import { CommitHistoryTooltipContent } from './CommitHistoryTooltipContent'
-import { GitGraphLane, GitGraphPlaceholder } from './historyGraph'
-import { computeSwimlanes, getSwimlaneIndentPx } from './historyGraphLayout'
-import { SourceControlDiffSection } from './SourceControlDiffSection'
+import { SourceControlChangesSection } from './SourceControlChangesSection'
+import { SourceControlHistorySection } from './SourceControlHistorySection'
+import { computeSwimlanes } from './historyGraphLayout'
 
 interface SourceControlPanelProps {
   fileDiffs: readonly ConversationFileDiff[]
@@ -44,30 +28,6 @@ interface SourceControlPanelProps {
   width: number
   workspacePath: string | null | undefined
 }
-
-interface SyncActionConfig {
-  action: GitSyncAction
-  icon: LucideIcon
-  label: string
-}
-
-const SYNC_ACTIONS: readonly SyncActionConfig[] = [
-  {
-    action: 'fetch-all',
-    icon: Upload,
-    label: 'Fetch all remotes',
-  },
-  {
-    action: 'pull',
-    icon: ArrowDownToLine,
-    label: 'Pull latest changes',
-  },
-  {
-    action: 'push',
-    icon: ArrowUpToLine,
-    label: 'Push current branch',
-  },
-]
 
 const HISTORY_PAGE_SIZE = 200
 
@@ -91,6 +51,7 @@ export function SourceControlPanel({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const panelBodyRef = useRef<HTMLDivElement | null>(null)
   const historyRowRefMap = useRef(new Map<string, HTMLButtonElement | null>())
+  const commitActionControlsRef = useRef<HTMLDivElement | null>(null)
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
   const historyResizeStateRef = useRef<{
     containerHeight: number
@@ -107,6 +68,7 @@ export function SourceControlPanel({
   const [commitMessage, setCommitMessage] = useState('')
   const [includeUnstaged, setIncludeUnstaged] = useState(true)
   const [isQuickCommitting, setIsQuickCommitting] = useState(false)
+  const [isCommitActionMenuOpen, setIsCommitActionMenuOpen] = useState(false)
   const [quickCommitError, setQuickCommitError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -144,6 +106,8 @@ export function SourceControlPanel({
   const canQuickCommit =
     !isQuickCommitting &&
     (includeUnstaged ? totalChangedFileCount > 0 : stagedFileDiffs.length > 0)
+  const isCommitActionDisabled = !canQuickCommit || pendingSyncAction !== null
+  const isCommitPrimaryBusy = isQuickCommitting || pendingSyncAction === 'push'
 
   const historyViewModels = useMemo(() => computeSwimlanes(historyEntries), [historyEntries])
 
@@ -388,6 +352,47 @@ export function SourceControlPanel({
     void refreshHistory()
   }, [isOpen, refreshHistory, normalizedWorkspacePath])
 
+  useEffect(() => {
+    if (!isCommitActionMenuOpen) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+      if (!commitActionControlsRef.current?.contains(target)) {
+        setIsCommitActionMenuOpen(false)
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsCommitActionMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isCommitActionMenuOpen])
+
+  useEffect(() => {
+    if (!syncMessage) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSyncMessage((currentValue) => (currentValue === syncMessage ? null : currentValue))
+    }, 3000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [syncMessage])
+
   const loadCommitDetails = useCallback(
     async (commitHash: string) => {
       if (!hasWorkspacePath || commitDetailsByHash[commitHash] || loadingCommitHashes.includes(commitHash)) {
@@ -413,9 +418,9 @@ export function SourceControlPanel({
     [commitDetailsByHash, hasWorkspacePath, loadingCommitHashes, normalizedWorkspacePath],
   )
 
-  async function handleSyncAction(action: GitSyncAction) {
+  async function performSyncAction(action: GitSyncAction): Promise<boolean> {
     if (!hasWorkspacePath) {
-      return
+      return false
     }
 
     setPendingSyncAction(action)
@@ -428,11 +433,17 @@ export function SourceControlPanel({
       })
       setSyncMessage(result.message)
       await Promise.all([onRefreshAll(), refreshHistory()])
+      return true
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : `Failed to ${action}.`)
+      return false
     } finally {
       setPendingSyncAction(null)
     }
+  }
+
+  async function handleSyncAction(action: GitSyncAction) {
+    await performSyncAction(action)
   }
 
   async function handleRefreshPanel() {
@@ -449,13 +460,15 @@ export function SourceControlPanel({
     }
   }
 
-  async function handleQuickCommitSubmit() {
-    if (!canQuickCommit) {
+  async function handleQuickCommitSubmit(action: 'commit' | 'commit-and-push' = 'commit') {
+    if (isCommitActionDisabled) {
       return
     }
 
     setIsQuickCommitting(true)
+    setIsCommitActionMenuOpen(false)
     setQuickCommitError(null)
+    setSyncMessage(null)
 
     try {
       await onQuickCommit({
@@ -464,9 +477,16 @@ export function SourceControlPanel({
       })
 
       setCommitMessage('')
-      setSyncMessage('Committed changes.')
       setSyncError(null)
-      await refreshHistory()
+      if (action === 'commit-and-push') {
+        const isPushSuccessful = await performSyncAction('push')
+        if (!isPushSuccessful) {
+          return
+        }
+      } else {
+        setSyncMessage('Committed changes.')
+        await refreshHistory()
+      }
     } catch (error) {
       setQuickCommitError(error instanceof Error ? error.message : 'Failed to commit changes.')
     } finally {
@@ -549,36 +569,6 @@ export function SourceControlPanel({
     if (shouldExpand) {
       void loadCommitDetails(commitHash)
     }
-  }
-
-  function renderCommitDetails(commitHash: string, files: readonly GitHistoryCommitFile[], laneColumnCount: number) {
-    const isLoadingCommitDetails = loadingCommitHashes.includes(commitHash)
-    const indentPx = getSwimlaneIndentPx(laneColumnCount)
-
-    if (isLoadingCommitDetails) {
-      return (
-        <div className="flex items-center gap-2 py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-          <Loader2 size={13} className="animate-spin" />
-          Loading files...
-        </div>
-      )
-    }
-
-    if (files.length === 0) {
-      return (
-        <div className="py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-          No changed files.
-        </div>
-      )
-    }
-
-    return (
-      <div className="flex flex-col">
-        {files.map((file) => (
-          <CommitFileRow key={`${commitHash}-${file.path}`} file={file} indentPx={indentPx} />
-        ))}
-      </div>
-    )
   }
 
   return (

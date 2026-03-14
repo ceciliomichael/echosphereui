@@ -43,11 +43,16 @@ function formatReadResultBody(semanticResult: Record<string, unknown>) {
   const subjectPath = readString(semanticResult.path) ?? 'unknown'
   const startLine = readNumber(semanticResult.startLine) ?? 1
   const endLine = readNumber(semanticResult.endLine) ?? startLine
+  const totalLineCount = readNumber(semanticResult.totalLineCount)
   const content = typeof semanticResult.content === 'string' ? semanticResult.content : ''
   const fenceLanguage = inferFenceLanguage(subjectPath)
-  const lines = [`File ${subjectPath} (lines ${startLine}-${endLine})`, `\`\`\`${fenceLanguage ?? ''}`, content, '```']
+  const lines = [
+    `File ${subjectPath} (lines ${startLine}-${endLine}${totalLineCount === null ? '' : ` of ${totalLineCount}`})`,
+    `\`\`\`${fenceLanguage ?? ''}`,
+    content,
+    '```',
+  ]
 
-  appendTruncationNotice(lines, readBoolean(semanticResult.truncated))
   return lines.join('\n')
 }
 

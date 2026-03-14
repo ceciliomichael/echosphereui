@@ -6,10 +6,12 @@ import test from 'node:test'
 import type { Message } from '../../src/types/chat'
 import type { StreamDeltaEvent } from '../../electron/chat/providerTypes'
 import {
+  createHydratedToolExecutionTurnState,
   createToolExecutionScheduler,
   createToolExecutionTurnState,
   executeToolCallWithPolicies,
 } from '../../electron/chat/openaiCompatible/toolExecution'
+import { buildSuccessfulToolArtifacts } from '../../electron/chat/openaiCompatible/toolResultFormatter'
 import type {
   OpenAICompatibleToolCall,
   OpenAICompatibleToolExecutionMode,
@@ -33,6 +35,15 @@ function createReadToolCall(id: string, filePath: string): OpenAICompatibleToolC
   }
 }
 
+function createWriteToolCall(id: string, filePath: string, content: string): OpenAICompatibleToolCall {
+  return {
+    argumentsText: JSON.stringify({ absolute_path: filePath, content }),
+    id,
+    name: 'write',
+    startedAt: 1_700_000_000_000,
+  }
+}
+
 async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Promise<T>) {
   const directoryPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-tool-policy-test-'))
 
@@ -43,7 +54,7 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('executeToolCallWithPolicies allows repeating the same list call without a synthetic duplicate failure', async () => {
+test('executeToolCallWithPolicies allows repeating the same list call without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -60,19 +71,17 @@ test('executeToolCallWithPolicies allows repeating the same list call without a 
 
     await executeToolCallWithPolicies(createListToolCall('call-1', workspacePath), context, workspacePath, inMemoryMessages, turnState)
     await executeToolCallWithPolicies(createListToolCall('call-2', workspacePath), context, workspacePath, inMemoryMessages, turnState)
-    await executeToolCallWithPolicies(createListToolCall('call-3', workspacePath), context, workspacePath, inMemoryMessages, turnState)
 
-    assert.equal(inMemoryMessages.length, 3)
-    assert.equal(inMemoryMessages.every((message) => !message.content.includes('Repeated identical list call blocked')), true)
+    assert.equal(inMemoryMessages.length, 2)
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
 
-    assert.equal(completedEvents.length, 3)
+    assert.equal(completedEvents.length, 2)
     assert.equal(failedEvents.length, 0)
   })
 })
 
-test('executeToolCallWithPolicies allows rereading the same file without a synthetic duplicate failure', async () => {
+test('executeToolCallWithPolicies allows rereading the same file without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -90,11 +99,90 @@ test('executeToolCallWithPolicies allows rereading the same file without a synth
 
     await executeToolCallWithPolicies(createReadToolCall('read-1', filePath), context, workspacePath, inMemoryMessages, turnState)
     await executeToolCallWithPolicies(createReadToolCall('read-2', filePath), context, workspacePath, inMemoryMessages, turnState)
-    await executeToolCallWithPolicies(createReadToolCall('read-3', filePath), context, workspacePath, inMemoryMessages, turnState)
+
+    assert.equal(inMemoryMessages.length, 2)
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
+    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
+    assert.equal(completedEvents.length, 2)
+    assert.equal(failedEvents.length, 0)
+  })
+})
+
+test('createHydratedToolExecutionTurnState does not block rereads from historical read tool results', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'notes.txt')
+    await fs.writeFile(filePath, 'hello', 'utf8')
+
+    const historicalReadCall = createReadToolCall('read-history-1', filePath)
+    const historicalReadResult = buildSuccessfulToolArtifacts(
+      historicalReadCall,
+      {
+        content: 'hello',
+        endLine: 1,
+        lineCount: 1,
+        maxReadLineCount: 500,
+        path: 'notes.txt',
+        startLine: 1,
+        totalLineCount: 1,
+        targetKind: 'file',
+        truncated: false,
+      },
+      historicalReadCall.startedAt,
+      historicalReadCall.startedAt + 1,
+    )
+    const historicalMessages: Message[] = [historicalReadResult.syntheticMessage]
+
+    const emittedEvents: StreamDeltaEvent[] = []
+    const inMemoryMessages: Message[] = []
+    const turnState = createHydratedToolExecutionTurnState(historicalMessages, workspacePath)
+    const context = {
+      emitDelta(event: StreamDeltaEvent) {
+        emittedEvents.push(event)
+      },
+      signal: new AbortController().signal,
+      workspaceCheckpointId: null,
+    }
+
+    await executeToolCallWithPolicies(createReadToolCall('read-next-1', filePath), context, workspacePath, inMemoryMessages, turnState)
+
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
+    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
+    assert.equal(completedEvents.length, 1)
+    assert.equal(failedEvents.length, 0)
+  })
+})
+
+test('executeToolCallWithPolicies allows rereading the same file after a successful write', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'notes.txt')
+    await fs.writeFile(filePath, 'hello', 'utf8')
+
+    const emittedEvents: StreamDeltaEvent[] = []
+    const inMemoryMessages: Message[] = []
+    const turnState = createToolExecutionTurnState()
+    const context = {
+      emitDelta(event: StreamDeltaEvent) {
+        emittedEvents.push(event)
+      },
+      signal: new AbortController().signal,
+      workspaceCheckpointId: null,
+    }
+
+    await executeToolCallWithPolicies(createReadToolCall('read-1', filePath), context, workspacePath, inMemoryMessages, turnState)
+    await executeToolCallWithPolicies(
+      createWriteToolCall('write-1', filePath, 'updated'),
+      context,
+      workspacePath,
+      inMemoryMessages,
+      turnState,
+    )
+    await executeToolCallWithPolicies(createReadToolCall('read-2', filePath), context, workspacePath, inMemoryMessages, turnState)
 
     assert.equal(inMemoryMessages.length, 3)
-    assert.equal(inMemoryMessages.every((message) => !message.content.includes('Repeated identical read call blocked')), true)
-    assert.equal(emittedEvents.every((event) => event.type !== 'tool_invocation_failed'), true)
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
+    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
+    assert.equal(completedEvents.length, 3)
+    assert.equal(failedEvents.length, 0)
   })
 })
 

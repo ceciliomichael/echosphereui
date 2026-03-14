@@ -8,8 +8,8 @@ import {
 } from './codexRuntime'
 import { buildReplayableMessageHistory } from '../openaiCompatible/messageHistory'
 import {
+  createHydratedToolExecutionTurnState,
   createToolExecutionScheduler,
-  createToolExecutionTurnState,
 } from '../openaiCompatible/toolExecution'
 import { forceRefreshCodexAuthData, loadCodexAuthData } from './codexAuth'
 
@@ -61,7 +61,7 @@ async function streamCodexResponseWithTools(
   context: ProviderStreamContext,
 ) {
   const inMemoryMessages = buildReplayableMessageHistory(request.messages)
-  const turnState = createToolExecutionTurnState()
+  const turnState = createHydratedToolExecutionTurnState(request.messages, request.agentContextRootPath)
   const toolExecutionScheduler = createToolExecutionScheduler({
     agentContextRootPath: request.agentContextRootPath,
     context,

@@ -73,7 +73,7 @@ test('buildCodexInputMessages groups current-turn tool results into one user-sty
       content: [
         {
           text:
-            'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state.\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
+            'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state. Reuse the latest inspection state below before repeating the same inspection tool call.\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
           type: 'input_text',
         },
       ],

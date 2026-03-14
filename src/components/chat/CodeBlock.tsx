@@ -5,8 +5,11 @@ import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 interface CodeBlockProps {
   code: string
   fileName?: string
+  headerLabel?: string
   language?: string
   isStreaming?: boolean
+  maxBodyHeightClassName?: string
+  startLineNumber?: number
 }
 
 interface TokenizedCode {
@@ -40,9 +43,11 @@ function tokenizeCode(code: string): TokenizedCode {
 
 interface CodeRowsProps {
   code: string
+  maxBodyHeightClassName?: string
+  startLineNumber?: number
 }
 
-const CodeRows = memo(function CodeRows({ code }: CodeRowsProps) {
+const CodeRows = memo(function CodeRows({ code, maxBodyHeightClassName, startLineNumber = 1 }: CodeRowsProps) {
   const tokenizedCode = useMemo(() => tokenizeCode(code), [code])
 
   return (

@@ -104,8 +104,10 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
     {
       content: 'module.exports = {}',
       endLine: 1,
+      maxReadLineCount: 500,
       path: 'tailwind.config.js',
       startLine: 1,
+      totalLineCount: 42,
     },
     sampleReadToolCall.startedAt,
     completedAt,
@@ -115,12 +117,48 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged file read result: Read tailwind\.config\.js lines 1-1\./iu,
+    /^Acknowledged file read result: Read tailwind\.config\.js lines 1-1 of 42\./iu,
   )
-  assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1\)/u)
+  assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1 of 42\)/u)
   assert.match(parsedContent.body ?? '', /```js/u)
   assert.equal(parsedContent.metadata?.semantics?.start_line, 1)
   assert.equal(parsedContent.metadata?.semantics?.end_line, 1)
+  assert.equal(parsedContent.metadata?.semantics?.total_line_count, 42)
+  assert.equal(parsedContent.metadata?.semantics?.max_read_line_count, 500)
+})
+
+test('buildSuccessfulToolArtifacts keeps truncated read continuation data in structured metadata without extra prose', () => {
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleReadToolCall,
+    {
+      content: 'line-1\nline-2',
+      endLine: 2,
+      hasMoreLines: true,
+      lineCount: 2,
+      maxReadLineCount: 2,
+      nextEndLine: 4,
+      nextStartLine: 3,
+      path: 'tailwind.config.js',
+      remainingLineCount: 2,
+      startLine: 1,
+      totalLineCount: 4,
+      truncated: true,
+    },
+    sampleReadToolCall.startedAt,
+    sampleReadToolCall.startedAt + 1,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+  assert.match(
+    parsedContent.metadata?.summary ?? '',
+    /Read tailwind\.config\.js lines 1-2 of 4 \(truncated, 2 lines remaining\)\./u,
+  )
+  assert.doesNotMatch(parsedContent.body ?? '', /Results truncated\./u)
+  assert.doesNotMatch(parsedContent.body ?? '', /Next recommended read range/u)
+  assert.equal(parsedContent.metadata?.semantics?.has_more_lines, true)
+  assert.equal(parsedContent.metadata?.semantics?.remaining_line_count, 2)
+  assert.equal(parsedContent.metadata?.semantics?.next_start_line, 3)
+  assert.equal(parsedContent.metadata?.semantics?.next_end_line, 4)
 })
 
 test('buildSuccessfulToolArtifacts adds direct acknowledgements for glob and grep results', () => {
@@ -265,8 +303,12 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
   ])
 
   assert.match(content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
+  assert.match(content ?? '', /Reuse the latest inspection state below before repeating the same inspection tool call\./u)
   assert.match(content ?? '', /For each mutated path, the latest successful mutation below is the current workspace state\./u)
   assert.match(content ?? '', /Acknowledged tool result summaries:/u)
+  assert.match(content ?? '', /Latest acknowledged inspection state\./u)
+  assert.match(content ?? '', /- \. was last listed with 1 visible entry\./u)
+  assert.match(content ?? '', /- src\/index\.ts was last read at lines 1-2\./u)
   assert.match(content ?? '', /- list success: Listed \. with 1 visible entry\./u)
   assert.match(content ?? '', /- read success: Read src\/index\.ts lines 1-2\./u)
   assert.match(content ?? '', /<tool_result>/u)
