@@ -5,6 +5,7 @@ import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
 import { EmptyState } from '../components/EmptyState'
 import { CommitModal } from '../components/commit/CommitModal'
+import { CommitSuccessDialog } from '../components/commit/CommitSuccessDialog'
 import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { ConversationDiffPanel, type DiffPanelScope } from '../components/chat/ConversationDiffPanel'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
@@ -21,7 +22,7 @@ import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useGitCommit } from '../hooks/useGitCommit'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
-import type { AppSettings, GitCommitAction } from '../types/chat'
+import type { AppSettings, GitCommitAction, GitCommitResult } from '../types/chat'
 
 export type RightPanelTab = 'diff' | 'source-control'
 
@@ -46,6 +47,11 @@ interface ChatInterfaceProps {
   sidebarWidth: number
 }
 
+interface CommitSuccessDialogState {
+  action: GitCommitAction
+  result: GitCommitResult
+}
+
 export function ChatInterface({
   chatMessages,
   diffPanelWidth,
@@ -68,6 +74,7 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false)
+  const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
   const [pendingFileActionPath, setPendingFileActionPath] = useState<string | null>(null)
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
@@ -193,6 +200,10 @@ export function ChatInterface({
     setIsCommitModalOpen(false)
   }, [])
 
+  const handleCloseCommitSuccessDialog = useCallback(() => {
+    setCommitSuccessDialog(null)
+  }, [])
+
   const handleCommit = useCallback(
     async (input: {
       action: GitCommitAction
@@ -200,8 +211,12 @@ export function ChatInterface({
       message: string
       preferredBranchName?: string
     }) => {
-      await gitCommitState.commit(input)
+      const commitResult = await gitCommitState.commit(input)
       setIsCommitModalOpen(false)
+      setCommitSuccessDialog({
+        action: input.action,
+        result: commitResult,
+      })
       // Refresh diffs and branch state after commit
       void refreshGitDiffSnapshot({ forceRefresh: true })
       void gitBranchState.refresh()
@@ -598,6 +613,13 @@ export function ChatInterface({
           onClose={handleCloseCommitModal}
           onCommit={handleCommit}
           status={gitCommitState.status}
+        />
+      ) : null}
+      {commitSuccessDialog ? (
+        <CommitSuccessDialog
+          action={commitSuccessDialog.action}
+          result={commitSuccessDialog.result}
+          onClose={handleCloseCommitSuccessDialog}
         />
       ) : null}
     </AppWorkspaceShell>
