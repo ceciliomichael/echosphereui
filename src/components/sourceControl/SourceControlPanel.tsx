@@ -719,7 +719,7 @@ export function SourceControlPanel({
                           isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
                         ].join(' ')}
                       >
-                        {isQuickCommitting ? 'Committing...' : pendingSyncAction === 'push' ? 'Pushing...' : 'Commit'}
+                        {isQuickCommitting ? 'Committing' : pendingSyncAction === 'push' ? 'Pushing' : 'Commit'}
                       </button>
                       <button
                         type="button"
