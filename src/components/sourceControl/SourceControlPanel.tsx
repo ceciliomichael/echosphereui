@@ -523,6 +523,7 @@ export function SourceControlPanel({
           return
         }
       } else {
+        setSyncMessage('Committed changes.')
         await refreshHistory()
       }
     } catch (error) {
@@ -714,7 +715,7 @@ export function SourceControlPanel({
                         disabled={isCommitActionDisabled}
                         onClick={() => void handleQuickCommitSubmit('commit')}
                         className={[
-                          'inline-flex h-8 items-center justify-center rounded-l-lg rounded-r-none pl-3 pr-0 text-xs font-medium transition-colors',
+                          'inline-flex h-8 min-w-[66px] items-center justify-center rounded-l-lg rounded-r-none pl-2 text-xs font-medium transition-colors',
                           isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
                         ].join(' ')}
                       >
