@@ -70,7 +70,7 @@ function buildFileActionButtons(input: {
             event.stopPropagation()
             void onDiscardFile(fileDiff.fileName)
           }}
-          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
         </button>
@@ -84,7 +84,7 @@ function buildFileActionButtons(input: {
           event.stopPropagation()
           void onStageFile(fileDiff.fileName)
         }}
-        className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
       </button>
@@ -113,7 +113,9 @@ export function SourceControlDiffSection({
       ) : null}
       <div className={bodyClassName ?? ''}>
         {diffs.length === 0 ? (
-          <p className="px-4 pb-3 text-sm text-muted-foreground">{emptyLabel}</p>
+          <div className="flex min-h-16 items-center px-4 py-3">
+            <p className="text-[12px] text-muted-foreground">{emptyLabel}</p>
+          </div>
         ) : (
           diffs.map((fileDiff) => (
             <DiffViewer

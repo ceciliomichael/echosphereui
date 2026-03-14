@@ -89,12 +89,21 @@ export function SourceControlPanel({
   workspacePath,
 }: SourceControlPanelProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const panelBodyRef = useRef<HTMLDivElement | null>(null)
   const historyRowRefMap = useRef(new Map<string, HTMLButtonElement | null>())
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+  const historyResizeStateRef = useRef<{
+    containerHeight: number
+    pointerId: number
+    startHeight: number
+    startY: number
+  } | null>(null)
   const widthRef = useRef(width)
   const onWidthChangeRef = useRef(onWidthChange)
   const onWidthCommitRef = useRef(onWidthCommit)
   const [isResizing, setIsResizing] = useState(false)
+  const [isHistoryResizing, setIsHistoryResizing] = useState(false)
+  const [historyHeight, setHistoryHeight] = useState<number | null>(null)
   const [commitMessage, setCommitMessage] = useState('')
   const [includeUnstaged, setIncludeUnstaged] = useState(true)
   const [isQuickCommitting, setIsQuickCommitting] = useState(false)
@@ -243,6 +252,60 @@ export function SourceControlPanel({
       document.body.style.cursor = ''
     }
   }, [])
+
+  useEffect(() => {
+    function handleHistoryPointerMove(event: PointerEvent) {
+      const resizeState = historyResizeStateRef.current
+      if (!resizeState) {
+        return
+      }
+
+      const nextHeight = clampHistoryHeight(
+        resizeState.startHeight + (resizeState.startY - event.clientY),
+        resizeState.containerHeight,
+      )
+      setHistoryHeight(nextHeight)
+    }
+
+    function handleHistoryPointerUp(event: PointerEvent) {
+      if (historyResizeStateRef.current?.pointerId !== event.pointerId) {
+        return
+      }
+
+      historyResizeStateRef.current = null
+      setIsHistoryResizing(false)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+
+    window.addEventListener('pointermove', handleHistoryPointerMove)
+    window.addEventListener('pointerup', handleHistoryPointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handleHistoryPointerMove)
+      window.removeEventListener('pointerup', handleHistoryPointerUp)
+      historyResizeStateRef.current = null
+      setIsHistoryResizing(false)
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isHistorySectionOpen || historyHeight === null) {
+      return
+    }
+
+    const containerHeight = panelBodyRef.current?.clientHeight
+    if (!containerHeight) {
+      return
+    }
+
+    const clampedHeight = clampHistoryHeight(historyHeight, containerHeight)
+    if (clampedHeight !== historyHeight) {
+      setHistoryHeight(clampedHeight)
+    }
+  }, [historyHeight, isHistorySectionOpen])
 
   const loadHistoryPage = useCallback(
     async (offset: number, append: boolean) => {
@@ -440,6 +503,36 @@ export function SourceControlPanel({
     document.body.style.cursor = 'col-resize'
   }
 
+  function clampHistoryHeight(nextHeight: number, containerHeight: number) {
+    const minHistoryHeight = 140
+    const minNonHistoryHeight = 160
+    const maxHistoryHeight = Math.max(minHistoryHeight, containerHeight - minNonHistoryHeight)
+    return Math.min(maxHistoryHeight, Math.max(minHistoryHeight, Math.round(nextHeight)))
+  }
+
+  function handleHistoryResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!isHistorySectionOpen) {
+      return
+    }
+
+    const containerHeight = panelBodyRef.current?.clientHeight
+    if (!containerHeight) {
+      return
+    }
+
+    const startHeight = historyHeight ?? Math.round(containerHeight * 0.45)
+    historyResizeStateRef.current = {
+      containerHeight,
+      pointerId: event.pointerId,
+      startHeight,
+      startY: event.clientY,
+    }
+    setHistoryHeight(startHeight)
+    setIsHistoryResizing(true)
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'row-resize'
+  }
+
   function handleChangeFileExpandedChange(filePath: string, nextValue: boolean) {
     setExpandedChangeFilePaths((currentValue) =>
       nextValue ? [...currentValue, filePath] : currentValue.filter((value) => value !== filePath),
@@ -519,7 +612,13 @@ export function SourceControlPanel({
 
         <div className="h-px w-full bg-border" />
 
-        <div className="min-h-0 flex flex-1 flex-col overflow-hidden">
+        <div
+          ref={panelBodyRef}
+          className={[
+            'min-h-0 flex flex-1 flex-col overflow-hidden',
+            isHistoryResizing ? 'cursor-row-resize' : '',
+          ].join(' ')}
+        >
           <section className={['border-b border-border', isChangesSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
             <button
               type="button"
@@ -576,93 +675,125 @@ export function SourceControlPanel({
                 {!syncError && syncMessage ? <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p> : null}
               </div>
 
-              <section className={['border-b border-border', isStagedSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextValue = !isStagedSectionOpen
-                    setIsStagedSectionOpen(nextValue)
-                    persistSectionOpen({ staged: nextValue })
-                  }}
-                  className="flex h-10 w-full items-center justify-between px-4 text-left"
-                >
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Staged Changes</span>
-                  <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-                </button>
-                <div className={['min-h-0 transition-[opacity] duration-200', isStagedSectionOpen ? 'flex flex-1 flex-col border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
-                  <SourceControlDiffSection
-                    sectionClassName="min-h-0 flex-1 flex flex-col border-b-0"
-                    bodyClassName="min-h-0 flex-1 overflow-y-auto"
-                    title=""
-                    scope="staged"
-                    diffs={stagedFileDiffs}
-                    emptyLabel="No staged files."
-                    expandedFilePaths={expandedChangeFilePaths}
-                    pendingFileActionPath={pendingFileActionPath}
-                    onDiscardFile={onDiscardFile}
-                    onExpandedChange={handleChangeFileExpandedChange}
-                    onStageFile={onStageFile}
-                    onUnstageFile={onUnstageFile}
-                  />
-                </div>
-              </section>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {stagedFileDiffs.length > 0 ? (
+                  <section className="shrink-0 border-b border-border">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextValue = !isStagedSectionOpen
+                        setIsStagedSectionOpen(nextValue)
+                        persistSectionOpen({ staged: nextValue })
+                      }}
+                      className="flex h-10 w-full items-center justify-between px-4 text-left"
+                    >
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Staged Changes</span>
+                      <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
+                    </button>
+                    <div className={['transition-[opacity] duration-200', isStagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
+                      <SourceControlDiffSection
+                        sectionClassName="border-b-0"
+                        title=""
+                        scope="staged"
+                        diffs={stagedFileDiffs}
+                        emptyLabel="No staged files."
+                        expandedFilePaths={expandedChangeFilePaths}
+                        pendingFileActionPath={pendingFileActionPath}
+                        onDiscardFile={onDiscardFile}
+                        onExpandedChange={handleChangeFileExpandedChange}
+                        onStageFile={onStageFile}
+                        onUnstageFile={onUnstageFile}
+                      />
+                    </div>
+                  </section>
+                ) : null}
 
-              <section className={['border-b border-border', isUnstagedSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextValue = !isUnstagedSectionOpen
-                    setIsUnstagedSectionOpen(nextValue)
-                    persistSectionOpen({ unstaged: nextValue })
-                  }}
-                  className="flex h-10 w-full items-center justify-between px-4 text-left"
-                >
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
-                  <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-                </button>
-                <div className={['min-h-0 transition-[opacity] duration-200', isUnstagedSectionOpen ? 'flex flex-1 flex-col border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
-                  <SourceControlDiffSection
-                    sectionClassName="min-h-0 flex-1 flex flex-col border-b-0"
-                    bodyClassName="min-h-0 flex-1 overflow-y-auto"
-                    title=""
-                    scope="unstaged"
-                    diffs={unstagedFileDiffs}
-                    emptyLabel="No unstaged files."
-                    expandedFilePaths={expandedChangeFilePaths}
-                    pendingFileActionPath={pendingFileActionPath}
-                    onDiscardFile={onDiscardFile}
-                    onExpandedChange={handleChangeFileExpandedChange}
-                    onStageFile={onStageFile}
-                    onUnstageFile={onUnstageFile}
-                  />
-                </div>
-              </section>
+                <section className={['border-border', isUnstagedSectionOpen ? 'border-b-0' : 'border-b'].join(' ')}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextValue = !isUnstagedSectionOpen
+                      setIsUnstagedSectionOpen(nextValue)
+                      persistSectionOpen({ unstaged: nextValue })
+                    }}
+                    className="flex h-10 w-full items-center justify-between px-4 text-left"
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
+                    <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
+                  </button>
+                  <div className={['transition-[opacity] duration-200', isUnstagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
+                    <SourceControlDiffSection
+                      sectionClassName="border-b-0"
+                      title=""
+                      scope="unstaged"
+                      diffs={unstagedFileDiffs}
+                      emptyLabel="No unstaged files."
+                      expandedFilePaths={expandedChangeFilePaths}
+                      pendingFileActionPath={pendingFileActionPath}
+                      onDiscardFile={onDiscardFile}
+                      onExpandedChange={handleChangeFileExpandedChange}
+                      onStageFile={onStageFile}
+                      onUnstageFile={onUnstageFile}
+                    />
+                  </div>
+                </section>
+              </div>
             </div>
           </section>
 
           <section
             className={[
               'border-b border-border',
-              isHistorySectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0',
+              isHistorySectionOpen ? 'min-h-0 shrink-0 flex flex-1 flex-col' : 'shrink-0',
             ].join(' ')}
+            style={
+              isHistorySectionOpen && historyHeight !== null
+                ? {
+                    flex: '0 0 auto',
+                    height: `${historyHeight}px`,
+                  }
+                : undefined
+            }
           >
-            <div className="flex h-10 items-center justify-between px-4">
-              <button
-                type="button"
-                onClick={() => {
-                  const nextValue = !isHistorySectionOpen
-                  setIsHistorySectionOpen(nextValue)
-                  persistSectionOpen({ history: nextValue })
-                }}
-                className="inline-flex items-center gap-2 text-left"
-              >
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize history section"
+              onPointerDown={handleHistoryResizePointerDown}
+              className={[
+                'h-1 w-full bg-transparent',
+                isHistorySectionOpen ? 'cursor-row-resize' : 'cursor-default',
+              ].join(' ')}
+            />
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isHistorySectionOpen}
+              onClick={() => {
+                const nextValue = !isHistorySectionOpen
+                setIsHistorySectionOpen(nextValue)
+                persistSectionOpen({ history: nextValue })
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                  return
+                }
+
+                event.preventDefault()
+                const nextValue = !isHistorySectionOpen
+                setIsHistorySectionOpen(nextValue)
+                persistSectionOpen({ history: nextValue })
+              }}
+              className="flex h-10 cursor-pointer items-center justify-between px-4"
+            >
+              <span className="inline-flex items-center gap-2 text-left">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">History</span>
                 <ChevronDown
                   size={13}
                   className={['text-muted-foreground transition-transform', isHistorySectionOpen ? '' : '-rotate-90'].join(' ')}
                 />
-              </button>
-              <div className="inline-flex items-center gap-0.5">
+              </span>
+              <div className="inline-flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
                 {SYNC_ACTIONS.map((config) => {
                   const Icon = config.icon
                   const isPending = pendingSyncAction === config.action
@@ -715,8 +846,8 @@ export function SourceControlPanel({
                   Loading history...
                 </div>
               ) : historyEntries.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-[12px] text-muted-foreground">
-                  No commits yet.
+                <div className="px-4 py-3">
+                  <div className="flex min-h-16 items-center text-[12px] text-muted-foreground">No commits yet.</div>
                 </div>
               ) : (
                 <div>
