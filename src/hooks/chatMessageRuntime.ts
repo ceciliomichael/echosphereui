@@ -1,4 +1,5 @@
 import type {
+  AppTerminalExecutionMode,
   ChatMode,
   ChatProviderId,
   Message,
@@ -12,6 +13,7 @@ export interface ChatRuntimeSelection {
   providerId: ChatProviderId | null
   providerLabel: string | null
   reasoningEffort: ReasoningEffort
+  terminalExecutionMode: AppTerminalExecutionMode
 }
 
 interface StreamAssistantResponseInput {
@@ -25,6 +27,7 @@ interface StreamAssistantResponseInput {
   onSyntheticToolMessage: (message: Message) => void
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
+  terminalExecutionMode: AppTerminalExecutionMode
   onToolInvocationCompleted: (
     invocationId: string,
     nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
@@ -197,6 +200,7 @@ export async function streamAssistantResponse(
         modelId: input.modelId,
         providerId: input.providerId,
         reasoningEffort: input.reasoningEffort,
+        terminalExecutionMode: input.terminalExecutionMode,
       })
       .then((result) => {
         streamId = result.streamId

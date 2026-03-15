@@ -2,7 +2,14 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
-import type { ChatAttachment, ChatMode, ContextUsageEstimate, GitBranchState, ReasoningEffort } from '../types/chat'
+import type {
+  AppTerminalExecutionMode,
+  ChatAttachment,
+  ChatMode,
+  ContextUsageEstimate,
+  GitBranchState,
+  ReasoningEffort,
+} from '../types/chat'
 import { Tooltip } from './Tooltip'
 import { ContextIndicator } from './chat/ContextIndicator'
 import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
@@ -10,6 +17,7 @@ import { GitBranchSelectorField } from './chat/GitBranchSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
 import { ReasoningEffortBlock } from './chat/ReasoningEffortBlock'
 import { RuntimeTargetSelectorField } from './chat/RuntimeTargetSelectorField'
+import { TerminalExecutionModeSelectorField } from './chat/TerminalExecutionModeSelectorField'
 import { AttachmentPillList } from './chat/AttachmentPillList'
 
 interface ChatInputProps {
@@ -36,13 +44,16 @@ interface ChatInputProps {
   onGitBranchRefresh?: () => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
+  onTerminalExecutionModeChange?: (mode: AppTerminalExecutionMode) => void
   onSend: () => void
   selectedChatMode?: ChatMode
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
   showRuntimeTargetSelector?: boolean
+  showTerminalExecutionModeSelector?: boolean
   showReasoningEffortSelector?: boolean
+  terminalExecutionMode?: AppTerminalExecutionMode
   value: string
   onValueChange: (value: string) => void
   sendOnEnter?: boolean
@@ -62,6 +73,7 @@ export function ChatInput({
   onChatModeChange,
   onModelChange,
   onReasoningEffortChange,
+  onTerminalExecutionModeChange,
   isEditing = false,
   isStreaming = false,
   selectedChatMode = 'agent',
@@ -69,6 +81,7 @@ export function ChatInput({
   reasoningEffortOptions = [],
   selectedModelId = '',
   showReasoningEffortSelector = false,
+  terminalExecutionMode = 'sandbox',
   sendOnEnter = true,
   variant = 'composer',
   focusSignal,
@@ -84,6 +97,7 @@ export function ChatInput({
   onGitBranchCreate,
   onGitBranchRefresh,
   showRuntimeTargetSelector = false,
+  showTerminalExecutionModeSelector = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -95,9 +109,14 @@ export function ChatInput({
   const showModelSelector = modelOptions.length > 0 && typeof onModelChange === 'function'
   const showReasoningControl = showReasoningEffortSelector && typeof onReasoningEffortChange === 'function'
   const showRuntimeTargetControl = variant === 'composer' && showRuntimeTargetSelector
+  const showTerminalExecutionModeControl =
+    variant === 'composer' &&
+    showTerminalExecutionModeSelector &&
+    typeof onTerminalExecutionModeChange === 'function'
   const showGitBranchSelector = variant === 'composer' && typeof onGitBranchChange === 'function' && gitBranchState !== undefined
   const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
-  const showDetachedFooterControls = showRuntimeTargetControl || showGitBranchSelector
+  const showDetachedFooterControls =
+    showRuntimeTargetControl || showTerminalExecutionModeControl || showGitBranchSelector
   const resolvedActionButtonMode =
     actionButtonMode === 'auto' ? (isStreaming && typeof onAbort === 'function' ? 'abort' : 'send') : actionButtonMode
   const canAbort = resolvedActionButtonMode === 'abort' && typeof onAbort === 'function'
@@ -371,6 +390,16 @@ export function ChatInput({
             {showRuntimeTargetControl ? (
               <Tooltip content="Select runtime target" hideWhenTriggerExpanded>
                 <RuntimeTargetSelectorField triggerClassName="chat-footer-control-trigger" />
+              </Tooltip>
+            ) : null}
+
+            {showTerminalExecutionModeControl ? (
+              <Tooltip content="Select terminal execution mode" hideWhenTriggerExpanded>
+                <TerminalExecutionModeSelectorField
+                  triggerClassName="chat-footer-control-trigger"
+                  value={terminalExecutionMode}
+                  onChange={onTerminalExecutionModeChange}
+                />
               </Tooltip>
             ) : null}
           </div>

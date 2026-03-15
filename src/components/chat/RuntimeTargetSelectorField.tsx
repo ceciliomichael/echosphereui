@@ -5,6 +5,7 @@ import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
 import { Tooltip } from '../Tooltip'
 
 interface RuntimeTargetOption {
+  description: string
   disabled?: boolean
   icon: typeof Monitor
   label: string
@@ -13,11 +14,13 @@ interface RuntimeTargetOption {
 
 const TARGET_OPTIONS: readonly RuntimeTargetOption[] = [
   {
+    description: 'Runs commands against your current local workspace.',
     icon: Monitor,
     label: 'Local',
     value: 'local',
   },
   {
+    description: 'Targets a mobile runtime environment (coming soon).',
     disabled: true,
     icon: Smartphone,
     label: 'Mobile',
@@ -84,7 +87,7 @@ export function RuntimeTargetSelectorField({ triggerClassName }: { triggerClassN
               data-floating-menu-root="true"
               role="listbox"
               aria-label="Runtime targets"
-              className="fixed z-40 min-w-[12rem] overflow-hidden rounded-2xl border border-border bg-surface p-1 shadow-soft"
+              className="fixed z-40 min-w-[12rem] overflow-hidden rounded-2xl border border-border bg-surface p-1 shadow-soft space-y-1.5"
               style={menuStyle}
             >
               {TARGET_OPTIONS.map((option) => {
@@ -118,15 +121,11 @@ export function RuntimeTargetSelectorField({ triggerClassName }: { triggerClassN
                   </div>
                 )
 
-                if (option.disabled) {
-                  return (
-                    <Tooltip key={option.value} content="Coming soon" side="left">
-                      {optionRow}
-                    </Tooltip>
-                  )
-                }
-
-                return <div key={option.value}>{optionRow}</div>
+                return (
+                  <Tooltip key={option.value} content={option.description} side="right" fullWidthTrigger>
+                    {optionRow}
+                  </Tooltip>
+                )
               })}
             </div>,
             document.body,

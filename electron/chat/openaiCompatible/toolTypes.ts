@@ -1,4 +1,5 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions/completions'
+import type { AppTerminalExecutionMode } from '../../../src/types/chat'
 
 export interface OpenAICompatibleToolCall {
   argumentsText: string
@@ -12,6 +13,8 @@ export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel' | 'path
 export interface OpenAICompatibleToolExecutionContext {
   agentContextRootPath: string
   signal: AbortSignal
+  streamId: string
+  terminalExecutionMode: AppTerminalExecutionMode
   workspaceCheckpointId: string | null
 }
 

@@ -63,6 +63,27 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
+  if (toolName === 'exec_command') {
+    return {
+      cmd: readString(argumentsValue.cmd) ?? undefined,
+      max_output_tokens: readNumber(argumentsValue.max_output_tokens) ?? undefined,
+      shell: readString(argumentsValue.shell) ?? undefined,
+      tty: readBoolean(argumentsValue.tty),
+      workdir: readString(argumentsValue.workdir) ?? undefined,
+      yield_time_ms: readNumber(argumentsValue.yield_time_ms) ?? undefined,
+    }
+  }
+
+  if (toolName === 'write_stdin') {
+    const chars = readString(argumentsValue.chars)
+    return {
+      chars_length: chars?.length ?? undefined,
+      max_output_tokens: readNumber(argumentsValue.max_output_tokens) ?? undefined,
+      session_id: readNumber(argumentsValue.session_id) ?? undefined,
+      yield_time_ms: readNumber(argumentsValue.yield_time_ms) ?? undefined,
+    }
+  }
+
   return undefined
 }
 
@@ -99,6 +120,28 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return readString(semanticResult.message) ?? 'Tool completed successfully.'
   }
 
+  if (toolName === 'exec_command') {
+    const executionMode = readString(semanticResult.executionMode) ?? 'full'
+    const sessionId = readNumber(semanticResult.processId)
+    const exitCode = readNumber(semanticResult.exitCode)
+    if (sessionId !== null) {
+      return `Started terminal command in ${executionMode} mode with session ${sessionId}.`
+    }
+
+    return `Executed terminal command in ${executionMode} mode${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+  }
+
+  if (toolName === 'write_stdin') {
+    const sessionId = readNumber(semanticResult.sessionId)
+    const nextProcessId = readNumber(semanticResult.processId)
+    const exitCode = readNumber(semanticResult.exitCode)
+    if (nextProcessId !== null) {
+      return `Updated terminal session ${sessionId ?? nextProcessId}; session is still running.`
+    }
+
+    return `Updated terminal session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+  }
+
   return 'Tool completed successfully.'
 }
 
@@ -108,8 +151,20 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
     return undefined
   }
 
+  if (toolName === 'write_stdin' && subjectPath === '.') {
+    return undefined
+  }
+
   const defaultKind =
-    toolName === 'list' ? 'directory' : toolName === 'glob' || toolName === 'grep' ? 'path' : 'file'
+    toolName === 'list'
+      ? 'directory'
+      : toolName === 'glob' || toolName === 'grep'
+        ? 'path'
+        : toolName === 'exec_command'
+          ? 'directory'
+          : toolName === 'write_stdin'
+            ? 'terminal'
+            : 'file'
   return {
     kind: readString(semanticResult.targetKind) ?? defaultKind,
     path: subjectPath,
@@ -205,6 +260,42 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
           : totalChangedPaths > 0
             ? 'files_edited'
             : 'file_already_matched',
+    })
+  }
+
+  if (toolName === 'exec_command') {
+    const processId = readNumber(semanticResult.processId)
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      command_running: processId !== null,
+      end_line_number: undefined,
+      exit_code: readNumber(semanticResult.exitCode) ?? undefined,
+      mutation_applied: false,
+      operation: readString(semanticResult.operation) ?? undefined,
+      output_token_count: readNumber(semanticResult.originalTokenCount) ?? undefined,
+      process_id: processId ?? undefined,
+      start_line_number: undefined,
+      target_exists_after_call: true,
+      working_directory: readString(semanticResult.path) ?? undefined,
+      workspace_effect: 'no_file_change',
+    })
+  }
+
+  if (toolName === 'write_stdin') {
+    const processId = readNumber(semanticResult.processId)
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      command_running: processId !== null,
+      end_line_number: undefined,
+      exit_code: readNumber(semanticResult.exitCode) ?? undefined,
+      mutation_applied: false,
+      operation: readString(semanticResult.operation) ?? undefined,
+      output_token_count: readNumber(semanticResult.originalTokenCount) ?? undefined,
+      process_id: processId ?? undefined,
+      session_id: readNumber(semanticResult.sessionId) ?? undefined,
+      start_line_number: undefined,
+      target_exists_after_call: true,
+      workspace_effect: 'no_file_change',
     })
   }
 

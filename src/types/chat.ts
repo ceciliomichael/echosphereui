@@ -169,10 +169,12 @@ export interface AppSettings {
   sourceControlSectionOrder: SourceControlSectionId[]
   sourceControlSectionOpen: Record<SourceControlSectionOpenId, boolean>
   sourceControlSectionSizes: Record<SourceControlSectionId, number>
+  terminalExecutionMode: AppTerminalExecutionMode
 }
 
 export type SourceControlSectionId = 'commit' | 'changes' | 'history'
 export type SourceControlSectionOpenId = SourceControlSectionId | 'staged' | 'unstaged'
+export type AppTerminalExecutionMode = 'full' | 'sandbox'
 
 export interface CodexProviderConnectionStatus {
   accountId: string | null
@@ -255,6 +257,7 @@ export interface StartChatStreamInput {
   modelId: string
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
+  terminalExecutionMode: AppTerminalExecutionMode
 }
 
 export interface StartChatStreamResult {

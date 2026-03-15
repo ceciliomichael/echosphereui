@@ -129,6 +129,7 @@ export function ChatInterface({
     providerId: chatRuntimeConfig.providerId,
     providerLabel: chatRuntimeConfig.providerLabel,
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
+    terminalExecutionMode: settings.terminalExecutionMode,
   }
   const contextUsage = useChatContextUsage({
     agentContextRootPath: activeConversationRootPath ?? selectedFolderPath,
@@ -379,6 +380,22 @@ export function ChatInterface({
     },
     [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
   )
+  const handleSourceControlSectionOpenChange = useCallback(
+    (sourceControlSectionOpen: AppSettings['sourceControlSectionOpen']) => {
+      void onUpdateSettings({ sourceControlSectionOpen })
+    },
+    [onUpdateSettings],
+  )
+  const handleTerminalExecutionModeChange = useCallback(
+    (terminalExecutionMode: AppSettings['terminalExecutionMode']) => {
+      if (terminalExecutionMode === settings.terminalExecutionMode) {
+        return
+      }
+
+      void onUpdateSettings({ terminalExecutionMode })
+    },
+    [onUpdateSettings, settings.terminalExecutionMode],
+  )
 
   return (
     <AppWorkspaceShell
@@ -555,7 +572,10 @@ export function ChatInterface({
                   reasoningEffortOptions={availableReasoningEfforts}
                   onReasoningEffortChange={setReasoningEffort}
                   showRuntimeTargetSelector
+                  showTerminalExecutionModeSelector
                   showReasoningEffortSelector={showReasoningEffortSelector}
+                  terminalExecutionMode={settings.terminalExecutionMode}
+                  onTerminalExecutionModeChange={handleTerminalExecutionModeChange}
                 />
               </div>
             </div>
@@ -585,9 +605,7 @@ export function ChatInterface({
             onOpenCommitModal={handleOpenCommitModal}
             onQuickCommit={handleQuickCommit}
             onRefreshAll={handleRefreshGitUi}
-            onSectionOpenChange={(sourceControlSectionOpen) => {
-              void onUpdateSettings({ sourceControlSectionOpen })
-            }}
+            onSectionOpenChange={handleSourceControlSectionOpenChange}
             onStageFile={handleStageDiffFile}
             onUnstageFile={handleUnstageDiffFile}
             pendingFileActionPath={pendingFileActionPath}

@@ -94,6 +94,16 @@ function formatMutationResultBody(semanticResult: Record<string, unknown>) {
   return message ?? 'Tool completed successfully.'
 }
 
+function formatTerminalResultBody(semanticResult: Record<string, unknown>) {
+  const output = typeof semanticResult.output === 'string' ? semanticResult.output : ''
+  if (output.length > 0) {
+    return output
+  }
+
+  const message = readString(semanticResult.message)
+  return message ?? 'Terminal command completed.'
+}
+
 function formatFallbackResultBody(semanticResult: Record<string, unknown>) {
   return JSON.stringify(semanticResult, null, 2)
 }
@@ -117,6 +127,10 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
 
   if (toolName === 'write' || toolName === 'edit') {
     return formatMutationResultBody(semanticResult)
+  }
+
+  if (toolName === 'exec_command' || toolName === 'write_stdin') {
+    return formatTerminalResultBody(semanticResult)
   }
 
   return formatFallbackResultBody(semanticResult)

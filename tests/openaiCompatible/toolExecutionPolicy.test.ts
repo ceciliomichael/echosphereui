@@ -54,7 +54,7 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('executeToolCallWithPolicies allows repeating the same list call without an intervening mutation', async () => {
+test('executeToolCallWithPolicies blocks repeating the same list call without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -76,12 +76,13 @@ test('executeToolCallWithPolicies allows repeating the same list call without an
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
 
-    assert.equal(completedEvents.length, 2)
-    assert.equal(failedEvents.length, 0)
+    assert.equal(completedEvents.length, 1)
+    assert.equal(failedEvents.length, 1)
+    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
   })
 })
 
-test('executeToolCallWithPolicies allows rereading the same file without an intervening mutation', async () => {
+test('executeToolCallWithPolicies blocks rereading the same file without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -103,12 +104,13 @@ test('executeToolCallWithPolicies allows rereading the same file without an inte
     assert.equal(inMemoryMessages.length, 2)
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 2)
-    assert.equal(failedEvents.length, 0)
+    assert.equal(completedEvents.length, 1)
+    assert.equal(failedEvents.length, 1)
+    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
   })
 })
 
-test('createHydratedToolExecutionTurnState does not block rereads from historical read tool results', async () => {
+test('createHydratedToolExecutionTurnState blocks rereads from historical read tool results', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -147,8 +149,9 @@ test('createHydratedToolExecutionTurnState does not block rereads from historica
 
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 1)
-    assert.equal(failedEvents.length, 0)
+    assert.equal(completedEvents.length, 0)
+    assert.equal(failedEvents.length, 1)
+    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
   })
 })
 

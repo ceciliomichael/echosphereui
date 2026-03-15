@@ -5,6 +5,7 @@ import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 interface ToolArgumentsValue {
   absolute_path?: unknown
   patch?: unknown
+  workdir?: unknown
 }
 
 function parseCompleteToolArguments(argumentsText: string): ToolArgumentsValue | null {
@@ -103,14 +104,28 @@ function extractFirstPatchPath(patchText: string) {
   return patchPath && patchPath.length > 0 ? patchPath : null
 }
 
-function extractPartialPatchPath(argumentsText: string) {
-  const patchMatch = argumentsText.match(/"patch"\s*:\s*"((?:\\.|[^"])*)/u)
-  if (!patchMatch) {
+function extractPatchPathFromRawText(input: string) {
+  const directMatch = input.match(/\*\*\* (?:Update|Add|Delete) File:\s*([^\n\r"]+)/u)
+  if (!directMatch) {
     return null
   }
 
-  const patchText = decodePartialJsonString(patchMatch[1])
-  return extractFirstPatchPath(patchText)
+  const patchPath = directMatch[1]?.trim()
+  return patchPath && patchPath.length > 0 ? patchPath : null
+}
+
+function extractPartialPatchPath(argumentsText: string) {
+  const patchMatch = argumentsText.match(/"patch"\s*:\s*"((?:\\.|[^"])*)/u)
+  if (patchMatch) {
+    const patchText = decodePartialJsonString(patchMatch[1])
+    const patchPath = extractFirstPatchPath(patchText)
+    if (patchPath) {
+      return patchPath
+    }
+  }
+
+  const decodedArguments = decodePartialJsonString(argumentsText)
+  return extractPatchPathFromRawText(decodedArguments) ?? extractPatchPathFromRawText(argumentsText)
 }
 
 function getAbsolutePath(invocation: ToolInvocationTrace) {
@@ -124,6 +139,10 @@ function getAbsolutePath(invocation: ToolInvocationTrace) {
     if (patchPath) {
       return patchPath
     }
+  }
+
+  if (typeof argumentsValue?.workdir === 'string' && argumentsValue.workdir.trim().length > 0) {
+    return argumentsValue.workdir.trim()
   }
 
   return extractPartialAbsolutePath(invocation.argumentsText) ?? extractPartialPatchPath(invocation.argumentsText)
@@ -198,6 +217,22 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     return operation === 'noop' ? 'Verified' : 'Edited'
   }
 
+  if (invocation.toolName === 'exec_command') {
+    return invocation.state === 'running'
+      ? 'Executing'
+      : invocation.state === 'completed'
+        ? 'Executed'
+        : 'Execution failed'
+  }
+
+  if (invocation.toolName === 'write_stdin') {
+    return invocation.state === 'running'
+      ? 'Interacting'
+      : invocation.state === 'completed'
+        ? 'Updated session'
+        : 'Session update failed'
+  }
+
   return invocation.state === 'running'
     ? `Running ${invocation.toolName}`
     : invocation.state === 'completed'
@@ -209,11 +244,21 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
-    if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
-      return structuredPath
+    const normalizedStructuredPath = structuredPath.trim()
+    if (invocation.toolName === 'edit' && normalizedStructuredPath === '.') {
+      const absolutePath = getAbsolutePath(invocation)
+      return absolutePath ? getBasename(absolutePath) : null
     }
 
-    return getBasename(structuredPath)
+    if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
+      return normalizedStructuredPath
+    }
+
+    if (invocation.toolName === 'exec_command') {
+      return normalizedStructuredPath
+    }
+
+    return getBasename(normalizedStructuredPath)
   }
 
   const absolutePath = getAbsolutePath(invocation)

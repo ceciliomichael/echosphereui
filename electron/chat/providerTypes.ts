@@ -1,4 +1,11 @@
-import type { ChatMode, ChatProviderId, Message, ReasoningEffort, ToolInvocationResultPresentation } from '../../src/types/chat'
+import type {
+  AppTerminalExecutionMode,
+  ChatMode,
+  ChatProviderId,
+  Message,
+  ReasoningEffort,
+  ToolInvocationResultPresentation,
+} from '../../src/types/chat'
 
 export type StreamDeltaEvent =
   | {
@@ -51,11 +58,14 @@ export interface ProviderStreamRequest {
   modelId: string
   providerId: ChatProviderId
   reasoningEffort: ReasoningEffort
+  terminalExecutionMode: AppTerminalExecutionMode
 }
 
 export interface ProviderStreamContext {
   emitDelta: (event: StreamDeltaEvent) => void
   signal: AbortSignal
+  streamId: string
+  terminalExecutionMode: AppTerminalExecutionMode
   workspaceCheckpointId: string | null
 }
 
