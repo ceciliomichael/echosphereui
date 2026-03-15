@@ -6,9 +6,11 @@ interface CodeBlockProps {
   code: string
   fileName?: string
   headerLabel?: string
+  headerRightLabel?: string
   language?: string
   isStreaming?: boolean
   maxBodyHeightClassName?: string
+  showCopyButton?: boolean
   startLineNumber?: number
 }
 
@@ -82,14 +84,17 @@ const CodeRows = memo(function CodeRows({ code, startLineNumber }: CodeRowsProps
 export const CodeBlock = memo(function CodeBlock({
   code,
   fileName,
+  headerLabel,
+  headerRightLabel,
   language,
   isStreaming = false,
   maxBodyHeightClassName,
+  showCopyButton = true,
   startLineNumber = 1,
 }: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false)
   const iconConfig = resolveFileIconConfig({ fileName, languageId: language })
-  const titleLabel = fileName ?? toLanguageLabel(language, iconConfig.label)
+  const titleLabel = headerLabel ?? fileName ?? toLanguageLabel(language, iconConfig.label)
   const LanguageIcon = iconConfig.icon
 
   useEffect(() => {
@@ -115,8 +120,8 @@ export const CodeBlock = memo(function CodeBlock({
 
   return (
     <div className="my-2 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-      <div className="relative flex items-center border-b border-border bg-surface px-3 py-3 pr-11 text-[12px] text-muted-foreground">
-        <span className="inline-flex min-h-4 min-w-0 items-center gap-2">
+      <div className="flex items-center gap-3 border-b border-border bg-surface px-3 py-3 text-[12px] text-muted-foreground">
+        <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
           <span className="flex h-4 w-4 items-center justify-center">
             <LanguageIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
           </span>
@@ -124,15 +129,24 @@ export const CodeBlock = memo(function CodeBlock({
             {titleLabel}
           </span>
         </span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="absolute top-1/2 right-3 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
-          aria-label={isCopied ? 'Copied code' : 'Copy code'}
-          title={isCopied ? 'Copied' : 'Copy'}
-        >
-          {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        </button>
+        <span className="ml-auto inline-flex shrink-0 items-center gap-3">
+          {headerRightLabel ? (
+            <span className="font-mono text-[11px] leading-none text-muted-foreground" title={headerRightLabel}>
+              {headerRightLabel}
+            </span>
+          ) : null}
+          {showCopyButton ? (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
+              aria-label={isCopied ? 'Copied code' : 'Copy code'}
+              title={isCopied ? 'Copied' : 'Copy'}
+            >
+              {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </button>
+          ) : null}
+        </span>
       </div>
       <div
         className={[

@@ -8,6 +8,7 @@ export function buildAgentContextSection(agentContextRootPath: string, supportsN
     'When a request depends on project context, inspect the top-level structure once if needed, then explore selectively based on the task.',
     'Do not scan the whole codebase blindly or repeat the same exploration after enough context is already available.',
     'When the current context is already sufficient, answer or act immediately instead of exploring additional files.',
+    'Do not restart discovery after each extracted feature or subtask. Preserve working context and continue from what is already known unless evidence is stale.',
   ]
 
   if (supportsNativeTools) {

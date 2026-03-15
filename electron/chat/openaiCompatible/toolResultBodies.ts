@@ -125,7 +125,7 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatGrepResultBody(semanticResult)
   }
 
-  if (toolName === 'write' || toolName === 'edit') {
+  if (toolName === 'patch') {
     return formatMutationResultBody(semanticResult)
   }
 
@@ -154,7 +154,7 @@ export function buildResultPresentation(
   toolName: string,
   semanticResult: Record<string, unknown>,
 ): ToolInvocationResultPresentation | undefined {
-  if (toolName !== 'edit' && toolName !== 'write') {
+  if (toolName !== 'patch') {
     return undefined
   }
 

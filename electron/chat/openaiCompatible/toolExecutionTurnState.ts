@@ -46,6 +46,16 @@ function readNormalizedAbsolutePath(argumentsValue: Record<string, unknown>, age
   return normalizeToolPath(normalizedTargetPath)
 }
 
+function readNormalizedSubjectPath(subjectPath: string, agentContextRootPath: string) {
+  if (subjectPath === '.') {
+    return null
+  }
+
+  const absolutePath = path.isAbsolute(subjectPath) ? subjectPath : path.join(agentContextRootPath, subjectPath)
+  const { normalizedTargetPath } = resolveToolPath(agentContextRootPath, absolutePath)
+  return normalizeToolPath(normalizedTargetPath)
+}
+
 function buildInspectionCallKey(
   toolCall: OpenAICompatibleToolCall,
   argumentsValue: Record<string, unknown>,
@@ -221,11 +231,18 @@ function toMutationTargetPathFromMetadata(
   metadata: Record<string, unknown>,
   agentContextRootPath: string,
 ) {
-  if (!isRecord(metadata.arguments)) {
+  if (!isRecord(metadata.semantics) || metadata.semantics.content_changed !== true) {
     return null
   }
 
-  if (!isRecord(metadata.semantics) || metadata.semantics.content_changed !== true) {
+  if (isRecord(metadata.subject) && typeof metadata.subject.path === 'string') {
+    const normalizedSubjectPath = readNormalizedSubjectPath(metadata.subject.path, agentContextRootPath)
+    if (normalizedSubjectPath) {
+      return normalizedSubjectPath
+    }
+  }
+
+  if (!isRecord(metadata.arguments)) {
     return null
   }
 
@@ -265,13 +282,26 @@ function registerMutationCall(
     return
   }
 
+  if (typeof semanticResult.path === 'string') {
+    try {
+      const normalizedSubjectPath = readNormalizedSubjectPath(semanticResult.path, agentContextRootPath)
+      if (normalizedSubjectPath) {
+        invalidateAffectedInspections(normalizedSubjectPath, turnState.inspectionCallsByKey)
+        return
+      }
+    } catch {
+      // Fall back to argument-based path handling.
+    }
+  }
+
   try {
     invalidateAffectedInspections(
       readNormalizedAbsolutePath(argumentsValue, agentContextRootPath),
       turnState.inspectionCallsByKey,
     )
   } catch {
-    // Let tool result replay guide the model when mutation metadata is incomplete.
+    // Unknown mutation scope is safest as full inspection invalidation.
+    turnState.inspectionCallsByKey.clear()
   }
 }
 
@@ -319,7 +349,7 @@ export function hydrateToolExecutionTurnStateFromMessages(
         }
       }
 
-      if (metadata.toolName === 'write' || metadata.toolName === 'edit') {
+      if (metadata.toolName === 'patch') {
         const mutationTargetPath = toMutationTargetPathFromMetadata(metadata, agentContextRootPath)
         if (mutationTargetPath) {
           invalidateAffectedInspections(mutationTargetPath, turnState.inspectionCallsByKey)
@@ -383,7 +413,7 @@ export function recordSuccessfulToolExecution(
     return
   }
 
-  if (toolCall.name === 'write' || toolCall.name === 'edit') {
+  if (toolCall.name === 'patch') {
     registerMutationCall(argumentsValue, semanticResult, agentContextRootPath, turnState)
   }
 }

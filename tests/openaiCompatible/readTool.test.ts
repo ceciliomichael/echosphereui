@@ -88,29 +88,30 @@ test('read tool supports explicit start_line and end_line range selection up to 
   })
 })
 
-test('read tool rejects ranges larger than 500 lines', async () => {
+test('read tool clamps ranges larger than 500 lines', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'src', 'large.ts')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     const fileContent = Array.from({ length: 600 }, (_, index) => `line-${index + 1}`).join('\n')
     await fs.writeFile(filePath, fileContent, 'utf8')
 
-    await assert.rejects(
-      () =>
-        readTool.execute(
-          {
-            absolute_path: filePath,
-            end_line: 501,
-            start_line: 1,
-          },
-          buildExecutionContext(workspacePath),
-        ),
-      (error: unknown) => {
-        assert.ok(error instanceof OpenAICompatibleToolError)
-        assert.match(error.message, /at most 500 lines/u)
-        return true
+    const result = await readTool.execute(
+      {
+        absolute_path: filePath,
+        end_line: 508,
+        start_line: 1,
       },
+      buildExecutionContext(workspacePath),
     )
+
+    assert.equal(result.startLine, 1)
+    assert.equal(result.endLine, 500)
+    assert.equal(result.lineCount, 500)
+    assert.equal(result.maxReadLineCount, 500)
+    assert.equal(result.totalLineCount, 600)
+    assert.equal(result.nextStartLine, 501)
+    assert.equal(result.nextEndLine, 600)
+    assert.equal(result.truncated, true)
   })
 })
 

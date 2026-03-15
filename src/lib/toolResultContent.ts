@@ -44,7 +44,7 @@ function buildMutationAcknowledgement(metadata: StructuredToolResultMetadata) {
     return null
   }
 
-  if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
+  if (metadata.toolName !== 'patch') {
     return null
   }
 
@@ -54,29 +54,11 @@ function buildMutationAcknowledgement(metadata: StructuredToolResultMetadata) {
     return null
   }
 
-  if (metadata.toolName === 'write') {
-    if (operation === 'create') {
-      return `Acknowledged workspace state: ${subjectPath} was created successfully and now exists in the workspace.`
-    }
-
-    if (operation === 'overwrite') {
-      return `Acknowledged workspace state: ${subjectPath} was overwritten successfully and now reflects the requested content.`
-    }
-
-    if (operation === 'noop') {
-      return `Acknowledged workspace state: ${subjectPath} already matched the requested content and remains unchanged.`
-    }
+  if (operation === 'noop') {
+    return `Acknowledged workspace state: ${subjectPath} already matched the requested patch outcome and remains unchanged.`
   }
 
-  if (metadata.toolName === 'edit') {
-    if (operation === 'noop') {
-      return `Acknowledged workspace state: ${subjectPath} already matched the requested edit outcome and remains unchanged.`
-    }
-
-    return `Acknowledged workspace state: ${subjectPath} was edited successfully and now reflects the applied changes.`
-  }
-
-  return null
+  return `Acknowledged workspace state: ${subjectPath} was patched successfully and now reflects the applied changes.`
 }
 
 function buildGeneralSuccessAcknowledgement(metadata: StructuredToolResultMetadata) {

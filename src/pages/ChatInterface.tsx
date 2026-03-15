@@ -184,7 +184,7 @@ export function ChatInterface({
     () =>
       [
         {
-          description: 'Echo can write and edit code',
+          description: 'Echo can inspect and patch code',
           label: 'Agent',
           value: 'agent',
         },

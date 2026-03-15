@@ -67,7 +67,7 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       latestInspectionStateByKey.set(inspectionStateKey, inspectionStateLine)
     }
 
-    if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
+    if (metadata.toolName !== 'patch') {
       continue
     }
 
@@ -95,26 +95,12 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   }
 
   const latestMutationStateLines = Array.from(latestMutationStateByPath.values()).map((entry) => {
-    if (entry.toolName === 'write') {
-      if (entry.operation === 'create') {
-        return `- ${entry.path} now exists in the workspace after a successful write create.`
-      }
-
-      if (entry.operation === 'overwrite') {
-        return `- ${entry.path} now reflects the latest successful write content.`
-      }
-
+    if (entry.toolName === 'patch') {
       if (entry.operation === 'noop') {
-        return `- ${entry.path} already matched the requested write content and remains unchanged.`
-      }
-    }
-
-    if (entry.toolName === 'edit') {
-      if (entry.operation === 'noop') {
-        return `- ${entry.path} already matched the requested edit outcome and remains unchanged.`
+        return `- ${entry.path} already matched the requested patch outcome and remains unchanged.`
       }
 
-      return `- ${entry.path} now reflects the latest successful edit changes.`
+      return `- ${entry.path} now reflects the latest successful patch changes.`
     }
 
     const operationSuffix = entry.operation ? ` (${entry.operation})` : ''

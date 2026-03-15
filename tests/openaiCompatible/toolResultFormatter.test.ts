@@ -36,17 +36,17 @@ const sampleGrepToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
-const sampleEditToolCall: OpenAICompatibleToolCall = {
+const samplePatchToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"path":"package.json"}',
-  id: 'tool-call-edit-123',
-  name: 'edit',
+  id: 'tool-call-patch-123',
+  name: 'patch',
   startedAt: 1_700_000_000_000,
 }
 
-const sampleWriteToolCall: OpenAICompatibleToolCall = {
+const samplePatchCreateToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"path":"src/app/page.tsx"}',
-  id: 'tool-call-write-123',
-  name: 'write',
+  id: 'tool-call-patch-create-123',
+  name: 'patch',
   startedAt: 1_700_000_000_000,
 }
 
@@ -195,24 +195,26 @@ test('buildSuccessfulToolArtifacts adds direct acknowledgements for glob and gre
   )
 })
 
-test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exposing diff presentation data', () => {
+test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while exposing diff presentation data', () => {
   const completedAt = 1_700_000_000_175
   const artifacts = buildSuccessfulToolArtifacts(
-    sampleEditToolCall,
+    samplePatchToolCall,
     {
+      addedPaths: [],
       contentChanged: true,
       contextLines: 3,
+      deletedPaths: [],
       endLineNumber: 12,
       message: 'Edited package.json successfully.',
+      modifiedPaths: ['package.json'],
       newContent: '{\n  "name": "next"\n}',
       oldContent: '{\n  "name": "prev"\n}',
-      operation: 'edit',
+      operation: 'apply_patch',
       path: 'package.json',
-      replacementCount: 1,
       startLineNumber: 10,
       targetKind: 'file',
     },
-    sampleEditToolCall.startedAt,
+    samplePatchToolCall.startedAt,
     completedAt,
   )
 
@@ -220,10 +222,10 @@ test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exp
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: package\.json was edited successfully and now reflects the applied changes\./iu,
+    /^Acknowledged workspace state: package\.json was patched successfully and now reflects the applied changes\./iu,
   )
   assert.equal(parsedContent.body, 'Edited package.json successfully.')
-  assert.equal(parsedContent.metadata?.semantics?.operation, 'edit')
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
   assert.deepEqual(artifacts.resultPresentation, {
     addedLineCount: 1,
     contextLines: 3,
@@ -237,21 +239,26 @@ test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exp
   })
 })
 
-test('buildSuccessfulToolArtifacts exposes create-file diff presentation for write results', () => {
+test('buildSuccessfulToolArtifacts exposes create-file diff presentation for patch results', () => {
   const completedAt = 1_700_000_000_180
   const artifacts = buildSuccessfulToolArtifacts(
-    sampleWriteToolCall,
+    samplePatchCreateToolCall,
     {
+      addedPaths: ['src/app/page.tsx'],
+      changeCount: 1,
       contentChanged: true,
+      deletedPaths: [],
       endLineNumber: 4,
       message: 'Created src/app/page.tsx successfully.',
+      modifiedPaths: [],
       newContent: 'export default function Page() {\n  return null\n}\n',
-      operation: 'create',
+      oldContent: null,
+      operation: 'apply_patch',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    sampleWriteToolCall.startedAt,
+    samplePatchCreateToolCall.startedAt,
     completedAt,
   )
 
@@ -259,11 +266,11 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for wri
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: src\/app\/page\.tsx was created successfully and now exists in the workspace\./iu,
+    /^Acknowledged workspace state: src\/app\/page\.tsx was patched successfully and now reflects the applied changes\./iu,
   )
   assert.equal(parsedContent.body, 'Created src/app/page.tsx successfully.')
-  assert.equal(parsedContent.metadata?.semantics?.operation, 'create')
-  assert.equal(parsedContent.metadata?.semantics?.workspace_effect, 'file_created')
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
+  assert.equal(parsedContent.metadata?.semantics?.workspace_effect, 'files_edited')
   assert.equal(parsedContent.metadata?.semantics?.mutation_applied, true)
   assert.equal(parsedContent.metadata?.semantics?.target_exists_after_call, true)
   assert.deepEqual(artifacts.resultPresentation, {
@@ -316,43 +323,52 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
   assert.match(content ?? '', /"toolName": "read"/u)
 })
 
-test('buildCodexGroupedToolResultContent includes latest mutation state summary for repeated file writes', () => {
+test('buildCodexGroupedToolResultContent includes latest mutation state summary for repeated file patches', () => {
   const createContent = buildSuccessfulToolArtifacts(
-    sampleWriteToolCall,
+    samplePatchCreateToolCall,
     {
+      addedPaths: ['src/app/page.tsx'],
+      changeCount: 1,
       contentChanged: true,
+      deletedPaths: [],
       endLineNumber: 2,
       message: 'Created src/app/page.tsx successfully.',
+      modifiedPaths: [],
       newContent: 'export default function Page() {\n  return null\n}\n',
-      operation: 'create',
+      oldContent: null,
+      operation: 'apply_patch',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    sampleWriteToolCall.startedAt,
-    sampleWriteToolCall.startedAt + 1,
+    samplePatchCreateToolCall.startedAt,
+    samplePatchCreateToolCall.startedAt + 1,
   ).resultContent
-  const overwriteContent = buildSuccessfulToolArtifacts(
-    sampleWriteToolCall,
+  const patchUpdateContent = buildSuccessfulToolArtifacts(
+    samplePatchCreateToolCall,
     {
+      addedPaths: [],
+      changeCount: 1,
       contentChanged: true,
+      deletedPaths: [],
       endLineNumber: 3,
-      message: 'Overwrote src/app/page.tsx successfully.',
+      message: 'Edited src/app/page.tsx successfully.',
+      modifiedPaths: ['src/app/page.tsx'],
       newContent: 'export default function Page() {\n  return <main />\n}\n',
       oldContent: 'export default function Page() {\n  return null\n}\n',
-      operation: 'overwrite',
+      operation: 'apply_patch',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    sampleWriteToolCall.startedAt + 2,
-    sampleWriteToolCall.startedAt + 3,
+    samplePatchCreateToolCall.startedAt + 2,
+    samplePatchCreateToolCall.startedAt + 3,
   ).resultContent
   const content = buildCodexGroupedToolResultContent([
     createContent,
-    overwriteContent,
+    patchUpdateContent,
   ])
 
   assert.match(content ?? '', /Latest acknowledged workspace file state:/u)
-  assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful write content\./u)
+  assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful patch changes\./u)
 })

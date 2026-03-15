@@ -50,13 +50,7 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
-  if (toolName === 'write') {
-    return {
-      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
-    }
-  }
-
-  if (toolName === 'edit') {
+  if (toolName === 'patch') {
     const patch = readString(argumentsValue.patch)
     return {
       patch_length: patch?.length ?? undefined,
@@ -116,7 +110,7 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Found ${matchCount} search hit${matchCount === 1 ? '' : 's'} for ${pattern} in ${subjectPath}${truncated ? ' (truncated)' : ''}.`
   }
 
-  if (toolName === 'write' || toolName === 'edit') {
+  if (toolName === 'patch') {
     return readString(semanticResult.message) ?? 'Tool completed successfully.'
   }
 
@@ -215,32 +209,17 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     })
   }
 
-  if (toolName === 'write') {
+  if (toolName === 'patch') {
     const operation = readString(semanticResult.operation) ?? undefined
-    return filterUndefinedEntries({
-      ...sharedSemantics,
-      content_changed: readBoolean(semanticResult.contentChanged),
-      end_line_number: readNumber(semanticResult.endLineNumber) ?? undefined,
-      mutation_applied: operation === 'create' || operation === 'overwrite',
-      operation,
-      start_line_number: readNumber(semanticResult.startLineNumber) ?? undefined,
-      target_exists_after_call: true,
-      workspace_effect:
-        operation === 'create'
-          ? 'file_created'
-          : operation === 'overwrite'
-            ? 'file_overwritten'
-            : operation === 'noop'
-              ? 'file_already_matched'
-              : undefined,
-    })
-  }
-
-  if (toolName === 'edit') {
-    const operation = readString(semanticResult.operation) ?? undefined
-    const addedPaths = readListEntries(semanticResult.addedPaths)
-    const modifiedPaths = readListEntries(semanticResult.modifiedPaths)
-    const deletedPaths = readListEntries(semanticResult.deletedPaths)
+    const addedPaths = Array.isArray(semanticResult.addedPaths)
+      ? semanticResult.addedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    const modifiedPaths = Array.isArray(semanticResult.modifiedPaths)
+      ? semanticResult.modifiedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    const deletedPaths = Array.isArray(semanticResult.deletedPaths)
+      ? semanticResult.deletedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
     const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
     return filterUndefinedEntries({
       ...sharedSemantics,

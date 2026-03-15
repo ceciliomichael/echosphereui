@@ -75,27 +75,18 @@ export const readTool: OpenAICompatibleToolDefinition = {
     }
 
     const requestedLineCountFromRange = endLine === undefined ? undefined : endLine - startLine + 1
-    if (requestedLineCountFromRange !== undefined && requestedLineCountFromRange > MAX_READ_LINE_COUNT) {
-      const maxEndLineForStart = startLine + MAX_READ_LINE_COUNT - 1
-      throw new OpenAICompatibleToolError(
-        `Requested range must include at most ${MAX_READ_LINE_COUNT} lines. Line ranges are inclusive, so for start_line=${startLine} the maximum end_line is ${maxEndLineForStart}.`,
-        {
-        endLine,
-        maxAllowedLines: MAX_READ_LINE_COUNT,
-        maxEndLineForStart,
-        requestedLineCount: requestedLineCountFromRange,
-        startLine,
-        },
-      )
-    }
+    const boundedLineCountFromRange =
+      requestedLineCountFromRange === undefined
+        ? undefined
+        : Math.min(requestedLineCountFromRange, MAX_READ_LINE_COUNT)
 
     const hasMaxLines = argumentsValue.max_lines !== undefined
     const requestedLineCount =
-      requestedLineCountFromRange === undefined
+      boundedLineCountFromRange === undefined
         ? maxLines
         : hasMaxLines
-          ? Math.min(requestedLineCountFromRange, maxLines)
-          : requestedLineCountFromRange
+          ? Math.min(boundedLineCountFromRange, maxLines)
+          : boundedLineCountFromRange
     const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
     const fileStat = await fs.stat(normalizedTargetPath).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -176,7 +167,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
           },
           end_line: {
             description:
-              'Optional 1-based inclusive ending line. With start_line, the requested size is end_line - start_line + 1 and must be <= 500. Example: start_line=500,end_line=999 is valid (500 lines); end_line=1000 is invalid (501 lines).',
+              'Optional 1-based inclusive ending line. With start_line, the requested size is end_line - start_line + 1. If the requested range exceeds 500 lines, the tool automatically returns at most 500 lines.',
             minimum: 1,
             type: 'integer',
           },

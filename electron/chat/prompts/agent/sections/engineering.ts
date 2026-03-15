@@ -5,6 +5,7 @@ export function buildAgentEngineeringSection() {
     'Separate code by responsibility, not by file length, and split modules when responsibilities, lifecycle, interface role, or reuse potential differ.',
     'Keep route, screen, handler, and other entry files thin by moving implementation detail into focused modules.',
     'Prefer extending existing modules and utilities over creating duplicate parallel implementations.',
+    'Prefer coherent end-to-end edits over fragmented micro-refactors that force repeated rediscovery of the same local context.',
     'Use strict, explicit typing and do not introduce any or leave unvalidated loose data at normal module boundaries.',
     'Validate external and persisted inputs at system boundaries, and narrow untrusted data early instead of passing loose shapes deeper into the system.',
     'Build for production: validate external inputs, handle failure paths deliberately, preserve backward compatibility unless the user requests a breaking change, and keep side effects controlled and observable.',

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { editTool } from '../../electron/chat/openaiCompatible/tools/editTool'
+import { patchTool } from '../../electron/chat/openaiCompatible/tools/patchTool'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext(agentContextRootPath: string) {
@@ -31,7 +31,7 @@ test('edit tool applies structured patch updates', async () => {
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, ['function Demo() {', '  return null', '}'].join('\n'), 'utf8')
 
-    const result = await editTool.execute(
+    const result = await patchTool.execute(
       {
         patch: ['*** Begin Patch', '*** Update File: src/component.tsx', '@@ function Demo() {', '-  return null', '+  return <div />', '*** End Patch'].join('\n'),
       },
@@ -56,7 +56,7 @@ test('edit tool supports add, move, and delete in one patch', async () => {
     await fs.writeFile(sourcePath, ['export const value = 1', ''].join('\n'), 'utf8')
     await fs.writeFile(deletePath, ['old', ''].join('\n'), 'utf8')
 
-    const result = await editTool.execute(
+    const result = await patchTool.execute(
       {
         patch: [
           '*** Begin Patch',
@@ -90,7 +90,7 @@ test('edit tool supports add, move, and delete in one patch', async () => {
 test('edit tool rejects patches with invalid boundaries', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await assert.rejects(
-      () => editTool.execute({ patch: '*** Update File: src/a.ts' }, buildExecutionContext(workspacePath)),
+      () => patchTool.execute({ patch: '*** Update File: src/a.ts' }, buildExecutionContext(workspacePath)),
       (error: unknown) => {
         assert.ok(error instanceof OpenAICompatibleToolError)
         assert.match(error.message, /first line must be \*\*\* Begin Patch/u)
@@ -108,7 +108,7 @@ test('edit tool rejects update hunks that do not match file content', async () =
 
     await assert.rejects(
       () =>
-        editTool.execute(
+        patchTool.execute(
           {
             patch: [
               '*** Begin Patch',
@@ -132,7 +132,7 @@ test('edit tool rejects update hunks that do not match file content', async () =
 
 test('edit tool returns noop for empty patch body', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
-    const result = await editTool.execute(
+    const result = await patchTool.execute(
       {
         patch: ['*** Begin Patch', '*** End Patch'].join('\n'),
       },

@@ -104,6 +104,23 @@ function extractFirstPatchPath(patchText: string) {
   return patchPath && patchPath.length > 0 ? patchPath : null
 }
 
+function extractFirstPatchAction(patchText: string): 'add' | 'delete' | 'update' | null {
+  const normalizedPatch = patchText.replace(/\r\n/g, '\n')
+  const patchActionMatch = normalizedPatch.match(/\*\*\* (Update|Add|Delete) File:\s*(.+)/u)
+  if (!patchActionMatch) {
+    return null
+  }
+
+  const patchAction = patchActionMatch[1]
+  if (patchAction === 'Add') {
+    return 'add'
+  }
+  if (patchAction === 'Update') {
+    return 'update'
+  }
+  return 'delete'
+}
+
 function extractPatchPathFromRawText(input: string) {
   const directMatch = input.match(/\*\*\* (?:Update|Add|Delete) File:\s*([^\n\r"]+)/u)
   if (!directMatch) {
@@ -112,6 +129,21 @@ function extractPatchPathFromRawText(input: string) {
 
   const patchPath = directMatch[1]?.trim()
   return patchPath && patchPath.length > 0 ? patchPath : null
+}
+
+function extractPatchActionFromRawText(input: string): 'add' | 'delete' | 'update' | null {
+  const directMatch = input.match(/\*\*\* (Update|Add|Delete) File:\s*[^\n\r"]+/u)
+  if (!directMatch) {
+    return null
+  }
+
+  if (directMatch[1] === 'Add') {
+    return 'add'
+  }
+  if (directMatch[1] === 'Update') {
+    return 'update'
+  }
+  return 'delete'
 }
 
 function extractPartialPatchPath(argumentsText: string) {
@@ -126,6 +158,20 @@ function extractPartialPatchPath(argumentsText: string) {
 
   const decodedArguments = decodePartialJsonString(argumentsText)
   return extractPatchPathFromRawText(decodedArguments) ?? extractPatchPathFromRawText(argumentsText)
+}
+
+function extractPartialPatchAction(argumentsText: string): 'add' | 'delete' | 'update' | null {
+  const patchMatch = argumentsText.match(/"patch"\s*:\s*"((?:\\.|[^"])*)/u)
+  if (patchMatch) {
+    const patchText = decodePartialJsonString(patchMatch[1])
+    const patchAction = extractFirstPatchAction(patchText)
+    if (patchAction) {
+      return patchAction
+    }
+  }
+
+  const decodedArguments = decodePartialJsonString(argumentsText)
+  return extractPatchActionFromRawText(decodedArguments) ?? extractPatchActionFromRawText(argumentsText)
 }
 
 function getAbsolutePath(invocation: ToolInvocationTrace) {
@@ -152,6 +198,17 @@ function getBasename(absolutePath: string) {
   const normalizedPath = absolutePath.replace(/\\/g, '/')
   const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0)
   return pathSegments[pathSegments.length - 1] ?? absolutePath
+}
+
+function getPatchIntent(invocation: ToolInvocationTrace): 'editing' | 'writing' {
+  const argumentsValue = parseCompleteToolArguments(invocation.argumentsText)
+  if (typeof argumentsValue?.patch === 'string' && argumentsValue.patch.trim().length > 0) {
+    const patchAction = extractFirstPatchAction(argumentsValue.patch)
+    return patchAction === 'add' ? 'writing' : 'editing'
+  }
+
+  const partialPatchAction = extractPartialPatchAction(invocation.argumentsText)
+  return partialPatchAction === 'add' ? 'writing' : 'editing'
 }
 
 function getToolVerb(invocation: ToolInvocationTrace) {
@@ -185,36 +242,21 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Search failed'
   }
 
-  if (invocation.toolName === 'write') {
+  if (invocation.toolName === 'patch') {
+    const patchIntent = getPatchIntent(invocation)
     if (invocation.state === 'running') {
-      return 'Writing'
+      return patchIntent === 'writing' ? 'Writing' : 'Editing'
     }
 
     if (invocation.state === 'failed') {
-      return 'Write failed'
-    }
-
-    if (operation === 'overwrite') {
-      return 'Overwrote'
+      return patchIntent === 'writing' ? 'Write failed' : 'Edit failed'
     }
 
     if (operation === 'noop') {
       return 'Verified'
     }
 
-    return 'Created'
-  }
-
-  if (invocation.toolName === 'edit') {
-    if (invocation.state === 'running') {
-      return 'Editing'
-    }
-
-    if (invocation.state === 'failed') {
-      return 'Edit failed'
-    }
-
-    return operation === 'noop' ? 'Verified' : 'Edited'
+    return patchIntent === 'writing' ? 'Wrote' : 'Edited'
   }
 
   if (invocation.toolName === 'exec_command') {
@@ -245,7 +287,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if (invocation.toolName === 'edit' && normalizedStructuredPath === '.') {
+    if (invocation.toolName === 'patch' && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }

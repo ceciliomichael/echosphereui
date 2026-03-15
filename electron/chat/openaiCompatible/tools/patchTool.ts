@@ -448,9 +448,9 @@ async function readRequiredFile(absolutePath: string, action: 'delete' | 'update
   }
 }
 
-export const editTool: OpenAICompatibleToolDefinition = {
+export const patchTool: OpenAICompatibleToolDefinition = {
   executionMode: 'path-exclusive',
-  name: 'edit',
+  name: 'patch',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
     const patch = readRequiredText(argumentsValue, 'patch')
@@ -630,7 +630,7 @@ export const editTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description: 'Apply a structured patch with add, update, delete, and move operations inside the locked thread root.',
-      name: 'edit',
+      name: 'patch',
       parameters: {
         additionalProperties: false,
         properties: {

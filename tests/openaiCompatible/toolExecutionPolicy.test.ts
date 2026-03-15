@@ -35,11 +35,13 @@ function createReadToolCall(id: string, filePath: string): OpenAICompatibleToolC
   }
 }
 
-function createWriteToolCall(id: string, filePath: string, content: string): OpenAICompatibleToolCall {
+function createPatchToolCall(id: string, filePath: string, oldContent: string, newContent: string): OpenAICompatibleToolCall {
+  const patchPath = filePath.replace(/\\/g, '/')
+  const patch = `*** Begin Patch\n*** Update File: ${patchPath}\n@@\n-${oldContent}\n+${newContent}\n*** End Patch`
   return {
-    argumentsText: JSON.stringify({ absolute_path: filePath, content }),
+    argumentsText: JSON.stringify({ patch }),
     id,
-    name: 'write',
+    name: 'patch',
     startedAt: 1_700_000_000_000,
   }
 }
@@ -155,7 +157,7 @@ test('createHydratedToolExecutionTurnState blocks rereads from historical read t
   })
 })
 
-test('executeToolCallWithPolicies allows rereading the same file after a successful write', async () => {
+test('executeToolCallWithPolicies allows rereading the same file after a successful patch', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -173,7 +175,7 @@ test('executeToolCallWithPolicies allows rereading the same file after a success
 
     await executeToolCallWithPolicies(createReadToolCall('read-1', filePath), context, workspacePath, inMemoryMessages, turnState)
     await executeToolCallWithPolicies(
-      createWriteToolCall('write-1', filePath, 'updated'),
+      createPatchToolCall('patch-1', filePath, 'hello', 'updated'),
       context,
       workspacePath,
       inMemoryMessages,

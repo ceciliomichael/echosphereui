@@ -21,6 +21,10 @@ interface ReadToolResultViewModel {
   startLineNumber: number
 }
 
+function formatReadLineRangeLabel(startLineNumber: number, endLineNumber: number) {
+  return `${startLineNumber}-${endLineNumber}`
+}
+
 function parseReadToolResult(resultContent: string): ReadToolResultViewModel | null {
   const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)(?: of \d+)?\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
   if (!match) {
@@ -161,10 +165,15 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               <CodeBlock
                 code={readResultPresentation.code}
                 fileName={readResultDisplayPath}
+                headerRightLabel={formatReadLineRangeLabel(
+                  readResultPresentation.startLineNumber,
+                  readResultPresentation.endLineNumber,
+                )}
                 language={readResultPresentation.language}
                 isStreaming={invocation.state === 'running'}
                 startLineNumber={readResultPresentation.startLineNumber}
                 maxBodyHeightClassName="max-h-80"
+                showCopyButton={false}
               />
             </div>
           ) : (
