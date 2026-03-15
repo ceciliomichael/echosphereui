@@ -6,12 +6,14 @@ import {
   readRequiredString,
   resolveToolPath,
   toDisplayPath,
-} from './filesystemToolUtils'
-import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from './gitignoreMatcher'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
+} from '../filesystemToolUtils'
+import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from '../gitignoreMatcher'
+import { getToolDescription } from '../descriptionCatalog'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
 
 const DEFAULT_DIRECTORY_ENTRY_LIMIT = 200
+const TOOL_DESCRIPTION = getToolDescription('list')
 
 export const listTool: OpenAICompatibleToolDefinition = {
   executionMode: 'parallel',
@@ -67,7 +69,7 @@ export const listTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description: 'List the contents of a directory inside the workspace.',
+      description: TOOL_DESCRIPTION,
       name: 'list',
       parameters: {
         additionalProperties: false,
@@ -89,3 +91,4 @@ export const listTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

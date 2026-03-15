@@ -1,0 +1,8 @@
+Write input to an existing terminal session and return the latest output.
+
+Usage guidelines:
+- Provide `session_id` from a prior `exec_command` response.
+- Provide `chars` to send bytes to stdin.
+- Send an empty `chars` string to poll output without new input.
+- Use `yield_time_ms` and `max_output_tokens` to control output size and wait time.
+- Repeat calls while `commandRunning` is true.

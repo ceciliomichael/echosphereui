@@ -1,10 +1,11 @@
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import type { AppTerminalExecutionMode } from '../../../../src/types/chat'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
-import { parseToolArguments, readRequiredText } from './filesystemToolUtils'
-import { openTerminalSession, pollTerminalSession } from './terminalSessionManager'
+import type { AppTerminalExecutionMode } from '../../../../../src/types/chat'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
+import { getToolDescription } from '../descriptionCatalog'
+import { parseToolArguments, readRequiredText } from '../filesystemToolUtils'
+import { openTerminalSession, pollTerminalSession } from '../terminalSessionManager'
 import {
   DEFAULT_EXEC_COMMAND_YIELD_TIME_MS,
   formatTerminalToolOutput,
@@ -14,7 +15,7 @@ import {
   readOptionalStringValue,
   resolveTerminalWorkingDirectory,
   toTerminalWorkingDirectoryDisplayPath,
-} from './terminalToolSupport'
+} from '../terminalToolSupport'
 
 interface SpawnSpec {
   args: string[]
@@ -24,6 +25,7 @@ interface SpawnSpec {
 
 let wslAvailabilityPromise: Promise<boolean> | null = null
 const STRIPPED_TERMINAL_ENV_KEYS = new Set(['NODE_ENV'])
+const TOOL_DESCRIPTION = getToolDescription('exec_command')
 
 function createTerminalEnvironment() {
   const environment = { ...process.env }
@@ -240,8 +242,7 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description:
-        'Runs a command in a terminal session and returns output. If the process is still running after yield_time_ms, returns a session ID that can be continued with write_stdin.',
+      description: TOOL_DESCRIPTION,
       name: 'exec_command',
       parameters: {
         additionalProperties: false,
@@ -284,3 +285,4 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

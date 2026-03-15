@@ -1,12 +1,13 @@
-import { patchTool } from './tools/patchTool'
-import { execCommandTool } from './tools/execCommandTool'
-import { globTool } from './tools/globTool'
-import { grepTool } from './tools/grepTool'
-import { listTool } from './tools/listTool'
-import { readTool } from './tools/readTool'
-import { writeStdinTool } from './tools/writeStdinTool'
+import { execCommandTool } from './tools/exec-command/index'
+import { globTool } from './tools/glob/index'
+import { grepTool } from './tools/grep/index'
+import { listTool } from './tools/list/index'
+import { patchTool } from './tools/patch/index'
+import { readTool } from './tools/read/index'
+import { writeTool } from './tools/write/index'
+import { writeStdinTool } from './tools/write-stdin/index'
 
-const toolRegistry = [listTool, readTool, globTool, grepTool, patchTool, execCommandTool, writeStdinTool] as const
+const toolRegistry = [listTool, readTool, globTool, grepTool, patchTool, writeTool, execCommandTool, writeStdinTool] as const
 
 export function getOpenAICompatibleToolDefinitions() {
   return [...toolRegistry]

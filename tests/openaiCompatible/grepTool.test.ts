@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { grepTool } from '../../electron/chat/openaiCompatible/tools/grepTool'
+import { grepTool } from '../../electron/chat/openaiCompatible/tools/grep/index'
 import {
   getRipgrepBinaryCandidatePaths,
   resolveRipgrepBinaryPath,

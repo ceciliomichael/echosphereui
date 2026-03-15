@@ -3,8 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { readTool } from '../../electron/chat/openaiCompatible/tools/readTool'
-import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
+import { readTool } from '../../electron/chat/openaiCompatible/tools/read/index'
 
 function buildExecutionContext(agentContextRootPath: string) {
   const abortController = new AbortController()
@@ -140,26 +139,29 @@ test('read tool defaults to lines 1-500 when no explicit range is provided', asy
   })
 })
 
-test('read tool rejects start_line values beyond file length', async () => {
+test('read tool returns empty content when start_line exceeds file length', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'src', 'small.ts')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, ['line-1', 'line-2'].join('\n'), 'utf8')
 
-    await assert.rejects(
-      () =>
-        readTool.execute(
-          {
-            absolute_path: filePath,
-            start_line: 50,
-          },
-          buildExecutionContext(workspacePath),
-        ),
-      (error: unknown) => {
-        assert.ok(error instanceof OpenAICompatibleToolError)
-        assert.match(error.message, /start_line exceeds file length/u)
-        return true
+    const result = await readTool.execute(
+      {
+        absolute_path: filePath,
+        start_line: 50,
       },
+      buildExecutionContext(workspacePath),
     )
+
+    assert.equal(result.ok, true)
+    assert.equal(result.content, '')
+    assert.equal(result.lineCount, 0)
+    assert.equal(result.startLine, 50)
+    assert.equal(result.endLine, 49)
+    assert.equal(result.totalLineCount, 2)
+    assert.equal(result.hasMoreLines, false)
+    assert.equal(result.truncated, false)
+    assert.equal(result.nextStartLine, null)
+    assert.equal(result.nextEndLine, null)
   })
 })

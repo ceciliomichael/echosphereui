@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
@@ -21,13 +21,16 @@ import { useProvidersState } from '../hooks/useProvidersState'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
 import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useGitCommit } from '../hooks/useGitCommit'
-import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
+import {
+  useChatInterfaceController,
+  type ChatInterfaceRightPanelTab,
+} from '../hooks/useChatInterfaceController'
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
 import type { ResolvedTheme } from '../lib/theme'
-import type { AppSettings, GitCommitAction, GitCommitResult } from '../types/chat'
+import type { AppSettings } from '../types/chat'
 
-export type RightPanelTab = 'diff' | 'source-control'
+export type RightPanelTab = ChatInterfaceRightPanelTab
 
 interface ChatInterfaceProps {
   chatMessages: ChatMessagesController
@@ -50,11 +53,6 @@ interface ChatInterfaceProps {
   sendMessageOnEnter: boolean
   settings: AppSettings
   sidebarWidth: number
-}
-
-interface CommitSuccessDialogState {
-  action: GitCommitAction
-  result: GitCommitResult
 }
 
 const DEFAULT_TERMINAL_WORKSPACE_KEY = '__global__'
@@ -90,10 +88,6 @@ export function ChatInterface({
   settings,
   sidebarWidth,
 }: ChatInterfaceProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [isCommitModalOpen, setIsCommitModalOpen] = useState(false)
-  const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
-  const [pendingFileActionPath, setPendingFileActionPath] = useState<string | null>(null)
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
     providersState: providersState.providersState,
@@ -192,8 +186,6 @@ export function ChatInterface({
     [],
   )
   const hasRepository = gitBranchState.branchState.hasRepository
-  const isDiffPanelOpen = isRightPanelOpen && rightPanelTab === 'diff'
-  const isSourceControlPanelOpen = isRightPanelOpen && rightPanelTab === 'source-control'
   const { refresh: refreshGitDiffSnapshot, snapshot: gitDiffSnapshot } = useGitDiffSnapshot({
     hasRepository,
     workspacePath: activeWorkspacePath,
@@ -205,254 +197,45 @@ export function ChatInterface({
     reasoningEffort: runtimeSelection.reasoningEffort,
     workspacePath: activeWorkspacePath,
   })
-
-  const handleOpenCommitModal = useCallback(() => {
-    if (!hasRepository) {
-      return
-    }
-
-    if (isRightPanelOpen && rightPanelTab === 'source-control') {
-      onRightPanelOpenChange(false)
-    }
-
-    gitCommitState.resetResult()
-    void gitCommitState.refreshStatus()
-    setIsCommitModalOpen(true)
-  }, [gitCommitState, hasRepository, isRightPanelOpen, onRightPanelOpenChange, rightPanelTab])
-
-  const handleCloseCommitModal = useCallback(() => {
-    setIsCommitModalOpen(false)
-  }, [])
-
-  const handleCloseCommitSuccessDialog = useCallback(() => {
-    setCommitSuccessDialog(null)
-  }, [])
-
-  const handleCommit = useCallback(
-    async (input: {
-      action: GitCommitAction
-      includeUnstaged: boolean
-      message: string
-      preferredBranchName?: string
-    }) => {
-      const commitResult = await gitCommitState.commit(input)
-      setIsCommitModalOpen(false)
-      setCommitSuccessDialog({
-        action: input.action,
-        result: commitResult,
-      })
-      // Refresh diffs and branch state after commit
-      void refreshGitDiffSnapshot({ forceRefresh: true })
-      void gitBranchState.refresh()
-    },
-    [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
-  )
-  const previousWorkspacePathRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!hasRepository && isRightPanelOpen) {
-      onRightPanelOpenChange(false)
-    }
-  }, [hasRepository, isRightPanelOpen, onRightPanelOpenChange])
-
-  useEffect(() => {
-    if (!hasRepository) {
-      setPendingFileActionPath(null)
-    }
-  }, [hasRepository])
-
-  useEffect(() => {
-    if (!hasRepository) {
-      return
-    }
-
-    const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
-    const workspacePathKey = normalizedWorkspacePath.length > 0 ? normalizedWorkspacePath : null
-    const workspaceChanged = previousWorkspacePathRef.current !== workspacePathKey
-    previousWorkspacePathRef.current = workspacePathKey
-
-    void refreshGitDiffSnapshot({
-      forceRefresh: !workspaceChanged,
-      silent: true,
-    })
-  }, [
+  const {
+    commitSuccessDialog,
+    handleCloseCommitModal,
+    handleCloseCommitSuccessDialog,
+    handleCommit,
+    handleDiscardDiffFile,
+    handleOpenCommitModal,
+    handleOpenRightPanelTab,
+    handleQuickCommit,
+    handleRefreshGitUi,
+    handleSourceControlSectionOpenChange,
+    handleStageDiffFile,
+    handleTerminalExecutionModeChange,
+    handleTerminalPanelHeightCommit,
+    handleUnstageDiffFile,
+    isCommitModalOpen,
+    isDiffPanelOpen,
+    isSidebarOpen,
+    isSourceControlPanelOpen,
+    pendingFileActionPath,
+    setActiveWorkspaceTerminalOpen,
+    setIsSidebarOpen,
+  } = useChatInterfaceController({
+    activeTerminalWorkspaceKey,
     activeWorkspacePath,
-    gitBranchState.branchState.currentBranch,
+    createConversation,
+    gitBranchState,
+    gitCommitState,
     hasRepository,
-    messages.length,
-    refreshGitDiffSnapshot,
-  ])
-
-  useWorkspaceKeyboardShortcuts({
-    enabled: isActiveScreen,
-    onToggleDiffPanel: () => {
-      if (!hasRepository) {
-        return
-      }
-
-      if (isDiffPanelOpen) {
-        onRightPanelOpenChange(false)
-        return
-      }
-
-      onRightPanelTabChange('diff')
-      onRightPanelOpenChange(true)
-    },
-    onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
-    onCreateConversation: createConversation,
+    isActiveScreen,
+    isRightPanelOpen,
+    messagesLength: messages.length,
+    onDiffRefresh: refreshGitDiffSnapshot,
+    onRightPanelOpenChange,
+    onRightPanelTabChange,
+    onUpdateSettings,
+    rightPanelTab,
+    settings,
   })
-
-  const handleStageDiffFile = useCallback(
-    async (filePath: string) => {
-      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
-      if (!hasRepository || normalizedWorkspacePath.length === 0) {
-        return
-      }
-
-      setPendingFileActionPath(filePath)
-      try {
-        await window.echosphereGit.stageFile({
-          filePath,
-          workspacePath: normalizedWorkspacePath,
-        })
-        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
-      } catch (error) {
-        console.error('Failed to stage file from diff panel', error)
-      } finally {
-        setPendingFileActionPath(null)
-      }
-    },
-    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
-  )
-
-  const handleUnstageDiffFile = useCallback(
-    async (filePath: string) => {
-      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
-      if (!hasRepository || normalizedWorkspacePath.length === 0) {
-        return
-      }
-
-      setPendingFileActionPath(filePath)
-      try {
-        await window.echosphereGit.unstageFile({
-          filePath,
-          workspacePath: normalizedWorkspacePath,
-        })
-        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
-      } catch (error) {
-        console.error('Failed to unstage file from diff panel', error)
-      } finally {
-        setPendingFileActionPath(null)
-      }
-    },
-    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
-  )
-
-  const handleDiscardDiffFile = useCallback(
-    async (filePath: string) => {
-      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
-      if (!hasRepository || normalizedWorkspacePath.length === 0) {
-        return
-      }
-
-      setPendingFileActionPath(filePath)
-      try {
-        await window.echosphereGit.discardFileChanges({
-          filePath,
-          workspacePath: normalizedWorkspacePath,
-        })
-        await refreshGitDiffSnapshot({ forceRefresh: true, silent: true })
-      } catch (error) {
-        console.error('Failed to discard file changes from diff panel', error)
-      } finally {
-        setPendingFileActionPath(null)
-      }
-    },
-    [activeWorkspacePath, hasRepository, refreshGitDiffSnapshot],
-  )
-
-  const handleOpenRightPanelTab = useCallback(
-    (tab: RightPanelTab) => {
-      if (!hasRepository) {
-        return
-      }
-
-      if (isRightPanelOpen && rightPanelTab === tab) {
-        onRightPanelOpenChange(false)
-        return
-      }
-
-      onRightPanelTabChange(tab)
-      onRightPanelOpenChange(true)
-    },
-    [hasRepository, isRightPanelOpen, onRightPanelOpenChange, onRightPanelTabChange, rightPanelTab],
-  )
-
-  const handleRefreshGitUi = useCallback(async () => {
-    await Promise.all([refreshGitDiffSnapshot({ forceRefresh: true, silent: true }), gitBranchState.refresh()])
-  }, [gitBranchState, refreshGitDiffSnapshot])
-
-  const handleQuickCommit = useCallback(
-    async (input: { includeUnstaged: boolean; message: string }) => {
-      await gitCommitState.commit({
-        action: 'commit',
-        includeUnstaged: input.includeUnstaged,
-        message: input.message,
-      })
-
-      await Promise.all([refreshGitDiffSnapshot({ forceRefresh: true }), gitBranchState.refresh(), gitCommitState.refreshStatus()])
-    },
-    [gitBranchState, gitCommitState, refreshGitDiffSnapshot],
-  )
-  const handleSourceControlSectionOpenChange = useCallback(
-    (sourceControlSectionOpen: AppSettings['sourceControlSectionOpen']) => {
-      void onUpdateSettings({ sourceControlSectionOpen })
-    },
-    [onUpdateSettings],
-  )
-  const handleTerminalExecutionModeChange = useCallback(
-    (terminalExecutionMode: AppSettings['terminalExecutionMode']) => {
-      if (terminalExecutionMode === settings.terminalExecutionMode) {
-        return
-      }
-
-      void onUpdateSettings({ terminalExecutionMode })
-    },
-    [onUpdateSettings, settings.terminalExecutionMode],
-  )
-  const setActiveWorkspaceTerminalOpen = useCallback(
-    (nextOpen: boolean) => {
-      const currentOpenByWorkspace = settings.terminalOpenByWorkspace
-      const currentOpen = currentOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
-      if (currentOpen === nextOpen) {
-        return
-      }
-
-      void onUpdateSettings({
-        terminalOpenByWorkspace: {
-          ...currentOpenByWorkspace,
-          [activeTerminalWorkspaceKey]: nextOpen,
-        },
-      })
-    },
-    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalOpenByWorkspace],
-  )
-  const handleTerminalPanelHeightCommit = useCallback(
-    (nextHeight: number) => {
-      const currentHeightsByWorkspace = settings.terminalPanelHeightsByWorkspace
-      if (currentHeightsByWorkspace[activeTerminalWorkspaceKey] === nextHeight) {
-        return
-      }
-
-      void onUpdateSettings({
-        terminalPanelHeightsByWorkspace: {
-          ...currentHeightsByWorkspace,
-          [activeTerminalWorkspaceKey]: nextHeight,
-        },
-      })
-    },
-    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalPanelHeightsByWorkspace],
-  )
 
   return (
     <AppWorkspaceShell

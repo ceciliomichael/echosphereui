@@ -204,7 +204,10 @@ test('buildReplayableMessageHistory also converts tool messages appended after a
     /For each mutated path, the latest successful mutation below is the current workspace state\./u,
   )
   assert.match(toolContextMessage?.content ?? '', /Acknowledged tool result summaries:/u)
-  assert.match(toolContextMessage?.content ?? '', /- patch success: Created src\/components\/Hero\.tsx successfully\./u)
+  assert.match(
+    toolContextMessage?.content ?? '',
+    /- patch success: Applied patch to src\/components\/Hero\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+  )
   assert.match(toolContextMessage?.content ?? '', /Latest acknowledged workspace file state:/u)
   assert.match(
     toolContextMessage?.content ?? '',

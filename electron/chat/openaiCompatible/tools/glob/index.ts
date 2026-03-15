@@ -6,15 +6,17 @@ import {
   readRequiredString,
   resolveToolPath,
   toDisplayPath,
-} from './filesystemToolUtils'
-import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from './gitignoreMatcher'
-import { resolveRipgrepBinaryPath } from './ripgrepBinary'
-import { runRipgrepGlob } from './ripgrepGlobRunner'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
+} from '../filesystemToolUtils'
+import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from '../gitignoreMatcher'
+import { getToolDescription } from '../descriptionCatalog'
+import { resolveRipgrepBinaryPath } from '../ripgrepBinary'
+import { runRipgrepGlob } from '../ripgrepGlobRunner'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
 
 const DEFAULT_GLOB_RESULT_LIMIT = 200
 const MAX_GLOB_RESULT_LIMIT = 1_000
+const TOOL_DESCRIPTION = getToolDescription('glob')
 
 function readPattern(input: Record<string, unknown>) {
   const pattern = readRequiredString(input, 'pattern', true)
@@ -111,8 +113,7 @@ export const globTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description:
-        'Find file paths with ripgrep glob matching inside the workspace.',
+      description: TOOL_DESCRIPTION,
       name: 'glob',
       parameters: {
         additionalProperties: false,
@@ -139,3 +140,4 @@ export const globTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

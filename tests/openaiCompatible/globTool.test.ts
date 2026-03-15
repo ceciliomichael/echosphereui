@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { globTool } from '../../electron/chat/openaiCompatible/tools/globTool'
+import { globTool } from '../../electron/chat/openaiCompatible/tools/glob/index'
 import { buildRipgrepGlobArguments } from '../../electron/chat/openaiCompatible/tools/ripgrepGlobRunner'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 

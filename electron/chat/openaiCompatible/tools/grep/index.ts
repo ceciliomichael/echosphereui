@@ -7,14 +7,16 @@ import {
   readRequiredString,
   resolveToolPath,
   toDisplayPath,
-} from './filesystemToolUtils'
-import { resolveRipgrepBinaryPath } from './ripgrepBinary'
-import { runRipgrepSearch } from './ripgrepRunner'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
+} from '../filesystemToolUtils'
+import { resolveRipgrepBinaryPath } from '../ripgrepBinary'
+import { runRipgrepSearch } from '../ripgrepRunner'
+import { getToolDescription } from '../descriptionCatalog'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
 
 const DEFAULT_GREP_RESULT_LIMIT = 200
 const MAX_GREP_RESULT_LIMIT = 1_000
+const TOOL_DESCRIPTION = getToolDescription('grep')
 
 function readPattern(input: Record<string, unknown>) {
   const pattern = readRequiredString(input, 'pattern', true)
@@ -97,8 +99,7 @@ export const grepTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description:
-        'Search file contents with ripgrep inside the workspace.',
+      description: TOOL_DESCRIPTION,
       name: 'grep',
       parameters: {
         additionalProperties: false,
@@ -133,3 +134,4 @@ export const grepTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

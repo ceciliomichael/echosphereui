@@ -217,6 +217,10 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
       ? parsedResult.metadata.semantics.operation
       : null
+  const addedPathCount =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.added_path_count === 'number'
+      ? parsedResult.metadata.semantics.added_path_count
+      : null
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -257,6 +261,18 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     }
 
     return patchIntent === 'writing' ? 'Wrote' : 'Edited'
+  }
+
+  if (invocation.toolName === 'write') {
+    if (invocation.state === 'running') {
+      return 'Writing'
+    }
+
+    if (invocation.state === 'failed') {
+      return 'Write failed'
+    }
+
+    return addedPathCount !== null && addedPathCount > 0 ? 'Wrote' : 'Overwrote'
   }
 
   if (invocation.toolName === 'exec_command') {

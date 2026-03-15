@@ -1,0 +1,8 @@
+Read text file contents from an absolute path inside the workspace root.
+
+Usage guidelines:
+- Provide `absolute_path` as an absolute file path.
+- Use `start_line` and `end_line` for explicit inclusive ranges.
+- Use `max_lines` to cap output when line ranges are broad.
+- If more lines exist, call again with `nextStartLine` or a higher `start_line`.
+- Use `grep` to locate relevant sections first in large files.
