@@ -116,7 +116,7 @@ function formatMutationResultBody(semanticResult: Record<string, unknown>) {
 
   if (path && newContent !== null) {
     const fenceLanguage = inferFenceLanguage(path) ?? ''
-    lines.push(`Current content of ${path} after patch:`, `\`\`\`${fenceLanguage}`, newContent, '```')
+    lines.push(`Current content of ${path}:`, `\`\`\`${fenceLanguage}`, newContent, '```')
   }
 
   return lines.join('\n')
@@ -153,7 +153,7 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatGrepResultBody(semanticResult)
   }
 
-  if (toolName === 'patch') {
+  if (toolName === 'patch' || toolName === 'write') {
     return formatMutationResultBody(semanticResult)
   }
 
@@ -182,7 +182,7 @@ export function buildResultPresentation(
   toolName: string,
   semanticResult: Record<string, unknown>,
 ): ToolInvocationResultPresentation | undefined {
-  if (toolName !== 'patch') {
+  if (toolName !== 'patch' && toolName !== 'write') {
     return undefined
   }
 

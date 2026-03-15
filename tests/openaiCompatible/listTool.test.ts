@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { listTool } from '../../electron/chat/openaiCompatible/tools/listTool'
+import { listTool } from '../../electron/chat/openaiCompatible/tools/list/index'
 
 interface ListEntry {
   kind: string

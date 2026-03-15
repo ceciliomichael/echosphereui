@@ -57,6 +57,14 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
+  if (toolName === 'write') {
+    const content = readString(argumentsValue.content)
+    return {
+      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
+      content_length: content?.length ?? undefined,
+    }
+  }
+
   if (toolName === 'exec_command') {
     return {
       cmd: readString(argumentsValue.cmd) ?? undefined,
@@ -125,6 +133,16 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     }
 
     return 'Applied patch successfully. Treat the reported changed paths as the current workspace state.'
+  }
+
+  if (toolName === 'write') {
+    const subjectPath = readString(semanticResult.path) ?? 'unknown'
+    const contentChanged = readBoolean(semanticResult.contentChanged)
+    if (contentChanged === false) {
+      return readString(semanticResult.message) ?? `Write completed with no content change for ${subjectPath}.`
+    }
+
+    return `Wrote ${subjectPath}. The reported file content now reflects the current workspace state.`
   }
 
   if (toolName === 'exec_command') {
@@ -252,6 +270,31 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
           : totalChangedPaths > 0
             ? 'files_edited'
             : 'file_already_matched',
+    })
+  }
+
+  if (toolName === 'write') {
+    const addedPaths = Array.isArray(semanticResult.addedPaths)
+      ? semanticResult.addedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    const modifiedPaths = Array.isArray(semanticResult.modifiedPaths)
+      ? semanticResult.modifiedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    const deletedPaths = Array.isArray(semanticResult.deletedPaths)
+      ? semanticResult.deletedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
+    const operation = readString(semanticResult.operation) ?? 'write'
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      added_path_count: addedPaths.length,
+      content_changed: readBoolean(semanticResult.contentChanged),
+      deleted_path_count: deletedPaths.length,
+      mutation_applied: totalChangedPaths > 0 || readBoolean(semanticResult.contentChanged),
+      modified_path_count: modifiedPaths.length,
+      operation,
+      target_exists_after_call: true,
+      workspace_effect: totalChangedPaths > 0 || readBoolean(semanticResult.contentChanged) ? 'files_edited' : 'file_already_matched',
     })
   }
 

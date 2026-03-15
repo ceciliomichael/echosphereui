@@ -1,0 +1,35 @@
+Apply structured file edits with a patch envelope under the workspace root.
+
+Usage guidelines:
+- The patch must start with `*** Begin Patch` and end with `*** End Patch`.
+- Supported hunks: `*** Add File:`, `*** Update File:`, `*** Delete File:`, optional `*** Move to:`.
+- In an `*** Update File:` hunk, every change line must start with exactly one prefix: space (` `), plus (`+`), or minus (`-`).
+- Never include raw/unprefixed lines inside update hunks.
+- Patch preflight: before calling patch, verify each Update File hunk line begins with space/+/-.
+- Empty lines are allowed only when prefixed (for example a blank added line is just `+`).
+- If you are inserting a line without deleting/replacing existing lines, prefix it with `+`.
+- If a line is unchanged context, prefix it with a leading space.
+- Send only patch text in the patch argument; do not include markdown fences or narrative text.
+- Do not include markdown fences, explanations, or unified-diff headers like `@@ -1,3 +1,3 @@`.
+- Use context markers as `@@` or `@@ optional context text`.
+- Prefer precise hunks that target the smallest necessary change.
+- Use `read` before patching to confirm context and avoid mismatches.
+
+Valid update hunk example:
+```
+*** Begin Patch
+*** Update File: src/app.ts
+@@
+-const version = 1
++const version = 2
+*** End Patch
+```
+
+Invalid update hunk example (will fail):
+```
+*** Begin Patch
+*** Update File: src/app.ts
+@@
+const version = 2
+*** End Patch
+```

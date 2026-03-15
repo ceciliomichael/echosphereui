@@ -1,13 +1,16 @@
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
-import { parseToolArguments } from './filesystemToolUtils'
-import { pollTerminalSession, writeTerminalSession } from './terminalSessionManager'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
+import { getToolDescription } from '../descriptionCatalog'
+import { parseToolArguments } from '../filesystemToolUtils'
+import { pollTerminalSession, writeTerminalSession } from '../terminalSessionManager'
 import {
   DEFAULT_WRITE_STDIN_YIELD_TIME_MS,
   formatTerminalToolOutput,
   readOptionalNonNegativeIntegerValue,
   readOptionalPositiveIntegerValue,
-} from './terminalToolSupport'
+} from '../terminalToolSupport'
+
+const TOOL_DESCRIPTION = getToolDescription('write_stdin')
 
 function readSessionId(argumentsValue: Record<string, unknown>) {
   const rawSessionId = argumentsValue.session_id
@@ -108,7 +111,7 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description: 'Writes to an existing terminal session and returns the latest output chunk.',
+      description: TOOL_DESCRIPTION,
       name: 'write_stdin',
       parameters: {
         additionalProperties: false,
@@ -140,3 +143,4 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

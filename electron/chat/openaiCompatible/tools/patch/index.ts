@@ -1,9 +1,10 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { parseToolArguments, readRequiredText, resolveToolPath, toDisplayPath } from './filesystemToolUtils'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
-import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoints'
+import { parseToolArguments, readRequiredText, resolveToolPath, toDisplayPath } from '../filesystemToolUtils'
+import { getToolDescription } from '../descriptionCatalog'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
+import { captureWorkspaceCheckpointFileState } from '../../../../workspace/checkpoints'
 
 const BEGIN_PATCH_MARKER = '*** Begin Patch'
 const END_PATCH_MARKER = '*** End Patch'
@@ -12,6 +13,8 @@ const DELETE_FILE_MARKER = '*** Delete File: '
 const UPDATE_FILE_MARKER = '*** Update File: '
 const MOVE_TO_MARKER = '*** Move to: '
 const EOF_MARKER = '*** End of File'
+const EMPTY_PATCH_TEXT = `${BEGIN_PATCH_MARKER}\n${END_PATCH_MARKER}`
+const TOOL_DESCRIPTION = getToolDescription('patch')
 
 interface UpdateChunk {
   changeContext?: string
@@ -133,10 +136,11 @@ function parseUpdateChunk(lines: string[], startIndex: number): { chunk: UpdateC
       continue
     }
 
-    throw new OpenAICompatibleToolError('Invalid patch hunk: change line must start with +, -, or space.', {
-      lineNumber: cursor + 1,
-      receivedLine: line,
-    })
+    // Be tolerant when a model emits an unprefixed line in an update chunk.
+    // Treat it as a context line instead of hard-failing the entire patch.
+    oldLines.push(line)
+    newLines.push(line)
+    cursor += 1
   }
 
   if (oldLines.length === 0 && newLines.length === 0) {
@@ -454,6 +458,10 @@ export const patchTool: OpenAICompatibleToolDefinition = {
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
     const patch = readRequiredText(argumentsValue, 'patch')
+    const normalizedPatch = normalizeLineEndings(maybeUnwrapHeredocPatch(patch)).trim()
+    if (normalizedPatch === EMPTY_PATCH_TEXT) {
+      throw new OpenAICompatibleToolError('Patch rejected: empty patch.')
+    }
     const hunks = parsePatch(patch)
     const rootPath = path.resolve(context.agentContextRootPath)
 
@@ -629,14 +637,14 @@ export const patchTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description: 'Apply a structured patch with add, update, delete, and move operations inside the locked thread root.',
+      description: TOOL_DESCRIPTION,
       name: 'patch',
       parameters: {
         additionalProperties: false,
         properties: {
           patch: {
             description:
-              'Patch text using the patch format with *** Begin Patch / *** End Patch markers and Add/Update/Delete File hunks.',
+              'Patch text using *** Begin Patch / *** End Patch. In Update File hunks, every change line must begin with space, +, or - (no unprefixed lines).',
             type: 'string',
           },
         },
@@ -647,3 +655,4 @@ export const patchTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

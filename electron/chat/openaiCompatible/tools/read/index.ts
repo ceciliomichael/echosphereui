@@ -8,12 +8,14 @@ import {
   readRequiredString,
   resolveToolPath,
   toDisplayPath,
-} from './filesystemToolUtils'
-import type { OpenAICompatibleToolDefinition } from '../toolTypes'
-import { OpenAICompatibleToolError } from '../toolTypes'
+} from '../filesystemToolUtils'
+import { getToolDescription } from '../descriptionCatalog'
+import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
+import { OpenAICompatibleToolError } from '../../toolTypes'
 
 const DEFAULT_READ_LINE_COUNT = 500
 const MAX_READ_LINE_COUNT = 500
+const TOOL_DESCRIPTION = getToolDescription('read')
 
 interface ReadSliceResult {
   lineCount: number
@@ -116,10 +118,22 @@ export const readTool: OpenAICompatibleToolDefinition = {
     })
 
     if (totalLineCount < startLine) {
-      throw new OpenAICompatibleToolError('start_line exceeds file length.', {
+      return {
+        content: '',
+        endLine: Math.max(startLine - 1, 0),
+        hasMoreLines: false,
+        lineCount: 0,
+        maxReadLineCount: MAX_READ_LINE_COUNT,
+        nextEndLine: null,
+        nextStartLine: null,
+        ok: true,
+        path: toDisplayPath(relativePath),
+        remainingLineCount: 0,
         startLine,
+        targetKind: 'file',
         totalLineCount,
-      })
+        truncated: false,
+      }
     }
 
     const safeStartLine = startLine
@@ -148,8 +162,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description:
-        'Read file content from an absolute path inside the workspace. You can request a specific inclusive line range with start_line and end_line.',
+      description: TOOL_DESCRIPTION,
       name: 'read',
       parameters: {
         additionalProperties: false,
@@ -185,3 +198,4 @@ export const readTool: OpenAICompatibleToolDefinition = {
     type: 'function',
   },
 }
+

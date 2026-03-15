@@ -1,0 +1,8 @@
+Find file paths by glob pattern inside the workspace using ripgrep.
+
+Usage guidelines:
+- Provide `absolute_path` as an absolute file or directory search root.
+- Provide `pattern` as a glob expression (for example `**/*.ts`).
+- Use `max_results` to limit returned matches for large trees.
+- Results exclude gitignored entries unless they are always-visible metadata files.
+- Use this to discover candidate files before `read` or `patch`.

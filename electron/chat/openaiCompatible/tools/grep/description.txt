@@ -1,0 +1,8 @@
+Search file contents by pattern inside the workspace using ripgrep.
+
+Usage guidelines:
+- Provide `absolute_path` as an absolute file or directory search root.
+- Provide `pattern` as a fixed string by default; set `is_regex` for regex mode.
+- Use `case_sensitive` when exact casing matters.
+- Use `max_results` to constrain very broad searches.
+- Use returned file paths and line numbers with `read` for follow-up context.

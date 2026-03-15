@@ -1,0 +1,7 @@
+List files and directories at an absolute path inside the workspace root.
+
+Usage guidelines:
+- Provide `absolute_path` as an absolute directory path.
+- Use `limit` to cap returned entries when listing large directories.
+- Results are sorted and filtered to hide gitignored entries by default.
+- Use this before `read` when you need to discover exact file names.

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { patchTool } from '../../electron/chat/openaiCompatible/tools/patchTool'
+import { patchTool } from '../../electron/chat/openaiCompatible/tools/patch/index'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext(agentContextRootPath: string) {
@@ -130,18 +130,59 @@ test('edit tool rejects update hunks that do not match file content', async () =
   })
 })
 
-test('edit tool returns noop for empty patch body', async () => {
+test('edit tool rejects empty patch body', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
+    await assert.rejects(
+      () =>
+        patchTool.execute(
+          {
+            patch: ['*** Begin Patch', '*** End Patch'].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /empty patch/u)
+        return true
+      },
+    )
+  })
+})
+
+test('edit tool tolerates unprefixed context lines inside update hunks', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'page.tsx')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(
+      filePath,
+      [
+        'import Hero from "@/components/Hero";',
+        'import Footer from "@/components/Footer";',
+        '',
+        '<Hero />',
+        '<Footer />',
+        '',
+      ].join('\n'),
+      'utf8',
+    )
+
     const result = await patchTool.execute(
       {
-        patch: ['*** Begin Patch', '*** End Patch'].join('\n'),
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: src/page.tsx',
+          '@@',
+          'import Hero from "@/components/Hero";',
+          '+import Testimonials from "@/components/Testimonials";',
+          '*** End Patch',
+        ].join('\n'),
       },
       buildExecutionContext(workspacePath),
     )
 
     assert.equal(result.ok, true)
-    assert.equal(result.operation, 'noop')
-    assert.equal(result.contentChanged, false)
-    assert.equal(result.changeCount, 0)
+    assert.equal(result.operation, 'apply_patch')
+    const updated = await fs.readFile(filePath, 'utf8')
+    assert.match(updated, /import Testimonials from "@\/components\/Testimonials";/u)
   })
 })

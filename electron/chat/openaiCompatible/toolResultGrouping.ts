@@ -67,7 +67,7 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       latestInspectionStateByKey.set(inspectionStateKey, inspectionStateLine)
     }
 
-    if (metadata.toolName !== 'patch') {
+    if (metadata.toolName !== 'patch' && metadata.toolName !== 'write') {
       continue
     }
 
@@ -101,6 +101,10 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       }
 
       return `- ${entry.path} now reflects the latest successful patch changes.`
+    }
+
+    if (entry.toolName === 'write') {
+      return `- ${entry.path} now reflects the latest successful write changes.`
     }
 
     const operationSuffix = entry.operation ? ` (${entry.operation})` : ''

@@ -1,0 +1,8 @@
+Run a shell command in a managed terminal session and return output.
+
+Usage guidelines:
+- `cmd` is required and should be a complete shell command string.
+- Use `workdir` to change the execution directory (relative paths resolve from workspace root).
+- Use `yield_time_ms` to wait longer for output before returning.
+- If the process is still running, use `write_stdin` with the returned `processId` as `session_id`.
+- Keep commands scoped to the workspace and prefer non-interactive commands.
