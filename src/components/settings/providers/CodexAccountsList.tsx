@@ -1,4 +1,4 @@
-import { Calendar, Clock, RefreshCcw } from 'lucide-react'
+import { Calendar, Clock } from 'lucide-react'
 import type { CodexAccountSummary, CodexUsageWindow } from '../../../types/chat'
 
 interface CodexAccountsListProps {
@@ -60,20 +60,17 @@ export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAc
     )
   }
 
-  const switchButtonClassName =
-    'group inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent bg-[#101011] px-3.5 text-sm font-medium text-white transition-colors hover:bg-[#1f1f22] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#F5F5F7] dark:text-[#101011] dark:hover:bg-white'
-
   return (
     <div className="grid gap-3">
       {accounts.map((account) => {
         const usageDetail = getUsageDetail(account)
         const canSwitch = !account.isActive
+        const baseCardClassName =
+          'flex w-full flex-col gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors md:flex-row md:items-start md:justify-between'
+        const clickableCardClassName = `${baseCardClassName} cursor-pointer hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60`
 
-        return (
-          <div
-            key={account.accountId}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-background px-3 py-3 md:flex-row md:items-start md:justify-between"
-          >
+        const content = (
+          <>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-sm font-medium text-foreground">{account.email ?? account.label}</p>
@@ -84,33 +81,44 @@ export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAc
             <div className="flex flex-1 flex-col gap-2 md:items-end">
               <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end" title={usageDetail}>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-surface px-3 text-[11px] font-medium leading-none text-muted-foreground">
-                    <Clock size={12} className="shrink-0 text-muted-foreground" />
-                    <span>5h {formatRemaining(account.usage?.primary ?? null)}</span>
+                  <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
+                    <Clock size={12} className="-mt-px shrink-0 text-muted-foreground" />
+                    <span className="leading-none">5h {formatRemaining(account.usage?.primary ?? null)}</span>
                   </span>
-                  <span className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-surface px-3 text-[11px] font-medium leading-none text-muted-foreground">
-                    <Calendar size={12} className="shrink-0 text-muted-foreground" />
-                    <span>Week {formatRemaining(account.usage?.secondary ?? null)}</span>
+                  <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
+                    <Calendar size={12} className="-mt-px shrink-0 text-muted-foreground" />
+                    <span className="leading-none">Week {formatRemaining(account.usage?.secondary ?? null)}</span>
                   </span>
+                  {account.isActive ? (
+                    <span className="inline-flex h-7 items-center rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
+                      <span className="leading-none">active</span>
+                    </span>
+                  ) : null}
                 </div>
-
-                {canSwitch ? (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void onSwitchAccount(account.accountId)}
-                    className={switchButtonClassName}
-                  >
-                    <RefreshCcw
-                      size={14}
-                      className="shrink-0 text-white transition-colors group-hover:text-white dark:text-[#101011] dark:group-hover:text-[#101011]"
-                    />
-                    Switch
-                  </button>
-                ) : null}
               </div>
             </div>
-          </div>
+          </>
+        )
+
+        if (!canSwitch) {
+          return (
+            <div key={account.accountId} className={baseCardClassName} title={usageDetail}>
+              {content}
+            </div>
+          )
+        }
+
+        return (
+          <button
+            key={account.accountId}
+            type="button"
+            disabled={isBusy}
+            onClick={() => void onSwitchAccount(account.accountId)}
+            className={clickableCardClassName}
+            title={usageDetail}
+          >
+            {content}
+          </button>
         )
       })}
     </div>

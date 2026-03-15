@@ -57,11 +57,9 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
   }
 
   if (toolName === 'edit') {
+    const patch = readString(argumentsValue.patch)
     return {
-      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
-      end_line: readNumber(argumentsValue.end_line) ?? undefined,
-      replace_all: readBoolean(argumentsValue.replace_all),
-      start_line: readNumber(argumentsValue.start_line) ?? undefined,
+      patch_length: patch?.length ?? undefined,
     }
   }
 
@@ -185,16 +183,28 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
 
   if (toolName === 'edit') {
     const operation = readString(semanticResult.operation) ?? undefined
+    const addedPaths = readListEntries(semanticResult.addedPaths)
+    const modifiedPaths = readListEntries(semanticResult.modifiedPaths)
+    const deletedPaths = readListEntries(semanticResult.deletedPaths)
+    const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
     return filterUndefinedEntries({
       ...sharedSemantics,
+      added_path_count: addedPaths.length,
       content_changed: readBoolean(semanticResult.contentChanged),
+      deleted_path_count: deletedPaths.length,
       end_line_number: readNumber(semanticResult.endLineNumber) ?? undefined,
-      mutation_applied: operation !== 'noop',
+      mutation_applied: totalChangedPaths > 0 && operation !== 'noop',
+      modified_path_count: modifiedPaths.length,
       operation,
-      replacement_count: readNumber(semanticResult.replacementCount) ?? undefined,
+      replacement_count: undefined,
       start_line_number: readNumber(semanticResult.startLineNumber) ?? undefined,
       target_exists_after_call: true,
-      workspace_effect: operation === 'noop' ? 'file_already_matched' : 'file_edited',
+      workspace_effect:
+        operation === 'noop'
+          ? 'file_already_matched'
+          : totalChangedPaths > 0
+            ? 'files_edited'
+            : 'file_already_matched',
     })
   }
 
