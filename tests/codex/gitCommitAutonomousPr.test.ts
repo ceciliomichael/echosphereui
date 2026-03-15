@@ -71,9 +71,13 @@ test('gitCommit auto-creates a feature branch for commit-and-create-pr on defaul
     assert.equal(typeof result.branchName, 'string')
     assert.equal(result.branchName?.startsWith('fix/'), true)
     assert.notEqual(result.branchName, 'main')
+    assert.equal(result.defaultBranchName, 'main')
+    assert.equal(result.switchedToDefaultBranch, true)
+    assert.equal(result.pulledLatestOnDefaultBranch, true)
+    assert.equal(result.postCommitWarning, null)
 
     const { stdout: currentBranchStdout } = await runGit(['symbolic-ref', '--short', 'HEAD'], repoPath)
-    assert.equal(currentBranchStdout.trim(), result.branchName)
+    assert.equal(currentBranchStdout.trim(), 'main')
 
     const { stdout: remoteBranchStdout } = await runGit(['ls-remote', '--heads', 'origin', result.branchName!], repoPath)
     assert.equal(remoteBranchStdout.includes(`refs/heads/${result.branchName}`), true)
@@ -95,9 +99,13 @@ test('gitCommit respects preferredBranchName when creating PR commits', async ()
 
     assert.equal(result.success, true)
     assert.equal(result.branchName, 'feat/custom-branch')
+    assert.equal(result.defaultBranchName, 'main')
+    assert.equal(result.switchedToDefaultBranch, true)
+    assert.equal(result.pulledLatestOnDefaultBranch, true)
+    assert.equal(result.postCommitWarning, null)
 
     const { stdout: currentBranchStdout } = await runGit(['symbolic-ref', '--short', 'HEAD'], repoPath)
-    assert.equal(currentBranchStdout.trim(), 'feat/custom-branch')
+    assert.equal(currentBranchStdout.trim(), 'main')
   })
 })
 

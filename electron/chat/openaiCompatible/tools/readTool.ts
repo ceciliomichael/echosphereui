@@ -1,4 +1,6 @@
 import { promises as fs } from 'node:fs'
+import { createReadStream } from 'node:fs'
+import readline from 'node:readline'
 import {
   parseToolArguments,
   readOptionalBoundedPositiveInteger,
@@ -12,6 +14,44 @@ import { OpenAICompatibleToolError } from '../toolTypes'
 
 const DEFAULT_READ_LINE_COUNT = 500
 const MAX_READ_LINE_COUNT = 500
+
+interface ReadSliceResult {
+  lineCount: number
+  selectedLines: string[]
+}
+
+async function readFileSliceByLine(absolutePath: string, startLine: number, lineLimit: number): Promise<ReadSliceResult> {
+  const selectedLines: string[] = []
+  let lineCount = 0
+
+  const fileStream = createReadStream(absolutePath, { encoding: 'utf8' })
+  const lineReader = readline.createInterface({
+    crlfDelay: Infinity,
+    input: fileStream,
+  })
+
+  try {
+    for await (const line of lineReader) {
+      lineCount += 1
+      if (lineCount < startLine) {
+        continue
+      }
+      if (selectedLines.length < lineLimit) {
+        selectedLines.push(line)
+      }
+    }
+  } catch (error) {
+    throw error
+  } finally {
+    lineReader.close()
+    fileStream.destroy()
+  }
+
+  return {
+    lineCount,
+    selectedLines,
+  }
+}
 
 export const readTool: OpenAICompatibleToolDefinition = {
   executionMode: 'parallel',
@@ -59,31 +99,46 @@ export const readTool: OpenAICompatibleToolDefinition = {
           ? Math.min(requestedLineCountFromRange, maxLines)
           : requestedLineCountFromRange
     const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
-    const fileContent = await fs.readFile(normalizedTargetPath, 'utf8').catch((error: unknown) => {
+    const fileStat = await fs.stat(normalizedTargetPath).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new OpenAICompatibleToolError('The requested file does not exist.', {
           absolutePath: normalizedTargetPath,
         })
       }
+      throw error
+    })
+    if (!fileStat.isFile()) {
+      throw new OpenAICompatibleToolError('absolute_path must point to a file for read.', {
+        absolutePath: normalizedTargetPath,
+      })
+    }
 
+    const { lineCount: totalLineCount, selectedLines } = await readFileSliceByLine(
+      normalizedTargetPath,
+      startLine,
+      requestedLineCount,
+    ).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'EISDIR') {
         throw new OpenAICompatibleToolError('absolute_path must point to a file for read.', {
           absolutePath: normalizedTargetPath,
         })
       }
-
       throw error
     })
 
-    const normalizedContent = fileContent.replace(/\r\n/g, '\n')
-    const lines = normalizedContent.split('\n')
-    const safeStartLine = Math.max(1, Math.min(startLine, lines.length || 1))
-    const safeEndLine = Math.min(lines.length || safeStartLine, safeStartLine + requestedLineCount - 1)
-    const selectedLines = lines.slice(safeStartLine - 1, safeEndLine)
-    const hasMoreLines = safeEndLine < lines.length
-    const remainingLineCount = hasMoreLines ? lines.length - safeEndLine : 0
+    if (totalLineCount < startLine) {
+      throw new OpenAICompatibleToolError('start_line exceeds file length.', {
+        startLine,
+        totalLineCount,
+      })
+    }
+
+    const safeStartLine = startLine
+    const safeEndLine = safeStartLine + selectedLines.length - 1
+    const hasMoreLines = safeEndLine < totalLineCount
+    const remainingLineCount = hasMoreLines ? totalLineCount - safeEndLine : 0
     const nextStartLine = hasMoreLines ? safeEndLine + 1 : null
-    const nextEndLine = hasMoreLines ? Math.min(lines.length, safeEndLine + maxLines) : null
+    const nextEndLine = hasMoreLines ? Math.min(totalLineCount, safeEndLine + maxLines) : null
 
     return {
       content: selectedLines.join('\n'),
@@ -98,7 +153,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
       remainingLineCount,
       startLine: safeStartLine,
       targetKind: 'file',
-      totalLineCount: lines.length,
+      totalLineCount,
       truncated: hasMoreLines,
     }
   },

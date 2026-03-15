@@ -138,3 +138,27 @@ test('read tool defaults to lines 1-500 when no explicit range is provided', asy
     assert.equal(result.truncated, true)
   })
 })
+
+test('read tool rejects start_line values beyond file length', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'small.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['line-1', 'line-2'].join('\n'), 'utf8')
+
+    await assert.rejects(
+      () =>
+        readTool.execute(
+          {
+            absolute_path: filePath,
+            start_line: 50,
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /start_line exceeds file length/u)
+        return true
+      },
+    )
+  })
+})
