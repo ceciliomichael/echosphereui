@@ -13,6 +13,10 @@ const SETTINGS_FILE_NAME = 'settings.json'
 let settingsUpdateQueue: Promise<void> = Promise.resolve()
 const SOURCE_CONTROL_SECTION_IDS: readonly SourceControlSectionId[] = ['commit', 'changes', 'history']
 
+function isAppTerminalExecutionMode(value: unknown): value is AppSettings['terminalExecutionMode'] {
+  return value === 'sandbox' || value === 'full'
+}
+
 function isSourceControlSectionId(value: string): value is SourceControlSectionId {
   return SOURCE_CONTROL_SECTION_IDS.includes(value as SourceControlSectionId)
 }
@@ -123,6 +127,9 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   const sourceControlSectionOrder = sanitizeSourceControlSectionOrder(input?.sourceControlSectionOrder)
   const sourceControlSectionOpen = sanitizeSourceControlSectionOpen(input?.sourceControlSectionOpen)
   const sourceControlSectionSizes = sanitizeSourceControlSectionSizes(input?.sourceControlSectionSizes)
+  const terminalExecutionMode = isAppTerminalExecutionMode(input?.terminalExecutionMode)
+    ? input.terminalExecutionMode
+    : DEFAULT_APP_SETTINGS.terminalExecutionMode
 
   return {
     appearance,
@@ -136,6 +143,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     sourceControlSectionOrder,
     sourceControlSectionOpen,
     sourceControlSectionSizes,
+    terminalExecutionMode,
   }
 }
 

@@ -587,11 +587,23 @@ export const editTool: OpenAICompatibleToolDefinition = {
       totalChangedPathCount === 1
         ? (addedPaths[0] ?? modifiedPaths[0] ?? deletedPaths[0] ?? null)
         : null
+    const singlePlannedPath =
+      plannedChanges.length === 1
+        ? (() => {
+            const firstChange = plannedChanges[0]
+            if (firstChange.kind === 'update') {
+              return toDisplayPath(firstChange.moveToRelativePath ?? firstChange.relativePath)
+            }
+
+            return toDisplayPath(firstChange.relativePath)
+          })()
+        : null
+    const resolvedSinglePath = singleChangedPath ?? singlePlannedPath
     const message =
       operation === 'noop'
         ? 'Patch produced no file changes.'
-        : singleChangedPath
-          ? `Edited ${singleChangedPath} successfully.`
+        : resolvedSinglePath
+          ? `Edited ${resolvedSinglePath} successfully.`
           : `Applied patch successfully (${plannedChanges.length} file change${plannedChanges.length === 1 ? '' : 's'}).`
 
     return {
@@ -610,7 +622,7 @@ export const editTool: OpenAICompatibleToolDefinition = {
         : {}),
       ok: true,
       operation,
-      path: singleChangedPath ?? '.',
+      path: resolvedSinglePath ?? '.',
       startLineNumber: undefined,
       targetKind: 'workspace',
     }

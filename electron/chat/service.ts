@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
 import type { ChatStreamEvent, StartChatStreamInput, StartChatStreamResult } from '../../src/types/chat'
+import { terminateTerminalSessionsForStream } from './openaiCompatible/tools/terminalSessionManager'
 import { streamProviderResponse } from './providerRegistry'
 
 const STREAM_EVENT_CHANNEL = 'chat:stream:event'
@@ -93,6 +94,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
             modelId: input.modelId,
             providerId: input.providerId,
             reasoningEffort: input.reasoningEffort,
+            terminalExecutionMode: input.terminalExecutionMode,
           },
           {
             emitDelta: (deltaEvent) => {
@@ -102,6 +104,8 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
               })
             },
             signal: abortController.signal,
+            streamId,
+            terminalExecutionMode: input.terminalExecutionMode,
             workspaceCheckpointId,
           },
         )
@@ -123,6 +127,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
           type: 'error',
         })
       } finally {
+        await terminateTerminalSessionsForStream(streamId)
         activeStreams.delete(streamId)
         resolveSettledPromise()
       }

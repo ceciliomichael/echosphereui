@@ -8,6 +8,10 @@ import type { SourceControlSectionId } from '../../src/types/chat'
 const INITIAL_SETTINGS_ARG_PREFIX = '--echosphere-initial-settings='
 const SOURCE_CONTROL_SECTION_IDS: readonly SourceControlSectionId[] = ['commit', 'changes', 'history']
 
+function isAppTerminalExecutionMode(value: unknown): value is AppSettings['terminalExecutionMode'] {
+  return value === 'sandbox' || value === 'full'
+}
+
 function isSourceControlSectionId(value: string): value is SourceControlSectionId {
   return SOURCE_CONTROL_SECTION_IDS.includes(value as SourceControlSectionId)
 }
@@ -103,6 +107,9 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
     sourceControlSectionOrder: sanitizeSourceControlSectionOrder(candidate?.sourceControlSectionOrder),
     sourceControlSectionOpen: sanitizeSourceControlSectionOpen(candidate?.sourceControlSectionOpen),
     sourceControlSectionSizes: sanitizeSourceControlSectionSizes(candidate?.sourceControlSectionSizes),
+    terminalExecutionMode: isAppTerminalExecutionMode(candidate?.terminalExecutionMode)
+      ? candidate.terminalExecutionMode
+      : DEFAULT_APP_SETTINGS.terminalExecutionMode,
   }
 }
 

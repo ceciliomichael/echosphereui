@@ -1,5 +1,5 @@
 import { GitCommitHorizontal } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import type {
@@ -31,7 +31,7 @@ interface SourceControlPanelProps {
 
 const HISTORY_PAGE_SIZE = 200
 
-export function SourceControlPanel({
+function SourceControlPanelComponent({
   fileDiffs,
   isOpen,
   onDiscardFile,
@@ -694,3 +694,5 @@ export function SourceControlPanel({
     </div>
   )
 }
+
+export const SourceControlPanel = memo(SourceControlPanelComponent)

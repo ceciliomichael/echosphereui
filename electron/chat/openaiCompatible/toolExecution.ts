@@ -152,6 +152,8 @@ export async function executeToolCallWithPolicies(
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
       signal: context.signal,
+      streamId: context.streamId,
+      terminalExecutionMode: context.terminalExecutionMode,
       workspaceCheckpointId: context.workspaceCheckpointId,
     })
     const completedAt = Date.now()

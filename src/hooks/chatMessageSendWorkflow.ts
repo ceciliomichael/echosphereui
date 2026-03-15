@@ -217,6 +217,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       onToolInvocationStarted: draftManager.handleToolInvocationStarted,
       providerId,
       reasoningEffort: input.runtimeSelection.reasoningEffort,
+      terminalExecutionMode: input.runtimeSelection.terminalExecutionMode,
     })
 
     const streamedMessages = draftManager.finalizeStreamedMessages(streamedAssistant.wasAborted)

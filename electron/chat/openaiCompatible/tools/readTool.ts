@@ -40,8 +40,6 @@ async function readFileSliceByLine(absolutePath: string, startLine: number, line
         selectedLines.push(line)
       }
     }
-  } catch (error) {
-    throw error
   } finally {
     lineReader.close()
     fileStream.destroy()

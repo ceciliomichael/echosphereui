@@ -335,11 +335,34 @@ export function getDuplicateInspectionCallError(
   agentContextRootPath: string,
   turnState: ToolExecutionTurnState,
 ): DuplicateInspectionCallError | null {
-  void toolCall
-  void argumentsValue
-  void agentContextRootPath
-  void turnState
-  return null
+  if (toolCall.name !== 'list' && toolCall.name !== 'read' && toolCall.name !== 'glob' && toolCall.name !== 'grep') {
+    return null
+  }
+
+  let inspectionCallKey: string | null
+  try {
+    inspectionCallKey = buildInspectionCallKey(toolCall, argumentsValue, agentContextRootPath)
+  } catch {
+    return null
+  }
+
+  if (!inspectionCallKey) {
+    return null
+  }
+
+  const previousInspection = turnState.inspectionCallsByKey.get(inspectionCallKey)
+  if (!previousInspection) {
+    return null
+  }
+
+  return {
+    details: {
+      reusedHint: previousInspection.reuseHint,
+      targetPath: previousInspection.targetPath,
+      toolName: toolCall.name,
+    },
+    message: `Duplicate inspection call blocked. Reuse ${previousInspection.reuseHint} before issuing the same ${toolCall.name} call again.`,
+  }
 }
 
 export function recordSuccessfulToolExecution(
