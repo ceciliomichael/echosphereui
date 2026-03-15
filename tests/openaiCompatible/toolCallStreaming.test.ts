@@ -41,6 +41,28 @@ function createToolCallChunk(
   } as ChatCompletionChunk
 }
 
+function createLegacyFunctionCallChunk(name: string | undefined, argumentsText: string | undefined): ChatCompletionChunk {
+  return {
+    choices: [
+      {
+        delta: {
+          function_call: {
+            ...(argumentsText !== undefined ? { arguments: argumentsText } : {}),
+            ...(name !== undefined ? { name } : {}),
+          },
+        },
+        finish_reason: null,
+        index: 0,
+        logprobs: null,
+      },
+    ],
+    created: 1_700_000_000,
+    id: `legacy-fn-${name ?? 'unknown'}`,
+    model: 'test-model',
+    object: 'chat.completion.chunk',
+  } as ChatCompletionChunk
+}
+
 test('collectToolCalls marks an earlier tool call ready once a later tool call starts and the earlier JSON is complete', () => {
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
   const readyToolCallIndexes = new Set<number>()
@@ -97,4 +119,52 @@ test('collectToolCalls marks an earlier tool call ready once a later tool call s
     toToolCallList(toolCallsByIndex).map((toolCall) => toolCall.id),
     ['call-1', 'call-2'],
   )
+})
+
+test('collectToolCalls assembles legacy function_call deltas into a callable tool invocation', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+  const emittedEvents: StreamDeltaEvent[] = []
+
+  collectToolCalls(
+    createLegacyFunctionCallChunk('read', '{"absolute_path":"C:\\\\repo\\\\Hero.tsx'),
+    toolCallsByIndex,
+    (event) => {
+      emittedEvents.push(event)
+    },
+    readyToolCallIndexes,
+  )
+
+  collectToolCalls(
+    createLegacyFunctionCallChunk(undefined, '"}'),
+    toolCallsByIndex,
+    (event) => {
+      emittedEvents.push(event)
+    },
+    readyToolCallIndexes,
+  )
+
+  const startedEvent = emittedEvents.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }> =>
+      event.type === 'tool_invocation_started',
+  )
+  assert.ok(startedEvent)
+  assert.equal(startedEvent.toolName, 'read')
+
+  const toolCalls = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCalls.length, 1)
+  assert.equal(toolCalls[0]?.name, 'read')
+  assert.equal(toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\Hero.tsx"}')
+})
+
+test('collectToolCalls preserves whitespace-only argument deltas', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+
+  collectToolCalls(createToolCallChunk(0, 'call-1', 'write', '{"content":"hello'), toolCallsByIndex, () => {}, readyToolCallIndexes)
+  collectToolCalls(createToolCallChunk(0, 'call-1', undefined, ' '), toolCallsByIndex, () => {}, readyToolCallIndexes)
+  collectToolCalls(createToolCallChunk(0, 'call-1', undefined, 'world"}'), toolCallsByIndex, () => {}, readyToolCallIndexes)
+
+  const [toolCall] = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCall?.argumentsText, '{"content":"hello world"}')
 })

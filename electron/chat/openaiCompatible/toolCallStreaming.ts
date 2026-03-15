@@ -10,8 +10,14 @@ export interface ToolCallAccumulator {
   startedAt: number | null
 }
 
-function hasNonEmptyString(value: unknown): value is string {
+const LEGACY_FUNCTION_CALL_INDEX = -1
+
+function hasNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
 }
 
 function isCompleteJsonObject(argumentsText: string) {
@@ -34,6 +40,42 @@ function toToolCall(accumulator: ToolCallAccumulator): OpenAICompatibleToolCall 
     name: accumulator.name,
     startedAt: accumulator.startedAt ?? Date.now(),
   }
+}
+
+interface NormalizedToolCallDelta {
+  argumentsText?: string
+  id?: string
+  index: number
+  name?: string
+}
+
+function toNormalizedToolCallDeltas(choice: ChatCompletionChunk.Choice): NormalizedToolCallDelta[] {
+  const streamedToolCalls = choice.delta.tool_calls ?? []
+  if (streamedToolCalls.length > 0) {
+    return streamedToolCalls.map((toolCallDelta) => ({
+      argumentsText: toolCallDelta.function?.arguments,
+      id: toolCallDelta.id,
+      index: toolCallDelta.index,
+      name: toolCallDelta.function?.name,
+    }))
+  }
+
+  const legacyFunctionCall = choice.delta.function_call
+  if (!legacyFunctionCall) {
+    return []
+  }
+
+  if (!hasNonBlankString(legacyFunctionCall.name) && !hasNonEmptyString(legacyFunctionCall.arguments)) {
+    return []
+  }
+
+  return [
+    {
+      argumentsText: legacyFunctionCall.arguments,
+      index: LEGACY_FUNCTION_CALL_INDEX,
+      name: legacyFunctionCall.name,
+    },
+  ]
 }
 
 export function emitReadyToolCalls(
@@ -73,7 +115,7 @@ export function collectToolCalls(
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void,
 ) {
   for (const choice of chunk.choices) {
-    for (const toolCallDelta of choice.delta.tool_calls ?? []) {
+    for (const toolCallDelta of toNormalizedToolCallDeltas(choice)) {
       const currentToolCall = toolCallsByIndex.get(toolCallDelta.index) ?? {
         argumentsText: '',
         id: toolCallDelta.id ?? randomUUID(),
@@ -82,16 +124,16 @@ export function collectToolCalls(
       }
       const previousArgumentsText = currentToolCall.argumentsText
 
-      if (hasNonEmptyString(toolCallDelta.id)) {
+      if (hasNonBlankString(toolCallDelta.id)) {
         currentToolCall.id = toolCallDelta.id
       }
 
-      if (hasNonEmptyString(toolCallDelta.function?.name)) {
-        currentToolCall.name = toolCallDelta.function.name
+      if (hasNonBlankString(toolCallDelta.name)) {
+        currentToolCall.name = toolCallDelta.name
       }
 
-      if (hasNonEmptyString(toolCallDelta.function?.arguments)) {
-        currentToolCall.argumentsText += toolCallDelta.function.arguments
+      if (hasNonEmptyString(toolCallDelta.argumentsText)) {
+        currentToolCall.argumentsText += toolCallDelta.argumentsText
       }
 
       if (currentToolCall.startedAt === null && currentToolCall.name.trim().length > 0) {
