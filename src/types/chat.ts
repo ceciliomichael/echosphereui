@@ -548,7 +548,7 @@ export interface EchosphereHistoryApi {
   createConversation: (input?: CreateConversationInput) => Promise<ConversationRecord>
   createFolder: (input: CreateConversationFolderInput) => Promise<ConversationFolderRecord>
   renameFolder: (input: RenameConversationFolderInput) => Promise<ConversationFolderRecord>
-  deleteFolder: (folderId: string) => Promise<void>
+  deleteFolder: (folderId: string) => Promise<string[]>
   pickFolder: () => Promise<ConversationFolderRecord | null>
   openFolderPath: (folderPath: string) => Promise<void>
   appendMessages: (input: AppendConversationMessagesInput) => Promise<ConversationRecord>

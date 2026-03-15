@@ -14,7 +14,7 @@ interface UseChatConversationActionsInput {
     deletedConversationFolderId: string | null
     remainingSummaries: ConversationSummary[]
   }
-  removeFolder: (folderId: string) => void
+  removeFolder: (folderId: string, deletedConversationIds: readonly string[]) => void
   removeConversationRuntime: (conversationId: string) => void
   renameFolder: (folderId: string, name: string) => void
   replaceConversationSummaries: (summaries: ConversationSummary[]) => void
@@ -237,8 +237,8 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
       clearError()
 
       try {
-        await window.echosphereHistory.deleteFolder(folderId)
-        removeFolder(folderId)
+        const deletedConversationIds = await window.echosphereHistory.deleteFolder(folderId)
+        removeFolder(folderId, deletedConversationIds)
       } catch (caughtError) {
         console.error(caughtError)
         setError('Unable to remove that project folder.')

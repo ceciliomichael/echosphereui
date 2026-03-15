@@ -184,22 +184,20 @@ export async function deleteStoredFolder(folderId: string) {
   const folders = await readFolderStore()
   const hasFolder = folders.some((folder) => folder.id === folderId)
   if (!hasFolder) {
-    return
+    return []
   }
 
   const nextFolders = folders.filter((folder) => folder.id !== folderId)
   const conversations = await listConversationRecords()
-  const conversationsToUnfile = conversations.filter((conversation) => conversation.folderId === folderId)
+  const conversationsToDelete = conversations.filter((conversation) => conversation.folderId === folderId)
+  const deletedConversationIds = conversationsToDelete.map((conversation) => conversation.id)
 
   await Promise.all([
     writeFolderStore(nextFolders),
-    ...conversationsToUnfile.map((conversation) =>
-      writeConversationFile({
-        ...conversation,
-        folderId: null,
-      }),
-    ),
+    ...deletedConversationIds.map((conversationId) => deleteConversationFile(conversationId)),
   ])
+
+  return deletedConversationIds
 }
 
 export async function appendStoredMessages(input: AppendConversationMessagesInput) {

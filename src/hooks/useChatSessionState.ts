@@ -137,39 +137,41 @@ export function useChatSessionState(language: AppLanguage) {
     )
   }, [])
 
-  const removeFolder = useCallback((folderId: string) => {
-    setFolderSummaries((currentValue) => currentValue.filter((folder) => folder.id !== folderId))
-    setConversationSummaries((currentValue) =>
-      currentValue.map((conversation) =>
-        conversation.folderId === folderId ? { ...conversation, folderId: null } : conversation,
-      ),
-    )
-    setConversationRuntimeStates((currentValue) => {
-      let hasChanges = false
-      const nextValue = Object.fromEntries(
-        Object.entries(currentValue).map(([conversationId, conversationState]) => {
-          if (conversationState.conversation.folderId !== folderId) {
-            return [conversationId, conversationState]
+  const removeFolder = useCallback(
+    (folderId: string, deletedConversationIds: readonly string[]) => {
+      const deletedConversationIdSet = new Set(deletedConversationIds)
+
+      setFolderSummaries((currentValue) => currentValue.filter((folder) => folder.id !== folderId))
+      setConversationSummaries((currentValue) =>
+        currentValue.filter((conversation) => !deletedConversationIdSet.has(conversation.id)),
+      )
+      setConversationRuntimeStates((currentValue) => {
+        if (deletedConversationIdSet.size === 0) {
+          return currentValue
+        }
+
+        let hasChanges = false
+        const nextConversationStates: ConversationRuntimeStateMap = {}
+
+        for (const [conversationId, conversationState] of Object.entries(currentValue)) {
+          if (deletedConversationIdSet.has(conversationId)) {
+            hasChanges = true
+            continue
           }
 
-          hasChanges = true
-          return [
-            conversationId,
-            {
-              ...conversationState,
-              conversation: {
-                ...conversationState.conversation,
-                folderId: null,
-              },
-            },
-          ]
-        }),
-      )
+          nextConversationStates[conversationId] = conversationState
+        }
 
-      return hasChanges ? nextValue : currentValue
-    })
-    setSelectedFolderId((currentValue) => (currentValue === folderId ? null : currentValue))
-  }, [])
+        return hasChanges ? nextConversationStates : currentValue
+      })
+      setSelectedFolderId((currentValue) => (currentValue === folderId ? null : currentValue))
+      if (activeConversationId && deletedConversationIdSet.has(activeConversationId)) {
+        setActiveConversationId(null)
+        setActiveConversationChatMode(null)
+      }
+    },
+    [activeConversationId],
+  )
 
   const upsertConversationSummaryOnly = useCallback((conversation: ConversationRecord) => {
     setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))

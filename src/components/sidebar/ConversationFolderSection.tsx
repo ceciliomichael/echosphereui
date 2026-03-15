@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
 import { ConversationHistoryItem } from './ConversationHistoryItem'
+import { RemoveProjectFolderDialog } from './RemoveProjectFolderDialog'
 
 interface ConversationFolderSectionProps {
   group: ConversationGroupPreview
@@ -30,7 +32,88 @@ export function ConversationFolderSection({
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
   const isProjectFolder = group.folder.id !== null
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false)
+  const [isRemovingFolder, setIsRemovingFolder] = useState(false)
   const actionsMenuRootRef = useRef<HTMLDivElement | null>(null)
+  const actionsMenuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null)
+  const [actionsMenuStyle, setActionsMenuStyle] = useState<CSSProperties>({
+    left: 0,
+    maxHeight: 0,
+    top: 0,
+    visibility: 'hidden',
+  })
+
+  useLayoutEffect(() => {
+    if (!isActionsMenuOpen) {
+      return
+    }
+
+    function updateMenuPosition() {
+      const buttonElement = actionsMenuButtonRef.current
+      const menuElement = actionsMenuRef.current
+      const buttonRect = buttonElement?.getBoundingClientRect()
+      const menuRect = menuElement?.getBoundingClientRect()
+
+      if (!buttonRect || !menuElement) {
+        return
+      }
+
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const menuWidth = menuRect?.width ?? menuElement.scrollWidth
+      const menuHeight = menuElement.scrollHeight
+      const offset = 6
+      const edgePadding = 8
+      const settingsButtonRect =
+        document.querySelector<HTMLButtonElement>('button[aria-label="Open settings"]')?.getBoundingClientRect() ?? null
+      const menuBottomLimit = settingsButtonRect
+        ? Math.max(settingsButtonRect.top - edgePadding, edgePadding)
+        : viewportHeight - edgePadding
+      const availableBelow = Math.max(menuBottomLimit - buttonRect.bottom - offset, 0)
+      const availableAbove = Math.max(buttonRect.top - offset - edgePadding, 0)
+      const shouldOpenAbove = availableBelow < menuHeight && availableAbove > 0
+      const maxHeight = shouldOpenAbove ? availableAbove : availableBelow
+      const top = shouldOpenAbove
+        ? Math.max(edgePadding, buttonRect.top - Math.min(menuHeight, maxHeight) - offset)
+        : buttonRect.bottom + offset
+
+      // Keep the menu "pointing left" from the trigger by right-aligning with the button.
+      const unclampedLeft = buttonRect.right - menuWidth
+      const maxLeft = Math.max(viewportWidth - menuWidth - edgePadding, edgePadding)
+      const left = Math.min(Math.max(unclampedLeft, edgePadding), maxLeft)
+
+      setActionsMenuStyle({
+        left,
+        maxHeight,
+        top,
+        visibility: 'visible',
+      })
+    }
+
+    updateMenuPosition()
+    const animationFrameId = window.requestAnimationFrame(updateMenuPosition)
+    const resizeObserver =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            updateMenuPosition()
+          })
+        : null
+
+    if (resizeObserver && actionsMenuRef.current) {
+      resizeObserver.observe(actionsMenuRef.current)
+    }
+
+    window.addEventListener('resize', updateMenuPosition)
+    window.addEventListener('scroll', updateMenuPosition, true)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateMenuPosition)
+      window.removeEventListener('scroll', updateMenuPosition, true)
+    }
+  }, [isActionsMenuOpen])
 
   useEffect(() => {
     if (!isProjectFolder || !isActionsMenuOpen) {
@@ -43,7 +126,7 @@ export function ConversationFolderSection({
         return
       }
 
-      if (actionsMenuRootRef.current?.contains(target)) {
+      if (actionsMenuRootRef.current?.contains(target) || actionsMenuRef.current?.contains(target)) {
         return
       }
 
@@ -85,15 +168,21 @@ export function ConversationFolderSection({
     }
 
     setIsActionsMenuOpen(false)
-    const shouldRemoveFolder = window.confirm(
-      `Remove "${group.folder.name}" from EchoSphere? Conversations in this folder will move to Unfiled.`,
-    )
+    setIsRemoveDialogOpen(true)
+  }
 
-    if (!shouldRemoveFolder) {
+  async function handleConfirmRemoveFolder() {
+    if (!group.folder.id) {
       return
     }
 
-    void onDeleteFolder(group.folder.id)
+    setIsRemovingFolder(true)
+    try {
+      await onDeleteFolder(group.folder.id)
+      setIsRemoveDialogOpen(false)
+    } finally {
+      setIsRemovingFolder(false)
+    }
   }
 
   return (
@@ -157,6 +246,7 @@ export function ConversationFolderSection({
             <div ref={actionsMenuRootRef} className="relative">
               <Tooltip content="Project folder actions" side="right">
                 <button
+                  ref={actionsMenuButtonRef}
                   type="button"
                   aria-label={`Project folder actions for ${group.folder.name}`}
                   aria-haspopup="menu"
@@ -167,31 +257,6 @@ export function ConversationFolderSection({
                   <MoreHorizontal size={16} strokeWidth={2.1} />
                 </button>
               </Tooltip>
-
-              {isActionsMenuOpen ? (
-                <div
-                  role="menu"
-                  aria-label={`Project folder actions for ${group.folder.name}`}
-                  className="absolute right-0 top-[calc(100%+6px)] z-[999] min-w-[200px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleRenameFolder}
-                    className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
-                  >
-                    Rename project folder
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleRemoveFolder}
-                    className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
-                  >
-                    Remove project folder
-                  </button>
-                </div>
-              ) : null}
             </div>
 
             <Tooltip content={`Start new thread in ${group.folder.name}`} side="right">
@@ -246,6 +311,52 @@ export function ConversationFolderSection({
           </div>
         </div>
       </div>
+      {isActionsMenuOpen
+        ? createPortal(
+            <div
+              ref={actionsMenuRef}
+              data-floating-menu-root="true"
+              role="menu"
+              aria-label={`Project folder actions for ${group.folder.name}`}
+              className="fixed z-[1200] min-w-[200px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
+              style={actionsMenuStyle}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleRenameFolder}
+                className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
+              >
+                Rename project folder
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleRemoveFolder}
+                className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
+              >
+                Remove project folder
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+      {isRemoveDialogOpen ? (
+        <RemoveProjectFolderDialog
+          folderName={group.folder.name}
+          isBusy={isRemovingFolder}
+          onCancel={() => {
+            if (isRemovingFolder) {
+              return
+            }
+
+            setIsRemoveDialogOpen(false)
+          }}
+          onConfirm={() => {
+            void handleConfirmRemoveFolder()
+          }}
+        />
+      ) : null}
     </section>
   )
 }
