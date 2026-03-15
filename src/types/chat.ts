@@ -145,6 +145,11 @@ export interface CreateConversationFolderInput {
   path: string
 }
 
+export interface RenameConversationFolderInput {
+  folderId: string
+  name: string
+}
+
 export interface AppendConversationMessagesInput {
   conversationId: string
   messages: Message[]
@@ -169,6 +174,8 @@ export interface AppSettings {
   sourceControlSectionOrder: SourceControlSectionId[]
   sourceControlSectionOpen: Record<SourceControlSectionOpenId, boolean>
   sourceControlSectionSizes: Record<SourceControlSectionId, number>
+  terminalOpenByWorkspace: Record<string, boolean>
+  terminalPanelHeightsByWorkspace: Record<string, number>
   terminalExecutionMode: AppTerminalExecutionMode
 }
 
@@ -273,6 +280,50 @@ export interface EstimateContextUsageInput {
 
 export interface CreateWorkspaceCheckpointInput {
   workspaceRootPath: string
+}
+
+export interface CreateTerminalSessionInput {
+  cols: number
+  cwd?: string | null
+  rows: number
+}
+
+export interface CreateTerminalSessionResult {
+  bufferedOutput: string
+  cwd: string
+  isReused: boolean
+  sessionId: number
+  shell: string
+}
+
+export interface WriteTerminalSessionInput {
+  data: string
+  sessionId: number
+}
+
+export interface ResizeTerminalSessionInput {
+  cols: number
+  rows: number
+  sessionId: number
+}
+
+export interface CloseTerminalSessionInput {
+  sessionId: number
+}
+
+export interface OpenExternalTerminalLinkInput {
+  url: string
+}
+
+export interface TerminalDataEvent {
+  data: string
+  sessionId: number
+}
+
+export interface TerminalExitEvent {
+  exitCode: number
+  sessionId: number
+  signal: number | null
 }
 
 export interface ContextUsageEstimate {
@@ -496,6 +547,8 @@ export interface EchosphereHistoryApi {
   getConversation: (conversationId: string) => Promise<ConversationRecord | null>
   createConversation: (input?: CreateConversationInput) => Promise<ConversationRecord>
   createFolder: (input: CreateConversationFolderInput) => Promise<ConversationFolderRecord>
+  renameFolder: (input: RenameConversationFolderInput) => Promise<ConversationFolderRecord>
+  deleteFolder: (folderId: string) => Promise<void>
   pickFolder: () => Promise<ConversationFolderRecord | null>
   openFolderPath: (folderPath: string) => Promise<void>
   appendMessages: (input: AppendConversationMessagesInput) => Promise<ConversationRecord>
@@ -536,6 +589,16 @@ export interface EchosphereChatApi {
 export interface EchosphereWorkspaceApi {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
+}
+
+export interface EchosphereTerminalApi {
+  closeSession: (input: CloseTerminalSessionInput) => Promise<void>
+  createSession: (input: CreateTerminalSessionInput) => Promise<CreateTerminalSessionResult>
+  openExternalLink: (input: OpenExternalTerminalLinkInput) => Promise<void>
+  onData: (listener: (event: TerminalDataEvent) => void) => () => void
+  onExit: (listener: (event: TerminalExitEvent) => void) => () => void
+  resizeSession: (input: ResizeTerminalSessionInput) => Promise<void>
+  writeToSession: (input: WriteTerminalSessionInput) => Promise<void>
 }
 
 export interface EchosphereGitApi {

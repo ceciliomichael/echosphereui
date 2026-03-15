@@ -25,5 +25,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     commit: 1,
     history: 1,
   },
+  terminalOpenByWorkspace: {},
+  terminalPanelHeightsByWorkspace: {},
   terminalExecutionMode: 'sandbox',
 }

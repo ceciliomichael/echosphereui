@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Maximize2, Minimize2, Minus, Plus, Undo2 } from 'lucide-react'
+import { Check, ChevronDown, Maximize, Minimize, Minus, Plus, Undo2 } from 'lucide-react'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
@@ -313,6 +313,22 @@ export function ConversationDiffPanel({
     return 'File is not staged'
   }
 
+  function getStageTooltipLabel(fileDiff: ConversationFileDiff) {
+    if (pendingFileActionPath === fileDiff.fileName) {
+      return 'Updating file state...'
+    }
+
+    if (canStageFile(fileDiff)) {
+      return 'Stage file'
+    }
+
+    return 'File is already staged'
+  }
+
+  const panelIconButtonClassName =
+    'inline-flex h-6 w-6 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent'
+  const fileActionButtonClassName = `${panelIconButtonClassName} disabled:cursor-not-allowed disabled:text-muted-foreground/50 disabled:hover:bg-transparent`
+
   function renderScopeOption(option: DiffScopeOption) {
     const isSelected = option.value === selectedScope
     const isHighlighted = option.value === highlightedScope
@@ -412,14 +428,16 @@ export function ConversationDiffPanel({
               : null}
           </div>
 
-          <button
-            type="button"
-            aria-label={isFullscreen ? 'Exit fullscreen diff panel' : 'Fullscreen diff panel'}
-            onClick={() => setIsFullscreen((currentValue) => !currentValue)}
-            className="text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-          </button>
+          <Tooltip content={isFullscreen ? 'Exit fullscreen diff panel' : 'Fullscreen diff panel'} side="left" noWrap>
+            <button
+              type="button"
+              aria-label={isFullscreen ? 'Exit fullscreen diff panel' : 'Fullscreen diff panel'}
+              onClick={() => setIsFullscreen((currentValue) => !currentValue)}
+              className={panelIconButtonClassName}
+            >
+              {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+            </button>
+          </Tooltip>
         </div>
 
         <div className="h-px w-full bg-border" />
@@ -454,7 +472,7 @@ export function ConversationDiffPanel({
                 headerRightContent={
                   <span className="inline-flex items-center gap-0.5">
                     {selectedScope === 'staged' ? (
-                      <Tooltip content={getUnstageTooltipLabel(diff)} side="top">
+                      pendingFileActionPath === diff.fileName ? (
                         <button
                           type="button"
                           aria-label={`Unstage ${diff.fileName}`}
@@ -464,14 +482,30 @@ export function ConversationDiffPanel({
                             event.stopPropagation()
                             void onUnstageFile(diff.fileName)
                           }}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/50"
+                          className={fileActionButtonClassName}
                         >
                           <Minus size={14} />
                         </button>
-                      </Tooltip>
+                      ) : (
+                        <Tooltip content={getUnstageTooltipLabel(diff)} side="left" noWrap>
+                          <button
+                            type="button"
+                            aria-label={`Unstage ${diff.fileName}`}
+                            disabled={!canUnstageFile(diff) || pendingFileActionPath === diff.fileName}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              void onUnstageFile(diff.fileName)
+                            }}
+                            className={fileActionButtonClassName}
+                          >
+                            <Minus size={14} />
+                          </button>
+                        </Tooltip>
+                      )
                     ) : (
                       <>
-                        <Tooltip content={getDiscardTooltipLabel(diff)} side="top">
+                        <Tooltip content={getDiscardTooltipLabel(diff)} side="left" noWrap>
                           <button
                             type="button"
                             aria-label={`Discard ${diff.fileName}`}
@@ -481,24 +515,26 @@ export function ConversationDiffPanel({
                               event.stopPropagation()
                               void onDiscardFile(diff.fileName)
                             }}
-                            className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/50"
+                            className={fileActionButtonClassName}
                           >
                             <Undo2 size={14} />
                           </button>
                         </Tooltip>
-                        <button
-                          type="button"
-                          aria-label={`Stage ${diff.fileName}`}
-                          disabled={!canStageFile(diff) || pendingFileActionPath === diff.fileName}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            void onStageFile(diff.fileName)
-                          }}
-                          className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:text-muted-foreground/50"
-                        >
-                          <Plus size={14} />
-                        </button>
+                        <Tooltip content={getStageTooltipLabel(diff)} side="left" noWrap>
+                          <button
+                            type="button"
+                            aria-label={`Stage ${diff.fileName}`}
+                            disabled={!canStageFile(diff) || pendingFileActionPath === diff.fileName}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              void onStageFile(diff.fileName)
+                            }}
+                            className={fileActionButtonClassName}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </Tooltip>
                       </>
                     )}
                   </span>

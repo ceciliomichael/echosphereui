@@ -16,7 +16,9 @@ import type {
   AppendConversationMessagesInput,
   AppSettings,
   CheckoutGitBranchInput,
+  CloseTerminalSessionInput,
   CreateGitBranchInput,
+  CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
   EstimateContextUsageInput,
   GitCommitInput,
@@ -24,21 +26,27 @@ import type {
   GitHistoryPageInput,
   GitFileStageInput,
   GitSyncInput,
+  OpenExternalTerminalLinkInput,
+  ResizeTerminalSessionInput,
+  RenameConversationFolderInput,
   SaveCustomModelInput,
   StartChatStreamInput,
   CreateConversationFolderInput,
   CreateConversationInput,
   ReplaceConversationMessagesInput,
   SaveApiKeyProviderInput,
+  WriteTerminalSessionInput,
 } from '../src/types/chat'
 import {
   appendStoredMessages,
   createStoredFolder,
   createStoredConversation,
+  deleteStoredFolder,
   deleteStoredConversation,
   getStoredConversation,
   listStoredConversations,
   listStoredFolders,
+  renameStoredFolder,
   replaceStoredMessages,
   updateStoredConversationTitle,
 } from './history/store'
@@ -72,6 +80,14 @@ import {
   unstageGitFile,
 } from './git/service'
 import { listCustomModels, removeCustomModel, saveCustomModel } from './models/service'
+import {
+  closeAllTerminalSessions,
+  closeTerminalSession,
+  createTerminalSession,
+  openExternalTerminalLink,
+  resizeTerminalSession,
+  writeToTerminalSession,
+} from './terminal/service'
 import { createWorkspaceCheckpoint, restoreWorkspaceCheckpoint } from './workspace/checkpoints'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -173,6 +189,10 @@ function registerHistoryHandlers() {
   ipcMain.handle('history:createFolder', async (_event, input: CreateConversationFolderInput) =>
     createStoredFolder(input),
   )
+  ipcMain.handle('history:renameFolder', async (_event, input: RenameConversationFolderInput) =>
+    renameStoredFolder(input),
+  )
+  ipcMain.handle('history:deleteFolder', async (_event, folderId: string) => deleteStoredFolder(folderId))
   ipcMain.handle('history:pickFolder', async () => {
     const dialogOptions: OpenDialogOptions = {
       properties: ['openDirectory', 'createDirectory'],
@@ -236,6 +256,21 @@ function registerHistoryHandlers() {
   ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) =>
     estimateChatContextUsage(input),
   )
+  ipcMain.handle('terminal:createSession', async (event, input: CreateTerminalSessionInput) =>
+    createTerminalSession(event, input),
+  )
+  ipcMain.handle('terminal:writeToSession', async (event, input: WriteTerminalSessionInput) =>
+    writeToTerminalSession(event, input),
+  )
+  ipcMain.handle('terminal:resizeSession', async (event, input: ResizeTerminalSessionInput) =>
+    resizeTerminalSession(event, input),
+  )
+  ipcMain.handle('terminal:closeSession', async (event, input: CloseTerminalSessionInput) =>
+    closeTerminalSession(event, input),
+  )
+  ipcMain.handle('terminal:openExternalLink', async (_event, input: OpenExternalTerminalLinkInput) =>
+    openExternalTerminalLink(input),
+  )
   ipcMain.handle('git:getBranches', async (_event, workspacePath: string) => getGitBranchState(workspacePath))
   ipcMain.handle('git:getDiffs', async (_event, workspacePath: string) => getGitDiffSnapshot(workspacePath))
   ipcMain.handle('git:getHistoryCommitDetails', async (_event, input: GitHistoryCommitDetailsInput) =>
@@ -277,6 +312,9 @@ app.on('before-quit', (event) => {
 
   event.preventDefault()
   isQuitFlushInProgress = true
+  void closeAllTerminalSessions().catch((error) => {
+    console.error('Failed to close terminal sessions on quit', error)
+  })
   void flushStoredSettingsUpdates()
     .catch((error) => {
       console.error('Failed to flush settings updates on quit', error)

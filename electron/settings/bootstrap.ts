@@ -1,6 +1,7 @@
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
+import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 import type { AppSettings } from '../../src/types/chat'
 import type { SourceControlSectionId } from '../../src/types/chat'
@@ -78,6 +79,44 @@ function sanitizeSourceControlSectionOpen(value: unknown): AppSettings['sourceCo
   }
 }
 
+function sanitizeTerminalOpenByWorkspace(value: unknown): AppSettings['terminalOpenByWorkspace'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.terminalOpenByWorkspace }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['terminalOpenByWorkspace'] = {}
+  for (const [workspaceKey, workspaceIsOpen] of candidateEntries) {
+    const normalizedWorkspaceKey = workspaceKey.trim()
+    if (normalizedWorkspaceKey.length === 0 || typeof workspaceIsOpen !== 'boolean') {
+      continue
+    }
+
+    sanitizedValue[normalizedWorkspaceKey] = workspaceIsOpen
+  }
+
+  return sanitizedValue
+}
+
+function sanitizeTerminalPanelHeightsByWorkspace(value: unknown): AppSettings['terminalPanelHeightsByWorkspace'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.terminalPanelHeightsByWorkspace }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['terminalPanelHeightsByWorkspace'] = {}
+  for (const [workspaceKey, workspacePanelHeight] of candidateEntries) {
+    const normalizedWorkspaceKey = workspaceKey.trim()
+    if (normalizedWorkspaceKey.length === 0 || typeof workspacePanelHeight !== 'number') {
+      continue
+    }
+
+    sanitizedValue[normalizedWorkspaceKey] = clampStoredTerminalPanelHeight(workspacePanelHeight)
+  }
+
+  return sanitizedValue
+}
+
 function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   const candidate = input as Partial<AppSettings> | null | undefined
 
@@ -107,6 +146,8 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
     sourceControlSectionOrder: sanitizeSourceControlSectionOrder(candidate?.sourceControlSectionOrder),
     sourceControlSectionOpen: sanitizeSourceControlSectionOpen(candidate?.sourceControlSectionOpen),
     sourceControlSectionSizes: sanitizeSourceControlSectionSizes(candidate?.sourceControlSectionSizes),
+    terminalOpenByWorkspace: sanitizeTerminalOpenByWorkspace(candidate?.terminalOpenByWorkspace),
+    terminalPanelHeightsByWorkspace: sanitizeTerminalPanelHeightsByWorkspace(candidate?.terminalPanelHeightsByWorkspace),
     terminalExecutionMode: isAppTerminalExecutionMode(candidate?.terminalExecutionMode)
       ? candidate.terminalExecutionMode
       : DEFAULT_APP_SETTINGS.terminalExecutionMode,

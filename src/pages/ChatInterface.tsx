@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { GitBranch, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
@@ -13,6 +13,7 @@ import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatin
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { SourceControlPanel } from '../components/sourceControl/SourceControlPanel'
+import { WorkspaceTerminalPanel } from '../components/chat/WorkspaceTerminalPanel'
 import { Tooltip } from '../components/Tooltip'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
@@ -22,6 +23,7 @@ import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useGitCommit } from '../hooks/useGitCommit'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
+import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
 import type { AppSettings, GitCommitAction, GitCommitResult } from '../types/chat'
 
 export type RightPanelTab = 'diff' | 'source-control'
@@ -29,6 +31,7 @@ export type RightPanelTab = 'diff' | 'source-control'
 interface ChatInterfaceProps {
   chatMessages: ChatMessagesController
   diffPanelWidth: number
+  isActiveScreen: boolean
   isRightPanelOpen: boolean
   rightPanelTab: RightPanelTab
   diffPanelExpandedFilePaths: readonly string[]
@@ -52,9 +55,21 @@ interface CommitSuccessDialogState {
   result: GitCommitResult
 }
 
+const DEFAULT_TERMINAL_WORKSPACE_KEY = '__global__'
+
+function toTerminalWorkspaceKey(workspacePath: string | null) {
+  const normalizedPath = workspacePath?.trim() ?? ''
+  if (normalizedPath.length === 0) {
+    return DEFAULT_TERMINAL_WORKSPACE_KEY
+  }
+
+  return normalizedPath
+}
+
 export function ChatInterface({
   chatMessages,
   diffPanelWidth,
+  isActiveScreen,
   isRightPanelOpen,
   rightPanelTab,
   diffPanelExpandedFilePaths,
@@ -94,6 +109,7 @@ export function ChatInterface({
     editComposerValue,
     createConversation,
     deleteConversation,
+    deleteFolder,
     editingMessageId,
     error,
     isEditComposerDirty,
@@ -106,6 +122,7 @@ export function ChatInterface({
     messages,
     revertUserMessage,
     renameConversationTitle,
+    renameFolder,
     selectedChatMode,
     selectedFolderName,
     selectedFolderPath,
@@ -147,6 +164,9 @@ export function ChatInterface({
     showReasoningEffortSelector,
   } = chatRuntimeConfig
   const activeWorkspacePath = activeConversationRootPath ?? selectedFolderPath
+  const activeTerminalWorkspaceKey = toTerminalWorkspaceKey(activeWorkspacePath)
+  const isTerminalOpen = settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
+  const terminalPanelHeight = settings.terminalPanelHeightsByWorkspace[activeTerminalWorkspaceKey] ?? DEFAULT_TERMINAL_PANEL_HEIGHT
   const gitBranchState = useGitBranchState(activeWorkspacePath)
   const selectorOptions = useMemo(
     () =>
@@ -261,6 +281,7 @@ export function ChatInterface({
   ])
 
   useWorkspaceKeyboardShortcuts({
+    enabled: isActiveScreen,
     onToggleDiffPanel: () => {
       if (!hasRepository) {
         return
@@ -396,6 +417,39 @@ export function ChatInterface({
     },
     [onUpdateSettings, settings.terminalExecutionMode],
   )
+  const setActiveWorkspaceTerminalOpen = useCallback(
+    (nextOpen: boolean) => {
+      const currentOpenByWorkspace = settings.terminalOpenByWorkspace
+      const currentOpen = currentOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
+      if (currentOpen === nextOpen) {
+        return
+      }
+
+      void onUpdateSettings({
+        terminalOpenByWorkspace: {
+          ...currentOpenByWorkspace,
+          [activeTerminalWorkspaceKey]: nextOpen,
+        },
+      })
+    },
+    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalOpenByWorkspace],
+  )
+  const handleTerminalPanelHeightCommit = useCallback(
+    (nextHeight: number) => {
+      const currentHeightsByWorkspace = settings.terminalPanelHeightsByWorkspace
+      if (currentHeightsByWorkspace[activeTerminalWorkspaceKey] === nextHeight) {
+        return
+      }
+
+      void onUpdateSettings({
+        terminalPanelHeightsByWorkspace: {
+          ...currentHeightsByWorkspace,
+          [activeTerminalWorkspaceKey]: nextHeight,
+        },
+      })
+    },
+    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalPanelHeightsByWorkspace],
+  )
 
   return (
     <AppWorkspaceShell
@@ -416,7 +470,9 @@ export function ChatInterface({
           onCreateFolder={createFolder}
           onCreateConversation={createConversation}
           onDeleteConversation={deleteConversation}
+          onDeleteFolder={deleteFolder}
           onOpenSettings={onOpenSettings}
+          onRenameFolder={renameFolder}
           onSelectConversation={selectConversation}
           onSelectFolder={selectFolder}
         />
@@ -429,6 +485,20 @@ export function ChatInterface({
           isSidebarOpen={isSidebarOpen}
           trailingContent={
             <div className="flex items-center gap-1">
+              <Tooltip content={isTerminalOpen ? 'Hide terminal panel' : 'Open terminal panel'} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setActiveWorkspaceTerminalOpen(!isTerminalOpen)}
+                  className={[
+                    'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
+                    isTerminalOpen ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <Terminal size={16} className="shrink-0" />
+                  <span className="hidden md:inline">Terminal</span>
+                </button>
+              </Tooltip>
+              <div className="mx-1 h-5 w-px bg-border" />
               <Tooltip content={hasRepository ? 'Commit changes' : 'Open a git-backed folder to commit'} side="bottom">
                 <button
                   type="button"
@@ -616,6 +686,13 @@ export function ChatInterface({
             width={diffPanelWidth}
           />
         </div>
+        <WorkspaceTerminalPanel
+          isOpen={isTerminalOpen}
+          onClose={() => setActiveWorkspaceTerminalOpen(false)}
+          onHeightCommit={handleTerminalPanelHeightCommit}
+          storedHeight={terminalPanelHeight}
+          workspacePath={activeWorkspacePath}
+        />
       </WorkspacePanel>
 
       {isCommitModalOpen ? (

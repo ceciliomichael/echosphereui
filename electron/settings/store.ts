@@ -5,6 +5,7 @@ import type { AppSettings } from '../../src/types/chat'
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
 import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
+import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
 import type { SourceControlSectionId } from '../../src/types/chat'
 
@@ -84,6 +85,44 @@ function sanitizeSourceControlSectionOpen(value: unknown) {
   }
 }
 
+function sanitizeTerminalOpenByWorkspace(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.terminalOpenByWorkspace }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: Record<string, boolean> = {}
+  for (const [workspaceKey, workspaceIsOpen] of candidateEntries) {
+    const normalizedWorkspaceKey = workspaceKey.trim()
+    if (normalizedWorkspaceKey.length === 0 || typeof workspaceIsOpen !== 'boolean') {
+      continue
+    }
+
+    sanitizedValue[normalizedWorkspaceKey] = workspaceIsOpen
+  }
+
+  return sanitizedValue
+}
+
+function sanitizeTerminalPanelHeightsByWorkspace(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.terminalPanelHeightsByWorkspace }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: Record<string, number> = {}
+  for (const [workspaceKey, workspacePanelHeight] of candidateEntries) {
+    const normalizedWorkspaceKey = workspaceKey.trim()
+    if (normalizedWorkspaceKey.length === 0 || typeof workspacePanelHeight !== 'number') {
+      continue
+    }
+
+    sanitizedValue[normalizedWorkspaceKey] = clampStoredTerminalPanelHeight(workspacePanelHeight)
+  }
+
+  return sanitizedValue
+}
+
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
 }
@@ -127,6 +166,8 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   const sourceControlSectionOrder = sanitizeSourceControlSectionOrder(input?.sourceControlSectionOrder)
   const sourceControlSectionOpen = sanitizeSourceControlSectionOpen(input?.sourceControlSectionOpen)
   const sourceControlSectionSizes = sanitizeSourceControlSectionSizes(input?.sourceControlSectionSizes)
+  const terminalOpenByWorkspace = sanitizeTerminalOpenByWorkspace(input?.terminalOpenByWorkspace)
+  const terminalPanelHeightsByWorkspace = sanitizeTerminalPanelHeightsByWorkspace(input?.terminalPanelHeightsByWorkspace)
   const terminalExecutionMode = isAppTerminalExecutionMode(input?.terminalExecutionMode)
     ? input.terminalExecutionMode
     : DEFAULT_APP_SETTINGS.terminalExecutionMode
@@ -143,6 +184,8 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     sourceControlSectionOrder,
     sourceControlSectionOpen,
     sourceControlSectionSizes,
+    terminalOpenByWorkspace,
+    terminalPanelHeightsByWorkspace,
     terminalExecutionMode,
   }
 }
