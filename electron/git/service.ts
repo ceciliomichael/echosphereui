@@ -1325,6 +1325,7 @@ async function checkoutOrCreateBranch(repoRootPath: string, branchName: string) 
 
   if (await doesLocalBranchExist(repoRootPath, branchName)) {
     await runGit(['checkout', '--quiet', branchName], repoRootPath)
+    await syncCheckedOutBranchWithRemote(repoRootPath, branchName)
     return branchName
   }
 
