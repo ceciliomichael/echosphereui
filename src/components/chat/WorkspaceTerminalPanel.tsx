@@ -1,0 +1,498 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { Terminal } from '@xterm/xterm'
+import type { IDisposable } from '@xterm/xterm'
+import {
+  MAX_TERMINAL_PANEL_HEIGHT,
+  MIN_TERMINAL_PANEL_HEIGHT,
+  clampStoredTerminalPanelHeight,
+} from '../../lib/terminalPanelSizing'
+import { Tooltip } from '../Tooltip'
+import '@xterm/xterm/css/xterm.css'
+
+const MIN_TERMINAL_COLS = 20
+const MIN_TERMINAL_ROWS = 6
+
+interface WorkspaceTerminalPanelProps {
+  isOpen: boolean
+  onClose: () => void
+  onHeightCommit: (nextHeight: number) => void
+  storedHeight: number
+  workspacePath: string | null
+}
+
+function clampPanelHeight(nextHeight: number, maxHeightLimit: number) {
+  const safeMaxHeight = Math.max(MIN_TERMINAL_PANEL_HEIGHT, maxHeightLimit)
+  return Math.max(MIN_TERMINAL_PANEL_HEIGHT, Math.min(nextHeight, safeMaxHeight))
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  return 'Failed to process terminal action.'
+}
+
+function getSessionDimensions(terminal: Terminal) {
+  return {
+    cols: Math.max(MIN_TERMINAL_COLS, terminal.cols || 80),
+    rows: Math.max(MIN_TERMINAL_ROWS, terminal.rows || 24),
+  }
+}
+
+export function WorkspaceTerminalPanel({
+  isOpen,
+  onClose,
+  onHeightCommit,
+  storedHeight,
+  workspacePath,
+}: WorkspaceTerminalPanelProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const terminalHostRef = useRef<HTMLDivElement | null>(null)
+  const terminalRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const terminalInputDisposableRef = useRef<IDisposable | null>(null)
+  const terminalResizeDisposableRef = useRef<IDisposable | null>(null)
+  const sessionIdRef = useRef<number | null>(null)
+  const workspacePathRef = useRef<string | null>(workspacePath)
+  const resizeStateRef = useRef<{ pointerId: number; startHeight: number; startY: number } | null>(null)
+  const lastSyncedSizeRef = useRef<{ cols: number; rows: number; sessionId: number } | null>(null)
+  const isResizingRef = useRef(false)
+  const [shellLabel, setShellLabel] = useState<string | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [exitCode, setExitCode] = useState<number | null>(null)
+  const [panelHeight, setPanelHeight] = useState(() => clampStoredTerminalPanelHeight(storedHeight))
+  const [cwdLabel, setCwdLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    workspacePathRef.current = workspacePath
+  }, [workspacePath])
+
+  useEffect(() => {
+    isResizingRef.current = isResizing
+  }, [isResizing])
+
+  const panelHeightRef = useRef(panelHeight)
+  useEffect(() => {
+    panelHeightRef.current = panelHeight
+  }, [panelHeight])
+
+  const getMaxPanelHeight = useCallback(() => {
+    const activePanelElement = panelRef.current
+    const parentHeight = activePanelElement?.parentElement?.clientHeight
+    if (!parentHeight) {
+      return MAX_TERMINAL_PANEL_HEIGHT
+    }
+
+    return Math.min(MAX_TERMINAL_PANEL_HEIGHT, Math.floor(parentHeight * 0.78))
+  }, [])
+
+  const sendTerminalSizeToSession = useCallback((dimensions: { cols: number; rows: number }) => {
+    const activeSessionId = sessionIdRef.current
+    if (activeSessionId === null) {
+      return
+    }
+
+    const lastSyncedSize = lastSyncedSizeRef.current
+    if (
+      lastSyncedSize &&
+      lastSyncedSize.sessionId === activeSessionId &&
+      lastSyncedSize.cols === dimensions.cols &&
+      lastSyncedSize.rows === dimensions.rows
+    ) {
+      return
+    }
+
+    lastSyncedSizeRef.current = {
+      cols: dimensions.cols,
+      rows: dimensions.rows,
+      sessionId: activeSessionId,
+    }
+
+    void window.echosphereTerminal
+      .resizeSession({
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+        sessionId: activeSessionId,
+      })
+      .catch((error) => {
+        lastSyncedSizeRef.current = null
+        console.error('Failed to sync terminal size', error)
+      })
+  }, [])
+
+  const syncTerminalSize = useCallback((force = false) => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (!terminal || !fitAddon) {
+      return
+    }
+
+    fitAddon.fit()
+    if (!force && isResizingRef.current) {
+      return
+    }
+
+    const dimensions = getSessionDimensions(terminal)
+    sendTerminalSizeToSession(dimensions)
+  }, [sendTerminalSizeToSession])
+
+  const ensureTerminal = useCallback(() => {
+    const hostElement = terminalHostRef.current
+    if (!hostElement || terminalRef.current) {
+      return
+    }
+
+    const hostStyles = getComputedStyle(hostElement)
+    const terminal = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'block',
+      fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
+      fontSize: 13,
+      lineHeight: 1.24,
+      scrollback: 5_000,
+      theme: {
+        background: hostStyles.backgroundColor,
+        cursor: hostStyles.color,
+        foreground: hostStyles.color,
+        brightYellow: hostStyles.color,
+        yellow: hostStyles.color,
+      },
+    })
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      if (!event.ctrlKey && !event.metaKey) {
+        return
+      }
+
+      event.preventDefault()
+      void window.echosphereTerminal.openExternalLink({ url: uri }).catch((error) => {
+        console.error('Failed to open terminal link', error)
+      })
+    })
+    terminal.loadAddon(fitAddon)
+    terminal.loadAddon(webLinksAddon)
+    terminal.open(hostElement)
+    terminal.focus()
+    fitAddon.fit()
+
+    terminalInputDisposableRef.current = terminal.onData((data) => {
+      const activeSessionId = sessionIdRef.current
+      if (activeSessionId === null) {
+        return
+      }
+
+      void window.echosphereTerminal.writeToSession({
+        data,
+        sessionId: activeSessionId,
+      })
+    })
+    terminalResizeDisposableRef.current = terminal.onResize(() => {
+      if (isResizingRef.current) {
+        return
+      }
+
+      sendTerminalSizeToSession(getSessionDimensions(terminal))
+    })
+
+    terminalRef.current = terminal
+    fitAddonRef.current = fitAddon
+  }, [sendTerminalSizeToSession])
+
+  const disposeTerminal = useCallback(() => {
+    terminalInputDisposableRef.current?.dispose()
+    terminalResizeDisposableRef.current?.dispose()
+    terminalInputDisposableRef.current = null
+    terminalResizeDisposableRef.current = null
+    fitAddonRef.current = null
+    terminalRef.current?.dispose()
+    terminalRef.current = null
+  }, [])
+
+  const attachWorkspaceSession = useCallback(() => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (!terminal || !fitAddon) {
+      return
+    }
+
+    setIsConnecting(true)
+    setErrorMessage(null)
+    setExitCode(null)
+    fitAddon.fit()
+    terminal.focus()
+
+    const dimensions = getSessionDimensions(terminal)
+    void window.echosphereTerminal
+      .createSession({
+        cols: dimensions.cols,
+        cwd: workspacePathRef.current,
+        rows: dimensions.rows,
+      })
+      .then((session) => {
+        const previousSessionId = sessionIdRef.current
+        sessionIdRef.current = session.sessionId
+        lastSyncedSizeRef.current = null
+        setShellLabel(session.shell)
+        setCwdLabel(session.cwd)
+        setIsConnecting(false)
+
+        if (previousSessionId !== session.sessionId) {
+          terminal.reset()
+          if (session.bufferedOutput.length > 0) {
+            terminal.write(session.bufferedOutput)
+          }
+        }
+
+        syncTerminalSize(true)
+      })
+      .catch((error) => {
+        const message = getErrorMessage(error)
+        setIsConnecting(false)
+        setErrorMessage(message)
+        terminal.writeln(`\r\n\nFailed to start terminal: ${message}`)
+      })
+  }, [syncTerminalSize])
+
+  useEffect(() => {
+    const unsubscribeData = window.echosphereTerminal.onData((event) => {
+      if (event.sessionId !== sessionIdRef.current) {
+        return
+      }
+
+      terminalRef.current?.write(event.data)
+    })
+    const unsubscribeExit = window.echosphereTerminal.onExit((event) => {
+      if (event.sessionId !== sessionIdRef.current) {
+        return
+      }
+
+      sessionIdRef.current = null
+      lastSyncedSizeRef.current = null
+      setIsConnecting(false)
+      setExitCode(event.exitCode)
+      terminalRef.current?.writeln(`\r\n\nProcess exited with code ${event.exitCode}.`)
+    })
+
+    return () => {
+      unsubscribeData()
+      unsubscribeExit()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    ensureTerminal()
+    attachWorkspaceSession()
+  }, [attachWorkspaceSession, ensureTerminal, isOpen, workspacePath])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const handleWindowResize = () => {
+      const maxHeightLimit = getMaxPanelHeight()
+      setPanelHeight((currentValue) => clampPanelHeight(currentValue, maxHeightLimit))
+      syncTerminalSize()
+    }
+
+    window.addEventListener('resize', handleWindowResize)
+    return () => {
+      window.removeEventListener('resize', handleWindowResize)
+    }
+  }, [getMaxPanelHeight, isOpen, syncTerminalSize])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const maxHeightLimit = getMaxPanelHeight()
+    setPanelHeight((currentValue) => clampPanelHeight(currentValue, maxHeightLimit))
+  }, [getMaxPanelHeight, isOpen])
+
+  useEffect(() => {
+    if (isResizing) {
+      return
+    }
+
+    const maxHeightLimit = getMaxPanelHeight()
+    setPanelHeight(clampPanelHeight(storedHeight, maxHeightLimit))
+  }, [getMaxPanelHeight, isResizing, storedHeight])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    syncTerminalSize()
+  }, [isOpen, panelHeight, syncTerminalSize])
+
+  useEffect(() => {
+    if (!isOpen || isResizing) {
+      return
+    }
+
+    syncTerminalSize(true)
+  }, [isOpen, isResizing, syncTerminalSize])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const hostElement = terminalHostRef.current
+    if (!hostElement) {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      syncTerminalSize()
+    })
+    resizeObserver.observe(hostElement)
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isOpen, syncTerminalSize])
+
+  useEffect(() => {
+    if (!isOpen || !isResizing || !resizeStateRef.current) {
+      return
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resizeState = resizeStateRef.current
+      if (!resizeState) {
+        return
+      }
+
+      const maxHeightLimit = getMaxPanelHeight()
+      const nextHeight = clampPanelHeight(resizeState.startHeight + (resizeState.startY - event.clientY), maxHeightLimit)
+      setPanelHeight(nextHeight)
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (resizeStateRef.current?.pointerId !== event.pointerId) {
+        return
+      }
+
+      resizeStateRef.current = null
+      setIsResizing(false)
+      onHeightCommit(panelHeightRef.current)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [getMaxPanelHeight, isOpen, isResizing, onHeightCommit])
+
+  useEffect(() => {
+    return () => {
+      disposeTerminal()
+    }
+  }, [disposeTerminal])
+
+  const effectivePanelHeight = isOpen ? panelHeight : 0
+  const headerIconButtonClassName =
+    'inline-flex h-6 w-6 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent'
+
+  return (
+    <section
+      ref={panelRef}
+      className={[
+        'relative flex min-h-0 w-full shrink-0 self-stretch flex-col overflow-hidden border-t border-border bg-[var(--workspace-panel-surface)]',
+        isResizing ? '' : 'transition-[height,border-color] duration-150 ease-out',
+      ].join(' ')}
+      style={{
+        borderTopColor: isOpen ? 'var(--color-border)' : 'transparent',
+        height: effectivePanelHeight,
+      }}
+      onTransitionEnd={(event) => {
+        if (event.propertyName === 'height') {
+          syncTerminalSize()
+        }
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Resize terminal panel"
+        onPointerDown={(event) => {
+          if (!isOpen || event.button !== 0) {
+            return
+          }
+
+          resizeStateRef.current = {
+            pointerId: event.pointerId,
+            startHeight: panelHeight,
+            startY: event.clientY,
+          }
+          setIsResizing(true)
+          document.body.style.cursor = 'row-resize'
+          document.body.style.userSelect = 'none'
+          event.preventDefault()
+        }}
+        className={[
+          'absolute left-0 right-0 top-0 z-20 h-2',
+          isOpen ? 'cursor-row-resize' : 'cursor-default',
+        ].join(' ')}
+      />
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border bg-[var(--workspace-panel-surface)] px-6">
+        <div className="flex min-w-0 items-center gap-2 text-base">
+          <span className="font-semibold text-foreground">Terminal</span>
+          <span className="truncate font-medium text-foreground">{shellLabel ?? 'Shell'}</span>
+          {cwdLabel ? (
+            <>
+              <span className="h-4 w-px bg-border" />
+              <span className="truncate text-sm text-foreground" title={cwdLabel}>
+                {cwdLabel}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-1">
+          {isConnecting ? <span className="pr-1 text-xs text-foreground">Starting...</span> : null}
+          <Tooltip content="Close terminal" side="left" noWrap>
+            <button
+              type="button"
+              onClick={onClose}
+              className={headerIconButtonClassName}
+              aria-label="Close terminal"
+            >
+              <X size={14} />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+      <div
+        ref={terminalHostRef}
+        className="min-h-0 flex-1 overflow-hidden bg-[var(--workspace-panel-surface)] px-4 py-3 text-foreground"
+      />
+      {errorMessage ? (
+        <div className="border-t border-danger-border bg-danger-surface px-4 py-1.5 text-xs text-danger-foreground">
+          {errorMessage}
+        </div>
+      ) : null}
+      {exitCode !== null ? (
+        <div className="border-t border-border bg-surface-muted px-4 py-1.5 text-xs text-muted-foreground">
+          Process exited with code {exitCode}
+        </div>
+      ) : null}
+    </section>
+  )
+}

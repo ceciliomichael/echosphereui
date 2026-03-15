@@ -119,40 +119,43 @@ export default function App() {
     )
   }
 
-  if (activeScreen === 'settings') {
-    return (
-      <SettingsInterface
-        settings={settings}
-        isSettingsLoading={isLoading}
-        settingsSaveState={saveState}
-        onBackToApp={() => setActiveScreen('chat')}
-        onSidebarWidthChange={handleSidebarWidthChange}
-        onUpdateSettings={updateSettings}
-        sidebarWidth={settings.sidebarWidth}
-      />
-    )
-  }
-
   return (
-    <ChatInterface
-      chatMessages={chatMessages}
-      diffPanelWidth={diffPanelWidth}
-      diffPanelExpandedFilePaths={diffPanelExpandedFilePaths}
-      diffPanelSelectedScope={diffPanelSelectedScope}
-      isRightPanelOpen={isRightPanelOpen}
-      rightPanelTab={rightPanelTab}
-      onDiffPanelExpandedFilePathsChange={setDiffPanelExpandedFilePaths}
-      onRightPanelOpenChange={setIsRightPanelOpen}
-      onRightPanelTabChange={setRightPanelTab}
-      onDiffPanelSelectedScopeChange={setDiffPanelSelectedScope}
-      onDiffPanelWidthChange={handleDiffPanelWidthChange}
-      onDiffPanelWidthCommit={handleDiffPanelWidthCommit}
-      settings={settings}
-      onUpdateSettings={updateSettings}
-      onSidebarWidthChange={handleSidebarWidthChange}
-      sendMessageOnEnter={settings.sendMessageOnEnter}
-      sidebarWidth={settings.sidebarWidth}
-      onOpenSettings={() => setActiveScreen('settings')}
-    />
+    <div className="relative h-screen w-screen">
+      <ChatInterface
+        chatMessages={chatMessages}
+        diffPanelWidth={diffPanelWidth}
+        diffPanelExpandedFilePaths={diffPanelExpandedFilePaths}
+        diffPanelSelectedScope={diffPanelSelectedScope}
+        isActiveScreen={activeScreen === 'chat'}
+        isRightPanelOpen={isRightPanelOpen}
+        rightPanelTab={rightPanelTab}
+        onDiffPanelExpandedFilePathsChange={setDiffPanelExpandedFilePaths}
+        onRightPanelOpenChange={setIsRightPanelOpen}
+        onRightPanelTabChange={setRightPanelTab}
+        onDiffPanelSelectedScopeChange={setDiffPanelSelectedScope}
+        onDiffPanelWidthChange={handleDiffPanelWidthChange}
+        onDiffPanelWidthCommit={handleDiffPanelWidthCommit}
+        settings={settings}
+        onUpdateSettings={updateSettings}
+        onSidebarWidthChange={handleSidebarWidthChange}
+        sendMessageOnEnter={settings.sendMessageOnEnter}
+        sidebarWidth={settings.sidebarWidth}
+        onOpenSettings={() => setActiveScreen('settings')}
+      />
+
+      {activeScreen === 'settings' ? (
+        <div className="absolute inset-0 z-50">
+          <SettingsInterface
+            settings={settings}
+            isSettingsLoading={isLoading}
+            settingsSaveState={saveState}
+            onBackToApp={() => setActiveScreen('chat')}
+            onSidebarWidthChange={handleSidebarWidthChange}
+            onUpdateSettings={updateSettings}
+            sidebarWidth={settings.sidebarWidth}
+          />
+        </div>
+      ) : null}
+    </div>
   )
 }

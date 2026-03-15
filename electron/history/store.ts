@@ -5,6 +5,7 @@ import type {
   ChatMode,
   ConversationRecord,
   CreateConversationFolderInput,
+  RenameConversationFolderInput,
   ReplaceConversationMessagesInput,
   CreateConversationInput,
 } from '../../src/types/chat'
@@ -147,6 +148,58 @@ export async function createStoredFolder(input: CreateConversationFolderInput) {
 
   await writeFolderStore([...folders, nextFolder])
   return nextFolder
+}
+
+export async function renameStoredFolder(input: RenameConversationFolderInput) {
+  const nextName = input.name.trim()
+  if (nextName.length === 0) {
+    throw new Error('Folder name is required.')
+  }
+
+  if (nextName.length > 48) {
+    throw new Error('Folder name must be 48 characters or less.')
+  }
+
+  const folders = await readFolderStore()
+  const folderToRename = folders.find((folder) => folder.id === input.folderId)
+  if (!folderToRename) {
+    throw new Error(`Folder not found: ${input.folderId}`)
+  }
+
+  if (folderToRename.name === nextName) {
+    return folderToRename
+  }
+
+  const updatedFolder = {
+    ...folderToRename,
+    name: nextName,
+    updatedAt: Date.now(),
+  }
+  const nextFolders = folders.map((folder) => (folder.id === input.folderId ? updatedFolder : folder))
+  await writeFolderStore(nextFolders)
+  return updatedFolder
+}
+
+export async function deleteStoredFolder(folderId: string) {
+  const folders = await readFolderStore()
+  const hasFolder = folders.some((folder) => folder.id === folderId)
+  if (!hasFolder) {
+    return
+  }
+
+  const nextFolders = folders.filter((folder) => folder.id !== folderId)
+  const conversations = await listConversationRecords()
+  const conversationsToUnfile = conversations.filter((conversation) => conversation.folderId === folderId)
+
+  await Promise.all([
+    writeFolderStore(nextFolders),
+    ...conversationsToUnfile.map((conversation) =>
+      writeConversationFile({
+        ...conversation,
+        folderId: null,
+      }),
+    ),
+  ])
 }
 
 export async function appendStoredMessages(input: AppendConversationMessagesInput) {

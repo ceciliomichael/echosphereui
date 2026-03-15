@@ -14,7 +14,9 @@ interface UseChatConversationActionsInput {
     deletedConversationFolderId: string | null
     remainingSummaries: ConversationSummary[]
   }
+  removeFolder: (folderId: string) => void
   removeConversationRuntime: (conversationId: string) => void
+  renameFolder: (folderId: string, name: string) => void
   replaceConversationSummaries: (summaries: ConversationSummary[]) => void
   resetComposerState: () => void
   selectedFolderId: string | null
@@ -32,7 +34,9 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     clearError,
     conversationRuntimeStatesRef,
     getDeletionContext,
+    removeFolder,
     removeConversationRuntime,
+    renameFolder,
     replaceConversationSummaries,
     resetComposerState,
     selectedFolderId,
@@ -211,6 +215,33 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
       } catch (caughtError) {
         console.error(caughtError)
         setError('Unable to rename that thread.')
+        throw caughtError
+      }
+    },
+    renameFolder: async (folderId: string, name: string) => {
+      clearError()
+
+      try {
+        const folder = await window.echosphereHistory.renameFolder({
+          folderId,
+          name,
+        })
+        renameFolder(folder.id, folder.name)
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to rename that project folder.')
+        throw caughtError
+      }
+    },
+    deleteFolder: async (folderId: string) => {
+      clearError()
+
+      try {
+        await window.echosphereHistory.deleteFolder(folderId)
+        removeFolder(folderId)
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to remove that project folder.')
         throw caughtError
       }
     },

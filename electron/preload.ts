@@ -10,11 +10,13 @@ import type {
   EchosphereGitApi,
   EchosphereModelsApi,
   EchosphereProvidersApi,
+  EchosphereTerminalApi,
   GitCommitInput,
   GitHistoryCommitDetailsInput,
   GitHistoryPageInput,
   SaveApiKeyProviderInput,
   SaveCustomModelInput,
+  RenameConversationFolderInput,
   CreateConversationFolderInput,
   CreateConversationInput,
   CreateWorkspaceCheckpointInput,
@@ -24,7 +26,12 @@ import type {
   GitFileStageInput,
   GitSyncInput,
   ReplaceConversationMessagesInput,
+  CloseTerminalSessionInput,
+  CreateTerminalSessionInput,
+  OpenExternalTerminalLinkInput,
+  ResizeTerminalSessionInput,
   StartChatStreamInput,
+  WriteTerminalSessionInput,
 } from '../src/types/chat'
 
 // --------- Expose some API to the Renderer process ---------
@@ -56,6 +63,8 @@ const historyApi: EchosphereHistoryApi = {
   getConversation: (conversationId: string) => ipcRenderer.invoke('history:get', conversationId),
   createConversation: (input?: CreateConversationInput) => ipcRenderer.invoke('history:create', input),
   createFolder: (input: CreateConversationFolderInput) => ipcRenderer.invoke('history:createFolder', input),
+  renameFolder: (input: RenameConversationFolderInput) => ipcRenderer.invoke('history:renameFolder', input),
+  deleteFolder: (folderId: string) => ipcRenderer.invoke('history:deleteFolder', folderId),
   pickFolder: () => ipcRenderer.invoke('history:pickFolder'),
   openFolderPath: (folderPath: string) => ipcRenderer.invoke('history:openFolderPath', folderPath),
   appendMessages: (input: AppendConversationMessagesInput) => ipcRenderer.invoke('history:appendMessages', input),
@@ -122,6 +131,28 @@ const workspaceApi: EchosphereWorkspaceApi = {
   restoreCheckpoint: (checkpointId: string) => ipcRenderer.invoke('workspace:checkpoint:restore', checkpointId),
 }
 
+const terminalApi: EchosphereTerminalApi = {
+  closeSession: (input: CloseTerminalSessionInput) => ipcRenderer.invoke('terminal:closeSession', input),
+  createSession: (input: CreateTerminalSessionInput) => ipcRenderer.invoke('terminal:createSession', input),
+  openExternalLink: (input: OpenExternalTerminalLinkInput) => ipcRenderer.invoke('terminal:openExternalLink', input),
+  onData: (listener) => {
+    const wrappedListener = (_event: unknown, payload: Parameters<typeof listener>[0]) => listener(payload)
+    ipcRenderer.on('terminal:session:data', wrappedListener)
+    return () => {
+      ipcRenderer.off('terminal:session:data', wrappedListener)
+    }
+  },
+  onExit: (listener) => {
+    const wrappedListener = (_event: unknown, payload: Parameters<typeof listener>[0]) => listener(payload)
+    ipcRenderer.on('terminal:session:exit', wrappedListener)
+    return () => {
+      ipcRenderer.off('terminal:session:exit', wrappedListener)
+    }
+  },
+  resizeSession: (input: ResizeTerminalSessionInput) => ipcRenderer.invoke('terminal:resizeSession', input),
+  writeToSession: (input: WriteTerminalSessionInput) => ipcRenderer.invoke('terminal:writeToSession', input),
+}
+
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
@@ -129,3 +160,4 @@ contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)
 contextBridge.exposeInMainWorld('echosphereGit', gitApi)
 contextBridge.exposeInMainWorld('echosphereWorkspace', workspaceApi)
+contextBridge.exposeInMainWorld('echosphereTerminal', terminalApi)

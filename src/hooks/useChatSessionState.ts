@@ -131,6 +131,46 @@ export function useChatSessionState(language: AppLanguage) {
     setFolderSummaries((currentValue) => insertFolderSummary(currentValue, folder))
   }, [])
 
+  const renameFolder = useCallback((folderId: string, name: string) => {
+    setFolderSummaries((currentValue) =>
+      currentValue.map((folder) => (folder.id === folderId ? { ...folder, name } : folder)),
+    )
+  }, [])
+
+  const removeFolder = useCallback((folderId: string) => {
+    setFolderSummaries((currentValue) => currentValue.filter((folder) => folder.id !== folderId))
+    setConversationSummaries((currentValue) =>
+      currentValue.map((conversation) =>
+        conversation.folderId === folderId ? { ...conversation, folderId: null } : conversation,
+      ),
+    )
+    setConversationRuntimeStates((currentValue) => {
+      let hasChanges = false
+      const nextValue = Object.fromEntries(
+        Object.entries(currentValue).map(([conversationId, conversationState]) => {
+          if (conversationState.conversation.folderId !== folderId) {
+            return [conversationId, conversationState]
+          }
+
+          hasChanges = true
+          return [
+            conversationId,
+            {
+              ...conversationState,
+              conversation: {
+                ...conversationState.conversation,
+                folderId: null,
+              },
+            },
+          ]
+        }),
+      )
+
+      return hasChanges ? nextValue : currentValue
+    })
+    setSelectedFolderId((currentValue) => (currentValue === folderId ? null : currentValue))
+  }, [])
+
   const upsertConversationSummaryOnly = useCallback((conversation: ConversationRecord) => {
     setConversationSummaries((currentValue) => upsertConversationSummary(currentValue, conversation))
   }, [])
@@ -303,7 +343,9 @@ export function useChatSessionState(language: AppLanguage) {
     getDeletionContext,
     initializeHistory,
     isLoading,
+    removeFolder,
     removeConversationRuntime,
+    renameFolder,
     replaceConversationSummaries: setConversationSummaries,
     runningConversationIds,
     selectedFolderId,

@@ -6,6 +6,8 @@ interface ConversationHistoryListProps {
   conversationGroups: ConversationGroupPreview[]
   onCreateConversation: (folderId?: string | null) => void
   onDeleteConversation: (conversationId: string) => void
+  onDeleteFolder: (folderId: string) => Promise<void>
+  onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
 }
@@ -15,6 +17,8 @@ export function ConversationHistoryList({
   onCreateConversation,
   onSelectConversation,
   onDeleteConversation,
+  onDeleteFolder,
+  onRenameFolder,
   onSelectFolder,
 }: ConversationHistoryListProps) {
   const [collapsedFolderState, setCollapsedFolderState] = useState<Record<string, boolean>>({})
@@ -39,6 +43,8 @@ export function ConversationHistoryList({
             isCollapsed={Boolean(collapsedFolderState[stateKey])}
             onCreateConversation={onCreateConversation}
             onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
+            onDeleteFolder={onDeleteFolder}
+            onRenameFolder={onRenameFolder}
             onSelectFolder={onSelectFolder}
             onSelectConversation={onSelectConversation}
             onDeleteConversation={onDeleteConversation}

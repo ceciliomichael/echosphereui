@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 
 interface UseWorkspaceKeyboardShortcutsOptions {
+  enabled?: boolean
   onToggleSidebar: () => void
   onToggleDiffPanel?: () => void
   onCreateConversation?: () => void | Promise<void>
 }
 
 export function useWorkspaceKeyboardShortcuts({
+  enabled = true,
   onToggleSidebar,
   onToggleDiffPanel,
   onCreateConversation,
@@ -22,6 +24,10 @@ export function useWorkspaceKeyboardShortcuts({
   }, [onCreateConversation, onToggleDiffPanel, onToggleSidebar])
 
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if (!event.ctrlKey || event.metaKey || event.shiftKey) {
         return
@@ -53,5 +59,5 @@ export function useWorkspaceKeyboardShortcuts({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [enabled])
 }

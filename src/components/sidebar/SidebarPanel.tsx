@@ -8,7 +8,9 @@ interface SidebarPanelProps {
   onCreateConversation: (folderId?: string | null) => void
   onCreateFolder: () => Promise<void>
   onDeleteConversation: (conversationId: string) => void
+  onDeleteFolder: (folderId: string) => Promise<void>
   onOpenSettings: () => void
+  onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
 }
@@ -18,7 +20,9 @@ export function SidebarPanel({
   onCreateFolder,
   onCreateConversation,
   onDeleteConversation,
+  onDeleteFolder,
   onOpenSettings,
+  onRenameFolder,
   onSelectConversation,
   onSelectFolder,
 }: SidebarPanelProps) {
@@ -28,7 +32,7 @@ export function SidebarPanel({
     'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-3 text-left text-sm font-medium text-foreground transition-colors duration-200 ease-out hover:bg-[var(--sidebar-hover-surface)]'
 
   return (
-    <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] px-4 pb-5 pt-3 md:px-5">
+    <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] pb-5 pl-4 pr-0 pt-3 md:pl-5 md:pr-0">
       <div className="pb-4">
         <div className="h-10" aria-hidden="true" />
 
@@ -53,11 +57,13 @@ export function SidebarPanel({
         </div>
       </div>
 
-      <div className="scroll-stable mt-2 flex-1 overflow-y-auto pr-1">
+      <div className="scroll-stable mt-2 flex-1 overflow-y-auto pr-6 md:pr-7">
         <ConversationHistoryList
           conversationGroups={conversationGroups}
           onCreateConversation={onCreateConversation}
           onDeleteConversation={onDeleteConversation}
+          onDeleteFolder={onDeleteFolder}
+          onRenameFolder={onRenameFolder}
           onSelectConversation={onSelectConversation}
           onSelectFolder={onSelectFolder}
         />
@@ -77,5 +83,3 @@ export function SidebarPanel({
     </aside>
   )
 }
-
-
