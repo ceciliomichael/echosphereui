@@ -112,7 +112,7 @@ export const globTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description:
-        'Find file paths with ripgrep glob matching inside the locked thread root. Respects .gitignore and returns matching files.',
+        'Find file paths with ripgrep glob matching inside the workspace.',
       name: 'glob',
       parameters: {
         additionalProperties: false,

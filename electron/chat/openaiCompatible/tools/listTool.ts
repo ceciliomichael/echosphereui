@@ -67,7 +67,7 @@ export const listTool: OpenAICompatibleToolDefinition = {
   },
   tool: {
     function: {
-      description: 'List the contents of a directory inside the locked thread root.',
+      description: 'List the contents of a directory inside the workspace.',
       name: 'list',
       parameters: {
         additionalProperties: false,
@@ -77,7 +77,7 @@ export const listTool: OpenAICompatibleToolDefinition = {
             type: 'string',
           },
           limit: {
-            description: 'Optional maximum number of entries to return.',
+            description: 'An optional maximum number of entries to return.',
             minimum: 1,
             type: 'integer',
           },

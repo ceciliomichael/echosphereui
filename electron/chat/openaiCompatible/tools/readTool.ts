@@ -149,7 +149,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description:
-        'Read file content from an absolute path inside the locked thread root. You can request a specific inclusive line range with start_line and end_line.',
+        'Read file content from an absolute path inside the workspace. You can request a specific inclusive line range with start_line and end_line.',
       name: 'read',
       parameters: {
         additionalProperties: false,

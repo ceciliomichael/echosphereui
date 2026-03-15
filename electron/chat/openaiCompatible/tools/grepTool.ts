@@ -98,7 +98,7 @@ export const grepTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description:
-        'Search file contents with ripgrep inside the locked thread root. Respects .gitignore and returns exact match locations.',
+        'Search file contents with ripgrep inside the workspace.',
       name: 'grep',
       parameters: {
         additionalProperties: false,

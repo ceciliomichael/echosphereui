@@ -38,7 +38,7 @@ test('buildSystemPrompt keeps built-in policy and strips reserved AGENTS directi
     supportsNativeTools: true,
   })
 
-  assert.match(prompt, /<tool_operating_model>/u)
+  assert.match(prompt, /<identity>/u)
   assert.match(prompt, /Act as a senior production-grade software engineering agent|You are Echo, a senior production-grade software engineering agent/u)
   assert.match(prompt, /## Project Overrides/u)
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)

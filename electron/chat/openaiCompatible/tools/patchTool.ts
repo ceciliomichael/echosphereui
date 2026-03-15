@@ -636,7 +636,7 @@ export const patchTool: OpenAICompatibleToolDefinition = {
         properties: {
           patch: {
             description:
-              'Patch text using the apply_patch format with *** Begin Patch / *** End Patch markers and Add/Update/Delete File hunks.',
+              'Patch text using the patch format with *** Begin Patch / *** End Patch markers and Add/Update/Delete File hunks.',
             type: 'string',
           },
         },

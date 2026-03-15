@@ -1,44 +1,12 @@
-import { buildAgentAutonomySection } from './sections/autonomy'
-import { buildAgentContextSection } from './sections/context'
 import { buildAgentIdentitySection } from './sections/identity'
-import { buildAgentProductionReadinessSection } from './sections/productionReadiness'
-import { buildAgentResponseSection } from './sections/response'
-import { buildAgentScopeSection } from './sections/scope'
-import { buildAgentStructureRulesSection } from './sections/structureRules'
-import { buildAgentTaskClassificationSection } from './sections/taskClassification'
-import { buildAgentToolMemorySection } from './sections/toolMemory'
-import { buildAgentToolOperatingModelSection } from './sections/toolOperatingModel'
-import { buildAgentToolsSection } from './sections/tools'
-import { buildAgentTypingRulesSection } from './sections/typingRules'
-import { buildAgentVerificationSection } from './sections/verification'
-import { buildAgentWorkflowSection } from './sections/workflow'
 import type { BuildAgentPromptInput } from './types'
 
-export function buildAgentPrompt({
-  agentContextRootPath,
-  chatMode,
-  supportsNativeTools,
-}: BuildAgentPromptInput) {
-  if (chatMode !== 'agent') {
+export function buildAgentPrompt(input: BuildAgentPromptInput) {
+  if (input.chatMode !== 'agent') {
     return 'You are Echo, a helpful coding assistant.'
   }
 
-  const sections = [
-    buildAgentIdentitySection(),
-    buildAgentContextSection(agentContextRootPath, supportsNativeTools),
-    buildAgentTaskClassificationSection(),
-    buildAgentAutonomySection(),
-    buildAgentToolOperatingModelSection(),
-    buildAgentScopeSection(),
-    buildAgentWorkflowSection(),
-    buildAgentToolsSection(agentContextRootPath, supportsNativeTools),
-    buildAgentToolMemorySection(),
-    buildAgentStructureRulesSection(),
-    buildAgentTypingRulesSection(),
-    buildAgentProductionReadinessSection(),
-    buildAgentVerificationSection(),
-    buildAgentResponseSection(),
-  ]
+  const sections = [buildAgentIdentitySection()]
 
-  return ['<agent_prompt>', ...sections, '</agent_prompt>'].join('\n\n')
+  return ['<agent_mode>', ...sections, '</agent_mode>'].join('\n\n')
 }
