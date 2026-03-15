@@ -4,11 +4,13 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ folderName }: EmptyStateProps) {
+  const logoSrc = `${import.meta.env.BASE_URL}logo/icon.svg`
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center">
       <div className="mb-6 flex items-center justify-center">
         <img
-          src="/logo/icon.svg"
+          src={logoSrc}
           alt="Echosphere Logo"
           className="h-20 w-20 md:h-24 md:w-24 opacity-90"
         />

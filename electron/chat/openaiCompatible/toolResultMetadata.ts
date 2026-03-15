@@ -142,7 +142,7 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
       return readString(semanticResult.message) ?? `Write completed with no content change for ${subjectPath}.`
     }
 
-    return `Wrote ${subjectPath}. The reported file content now reflects the current workspace state.`
+    return `Created ${subjectPath}. The reported file content now reflects the current workspace state.`
   }
 
   if (toolName === 'exec_command') {

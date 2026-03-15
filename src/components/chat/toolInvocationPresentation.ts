@@ -260,7 +260,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       return 'Verified'
     }
 
-    return patchIntent === 'writing' ? 'Wrote' : 'Edited'
+    return patchIntent === 'writing' ? 'Created' : 'Edited'
   }
 
   if (invocation.toolName === 'write') {
@@ -272,7 +272,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       return 'Write failed'
     }
 
-    return addedPathCount !== null && addedPathCount > 0 ? 'Wrote' : 'Overwrote'
+    return addedPathCount !== null && addedPathCount > 0 ? 'Created' : 'Overwrote'
   }
 
   if (invocation.toolName === 'exec_command') {
