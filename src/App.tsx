@@ -41,7 +41,7 @@ export default function App() {
     [settings.diffPanelWidth, updateSettings],
   )
 
-  useDocumentTheme(settings.appearance)
+  const resolvedTheme = useDocumentTheme(settings.appearance)
 
   useEffect(() => {
     setDiffPanelWidth(settings.diffPanelWidth)
@@ -135,6 +135,7 @@ export default function App() {
         onDiffPanelSelectedScopeChange={setDiffPanelSelectedScope}
         onDiffPanelWidthChange={handleDiffPanelWidthChange}
         onDiffPanelWidthCommit={handleDiffPanelWidthCommit}
+        resolvedTheme={resolvedTheme}
         settings={settings}
         onUpdateSettings={updateSettings}
         onSidebarWidthChange={handleSidebarWidthChange}

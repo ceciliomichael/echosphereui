@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { AppAppearance } from '../lib/appSettings'
 import {
   cacheAppearancePreference,
@@ -30,6 +30,13 @@ function enableThemeTransition(root: HTMLElement) {
 export function useDocumentTheme(appearance: AppAppearance) {
   const isFirstApplicationRef = useRef(true)
   const transitionTimeoutRef = useRef<number | null>(null)
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return resolveTheme(appearance)
+    }
+
+    return resolveTheme(appearance, window.matchMedia(SYSTEM_DARK_MODE_QUERY))
+  })
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -54,8 +61,9 @@ export function useDocumentTheme(appearance: AppAppearance) {
         enableThemeTransition(root)
       }
 
-      const resolvedTheme = resolveTheme(appearance, mediaQueryList)
-      applyDocumentTheme(appearance, resolvedTheme)
+      const nextResolvedTheme = resolveTheme(appearance, mediaQueryList)
+      setResolvedTheme(nextResolvedTheme)
+      applyDocumentTheme(appearance, nextResolvedTheme)
       cacheAppearancePreference(appearance)
 
       if (shouldAnimate) {
@@ -94,4 +102,6 @@ export function useDocumentTheme(appearance: AppAppearance) {
       mediaQueryList.removeListener(handleSystemThemeChange)
     }
   }, [appearance])
+
+  return resolvedTheme
 }

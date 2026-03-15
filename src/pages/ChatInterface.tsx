@@ -24,6 +24,7 @@ import { useGitCommit } from '../hooks/useGitCommit'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import { useGitDiffSnapshot } from '../hooks/useGitDiffSnapshot'
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
+import type { ResolvedTheme } from '../lib/theme'
 import type { AppSettings, GitCommitAction, GitCommitResult } from '../types/chat'
 
 export type RightPanelTab = 'diff' | 'source-control'
@@ -45,6 +46,7 @@ interface ChatInterfaceProps {
   onOpenSettings: () => void
   onSidebarWidthChange: (sidebarWidth: number) => void
   onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
+  resolvedTheme: ResolvedTheme
   sendMessageOnEnter: boolean
   settings: AppSettings
   sidebarWidth: number
@@ -83,6 +85,7 @@ export function ChatInterface({
   onOpenSettings,
   onSidebarWidthChange,
   onUpdateSettings,
+  resolvedTheme,
   sendMessageOnEnter,
   settings,
   sidebarWidth,
@@ -690,6 +693,7 @@ export function ChatInterface({
           isOpen={isTerminalOpen}
           onClose={() => setActiveWorkspaceTerminalOpen(false)}
           onHeightCommit={handleTerminalPanelHeightCommit}
+          resolvedTheme={resolvedTheme}
           storedHeight={terminalPanelHeight}
           workspacePath={activeWorkspacePath}
         />

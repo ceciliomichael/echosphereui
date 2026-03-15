@@ -3,22 +3,27 @@ import { X } from 'lucide-react'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
-import type { IDisposable } from '@xterm/xterm'
+import type { IDisposable, ITerminalOptions } from '@xterm/xterm'
 import {
   MAX_TERMINAL_PANEL_HEIGHT,
   MIN_TERMINAL_PANEL_HEIGHT,
   clampStoredTerminalPanelHeight,
 } from '../../lib/terminalPanelSizing'
+import type { ResolvedTheme } from '../../lib/theme'
 import { Tooltip } from '../Tooltip'
 import '@xterm/xterm/css/xterm.css'
 
 const MIN_TERMINAL_COLS = 20
 const MIN_TERMINAL_ROWS = 6
+const TERMINAL_THEME_SYNC_DELAY_MS = 200
+
+type TerminalTheme = NonNullable<ITerminalOptions['theme']>
 
 interface WorkspaceTerminalPanelProps {
   isOpen: boolean
   onClose: () => void
   onHeightCommit: (nextHeight: number) => void
+  resolvedTheme: ResolvedTheme
   storedHeight: number
   workspacePath: string | null
 }
@@ -43,10 +48,23 @@ function getSessionDimensions(terminal: Terminal) {
   }
 }
 
+function getTerminalTheme(hostElement: HTMLElement): TerminalTheme {
+  const hostStyles = window.getComputedStyle(hostElement)
+
+  return {
+    background: hostStyles.backgroundColor,
+    brightYellow: hostStyles.color,
+    cursor: hostStyles.color,
+    foreground: hostStyles.color,
+    yellow: hostStyles.color,
+  }
+}
+
 export function WorkspaceTerminalPanel({
   isOpen,
   onClose,
   onHeightCommit,
+  resolvedTheme,
   storedHeight,
   workspacePath,
 }: WorkspaceTerminalPanelProps) {
@@ -142,13 +160,23 @@ export function WorkspaceTerminalPanel({
     sendTerminalSizeToSession(dimensions)
   }, [sendTerminalSizeToSession])
 
+  const syncTerminalTheme = useCallback(() => {
+    const hostElement = terminalHostRef.current
+    const terminal = terminalRef.current
+    if (!hostElement || !terminal) {
+      return
+    }
+
+    terminal.options.theme = { ...getTerminalTheme(hostElement) }
+    terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+  }, [])
+
   const ensureTerminal = useCallback(() => {
     const hostElement = terminalHostRef.current
     if (!hostElement || terminalRef.current) {
       return
     }
 
-    const hostStyles = getComputedStyle(hostElement)
     const terminal = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
@@ -156,13 +184,7 @@ export function WorkspaceTerminalPanel({
       fontSize: 13,
       lineHeight: 1.24,
       scrollback: 5_000,
-      theme: {
-        background: hostStyles.backgroundColor,
-        cursor: hostStyles.color,
-        foreground: hostStyles.color,
-        brightYellow: hostStyles.color,
-        yellow: hostStyles.color,
-      },
+      theme: getTerminalTheme(hostElement),
     })
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon((event, uri) => {
@@ -293,6 +315,24 @@ export function WorkspaceTerminalPanel({
     ensureTerminal()
     attachWorkspaceSession()
   }, [attachWorkspaceSession, ensureTerminal, isOpen, workspacePath])
+
+  useEffect(() => {
+    if (!terminalRef.current || !terminalHostRef.current) {
+      return
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      syncTerminalTheme()
+    })
+    const timeoutId = window.setTimeout(() => {
+      syncTerminalTheme()
+    }, TERMINAL_THEME_SYNC_DELAY_MS)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [resolvedTheme, syncTerminalTheme])
 
   useEffect(() => {
     if (!isOpen) {
