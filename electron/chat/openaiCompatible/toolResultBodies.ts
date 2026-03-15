@@ -90,8 +90,36 @@ function formatGrepResultBody(semanticResult: Record<string, unknown>) {
 }
 
 function formatMutationResultBody(semanticResult: Record<string, unknown>) {
-  const message = readString(semanticResult.message)
-  return message ?? 'Tool completed successfully.'
+  const message = readString(semanticResult.message) ?? 'Tool completed successfully.'
+  const path = readString(semanticResult.path)
+  const newContent = typeof semanticResult.newContent === 'string' ? semanticResult.newContent : null
+  const operation = readString(semanticResult.operation)
+  const addedPaths = Array.isArray(semanticResult.addedPaths)
+    ? semanticResult.addedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : []
+  const modifiedPaths = Array.isArray(semanticResult.modifiedPaths)
+    ? semanticResult.modifiedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : []
+  const deletedPaths = Array.isArray(semanticResult.deletedPaths)
+    ? semanticResult.deletedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : []
+  const changedPaths = [...addedPaths, ...modifiedPaths, ...deletedPaths]
+  const lines = [message]
+
+  if (path && operation === 'apply_patch') {
+    lines.push(`Current workspace state for ${path} is authoritative.`)
+  }
+
+  if (changedPaths.length > 0) {
+    lines.push(`Changed paths: ${changedPaths.join(', ')}`)
+  }
+
+  if (path && newContent !== null) {
+    const fenceLanguage = inferFenceLanguage(path) ?? ''
+    lines.push(`Current content of ${path} after patch:`, `\`\`\`${fenceLanguage}`, newContent, '```')
+  }
+
+  return lines.join('\n')
 }
 
 function formatTerminalResultBody(semanticResult: Record<string, unknown>) {

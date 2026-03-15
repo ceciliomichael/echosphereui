@@ -222,9 +222,18 @@ test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while ex
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: package\.json was patched successfully and now reflects the applied changes\./iu,
+    /^Acknowledged workspace state: package\.json was patched successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
   )
-  assert.equal(parsedContent.body, 'Edited package.json successfully.')
+  assert.match(
+    parsedContent.metadata?.summary ?? '',
+    /Applied patch to package\.json\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+  )
+  assert.match(parsedContent.body ?? '', /^Edited package\.json successfully\./u)
+  assert.match(parsedContent.body ?? '', /Current workspace state for package\.json is authoritative\./u)
+  assert.match(parsedContent.body ?? '', /Changed paths: package\.json/u)
+  assert.match(parsedContent.body ?? '', /Current content of package\.json after patch:/u)
+  assert.match(parsedContent.body ?? '', /```json/u)
+  assert.match(parsedContent.body ?? '', /"name": "next"/u)
   assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
   assert.deepEqual(artifacts.resultPresentation, {
     addedLineCount: 1,
@@ -266,9 +275,17 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for pat
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: src\/app\/page\.tsx was patched successfully and now reflects the applied changes\./iu,
+    /^Acknowledged workspace state: src\/app\/page\.tsx was patched successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
   )
-  assert.equal(parsedContent.body, 'Created src/app/page.tsx successfully.')
+  assert.match(
+    parsedContent.metadata?.summary ?? '',
+    /Applied patch to src\/app\/page\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+  )
+  assert.match(parsedContent.body ?? '', /^Created src\/app\/page\.tsx successfully\./u)
+  assert.match(parsedContent.body ?? '', /Current workspace state for src\/app\/page\.tsx is authoritative\./u)
+  assert.match(parsedContent.body ?? '', /Changed paths: src\/app\/page\.tsx/u)
+  assert.match(parsedContent.body ?? '', /Current content of src\/app\/page\.tsx after patch:/u)
+  assert.match(parsedContent.body ?? '', /```tsx/u)
   assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
   assert.equal(parsedContent.metadata?.semantics?.workspace_effect, 'files_edited')
   assert.equal(parsedContent.metadata?.semantics?.mutation_applied, true)

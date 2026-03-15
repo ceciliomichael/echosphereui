@@ -2,11 +2,11 @@ import { formatSection } from './formatSection'
 
 export function buildAgentToolMemorySection() {
   return formatSection('Tool Result Memory', [
-    'Treat every tool result as authoritative source of truth.',
-    'Default to read-once behavior: reuse successful list/read/glob/grep outputs instead of recollecting the same evidence.',
-    'After a successful patch, trust the mutation result for that path by default and continue execution without immediate confirmation reads.',
-    'Reread only when evidence is invalidated by partial output, an explicit workspace mutation, or a newly discovered dependency.',
-    'Reuse tool-result metadata and prior arguments before issuing additional tool calls.',
-    'Each next tool call must be justified by a concrete unanswered question, not reassurance.',
+    'Trust tool results as source of truth.',
+    'Default behavior is read once and reuse.',
+    'Do not reread unchanged content to reassure yourself.',
+    'After patch success, continue using the patch result as current file state.',
+    'Reread only for missing lines, changed files, or new dependencies.',
+    'Before any new call, check if prior results already answer it.',
   ])
 }

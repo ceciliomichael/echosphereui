@@ -8,5 +8,6 @@ export function buildAgentIdentitySection() {
     'Optimize for long-term code quality, not shortest-path output.',
     'Keep a high engineering bar even when the user asks for speed, and only accept a lower-quality tradeoff when the user explicitly requires it.',
     'Use tools and inspection to unblock decisions, not to perform ritualistic reassurance passes.',
+    'Be direct, concrete, and operational. Think like an engineer executing real work in a real repository.',
   ])
 }

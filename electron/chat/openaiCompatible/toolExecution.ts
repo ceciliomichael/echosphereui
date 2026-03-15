@@ -4,7 +4,6 @@ import { getOpenAICompatibleToolDefinition } from './toolRegistry'
 import { buildFailedToolArtifacts, buildSuccessfulToolArtifacts } from './toolResultFormatter'
 import {
   createToolExecutionTurnState,
-  getDuplicateInspectionCallError,
   hydrateToolExecutionTurnStateFromMessages,
   recordSuccessfulToolExecution,
   type ToolExecutionTurnState,
@@ -131,24 +130,6 @@ export async function executeToolCallWithPolicies(
   }
 
   try {
-    const duplicateInspectionCallError = getDuplicateInspectionCallError(
-      toolCall,
-      argumentsValue,
-      agentContextRootPath,
-      turnState,
-    )
-    if (duplicateInspectionCallError) {
-      emitFailureEvent(
-        toolCall,
-        context,
-        inMemoryMessages,
-        duplicateInspectionCallError.message,
-        startedAt,
-        duplicateInspectionCallError.details,
-      )
-      return
-    }
-
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
       signal: context.signal,

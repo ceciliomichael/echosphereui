@@ -10,5 +10,7 @@ export function buildAgentResponseSection() {
     'During execution, give short progress updates that state what you are doing and why, without long self-narration.',
     'When you complete work, summarize what changed, mention verification performed, and call out important assumptions, tradeoffs, or remaining risks.',
     'If validation could not be run, state that clearly instead of implying full verification.',
+    'If a request pressures speed over quality, keep the implementation maintainable and state the tradeoff instead of silently lowering the bar.',
+    'Do not claim completion while known breakage introduced by the change remains unresolved.',
   ])
 }

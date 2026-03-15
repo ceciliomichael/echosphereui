@@ -5,6 +5,23 @@ interface BuildSharedAgentsInstructionsInput {
   agentContextRootPath: string
 }
 
+function normalizeAgentsOverrideContent(fileContent: string) {
+  const withoutStylingBlock = fileContent.replace(
+    /<preferred_styling_everytime\b[\s\S]*?<\/preferred_styling_everytime>/giu,
+    '',
+  )
+  const withoutReservedSystemDirectives = withoutStylingBlock.replace(
+    /<SYSTEM_INSTRUCTIONS_DIRECTIVE\b[\s\S]*$/giu,
+    '',
+  )
+  const withoutOrphanedInstructionTags = withoutReservedSystemDirectives.replace(
+    /^\s*<\/?INSTRUCTIONS>\s*$/gimu,
+    '',
+  )
+  const normalizedContent = withoutOrphanedInstructionTags.trim()
+  return normalizedContent.length > 0 ? normalizedContent : null
+}
+
 async function readAgentsFileContent(agentContextRootPath: string) {
   const agentsFilePath = path.join(agentContextRootPath, 'AGENTS.md')
 
@@ -15,8 +32,7 @@ async function readAgentsFileContent(agentContextRootPath: string) {
     }
 
     const fileContent = await fs.readFile(agentsFilePath, 'utf8')
-    const normalizedContent = fileContent.trim()
-    return normalizedContent.length > 0 ? normalizedContent : null
+    return normalizeAgentsOverrideContent(fileContent)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return null
@@ -35,9 +51,9 @@ export async function buildSharedAgentsInstructions({
   }
 
   return [
-    '## Custom Instructions',
-    '- The built-in system prompt remains the highest-priority instruction source.',
-    '- The following project-level custom instructions come from AGENTS.md in the locked root and have second priority.',
+    '## Project Overrides',
+    '- The built-in system prompt remains the highest-priority instruction source and already carries the repository core workflow, engineering, and tool-use policy.',
+    '- The following AGENTS.md content is limited to optional project-local overrides outside reserved system-directive blocks and remains second priority.',
     '<user_instructions>',
     agentsFileContent,
     '</user_instructions>',

@@ -26,9 +26,17 @@ function createListToolCall(id: string, workspacePath: string): OpenAICompatible
   }
 }
 
-function createReadToolCall(id: string, filePath: string): OpenAICompatibleToolCall {
+function createReadToolCall(
+  id: string,
+  filePath: string,
+  options?: { endLine?: number; startLine?: number },
+): OpenAICompatibleToolCall {
   return {
-    argumentsText: JSON.stringify({ absolute_path: filePath }),
+    argumentsText: JSON.stringify({
+      absolute_path: filePath,
+      ...(options?.endLine === undefined ? {} : { end_line: options.endLine }),
+      ...(options?.startLine === undefined ? {} : { start_line: options.startLine }),
+    }),
     id,
     name: 'read',
     startedAt: 1_700_000_000_000,
@@ -56,7 +64,7 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('executeToolCallWithPolicies blocks repeating the same list call without an intervening mutation', async () => {
+test('executeToolCallWithPolicies allows repeating the same list call without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -78,13 +86,12 @@ test('executeToolCallWithPolicies blocks repeating the same list call without an
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
 
-    assert.equal(completedEvents.length, 1)
-    assert.equal(failedEvents.length, 1)
-    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
+    assert.equal(completedEvents.length, 2)
+    assert.equal(failedEvents.length, 0)
   })
 })
 
-test('executeToolCallWithPolicies blocks rereading the same file without an intervening mutation', async () => {
+test('executeToolCallWithPolicies allows rereading the same file without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -106,13 +113,12 @@ test('executeToolCallWithPolicies blocks rereading the same file without an inte
     assert.equal(inMemoryMessages.length, 2)
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 1)
-    assert.equal(failedEvents.length, 1)
-    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
+    assert.equal(completedEvents.length, 2)
+    assert.equal(failedEvents.length, 0)
   })
 })
 
-test('createHydratedToolExecutionTurnState blocks rereads from historical read tool results', async () => {
+test('createHydratedToolExecutionTurnState allows rereads from historical read tool results', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
     await fs.writeFile(filePath, 'hello', 'utf8')
@@ -151,16 +157,15 @@ test('createHydratedToolExecutionTurnState blocks rereads from historical read t
 
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 0)
-    assert.equal(failedEvents.length, 1)
-    assert.match(failedEvents[0].errorMessage, /Duplicate inspection call blocked/u)
+    assert.equal(completedEvents.length, 1)
+    assert.equal(failedEvents.length, 0)
   })
 })
 
-test('executeToolCallWithPolicies allows rereading the same file after a successful patch', async () => {
+test('executeToolCallWithPolicies allows post-patch rereads of the same already-known file range', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')
-    await fs.writeFile(filePath, 'hello', 'utf8')
+    await fs.writeFile(filePath, 'hello\nworld\nagain', 'utf8')
 
     const emittedEvents: StreamDeltaEvent[] = []
     const inMemoryMessages: Message[] = []
@@ -184,6 +189,51 @@ test('executeToolCallWithPolicies allows rereading the same file after a success
     await executeToolCallWithPolicies(createReadToolCall('read-2', filePath), context, workspacePath, inMemoryMessages, turnState)
 
     assert.equal(inMemoryMessages.length, 3)
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
+    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
+    assert.equal(completedEvents.length, 3)
+    assert.equal(failedEvents.length, 0)
+  })
+})
+
+test('executeToolCallWithPolicies allows post-patch reads when they request genuinely new file content', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'notes.txt')
+    await fs.writeFile(filePath, 'hello\nworld\nagain', 'utf8')
+
+    const emittedEvents: StreamDeltaEvent[] = []
+    const inMemoryMessages: Message[] = []
+    const turnState = createToolExecutionTurnState()
+    const context = {
+      emitDelta(event: StreamDeltaEvent) {
+        emittedEvents.push(event)
+      },
+      signal: new AbortController().signal,
+      workspaceCheckpointId: null,
+    }
+
+    await executeToolCallWithPolicies(
+      createReadToolCall('read-1', filePath, { endLine: 1, startLine: 1 }),
+      context,
+      workspacePath,
+      inMemoryMessages,
+      turnState,
+    )
+    await executeToolCallWithPolicies(
+      createPatchToolCall('patch-1', filePath, 'hello', 'updated'),
+      context,
+      workspacePath,
+      inMemoryMessages,
+      turnState,
+    )
+    await executeToolCallWithPolicies(
+      createReadToolCall('read-2', filePath, { endLine: 3, startLine: 2 }),
+      context,
+      workspacePath,
+      inMemoryMessages,
+      turnState,
+    )
+
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
     assert.equal(completedEvents.length, 3)

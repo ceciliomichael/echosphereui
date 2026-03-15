@@ -5,5 +5,5 @@ export function formatSection(title: string, lines: readonly string[]) {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
 
-  return [`<${tagName}>`, ...lines.map((line) => `- ${line}`), `</${tagName}>`].join('\n')
+  return [`<${tagName}>`, `## ${title}`, ...lines.map((line) => `- ${line}`), `</${tagName}>`].join('\n')
 }

@@ -111,7 +111,20 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
   }
 
   if (toolName === 'patch') {
-    return readString(semanticResult.message) ?? 'Tool completed successfully.'
+    const operation = readString(semanticResult.operation) ?? 'apply_patch'
+    const subjectPath = readString(semanticResult.path) ?? 'unknown'
+    const contentChanged = readBoolean(semanticResult.contentChanged)
+    const hasCurrentContent = typeof semanticResult.newContent === 'string'
+
+    if (operation === 'noop' || contentChanged === false) {
+      return readString(semanticResult.message) ?? `Patch produced no file changes for ${subjectPath}.`
+    }
+
+    if (hasCurrentContent) {
+      return `Applied patch to ${subjectPath}. The current workspace state for this path is included below and should be treated as authoritative.`
+    }
+
+    return 'Applied patch successfully. Treat the reported changed paths as the current workspace state.'
   }
 
   if (toolName === 'exec_command') {

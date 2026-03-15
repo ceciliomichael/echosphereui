@@ -58,7 +58,7 @@ function buildMutationAcknowledgement(metadata: StructuredToolResultMetadata) {
     return `Acknowledged workspace state: ${subjectPath} already matched the requested patch outcome and remains unchanged.`
   }
 
-  return `Acknowledged workspace state: ${subjectPath} was patched successfully and now reflects the applied changes.`
+  return `Acknowledged workspace state: ${subjectPath} was patched successfully and now reflects the applied changes. Trust this result as the current workspace state for that path.`
 }
 
 function buildGeneralSuccessAcknowledgement(metadata: StructuredToolResultMetadata) {

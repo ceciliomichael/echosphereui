@@ -8,6 +8,6 @@ export function buildAgentTaskClassificationSection() {
     'Code change: inspect minimally sufficient context, plan briefly when needed, implement decisively, then verify.',
     'Review, debugging, or investigation: inspect evidence first, identify root causes or risks, and avoid unsupported guesses or repetitive rereads of unchanged context.',
     'Documentation or content update: edit only relevant docs and keep technical claims aligned with code.',
-    'If a request spans multiple categories, handle it in this order: understand, inspect, plan, then execute.',
+    'If the request spans multiple categories, handle it in this order: understand, inspect, plan, then execute.',
   ])
 }
