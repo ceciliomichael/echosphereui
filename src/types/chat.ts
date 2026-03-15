@@ -331,9 +331,13 @@ export interface GitCommitInput {
 export interface GitCommitResult {
   branchName: string | null
   commitHash: string
+  defaultBranchName: string | null
   message: string
+  postCommitWarning: string | null
   prUrl: string | null
+  pulledLatestOnDefaultBranch: boolean
   success: boolean
+  switchedToDefaultBranch: boolean
 }
 
 export interface GitStatusResult {

@@ -1478,6 +1478,65 @@ async function readSymbolicHeadBranchName(repoRootPath: string) {
   }
 }
 
+interface PostPullRequestCleanupResult {
+  defaultBranchName: string | null
+  postCommitWarning: string | null
+  pulledLatestOnDefaultBranch: boolean
+  switchedToDefaultBranch: boolean
+}
+
+async function runPostPullRequestCleanup(
+  repoRootPath: string,
+  pullRequestBranchName: string,
+): Promise<PostPullRequestCleanupResult> {
+  const defaultBranchName = await resolveDefaultBranchName(repoRootPath)
+  if (!defaultBranchName) {
+    return {
+      defaultBranchName: null,
+      postCommitWarning: 'Pull request was created, but no default branch could be resolved for post-PR cleanup.',
+      pulledLatestOnDefaultBranch: false,
+      switchedToDefaultBranch: false,
+    }
+  }
+
+  if (isDefaultBranchName(pullRequestBranchName, defaultBranchName)) {
+    return {
+      defaultBranchName,
+      postCommitWarning: null,
+      pulledLatestOnDefaultBranch: false,
+      switchedToDefaultBranch: false,
+    }
+  }
+
+  try {
+    await runGit(['checkout', '--quiet', defaultBranchName], repoRootPath)
+  } catch (error) {
+    return {
+      defaultBranchName,
+      postCommitWarning: `Pull request was created, but failed to switch back to '${defaultBranchName}': ${getErrorMessage(error)}`,
+      pulledLatestOnDefaultBranch: false,
+      switchedToDefaultBranch: false,
+    }
+  }
+
+  try {
+    await syncCheckedOutBranchWithRemote(repoRootPath, defaultBranchName)
+    return {
+      defaultBranchName,
+      postCommitWarning: null,
+      pulledLatestOnDefaultBranch: true,
+      switchedToDefaultBranch: true,
+    }
+  } catch (error) {
+    return {
+      defaultBranchName,
+      postCommitWarning: `Switched back to '${defaultBranchName}', but failed to pull the latest changes: ${getErrorMessage(error)}`,
+      pulledLatestOnDefaultBranch: false,
+      switchedToDefaultBranch: true,
+    }
+  }
+}
+
 export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult> {
   const workspacePath = input.workspacePath.trim()
   if (workspacePath.length === 0) {
@@ -1580,6 +1639,10 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
 
   // Push if needed
   let prUrl: string | null = null
+  let defaultBranchName: string | null = null
+  let switchedToDefaultBranch = false
+  let pulledLatestOnDefaultBranch = false
+  let postCommitWarning: string | null = null
   if (input.action === 'commit-and-push' || input.action === 'commit-and-create-pr') {
     try {
       const currentBranch = await readSymbolicHeadBranchName(repoRootPath)
@@ -1626,6 +1689,12 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
             }
           }
         }
+
+        const postPullRequestCleanupResult = await runPostPullRequestCleanup(repoRootPath, currentBranch)
+        defaultBranchName = postPullRequestCleanupResult.defaultBranchName
+        switchedToDefaultBranch = postPullRequestCleanupResult.switchedToDefaultBranch
+        pulledLatestOnDefaultBranch = postPullRequestCleanupResult.pulledLatestOnDefaultBranch
+        postCommitWarning = postPullRequestCleanupResult.postCommitWarning
       }
     } catch (error) {
       if (isGitUnavailable(error)) {
@@ -1639,8 +1708,12 @@ export async function gitCommit(input: GitCommitInput): Promise<GitCommitResult>
   return {
     branchName: activeBranchName,
     commitHash,
+    defaultBranchName,
     message: effectiveCommitMessage,
+    postCommitWarning,
     prUrl,
+    pulledLatestOnDefaultBranch,
     success: true,
+    switchedToDefaultBranch,
   }
 }
