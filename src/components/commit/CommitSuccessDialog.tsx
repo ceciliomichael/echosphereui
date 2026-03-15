@@ -100,7 +100,7 @@ export function CommitSuccessDialog({ action, onClose, result }: CommitSuccessDi
                 href={result.prUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-[#8771FF] transition-colors hover:text-[#6d5ed6]"
+                className="inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-muted-foreground"
               >
                 Open pull request
                 <ExternalLink size={14} />
