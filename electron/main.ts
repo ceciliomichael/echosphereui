@@ -50,6 +50,7 @@ import {
   connectCodexWithOAuth,
   disconnectCodex,
   getProvidersState,
+  initializeProvidersState,
   removeApiKeyProvider,
   saveApiKeyProvider,
   switchCodexAccount,
@@ -295,6 +296,11 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   registerHistoryHandlers()
+
+  void initializeProvidersState().catch((error) => {
+    console.error('Failed to preload providers state', error)
+  })
+
   void createWindow()
 
   nativeTheme.on('updated', () => {

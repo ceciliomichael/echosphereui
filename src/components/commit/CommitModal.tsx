@@ -183,12 +183,7 @@ export function CommitModal({
           {/* Branch row */}
           <div className="px-6 py-2.5">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm font-medium text-foreground shrink-0 flex flex-col">
-                <span>Branch override</span>
-                <span className="text-xs font-normal text-muted-foreground">
-                  Current: {branchState.currentBranch ?? 'No branch'}
-                </span>
-              </span>
+              <span className="text-sm font-medium text-foreground shrink-0">Branch override</span>
               <div className="relative min-w-0 flex-1">
                 <div className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-muted-foreground">
                   {isSwitchingBranch ? (
@@ -258,7 +253,7 @@ export function CommitModal({
               ref={textareaRef}
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
-              placeholder="Leave blank to auto-generate a detailed commit message (title + description) using the active model and staged diff"
+              placeholder={`Leave blank to auto-generate a detailed commit message (title + description) using the active model and staged diff. Current branch: ${branchState.currentBranch ?? 'No branch'}`}
               rows={3}
               className="w-full resize-none rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-subtle-foreground"
             />

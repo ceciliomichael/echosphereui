@@ -4,6 +4,7 @@ import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolArgumentsValue {
   absolute_path?: unknown
+  patch?: unknown
 }
 
 function parseCompleteToolArguments(argumentsText: string): ToolArgumentsValue | null {
@@ -91,13 +92,41 @@ function extractPartialAbsolutePath(argumentsText: string) {
   return absolutePath.length > 0 ? absolutePath : null
 }
 
+function extractFirstPatchPath(patchText: string) {
+  const normalizedPatch = patchText.replace(/\r\n/g, '\n')
+  const patchPathMatch = normalizedPatch.match(/\*\*\* (?:Update|Add|Delete) File:\s*(.+)/u)
+  if (!patchPathMatch) {
+    return null
+  }
+
+  const patchPath = patchPathMatch[1]?.trim()
+  return patchPath && patchPath.length > 0 ? patchPath : null
+}
+
+function extractPartialPatchPath(argumentsText: string) {
+  const patchMatch = argumentsText.match(/"patch"\s*:\s*"((?:\\.|[^"])*)/u)
+  if (!patchMatch) {
+    return null
+  }
+
+  const patchText = decodePartialJsonString(patchMatch[1])
+  return extractFirstPatchPath(patchText)
+}
+
 function getAbsolutePath(invocation: ToolInvocationTrace) {
   const argumentsValue = parseCompleteToolArguments(invocation.argumentsText)
   if (typeof argumentsValue?.absolute_path === 'string' && argumentsValue.absolute_path.trim().length > 0) {
     return argumentsValue.absolute_path.trim()
   }
 
-  return extractPartialAbsolutePath(invocation.argumentsText)
+  if (typeof argumentsValue?.patch === 'string' && argumentsValue.patch.trim().length > 0) {
+    const patchPath = extractFirstPatchPath(argumentsValue.patch)
+    if (patchPath) {
+      return patchPath
+    }
+  }
+
+  return extractPartialAbsolutePath(invocation.argumentsText) ?? extractPartialPatchPath(invocation.argumentsText)
 }
 
 function getBasename(absolutePath: string) {

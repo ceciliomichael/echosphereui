@@ -1,236 +1,450 @@
 import { promises as fs } from 'node:fs'
-import {
-  normalizeLineEndings,
-  parseToolArguments,
-  readOptionalBoolean,
-  readRequiredString,
-  readRequiredText,
-  resolveToolPath,
-  toDisplayPath,
-} from './filesystemToolUtils'
+import path from 'node:path'
+import { parseToolArguments, readRequiredText, resolveToolPath, toDisplayPath } from './filesystemToolUtils'
 import type { OpenAICompatibleToolDefinition } from '../toolTypes'
 import { OpenAICompatibleToolError } from '../toolTypes'
 import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoints'
 
-function getNearbySnippet(input: string, targetLine: number) {
-  const lines = input.split('\n')
-  const startLine = Math.max(1, targetLine - 3)
-  const endLine = Math.min(lines.length, targetLine + 3)
+const BEGIN_PATCH_MARKER = '*** Begin Patch'
+const END_PATCH_MARKER = '*** End Patch'
+const ADD_FILE_MARKER = '*** Add File: '
+const DELETE_FILE_MARKER = '*** Delete File: '
+const UPDATE_FILE_MARKER = '*** Update File: '
+const MOVE_TO_MARKER = '*** Move to: '
+const EOF_MARKER = '*** End of File'
 
-  return lines
-    .slice(startLine - 1, endLine)
-    .map((line, offset) => `${startLine + offset} | ${line}`)
-    .join('\n')
+interface UpdateChunk {
+  changeContext?: string
+  isEndOfFile: boolean
+  newLines: string[]
+  oldLines: string[]
 }
 
-function buildMissingMatchDetails(fileContent: string, oldString: string) {
-  const normalizedContent = normalizeLineEndings(fileContent)
-  const normalizedOldString = normalizeLineEndings(oldString)
-  const firstSearchLine = normalizedOldString.split('\n')[0]?.trim()
-  const candidateLineIndex =
-    firstSearchLine && firstSearchLine.length > 0
-      ? normalizedContent
-          .split('\n')
-          .findIndex((line) => line.includes(firstSearchLine))
-      : -1
+type ParsedHunk =
+  | { contents: string; kind: 'add'; rawPath: string }
+  | { kind: 'delete'; rawPath: string }
+  | { chunks: UpdateChunk[]; kind: 'update'; moveToRawPath?: string; rawPath: string }
 
-  return {
-    candidateSnippet:
-      candidateLineIndex >= 0 ? getNearbySnippet(normalizedContent, candidateLineIndex + 1) : null,
-    expectedOldString: normalizedOldString,
+type PlannedChange =
+  | { content: string; kind: 'add'; path: string; relativePath: string }
+  | { contentBefore: string; kind: 'delete'; path: string; relativePath: string }
+  | {
+      content: string
+      contentBefore: string
+      kind: 'update'
+      moveToPath?: string
+      moveToRelativePath?: string
+      path: string
+      relativePath: string
+    }
+
+interface PrimaryDiffPayload {
+  newContent: string
+  oldContent: string | null
+  path: string
+}
+
+function normalizeLineEndings(input: string) {
+  return input.replace(/\r\n/g, '\n')
+}
+
+function maybeUnwrapHeredocPatch(input: string) {
+  const normalized = normalizeLineEndings(input).trim()
+  const lines = normalized.split('\n')
+  if (lines.length < 4) {
+    return normalized
   }
+
+  const firstLine = lines[0]?.trim()
+  const lastLine = lines[lines.length - 1]?.trim()
+  const isHeredocStart = firstLine === '<<EOF' || firstLine === "<<'EOF'" || firstLine === '<<"EOF"'
+  if (!isHeredocStart || !lastLine?.endsWith('EOF')) {
+    return normalized
+  }
+
+  return lines.slice(1, -1).join('\n').trim()
 }
 
-interface LineScopedRange {
-  charEnd: number
-  charStart: number
-  endLine: number
-  startLine: number
-  text: string
-}
-
-function getScopedLineRange(content: string): LineScopedRange {
+function splitContentLines(content: string) {
   const lines = content.split('\n')
-  const totalLineCount = Math.max(lines.length, 1)
-  const startLine = 1
-  const endLine = totalLineCount
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop()
+  }
+  return lines
+}
 
-  let charStart = 0
-  let charEnd = 0
-  for (let lineIndex = 0; lineIndex < endLine; lineIndex += 1) {
-    charEnd += lines[lineIndex].length
-    if (lineIndex < endLine - 1) {
-      charEnd += 1
+function joinContentLines(lines: string[]) {
+  return `${lines.join('\n')}\n`
+}
+
+function parseUpdateChunk(lines: string[], startIndex: number): { chunk: UpdateChunk; nextIndex: number } {
+  let cursor = startIndex
+  let changeContext: string | undefined
+
+  if (cursor < lines.length) {
+    const candidate = lines[cursor].trim()
+    if (candidate === '@@' || candidate.startsWith('@@ ')) {
+      changeContext = candidate === '@@' ? undefined : candidate.slice(3)
+      cursor += 1
     }
   }
 
-  return {
-    charEnd,
-    charStart,
-    endLine,
-    startLine,
-    text: lines.slice(startLine - 1, endLine).join('\n'),
-  }
-}
+  const oldLines: string[] = []
+  const newLines: string[] = []
+  let isEndOfFile = false
 
-function getLineNumberAtIndex(input: string, index: number) {
-  return input.slice(0, index).split('\n').length
-}
-
-function escapeRegExp(input: string) {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function buildWhitespaceTolerantRegex(input: string) {
-  const parts = input.match(/(\s+|\S+)/g) ?? []
-  const pattern = parts
-    .map((part) => (/^\s+$/u.test(part) ? (part.includes('\n') ? '\\s+' : '[\\t ]+') : escapeRegExp(part)))
-    .join('')
-
-  return new RegExp(pattern, 'gu')
-}
-
-function findWhitespaceTolerantMatches(content: string, oldString: string) {
-  const regex = buildWhitespaceTolerantRegex(oldString)
-  return Array.from(content.matchAll(regex))
-}
-
-function getLeadingWhitespace(value: string) {
-  const match = value.match(/^[\t ]*/u)
-  return match ? match[0] : ''
-}
-
-function buildLineStartOffsets(input: string) {
-  const lineStartOffsets = [0]
-  for (let index = 0; index < input.length; index += 1) {
-    if (input[index] === '\n') {
-      lineStartOffsets.push(index + 1)
+  while (cursor < lines.length) {
+    const line = lines[cursor]
+    if (line.startsWith('*** ')) {
+      break
     }
-  }
-
-  return lineStartOffsets
-}
-
-interface IndentFlexibleMatch {
-  endIndex: number
-  indentOffset: string
-  startIndex: number
-}
-
-function findIndentFlexibleMatches(content: string, oldString: string): IndentFlexibleMatch[] {
-  const oldLines = oldString.split('\n')
-  const contentLines = content.split('\n')
-  if (oldLines.length < 2 || oldString.length < 20 || contentLines.length < oldLines.length) {
-    return []
-  }
-
-  const lineStartOffsets = buildLineStartOffsets(content)
-  const matches: IndentFlexibleMatch[] = []
-
-  for (let contentLineIndex = 0; contentLineIndex <= contentLines.length - oldLines.length; contentLineIndex += 1) {
-    let isMatch = true
-    let indentOffset = ''
-
-    for (let offset = 0; offset < oldLines.length; offset += 1) {
-      const oldLine = oldLines[offset]
-      const contentLine = contentLines[contentLineIndex + offset]
-      const oldLineTrimmed = oldLine.trimStart()
-      const contentLineTrimmed = contentLine.trimStart()
-
-      if (oldLineTrimmed !== contentLineTrimmed) {
-        isMatch = false
-        break
-      }
-
-      if (offset === 0 && oldLineTrimmed.length > 0) {
-        const oldIndent = getLeadingWhitespace(oldLine)
-        const contentIndent = getLeadingWhitespace(contentLine)
-        if (contentIndent.startsWith(oldIndent)) {
-          indentOffset = contentIndent.slice(oldIndent.length)
-        } else {
-          indentOffset = ''
-        }
-      }
+    if ((line.trim() === '@@' || line.trim().startsWith('@@ ')) && oldLines.length + newLines.length > 0) {
+      break
     }
 
-    if (!isMatch) {
+    if (line === EOF_MARKER) {
+      isEndOfFile = true
+      cursor += 1
+      break
+    }
+
+    if (line.length === 0) {
+      throw new OpenAICompatibleToolError('Invalid patch hunk: change line must start with +, -, or space.', {
+        lineNumber: cursor + 1,
+      })
+    }
+
+    const prefix = line[0]
+    const text = line.slice(1)
+    if (prefix === ' ') {
+      oldLines.push(text)
+      newLines.push(text)
+      cursor += 1
+      continue
+    }
+    if (prefix === '-') {
+      oldLines.push(text)
+      cursor += 1
+      continue
+    }
+    if (prefix === '+') {
+      newLines.push(text)
+      cursor += 1
       continue
     }
 
-    const matchStartLineOffset = lineStartOffsets[contentLineIndex]
-    const lastMatchedLineIndex = contentLineIndex + oldLines.length - 1
-    const lastMatchedLineStartOffset = lineStartOffsets[lastMatchedLineIndex]
-    const lastMatchedLine = contentLines[lastMatchedLineIndex]
-    const endIndex = lastMatchedLineStartOffset + lastMatchedLine.length
-
-    matches.push({
-      endIndex,
-      indentOffset,
-      startIndex: matchStartLineOffset,
+    throw new OpenAICompatibleToolError('Invalid patch hunk: change line must start with +, -, or space.', {
+      lineNumber: cursor + 1,
+      receivedLine: line,
     })
   }
 
-  return matches
-}
-
-function applyIndentOffsetToNewString(newString: string, indentOffset: string) {
-  if (indentOffset.length === 0) {
-    return newString
+  if (oldLines.length === 0 && newLines.length === 0) {
+    throw new OpenAICompatibleToolError('Invalid patch hunk: empty update chunk.', {
+      lineNumber: startIndex + 1,
+    })
   }
-
-  return newString
-    .split('\n')
-    .map((line) => (line.trim().length === 0 ? line : `${indentOffset}${line}`))
-    .join('\n')
-}
-
-function getFirstNonEmptyLine(lines: string[]) {
-  return lines.find((line) => line.trim().length > 0) ?? ''
-}
-
-function computeIndentOffsetFromMatchedText(oldString: string, matchedText: string) {
-  const oldFirstNonEmptyLine = getFirstNonEmptyLine(oldString.split('\n'))
-  const matchedFirstNonEmptyLine = getFirstNonEmptyLine(matchedText.split('\n'))
-  if (oldFirstNonEmptyLine.length === 0 || matchedFirstNonEmptyLine.length === 0) {
-    return ''
-  }
-
-  const oldIndent = getLeadingWhitespace(oldFirstNonEmptyLine)
-  const matchedIndent = getLeadingWhitespace(matchedFirstNonEmptyLine)
-  if (matchedIndent.startsWith(oldIndent)) {
-    return matchedIndent.slice(oldIndent.length)
-  }
-
-  return ''
-}
-
-function computeLinePrefixIndentAtMatchStart(content: string, matchStartIndex: number) {
-  const safeMatchStart = Math.max(0, Math.min(matchStartIndex, content.length))
-  const lineStartIndex = content.lastIndexOf('\n', safeMatchStart - 1) + 1
-  const prefix = content.slice(lineStartIndex, safeMatchStart)
-  return /^[\t ]*$/u.test(prefix) ? prefix : ''
-}
-
-function createFocusedDiffSnippet(
-  oldFileContent: string,
-  newFileContent: string,
-  startLineNumber: number,
-  changedOldLineCount: number,
-  changedNewLineCount: number,
-  contextLines = 5,
-) {
-  const oldLines = oldFileContent.split('\n')
-  const newLines = newFileContent.split('\n')
-  const changedVisibleLineCount = Math.max(changedOldLineCount, changedNewLineCount)
-  const snippetStartLine = Math.max(1, startLineNumber - contextLines)
-  const snippetEndLine = startLineNumber + changedVisibleLineCount + contextLines - 1
 
   return {
-    contextLines,
-    endLineNumber: Math.max(snippetStartLine, snippetEndLine),
-    newContent: newLines.slice(snippetStartLine - 1, Math.min(newLines.length, snippetEndLine)).join('\n'),
-    oldContent: oldLines.slice(snippetStartLine - 1, Math.min(oldLines.length, snippetEndLine)).join('\n'),
-    startLineNumber: snippetStartLine,
+    chunk: {
+      ...(changeContext === undefined ? {} : { changeContext }),
+      isEndOfFile,
+      newLines,
+      oldLines,
+    },
+    nextIndex: cursor,
+  }
+}
+
+function parsePatch(patchText: string): ParsedHunk[] {
+  const normalizedPatch = maybeUnwrapHeredocPatch(patchText)
+  const lines = normalizedPatch.split('\n')
+
+  if (lines.length < 2 || lines[0].trim() !== BEGIN_PATCH_MARKER || lines[lines.length - 1].trim() !== END_PATCH_MARKER) {
+    throw new OpenAICompatibleToolError('Invalid patch: first line must be *** Begin Patch and last line must be *** End Patch.')
+  }
+
+  const hunks: ParsedHunk[] = []
+  let index = 1
+  const endIndex = lines.length - 1
+  while (index < endIndex) {
+    const line = lines[index].trim()
+    if (line.length === 0) {
+      index += 1
+      continue
+    }
+
+    if (line.startsWith(ADD_FILE_MARKER)) {
+      const rawPath = line.slice(ADD_FILE_MARKER.length).trim()
+      if (rawPath.length === 0) {
+        throw new OpenAICompatibleToolError('Invalid patch: Add File requires a path.', { lineNumber: index + 1 })
+      }
+      index += 1
+      const addLines: string[] = []
+      while (index < endIndex) {
+        const addLine = lines[index]
+        if (!addLine.startsWith('+')) {
+          break
+        }
+        addLines.push(addLine.slice(1))
+        index += 1
+      }
+      if (addLines.length === 0) {
+        throw new OpenAICompatibleToolError('Invalid patch: Add File must include one or more + lines.', {
+          lineNumber: index + 1,
+          path: rawPath,
+        })
+      }
+      hunks.push({ contents: `${addLines.join('\n')}\n`, kind: 'add', rawPath })
+      continue
+    }
+
+    if (line.startsWith(DELETE_FILE_MARKER)) {
+      const rawPath = line.slice(DELETE_FILE_MARKER.length).trim()
+      if (rawPath.length === 0) {
+        throw new OpenAICompatibleToolError('Invalid patch: Delete File requires a path.', { lineNumber: index + 1 })
+      }
+      hunks.push({ kind: 'delete', rawPath })
+      index += 1
+      continue
+    }
+
+    if (line.startsWith(UPDATE_FILE_MARKER)) {
+      const rawPath = line.slice(UPDATE_FILE_MARKER.length).trim()
+      if (rawPath.length === 0) {
+        throw new OpenAICompatibleToolError('Invalid patch: Update File requires a path.', { lineNumber: index + 1 })
+      }
+      index += 1
+
+      let moveToRawPath: string | undefined
+      if (index < endIndex && lines[index].trim().startsWith(MOVE_TO_MARKER)) {
+        moveToRawPath = lines[index].trim().slice(MOVE_TO_MARKER.length).trim()
+        if (!moveToRawPath) {
+          throw new OpenAICompatibleToolError('Invalid patch: Move to requires a destination path.', {
+            lineNumber: index + 1,
+            path: rawPath,
+          })
+        }
+        index += 1
+      }
+
+      const chunks: UpdateChunk[] = []
+      while (index < endIndex) {
+        const candidate = lines[index]
+        if (candidate.trim().length === 0) {
+          index += 1
+          continue
+        }
+        if (candidate.trim().startsWith('*** ')) {
+          break
+        }
+        const parsedChunk = parseUpdateChunk(lines, index)
+        chunks.push(parsedChunk.chunk)
+        index = parsedChunk.nextIndex
+      }
+
+      if (chunks.length === 0) {
+        throw new OpenAICompatibleToolError('Invalid patch: Update File must include at least one change chunk.', {
+          path: rawPath,
+        })
+      }
+
+      hunks.push({
+        chunks,
+        kind: 'update',
+        ...(moveToRawPath === undefined ? {} : { moveToRawPath }),
+        rawPath,
+      })
+      continue
+    }
+
+    throw new OpenAICompatibleToolError('Invalid patch: unknown hunk marker.', {
+      lineNumber: index + 1,
+      marker: line,
+    })
+  }
+
+  return hunks
+}
+
+function resolvePatchPath(rootPath: string, rawPath: string) {
+  const absolutePath = path.isAbsolute(rawPath) ? rawPath : path.join(rootPath, rawPath)
+  return resolveToolPath(rootPath, absolutePath)
+}
+
+function seekSequence(contentLines: string[], pattern: string[], startIndex: number, isEndOfFile: boolean) {
+  if (pattern.length === 0) {
+    return isEndOfFile ? contentLines.length : startIndex
+  }
+
+  if (pattern.length > contentLines.length) {
+    return -1
+  }
+
+  const safeStart = Math.max(0, startIndex)
+  const maxIndex = contentLines.length - pattern.length
+  const searchStart = isEndOfFile ? Math.max(safeStart, maxIndex) : safeStart
+
+  for (let index = searchStart; index <= maxIndex; index += 1) {
+    let matched = true
+    for (let patternIndex = 0; patternIndex < pattern.length; patternIndex += 1) {
+      if (contentLines[index + patternIndex] !== pattern[patternIndex]) {
+        matched = false
+        break
+      }
+    }
+    if (matched) {
+      return index
+    }
+  }
+
+  for (let index = searchStart; index <= maxIndex; index += 1) {
+    let matched = true
+    for (let patternIndex = 0; patternIndex < pattern.length; patternIndex += 1) {
+      if (contentLines[index + patternIndex].trimEnd() !== pattern[patternIndex].trimEnd()) {
+        matched = false
+        break
+      }
+    }
+    if (matched) {
+      return index
+    }
+  }
+
+  for (let index = searchStart; index <= maxIndex; index += 1) {
+    let matched = true
+    for (let patternIndex = 0; patternIndex < pattern.length; patternIndex += 1) {
+      if (contentLines[index + patternIndex].trim() !== pattern[patternIndex].trim()) {
+        matched = false
+        break
+      }
+    }
+    if (matched) {
+      return index
+    }
+  }
+
+  const normalizeForFuzzyMatch = (value: string) =>
+    value
+      .trim()
+      .split('')
+      .map((character) => {
+        if ('‐‑‒–—―−'.includes(character)) {
+          return '-'
+        }
+        if ('‘’‚‛'.includes(character)) {
+          return "'"
+        }
+        if ('“”„‟'.includes(character)) {
+          return '"'
+        }
+        if ('\u00A0\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000'.includes(character)) {
+          return ' '
+        }
+        return character
+      })
+      .join('')
+
+  for (let index = searchStart; index <= maxIndex; index += 1) {
+    let matched = true
+    for (let patternIndex = 0; patternIndex < pattern.length; patternIndex += 1) {
+      if (normalizeForFuzzyMatch(contentLines[index + patternIndex]) !== normalizeForFuzzyMatch(pattern[patternIndex])) {
+        matched = false
+        break
+      }
+    }
+    if (matched) {
+      return index
+    }
+  }
+
+  if (isEndOfFile && searchStart !== safeStart) {
+    return seekSequence(contentLines, pattern, safeStart, false)
+  }
+
+  return -1
+}
+
+function deriveUpdatedContent(absolutePath: string, currentContent: string, chunks: UpdateChunk[]) {
+  const originalLines = splitContentLines(currentContent)
+  const replacements: { newLines: string[]; oldLength: number; startIndex: number }[] = []
+  let lineIndex = 0
+
+  for (const chunk of chunks) {
+    if (chunk.changeContext !== undefined) {
+      const contextIndex = seekSequence(originalLines, [chunk.changeContext], lineIndex, false)
+      if (contextIndex < 0) {
+        throw new OpenAICompatibleToolError('Failed to find change context while applying patch.', {
+          path: absolutePath,
+          context: chunk.changeContext,
+        })
+      }
+      lineIndex = contextIndex + 1
+    }
+
+    let oldPattern = chunk.oldLines
+    let newPattern = chunk.newLines
+    let foundIndex = seekSequence(originalLines, oldPattern, lineIndex, chunk.isEndOfFile)
+    if (foundIndex < 0 && oldPattern.length > 0 && oldPattern[oldPattern.length - 1] === '') {
+      oldPattern = oldPattern.slice(0, -1)
+      if (newPattern.length > 0 && newPattern[newPattern.length - 1] === '') {
+        newPattern = newPattern.slice(0, -1)
+      }
+      foundIndex = seekSequence(originalLines, oldPattern, lineIndex, chunk.isEndOfFile)
+    }
+
+    if (foundIndex < 0) {
+      throw new OpenAICompatibleToolError('Failed to find expected lines while applying patch.', {
+        oldLines: chunk.oldLines,
+        path: absolutePath,
+      })
+    }
+
+    replacements.push({
+      newLines: newPattern,
+      oldLength: oldPattern.length,
+      startIndex: foundIndex,
+    })
+    lineIndex = foundIndex + oldPattern.length
+  }
+
+  replacements.sort((lhs, rhs) => lhs.startIndex - rhs.startIndex)
+  const nextLines = [...originalLines]
+  for (let index = replacements.length - 1; index >= 0; index -= 1) {
+    const replacement = replacements[index]
+    nextLines.splice(replacement.startIndex, replacement.oldLength, ...replacement.newLines)
+  }
+
+  return joinContentLines(nextLines)
+}
+
+async function existsAsFile(absolutePath: string) {
+  try {
+    const stat = await fs.stat(absolutePath)
+    return stat.isFile()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false
+    }
+    throw error
+  }
+}
+
+async function readRequiredFile(absolutePath: string, action: 'delete' | 'update') {
+  try {
+    return await fs.readFile(absolutePath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new OpenAICompatibleToolError(`Cannot ${action} file because it does not exist.`, {
+        absolutePath,
+      })
+    }
+    if ((error as NodeJS.ErrnoException).code === 'EISDIR') {
+      throw new OpenAICompatibleToolError(`Cannot ${action} path because it is a directory.`, {
+        absolutePath,
+      })
+    }
+    throw error
   }
 }
 
@@ -239,274 +453,182 @@ export const editTool: OpenAICompatibleToolDefinition = {
   name: 'edit',
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
-    const absolutePath = readRequiredString(argumentsValue, 'absolute_path')
-    const oldString = readRequiredText(argumentsValue, 'old_string')
-    const newString = readRequiredText(argumentsValue, 'new_string', true)
-    const replaceAll = readOptionalBoolean(argumentsValue, 'replace_all', false)
-    const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
+    const patch = readRequiredText(argumentsValue, 'patch')
+    const hunks = parsePatch(patch)
+    const rootPath = path.resolve(context.agentContextRootPath)
 
-    const fileContent = await fs.readFile(normalizedTargetPath, 'utf8').catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new OpenAICompatibleToolError('The requested file does not exist.', {
-          absolutePath: normalizedTargetPath,
+    const plannedChanges: PlannedChange[] = []
+    for (const hunk of hunks) {
+      if (hunk.kind === 'add') {
+        const target = resolvePatchPath(rootPath, hunk.rawPath)
+        if (await existsAsFile(target.normalizedTargetPath)) {
+          throw new OpenAICompatibleToolError('Cannot add file because it already exists.', {
+            absolutePath: target.normalizedTargetPath,
+          })
+        }
+        plannedChanges.push({
+          content: hunk.contents,
+          kind: 'add',
+          path: target.normalizedTargetPath,
+          relativePath: target.relativePath,
         })
+        continue
       }
 
-      if ((error as NodeJS.ErrnoException).code === 'EISDIR') {
-        throw new OpenAICompatibleToolError('absolute_path must point to a file for edit.', {
-          absolutePath: normalizedTargetPath,
+      if (hunk.kind === 'delete') {
+        const target = resolvePatchPath(rootPath, hunk.rawPath)
+        const contentBefore = await readRequiredFile(target.normalizedTargetPath, 'delete')
+        plannedChanges.push({
+          contentBefore,
+          kind: 'delete',
+          path: target.normalizedTargetPath,
+          relativePath: target.relativePath,
         })
+        continue
       }
 
-      throw error
-    })
+      const source = resolvePatchPath(rootPath, hunk.rawPath)
+      const sourceContent = normalizeLineEndings(await readRequiredFile(source.normalizedTargetPath, 'update'))
+      const updatedContent = deriveUpdatedContent(source.normalizedTargetPath, sourceContent, hunk.chunks)
+      let moveToPath: string | undefined
+      let moveToRelativePath: string | undefined
+      if (hunk.moveToRawPath !== undefined) {
+        const destination = resolvePatchPath(rootPath, hunk.moveToRawPath)
+        moveToPath = destination.normalizedTargetPath
+        moveToRelativePath = destination.relativePath
+      }
 
-    const normalizedContent = normalizeLineEndings(fileContent)
-    const normalizedOldString = normalizeLineEndings(oldString)
-    const normalizedNewString = normalizeLineEndings(newString)
-    const usesCrlf = fileContent.includes('\r\n')
-
-    if (normalizedOldString.length === 0) {
-      throw new OpenAICompatibleToolError('old_string must not be empty.', {
-        absolutePath: normalizedTargetPath,
+      plannedChanges.push({
+        content: updatedContent,
+        contentBefore: sourceContent,
+        kind: 'update',
+        ...(moveToPath === undefined ? {} : { moveToPath }),
+        ...(moveToRelativePath === undefined ? {} : { moveToRelativePath }),
+        path: source.normalizedTargetPath,
+        relativePath: source.relativePath,
       })
     }
 
-    const scopedRange = getScopedLineRange(normalizedContent)
-    const scopedContent = scopedRange.text
+    const addedPaths: string[] = []
+    const modifiedPaths: string[] = []
+    const deletedPaths: string[] = []
+    let contentChanged = false
+    let primaryDiffPayload: PrimaryDiffPayload | null = null
 
-    const exactOccurrences = scopedContent.split(normalizedOldString).length - 1
-    if (!replaceAll && exactOccurrences > 1) {
-      throw new OpenAICompatibleToolError('old_string matched multiple locations. Retry with a more specific old_string or set replace_all to true.', {
-        absolutePath: normalizedTargetPath,
-        candidateRanges: [
-          {
-            endLine: scopedRange.endLine,
-            startLine: scopedRange.startLine,
-          },
-        ],
-        matchCount: exactOccurrences,
-        matchStrategyAttempted: 'exact',
-        whyRejected: 'ambiguous_match',
-      })
-    }
+    for (const change of plannedChanges) {
+      if (change.kind === 'add') {
+        if (context.workspaceCheckpointId) {
+          await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, change.path)
+        }
+        await fs.mkdir(path.dirname(change.path), { recursive: true })
+        await fs.writeFile(change.path, change.content, 'utf8')
+        const displayPath = toDisplayPath(change.relativePath)
+        addedPaths.push(displayPath)
+        if (plannedChanges.length === 1) {
+          primaryDiffPayload = {
+            newContent: change.content,
+            oldContent: null,
+            path: displayPath,
+          }
+        }
+        contentChanged = true
+        continue
+      }
 
-    let replacementIndex = scopedContent.indexOf(normalizedOldString)
-    let replacementCount = replaceAll ? exactOccurrences : exactOccurrences > 0 ? 1 : 0
-    let nextContent = normalizedContent
+      if (change.kind === 'delete') {
+        if (context.workspaceCheckpointId) {
+          await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, change.path)
+        }
+        await fs.unlink(change.path)
+        deletedPaths.push(toDisplayPath(change.relativePath))
+        contentChanged = true
+        continue
+      }
 
-    if (exactOccurrences > 0) {
-      if (replaceAll) {
-        const replacedScopedContent = scopedContent.split(normalizedOldString).join(normalizedNewString)
-        nextContent =
-          normalizedContent.slice(0, scopedRange.charStart) +
-          replacedScopedContent +
-          normalizedContent.slice(scopedRange.charEnd)
+      if (context.workspaceCheckpointId) {
+        await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, change.path)
+      }
+
+      const destinationPath = change.moveToPath ?? change.path
+      if (destinationPath !== change.path) {
+        if (context.workspaceCheckpointId && (await existsAsFile(destinationPath))) {
+          await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, destinationPath)
+        }
+        await fs.mkdir(path.dirname(destinationPath), { recursive: true })
+      }
+
+      const hasEffectiveChange = change.contentBefore !== change.content || destinationPath !== change.path
+      if (destinationPath === change.path) {
+        await fs.writeFile(destinationPath, change.content, 'utf8')
+        modifiedPaths.push(toDisplayPath(change.relativePath))
       } else {
-        const matchedLength = normalizedOldString.length
-        const absoluteMatchStart = scopedRange.charStart + replacementIndex
-        nextContent =
-          normalizedContent.slice(0, absoluteMatchStart) +
-          normalizedNewString +
-          normalizedContent.slice(absoluteMatchStart + matchedLength)
-      }
-    } else if (!replaceAll) {
-      const whitespaceMatches = findWhitespaceTolerantMatches(scopedContent, normalizedOldString)
-      if (whitespaceMatches.length === 1) {
-        const match = whitespaceMatches[0]
-        const matchStart = match.index ?? -1
-        if (matchStart >= 0) {
-          const matchedText = match[0]
-          replacementIndex = matchStart
-          replacementCount = 1
-          const linePrefixIndent = computeLinePrefixIndentAtMatchStart(scopedContent, matchStart)
-          const oldFirstNonEmptyLine = getFirstNonEmptyLine(normalizedOldString.split('\n'))
-          const oldFirstIndent = getLeadingWhitespace(oldFirstNonEmptyLine)
-          const derivedIndentOffset =
-            linePrefixIndent.startsWith(oldFirstIndent) ? linePrefixIndent.slice(oldFirstIndent.length) : linePrefixIndent
-          const adjustedNewString =
-            normalizedOldString.includes('\n')
-              ? applyIndentOffsetToNewString(
-                  normalizedNewString,
-                  derivedIndentOffset.length > 0
-                    ? derivedIndentOffset
-                    : computeIndentOffsetFromMatchedText(normalizedOldString, matchedText),
-                )
-              : normalizedNewString
-          const absoluteMatchStart = scopedRange.charStart + matchStart
-          nextContent =
-            normalizedContent.slice(0, absoluteMatchStart) +
-            adjustedNewString +
-            normalizedContent.slice(absoluteMatchStart + matchedText.length)
-        }
-      } else if (whitespaceMatches.length > 1) {
-        throw new OpenAICompatibleToolError(
-          'old_string matched multiple whitespace-tolerant locations. Retry with a more specific old_string or set replace_all to true.',
-          {
-            absolutePath: normalizedTargetPath,
-            candidateRanges: [
-              {
-                endLine: scopedRange.endLine,
-                startLine: scopedRange.startLine,
-              },
-            ],
-            matchCount: whitespaceMatches.length,
-            matchStrategy: 'whitespace_tolerant',
-            matchStrategyAttempted: 'whitespace_tolerant',
-            whyRejected: 'ambiguous_match',
-          },
-        )
+        await fs.writeFile(destinationPath, change.content, 'utf8')
+        await fs.unlink(change.path)
+        modifiedPaths.push(toDisplayPath(change.moveToRelativePath ?? change.relativePath))
       }
 
-      if (replacementCount === 0) {
-        const indentFlexibleMatches = findIndentFlexibleMatches(scopedContent, normalizedOldString)
-        if (indentFlexibleMatches.length === 1) {
-          const match = indentFlexibleMatches[0]
-          const absoluteMatchStart = scopedRange.charStart + match.startIndex
-          const absoluteMatchEnd = scopedRange.charStart + match.endIndex
-          const adjustedNewString = applyIndentOffsetToNewString(normalizedNewString, match.indentOffset)
-          replacementIndex = match.startIndex
-          replacementCount = 1
-          nextContent =
-            normalizedContent.slice(0, absoluteMatchStart) +
-            adjustedNewString +
-            normalizedContent.slice(absoluteMatchEnd)
-        } else if (indentFlexibleMatches.length > 1) {
-          throw new OpenAICompatibleToolError(
-            'old_string matched multiple indent-flexible locations. Retry with a more specific old_string or set replace_all to true.',
-            {
-              absolutePath: normalizedTargetPath,
-              candidateRanges: [
-                {
-                  endLine: scopedRange.endLine,
-                  startLine: scopedRange.startLine,
-                },
-              ],
-              matchCount: indentFlexibleMatches.length,
-              matchStrategy: 'indent_flexible',
-              matchStrategyAttempted: 'indent_flexible',
-              whyRejected: 'ambiguous_match',
-            },
-          )
+      if (hasEffectiveChange) {
+        contentChanged = true
+      }
+
+      if (plannedChanges.length === 1) {
+        const displayPath = toDisplayPath(change.moveToRelativePath ?? change.relativePath)
+        primaryDiffPayload = {
+          newContent: change.content,
+          oldContent: change.contentBefore,
+          path: displayPath,
         }
       }
     }
 
-    if (replacementCount === 0) {
-      const alreadyAppliedIndex = scopedContent.indexOf(normalizedNewString)
-      if (alreadyAppliedIndex >= 0) {
-        const alreadyAppliedStartLine = getLineNumberAtIndex(scopedContent, alreadyAppliedIndex) + scopedRange.startLine - 1
-        const alreadyAppliedLineCount = Math.max(1, normalizedNewString.split('\n').length)
-        const alreadyAppliedEndLine = alreadyAppliedStartLine + alreadyAppliedLineCount - 1
-        const alreadyAppliedSnippet = createFocusedDiffSnippet(
-          normalizedContent,
-          normalizedContent,
-          alreadyAppliedStartLine,
-          alreadyAppliedLineCount,
-          alreadyAppliedLineCount,
-        )
-
-        return {
-          contentChanged: false,
-          contextLines: alreadyAppliedSnippet.contextLines,
-          endLineNumber: alreadyAppliedSnippet.endLineNumber ?? alreadyAppliedEndLine,
-          message: `Confirmed ${toDisplayPath(relativePath)} already matched the requested edit.`,
-          newContent: alreadyAppliedSnippet.newContent,
-          oldContent: alreadyAppliedSnippet.oldContent,
-          ok: true,
-          operation: 'noop',
-          path: toDisplayPath(relativePath),
-          replacementCount: 0,
-          startLineNumber: alreadyAppliedSnippet.startLineNumber ?? alreadyAppliedStartLine,
-          targetKind: 'file',
-        }
-      }
-
-      throw new OpenAICompatibleToolError('old_string was not found in the target file.', {
-        absolutePath: normalizedTargetPath,
-        ...buildMissingMatchDetails(fileContent, oldString),
-        candidateRanges: [
-          {
-            endLine: scopedRange.endLine,
-            startLine: scopedRange.startLine,
-          },
-        ],
-        matchStrategyAttempted:
-          normalizedOldString.includes('\n') && normalizedOldString.length >= 20
-            ? 'exact_then_whitespace_tolerant_then_indent_flexible'
-            : 'exact_then_whitespace_tolerant',
-        whyRejected: 'no_match_found',
-      })
-    }
-
-    const singleEditStartLine =
-      replacementIndex >= 0
-        ? replaceAll
-          ? getLineNumberAtIndex(normalizedContent, scopedRange.charStart)
-          : getLineNumberAtIndex(scopedContent, replacementIndex) + scopedRange.startLine - 1
-        : 1
-    const oldLineCount = normalizedOldString.split('\n').length
-    const newLineCount = normalizedNewString.split('\n').length
-    const singleEditEndLine =
-      singleEditStartLine + Math.max(oldLineCount, newLineCount) - 1
-    const usesWholeFileDiff = replaceAll || replacementCount > 1
-    const contentChanged = normalizedContent !== nextContent
-
-    if (context.workspaceCheckpointId) {
-      await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
-    }
-
-    await fs.writeFile(normalizedTargetPath, usesCrlf ? nextContent.replace(/\n/g, '\r\n') : nextContent, 'utf8')
-
-    const focusedDiffSnippet = usesWholeFileDiff
-      ? null
-      : createFocusedDiffSnippet(normalizedContent, nextContent, singleEditStartLine, oldLineCount, newLineCount)
-    const operation = contentChanged ? 'edit' : 'noop'
+    const operation = contentChanged ? 'apply_patch' : 'noop'
+    const totalChangedPathCount = addedPaths.length + modifiedPaths.length + deletedPaths.length
+    const singleChangedPath =
+      totalChangedPathCount === 1
+        ? (addedPaths[0] ?? modifiedPaths[0] ?? deletedPaths[0] ?? null)
+        : null
     const message =
-      operation === 'edit'
-        ? `Edited ${toDisplayPath(relativePath)} successfully.`
-        : `Confirmed ${toDisplayPath(relativePath)} already matched the requested edit.`
+      operation === 'noop'
+        ? 'Patch produced no file changes.'
+        : singleChangedPath
+          ? `Edited ${singleChangedPath} successfully.`
+          : `Applied patch successfully (${plannedChanges.length} file change${plannedChanges.length === 1 ? '' : 's'}).`
 
     return {
+      addedPaths,
+      changeCount: plannedChanges.length,
       contentChanged,
-      contextLines: usesWholeFileDiff ? 5 : focusedDiffSnippet?.contextLines,
-      endLineNumber: usesWholeFileDiff ? nextContent.split('\n').length : focusedDiffSnippet?.endLineNumber ?? singleEditEndLine,
+      deletedPaths,
+      endLineNumber: undefined,
       message,
-      newContent: usesWholeFileDiff ? nextContent : focusedDiffSnippet?.newContent ?? normalizedNewString,
-      oldContent: usesWholeFileDiff ? normalizedContent : focusedDiffSnippet?.oldContent ?? normalizedOldString,
+      modifiedPaths,
+      ...(primaryDiffPayload
+        ? {
+            newContent: primaryDiffPayload.newContent,
+            oldContent: primaryDiffPayload.oldContent,
+          }
+        : {}),
       ok: true,
       operation,
-      path: toDisplayPath(relativePath),
-      replacementCount,
-      startLineNumber: usesWholeFileDiff ? 1 : focusedDiffSnippet?.startLineNumber ?? singleEditStartLine,
-      targetKind: 'file',
+      path: singleChangedPath ?? '.',
+      startLineNumber: undefined,
+      targetKind: 'workspace',
     }
   },
   tool: {
     function: {
-      description: 'Patch an existing file by replacing exact old_string content with new_string inside the locked thread root.',
+      description: 'Apply a structured patch with add, update, delete, and move operations inside the locked thread root.',
       name: 'edit',
       parameters: {
         additionalProperties: false,
         properties: {
-          absolute_path: {
-            description: 'Absolute file path to patch.',
+          patch: {
+            description:
+              'Patch text using the apply_patch format with *** Begin Patch / *** End Patch markers and Add/Update/Delete File hunks.',
             type: 'string',
-          },
-          new_string: {
-            description: 'Replacement text for the matched old_string.',
-            type: 'string',
-          },
-          old_string: {
-            description: 'Exact file content to replace.',
-            type: 'string',
-          },
-          replace_all: {
-            description: 'Optional flag to replace every exact occurrence instead of requiring a single match.',
-            type: 'boolean',
           },
         },
-        required: ['absolute_path', 'old_string', 'new_string'],
+        required: ['patch'],
         type: 'object',
       },
     },
