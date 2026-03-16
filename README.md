@@ -82,6 +82,41 @@ Platform-specific packaging scripts are also available:
 - `npm run dist:linux`
 - `npm run dist:mac`
 
+## Release Automation
+
+Use the automation wrappers to bump version, create a release commit, tag it, and push.
+Pushing the tag triggers the GitHub Actions release workflow.
+
+Windows (PowerShell/CMD):
+
+```bat
+automations\release.bat
+automations\release.bat patch
+automations\release.bat minor
+automations\release.bat 0.2.0
+```
+
+macOS/Linux:
+
+```bash
+./automations/release.sh
+./automations/release.sh patch
+./automations/release.sh minor
+./automations/release.sh 0.2.0
+```
+
+Optional flags are forwarded to the release script:
+
+- `--allow-dirty` to bypass clean-working-tree checks
+- `--remote <name>` to push to a different git remote
+
+Direct script usage (without commit/tag/push):
+
+```bash
+node ./scripts/release-version.mjs --bump patch
+node ./scripts/release-version.mjs --version 0.2.0
+```
+
 ## Quality Checks
 
 ```bash
