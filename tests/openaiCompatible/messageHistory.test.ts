@@ -154,9 +154,9 @@ test('buildCodexInputMessages keeps replayed tool context ahead of the next user
 test('buildReplayableMessageHistory also converts tool messages appended after an already replayed history', () => {
   const patchToolCall: OpenAICompatibleToolCall = {
     argumentsText:
-      '{"patch":"*** Begin Patch\\n*** Add File: src/components/Hero.tsx\\n+export default function Hero() {}\\n*** End Patch"}',
-    id: 'call-patch-1',
-    name: 'patch',
+      '{"edits":[{"absolute_path":"C:/workspace/src/components/Hero.tsx","old_string":"","new_string":"export default function Hero() {}\\n"}]}',
+    id: 'call-edit-1',
+    name: 'edit',
     startedAt: 1_700_000_000_100,
   }
   const patchResult = buildSuccessfulToolArtifacts(
@@ -171,7 +171,7 @@ test('buildReplayableMessageHistory also converts tool messages appended after a
       modifiedPaths: [],
       newContent: 'export default function Hero() {}\n',
       oldContent: null,
-      operation: 'apply_patch',
+      operation: 'edit',
       path: 'src/components/Hero.tsx',
       startLineNumber: 1,
       targetKind: 'file',
@@ -206,17 +206,17 @@ test('buildReplayableMessageHistory also converts tool messages appended after a
   assert.match(toolContextMessage?.content ?? '', /Acknowledged tool result summaries:/u)
   assert.match(
     toolContextMessage?.content ?? '',
-    /- patch success: Applied patch to src\/components\/Hero\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+    /- edit success: Applied edits to src\/components\/Hero\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
   )
   assert.match(toolContextMessage?.content ?? '', /Latest acknowledged workspace file state:/u)
   assert.match(
     toolContextMessage?.content ?? '',
-    /- src\/components\/Hero\.tsx now reflects the latest successful patch changes\./u,
+    /- src\/components\/Hero\.tsx now reflects the latest successful edit changes\./u,
   )
-  assert.match(toolContextMessage?.content ?? '', /"toolName": "patch"/u)
+  assert.match(toolContextMessage?.content ?? '', /"toolName": "edit"/u)
   assert.match(
     toolContextMessage?.content ?? '',
-    /Acknowledged workspace state: src\/components\/Hero\.tsx was patched successfully and now reflects the applied changes\./u,
+    /Acknowledged workspace state: src\/components\/Hero\.tsx was edited successfully and now reflects the applied changes\./u,
   )
   assert.match(toolContextMessage?.content ?? '', /Created src\/components\/Hero\.tsx successfully\./u)
 })

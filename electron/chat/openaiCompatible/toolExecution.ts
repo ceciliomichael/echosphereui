@@ -15,6 +15,7 @@ import {
 } from './toolTypes'
 
 export { createToolExecutionTurnState } from './toolExecutionTurnState'
+export { resolveWorkflowTurnToolChoice } from './toolExecutionTurnState'
 export type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 interface ToolExecutionSchedulerInput {
@@ -84,6 +85,92 @@ function normalizeExecutionResourceKey(absolutePath: string) {
   return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
 }
 
+interface NormalizedWorkflowStepSnapshot {
+  id: string
+  status: 'completed' | 'in_progress' | 'pending'
+  title: string
+}
+
+interface NormalizedWorkflowPlanSnapshot {
+  planId: string
+  steps: NormalizedWorkflowStepSnapshot[]
+}
+
+function readTrimmedString(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function normalizeUpdatePlanArguments(argumentsValue: Record<string, unknown>): NormalizedWorkflowPlanSnapshot | null {
+  const rawSteps = argumentsValue.steps
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
+    return null
+  }
+
+  const steps: NormalizedWorkflowStepSnapshot[] = []
+  for (const rawStep of rawSteps) {
+    if (typeof rawStep !== 'object' || rawStep === null || Array.isArray(rawStep)) {
+      return null
+    }
+
+    const stepRecord = rawStep as Record<string, unknown>
+    const id = readTrimmedString(stepRecord.id)
+    const title = readTrimmedString(stepRecord.title)
+    const statusValue = readTrimmedString(stepRecord.status)?.toLowerCase()
+    if (!id || !title || !statusValue) {
+      return null
+    }
+
+    if (statusValue !== 'pending' && statusValue !== 'in_progress' && statusValue !== 'completed') {
+      return null
+    }
+
+    steps.push({
+      id,
+      status: statusValue,
+      title,
+    })
+  }
+
+  return {
+    planId: readTrimmedString(argumentsValue.plan) ?? 'default',
+    steps,
+  }
+}
+
+function isUnchangedWorkflowPlanUpdate(
+  turnState: ToolExecutionTurnState,
+  argumentsValue: Record<string, unknown>,
+) {
+  const existingPlan = turnState.workflowPlan
+  if (!existingPlan || existingPlan.allStepsCompleted) {
+    return false
+  }
+
+  const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
+  if (!incomingPlan) {
+    return false
+  }
+
+  if (incomingPlan.planId !== existingPlan.planId || incomingPlan.steps.length !== existingPlan.steps.length) {
+    return false
+  }
+
+  return incomingPlan.steps.every((incomingStep, index) => {
+    const existingStep = existingPlan.steps[index]
+    return (
+      existingStep !== undefined &&
+      incomingStep.id === existingStep.id &&
+      incomingStep.status === existingStep.status &&
+      incomingStep.title === existingStep.title
+    )
+  })
+}
+
 export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall) {
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
   if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
@@ -126,6 +213,17 @@ export async function executeToolCallWithPolicies(
     const errorMessage = toErrorMessage(error)
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
     emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, errorDetails)
+    return
+  }
+
+  if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(turnState, argumentsValue)) {
+    emitFailureEvent(
+      toolCall,
+      context,
+      inMemoryMessages,
+      'update_plan has no changes. Execute the current in_progress step with an execution tool, then call update_plan only when step statuses change.',
+      startedAt,
+    )
     return
   }
 

@@ -177,11 +177,11 @@ export function ChatInterface({
   const chatModeOptions = useMemo(
     () =>
       [
-        {
-          description: 'Echo can inspect and patch code',
-          label: 'Agent',
-          value: 'agent',
-        },
+          {
+            description: 'Echo can inspect and edit code',
+            label: 'Agent',
+            value: 'agent',
+          },
       ] satisfies ChatModeOption[],
     [],
   )

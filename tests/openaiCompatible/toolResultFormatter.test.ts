@@ -36,17 +36,17 @@ const sampleGrepToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
-const samplePatchToolCall: OpenAICompatibleToolCall = {
+const sampleEditToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"path":"package.json"}',
-  id: 'tool-call-patch-123',
-  name: 'patch',
+  id: 'tool-call-edit-123',
+  name: 'edit',
   startedAt: 1_700_000_000_000,
 }
 
-const samplePatchCreateToolCall: OpenAICompatibleToolCall = {
+const sampleEditCreateToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"path":"src/app/page.tsx"}',
-  id: 'tool-call-patch-create-123',
-  name: 'patch',
+  id: 'tool-call-edit-create-123',
+  name: 'edit',
   startedAt: 1_700_000_000_000,
 }
 
@@ -195,10 +195,10 @@ test('buildSuccessfulToolArtifacts adds direct acknowledgements for glob and gre
   )
 })
 
-test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while exposing diff presentation data', () => {
+test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exposing diff presentation data', () => {
   const completedAt = 1_700_000_000_175
   const artifacts = buildSuccessfulToolArtifacts(
-    samplePatchToolCall,
+    sampleEditToolCall,
     {
       addedPaths: [],
       contentChanged: true,
@@ -209,12 +209,12 @@ test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while ex
       modifiedPaths: ['package.json'],
       newContent: '{\n  "name": "next"\n}',
       oldContent: '{\n  "name": "prev"\n}',
-      operation: 'apply_patch',
+      operation: 'edit',
       path: 'package.json',
       startLineNumber: 10,
       targetKind: 'file',
     },
-    samplePatchToolCall.startedAt,
+    sampleEditToolCall.startedAt,
     completedAt,
   )
 
@@ -222,11 +222,11 @@ test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while ex
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: package\.json was patched successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
+    /^Acknowledged workspace state: package\.json was edited successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
   )
   assert.match(
     parsedContent.metadata?.summary ?? '',
-    /Applied patch to package\.json\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+    /Applied edits to package\.json\. The current workspace state for this path is included below and should be treated as authoritative\./u,
   )
   assert.match(parsedContent.body ?? '', /^Edited package\.json successfully\./u)
   assert.match(parsedContent.body ?? '', /Current workspace state for package\.json is authoritative\./u)
@@ -234,7 +234,7 @@ test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while ex
   assert.match(parsedContent.body ?? '', /Current content of package\.json:/u)
   assert.match(parsedContent.body ?? '', /```json/u)
   assert.match(parsedContent.body ?? '', /"name": "next"/u)
-  assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'edit')
   assert.deepEqual(artifacts.resultPresentation, {
     addedLineCount: 1,
     contextLines: 3,
@@ -248,10 +248,10 @@ test('buildSuccessfulToolArtifacts keeps patch acknowledgements as text while ex
   })
 })
 
-test('buildSuccessfulToolArtifacts exposes create-file diff presentation for patch results', () => {
+test('buildSuccessfulToolArtifacts exposes create-file diff presentation for edit results', () => {
   const completedAt = 1_700_000_000_180
   const artifacts = buildSuccessfulToolArtifacts(
-    samplePatchCreateToolCall,
+    sampleEditCreateToolCall,
     {
       addedPaths: ['src/app/page.tsx'],
       changeCount: 1,
@@ -262,12 +262,12 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for pat
       modifiedPaths: [],
       newContent: 'export default function Page() {\n  return null\n}\n',
       oldContent: null,
-      operation: 'apply_patch',
+      operation: 'edit',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    samplePatchCreateToolCall.startedAt,
+    sampleEditCreateToolCall.startedAt,
     completedAt,
   )
 
@@ -275,18 +275,18 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for pat
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged workspace state: src\/app\/page\.tsx was patched successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
+    /^Acknowledged workspace state: src\/app\/page\.tsx was edited successfully and now reflects the applied changes\. Trust this result as the current workspace state for that path\./iu,
   )
   assert.match(
     parsedContent.metadata?.summary ?? '',
-    /Applied patch to src\/app\/page\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
+    /Applied edits to src\/app\/page\.tsx\. The current workspace state for this path is included below and should be treated as authoritative\./u,
   )
   assert.match(parsedContent.body ?? '', /^Created src\/app\/page\.tsx successfully\./u)
   assert.match(parsedContent.body ?? '', /Current workspace state for src\/app\/page\.tsx is authoritative\./u)
   assert.match(parsedContent.body ?? '', /Changed paths: src\/app\/page\.tsx/u)
   assert.match(parsedContent.body ?? '', /Current content of src\/app\/page\.tsx:/u)
   assert.match(parsedContent.body ?? '', /```tsx/u)
-  assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'edit')
   assert.equal(parsedContent.metadata?.semantics?.workspace_effect, 'files_edited')
   assert.equal(parsedContent.metadata?.semantics?.mutation_applied, true)
   assert.equal(parsedContent.metadata?.semantics?.target_exists_after_call, true)
@@ -340,9 +340,9 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
   assert.match(content ?? '', /"toolName": "read"/u)
 })
 
-test('buildCodexGroupedToolResultContent includes latest mutation state summary for repeated file patches', () => {
+test('buildCodexGroupedToolResultContent includes latest mutation state summary for repeated file edits', () => {
   const createContent = buildSuccessfulToolArtifacts(
-    samplePatchCreateToolCall,
+    sampleEditCreateToolCall,
     {
       addedPaths: ['src/app/page.tsx'],
       changeCount: 1,
@@ -353,16 +353,16 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
       modifiedPaths: [],
       newContent: 'export default function Page() {\n  return null\n}\n',
       oldContent: null,
-      operation: 'apply_patch',
+      operation: 'edit',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    samplePatchCreateToolCall.startedAt,
-    samplePatchCreateToolCall.startedAt + 1,
+    sampleEditCreateToolCall.startedAt,
+    sampleEditCreateToolCall.startedAt + 1,
   ).resultContent
   const patchUpdateContent = buildSuccessfulToolArtifacts(
-    samplePatchCreateToolCall,
+    sampleEditCreateToolCall,
     {
       addedPaths: [],
       changeCount: 1,
@@ -373,13 +373,13 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
       modifiedPaths: ['src/app/page.tsx'],
       newContent: 'export default function Page() {\n  return <main />\n}\n',
       oldContent: 'export default function Page() {\n  return null\n}\n',
-      operation: 'apply_patch',
+      operation: 'edit',
       path: 'src/app/page.tsx',
       startLineNumber: 1,
       targetKind: 'file',
     },
-    samplePatchCreateToolCall.startedAt + 2,
-    samplePatchCreateToolCall.startedAt + 3,
+    sampleEditCreateToolCall.startedAt + 2,
+    sampleEditCreateToolCall.startedAt + 3,
   ).resultContent
   const content = buildCodexGroupedToolResultContent([
     createContent,
@@ -387,5 +387,5 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
   ])
 
   assert.match(content ?? '', /Latest acknowledged workspace file state:/u)
-  assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful patch changes\./u)
+  assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful edit changes\./u)
 })

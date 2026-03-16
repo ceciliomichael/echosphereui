@@ -63,6 +63,93 @@ function createLegacyFunctionCallChunk(name: string | undefined, argumentsText: 
   } as ChatCompletionChunk
 }
 
+function createTerminalMessageToolCallChunk(index: number, id: string, name: string, argumentsText: string): ChatCompletionChunk {
+  return {
+    choices: [
+      {
+        delta: {},
+        finish_reason: 'tool_calls',
+        index: 0,
+        logprobs: null,
+        message: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              function: {
+                arguments: argumentsText,
+                name,
+              },
+              id,
+              index,
+              type: 'function',
+            },
+          ],
+        },
+      },
+    ],
+    created: 1_700_000_000,
+    id: `terminal-tool-${id}-${index}`,
+    model: 'test-model',
+    object: 'chat.completion.chunk',
+  } as ChatCompletionChunk
+}
+
+function createDeltaSingularToolCallChunk(index: number, id: string, name: string, argumentsText: string): ChatCompletionChunk {
+  return {
+    choices: [
+      {
+        delta: {
+          tool_call: {
+            function: {
+              arguments: argumentsText,
+              name,
+            },
+            id,
+            index,
+            type: 'function',
+          },
+        },
+        finish_reason: null,
+        index: 0,
+        logprobs: null,
+      },
+    ],
+    created: 1_700_000_000,
+    id: `delta-singular-tool-${id}-${index}`,
+    model: 'test-model',
+    object: 'chat.completion.chunk',
+  } as ChatCompletionChunk
+}
+
+function createDeltaToolCallsObjectArgumentsChunk(index: number, id: string, name: string): ChatCompletionChunk {
+  return {
+    choices: [
+      {
+        delta: {
+          tool_calls: {
+            function: {
+              arguments: {
+                absolute_path: 'C:\\repo\\main.tsx',
+              },
+              name,
+            },
+            id,
+            index,
+            type: 'function',
+          },
+        },
+        finish_reason: null,
+        index: 0,
+        logprobs: null,
+      },
+    ],
+    created: 1_700_000_000,
+    id: `delta-object-tool-${id}-${index}`,
+    model: 'test-model',
+    object: 'chat.completion.chunk',
+  } as ChatCompletionChunk
+}
+
 test('collectToolCalls marks an earlier tool call ready once a later tool call starts and the earlier JSON is complete', () => {
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
   const readyToolCallIndexes = new Set<number>()
@@ -167,4 +254,66 @@ test('collectToolCalls preserves whitespace-only argument deltas', () => {
 
   const [toolCall] = toToolCallList(toolCallsByIndex)
   assert.equal(toolCall?.argumentsText, '{"content":"hello world"}')
+})
+
+test('collectToolCalls reads terminal non-delta message tool_calls emitted by compatible providers', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+  const emittedEvents: StreamDeltaEvent[] = []
+
+  collectToolCalls(
+    createTerminalMessageToolCallChunk(0, 'call-terminal-1', 'read', '{"absolute_path":"C:\\\\repo\\\\page.tsx"}'),
+    toolCallsByIndex,
+    (event) => {
+      emittedEvents.push(event)
+    },
+    readyToolCallIndexes,
+  )
+
+  const startedEvent = emittedEvents.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }> =>
+      event.type === 'tool_invocation_started',
+  )
+  assert.ok(startedEvent)
+  assert.equal(startedEvent.invocationId, 'call-terminal-1')
+  assert.equal(startedEvent.toolName, 'read')
+
+  const [toolCall] = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCall?.id, 'call-terminal-1')
+  assert.equal(toolCall?.name, 'read')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\page.tsx"}')
+})
+
+test('collectToolCalls supports singular delta.tool_call payloads', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+
+  collectToolCalls(
+    createDeltaSingularToolCallChunk(0, 'call-singular-1', 'read', '{"absolute_path":"C:\\\\repo\\\\single.tsx"}'),
+    toolCallsByIndex,
+    () => {},
+    readyToolCallIndexes,
+  )
+
+  const [toolCall] = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCall?.id, 'call-singular-1')
+  assert.equal(toolCall?.name, 'read')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\single.tsx"}')
+})
+
+test('collectToolCalls stringifies object-form function arguments in non-standard chunks', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+
+  collectToolCalls(
+    createDeltaToolCallsObjectArgumentsChunk(0, 'call-object-1', 'read'),
+    toolCallsByIndex,
+    () => {},
+    readyToolCallIndexes,
+  )
+
+  const [toolCall] = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCall?.id, 'call-object-1')
+  assert.equal(toolCall?.name, 'read')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\main.tsx"}')
 })

@@ -106,7 +106,7 @@ function formatMutationResultBody(semanticResult: Record<string, unknown>) {
   const changedPaths = [...addedPaths, ...modifiedPaths, ...deletedPaths]
   const lines = [message]
 
-  if (path && operation === 'apply_patch') {
+  if (path && operation === 'edit') {
     lines.push(`Current workspace state for ${path} is authoritative.`)
   }
 
@@ -132,6 +132,33 @@ function formatTerminalResultBody(semanticResult: Record<string, unknown>) {
   return message ?? 'Terminal command completed.'
 }
 
+function formatUpdatePlanResultBody(semanticResult: Record<string, unknown>) {
+  const planId = readString(semanticResult.planId) ?? 'default'
+  const steps = Array.isArray(semanticResult.steps)
+    ? semanticResult.steps.filter((step): step is Record<string, unknown> => typeof step === 'object' && step !== null)
+    : []
+  const truncate = (value: string, maxLength = 80) => (value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`)
+  const lines = [planId]
+
+  if (steps.length === 0) {
+    lines.push('Steps: none')
+  } else {
+    for (const step of steps) {
+      const stepId = readString(step.id) ?? '?'
+      const stepStatus = readString(step.status) ?? 'pending'
+      const stepTitle = truncate(readString(step.title) ?? 'Untitled step')
+      lines.push(`${stepId}. [${stepStatus}] ${stepTitle}`)
+    }
+  }
+
+  const allStepsCompleted = readBoolean(semanticResult.allStepsCompleted)
+  if (allStepsCompleted) {
+    lines.push('All plan steps are completed.')
+  }
+
+  return lines.join('\n')
+}
+
 function formatFallbackResultBody(semanticResult: Record<string, unknown>) {
   return JSON.stringify(semanticResult, null, 2)
 }
@@ -153,12 +180,16 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatGrepResultBody(semanticResult)
   }
 
-  if (toolName === 'patch' || toolName === 'write') {
+  if (toolName === 'write' || toolName === 'edit') {
     return formatMutationResultBody(semanticResult)
   }
 
   if (toolName === 'exec_command' || toolName === 'write_stdin') {
     return formatTerminalResultBody(semanticResult)
+  }
+
+  if (toolName === 'update_plan') {
+    return formatUpdatePlanResultBody(semanticResult)
   }
 
   return formatFallbackResultBody(semanticResult)
@@ -182,7 +213,7 @@ export function buildResultPresentation(
   toolName: string,
   semanticResult: Record<string, unknown>,
 ): ToolInvocationResultPresentation | undefined {
-  if (toolName !== 'patch' && toolName !== 'write') {
+  if (toolName !== 'write' && toolName !== 'edit') {
     return undefined
   }
 

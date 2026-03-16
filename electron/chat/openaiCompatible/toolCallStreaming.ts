@@ -49,23 +49,128 @@ interface NormalizedToolCallDelta {
   name?: string
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  return value as Record<string, unknown>
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function readArgumentsText(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return undefined
+  }
+}
+
+function toToolCallEntries(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  if (readRecord(value)) {
+    return [value]
+  }
+
+  return []
+}
+
+function normalizeToolCallDelta(value: unknown, fallbackIndex: number): NormalizedToolCallDelta | null {
+  const toolCallRecord = readRecord(value)
+  if (!toolCallRecord) {
+    return null
+  }
+
+  const functionRecord = readRecord(toolCallRecord.function)
+  return {
+    argumentsText: readArgumentsText(functionRecord?.arguments ?? toolCallRecord.arguments),
+    id: readString(toolCallRecord.id),
+    index: readNumber(toolCallRecord.index) ?? fallbackIndex,
+    name: readString(functionRecord?.name ?? toolCallRecord.name),
+  }
+}
+
+function toNormalizedFallbackToolCallDeltas(choice: ChatCompletionChunk.Choice): NormalizedToolCallDelta[] {
+  const choiceRecord = readRecord(choice)
+  if (!choiceRecord) {
+    return []
+  }
+
+  const messageRecord = readRecord(choiceRecord.message)
+  const fallbackToolCalls = toToolCallEntries(messageRecord?.tool_calls ?? choiceRecord.tool_calls)
+  if (fallbackToolCalls.length === 0) {
+    return []
+  }
+
+  const normalizedToolCalls: NormalizedToolCallDelta[] = []
+  for (const [fallbackIndex, entry] of fallbackToolCalls.entries()) {
+    const normalizedToolCall = normalizeToolCallDelta(entry, fallbackIndex)
+    if (!normalizedToolCall) {
+      continue
+    }
+
+    normalizedToolCalls.push(normalizedToolCall)
+  }
+
+  return normalizedToolCalls
+}
+
 function toNormalizedToolCallDeltas(choice: ChatCompletionChunk.Choice): NormalizedToolCallDelta[] {
-  const streamedToolCalls = choice.delta.tool_calls ?? []
+  const streamedToolCalls = toToolCallEntries(choice.delta.tool_calls)
   if (streamedToolCalls.length > 0) {
-    return streamedToolCalls.map((toolCallDelta) => ({
-      argumentsText: toolCallDelta.function?.arguments,
-      id: toolCallDelta.id,
-      index: toolCallDelta.index,
-      name: toolCallDelta.function?.name,
-    }))
+    return streamedToolCalls
+      .map((toolCallDelta, index) => normalizeToolCallDelta(toolCallDelta, index))
+      .filter((value): value is NormalizedToolCallDelta => value !== null)
+  }
+
+  const deltaRecord = readRecord(choice.delta)
+  const singularToolCall = readRecord(deltaRecord?.tool_call)
+  if (singularToolCall) {
+    const singularFunction = readRecord(singularToolCall.function)
+    return [
+      {
+        argumentsText: readArgumentsText(singularFunction?.arguments ?? singularToolCall.arguments),
+        id: readString(singularToolCall.id),
+        index: readNumber(singularToolCall.index) ?? 0,
+        name: readString(singularFunction?.name ?? singularToolCall.name),
+      },
+    ]
   }
 
   const legacyFunctionCall = choice.delta.function_call
   if (!legacyFunctionCall) {
+    const fallbackToolCalls = toNormalizedFallbackToolCallDeltas(choice)
+    if (fallbackToolCalls.length > 0) {
+      return fallbackToolCalls
+    }
+
     return []
   }
 
   if (!hasNonBlankString(legacyFunctionCall.name) && !hasNonEmptyString(legacyFunctionCall.arguments)) {
+    const fallbackToolCalls = toNormalizedFallbackToolCallDeltas(choice)
+    if (fallbackToolCalls.length > 0) {
+      return fallbackToolCalls
+    }
+
     return []
   }
 

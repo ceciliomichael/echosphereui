@@ -4,5 +4,5 @@ Usage guidelines:
 - Provide `absolute_path` as an absolute file path.
 - Provide `content` as the full target file contents.
 - Existing files are overwritten in full; this tool does not apply partial edits.
-- Prefer `patch` for targeted modifications to existing files.
+- Prefer `edit` for targeted modifications to existing files.
 - Use `read` before writing when preserving unrelated content matters.

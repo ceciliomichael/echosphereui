@@ -1,5 +1,16 @@
 export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: string; rules: readonly string[] }> = [
   {
+    description: 'Track and update execution workflow state for the current run.',
+    toolName: 'update_plan',
+    rules: [
+      'For substantial multi-step work, call update_plan before making code changes.',
+      'Keep exactly one in_progress step whenever active work remains.',
+      'Keep step ids stable across updates and only change statuses when progress actually changes.',
+      'Update step statuses as work completes; do not mark completed prematurely.',
+      'When all steps are complete, update_plan should reflect no remaining incomplete steps.',
+    ],
+  },
+  {
     description: 'Inspect directories before opening or mutating files.',
     toolName: 'list',
     rules: [
@@ -19,7 +30,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     description: 'Locate files by glob pattern.',
     toolName: 'glob',
     rules: [
-      'Use glob to discover candidate files before read or patch.',
+      'Use glob to discover candidate files before read or edit.',
       'Constrain broad searches with max_results.',
     ],
   },
@@ -32,30 +43,27 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     ],
   },
   {
-    description: 'Apply precise line-level changes while keeping diffs reviewable.',
-    toolName: 'patch',
-    rules: [
-      'Why: use patch to make minimal, auditable edits instead of rewriting full files.',
-      'When: prefer patch for targeted updates where most of the file stays unchanged.',
-      'If the file has not been read in this conversation, read it first to confirm exact context before patching.',
-      'If the change is a full rewrite or generated content replacement, use write instead of patch.',
-      'Format: patch text must start with *** Begin Patch and end with *** End Patch.',
-      'Format: for updates, use *** Update File: <path> then @@ sections with context.',
-      'Format: inside update hunks, every line must begin with exactly one prefix: space (context), + (add), or - (remove).',
-      'Format: never include raw/unprefixed lines, markdown fences, narrative text, or unified-diff headers.',
-      'Example (valid minimal patch): *** Begin Patch | *** Update File: path/to/file.ts | @@ | - old line | + new line | *** End Patch',
-      'Preflight: verify file paths are correct and each hunk can be applied cleanly to current file contents.',
-    ],
-  },
-  {
     description: 'Write full file contents in one operation.',
     toolName: 'write',
     rules: [
-      'Why: use write when replacing an entire file is clearer and safer than constructing many patch hunks.',
-      'When: use write for new files, full rewrites, or generated outputs that should be replaced atomically.',
-      'If only a small region changes, prefer patch/edit to preserve history and reduce accidental deletions.',
-      'If writing an existing file, provide the complete final content, not partial snippets.',
-      'If uncertain about current contents, read first before write to avoid clobbering unrelated changes.',
+      'Use write when you know the complete final content for a file.',
+      'Provide absolute_path and full content.',
+      'Write replaces the file content entirely.',
+      'If only part of a file should change, prefer edit.',
+    ],
+  },
+  {
+    description: 'Apply robust, context-anchored targeted edits.',
+    toolName: 'edit',
+    rules: [
+      'Use edit for targeted mutations where only part of a file should change.',
+      'Edit payload shape: { "absolute_path": "...", ... }.',
+      'Replace operation: include old_string + new_string (+ optional replace_all).',
+      'When old_string is non-empty, read the file first and provide enough surrounding context for uniqueness.',
+      'If the tool reports multiple matches, expand old_string context or set replace_all: true.',
+      'For new files in replace mode, set old_string to an empty string and put full file text in new_string.',
+      'For multiple files, issue multiple edit calls (parallel calls are allowed across different paths).',
+      'Never emit pseudo tool calls in plain text (for example functions.edit:{...}); always invoke the tool directly.',
     ],
   },
   {

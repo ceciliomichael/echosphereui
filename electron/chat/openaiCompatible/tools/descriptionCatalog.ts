@@ -1,4 +1,12 @@
 const TOOL_DESCRIPTIONS = {
+  update_plan: `Create or update the active execution plan for this run.
+
+Usage guidelines:
+- Call this at the start of substantial multi-step work, then only when plan status changes.
+- Optional \`plan\`: short plan title.
+- Required \`steps\`: ordered objects with \`id\`, \`title\`, and \`status\`.
+- Status rules: exactly one \`in_progress\` while work remains; remaining items should be \`pending\` or \`completed\`.
+- Keep step ids stable across updates so progress tracking stays consistent.`,
   list: `List files and directories at an absolute path inside the workspace root.
 
 Usage guidelines:
@@ -21,7 +29,7 @@ Usage guidelines:
 - Provide \`pattern\` as a glob expression (for example \`**/*.ts\`).
 - Use \`max_results\` to limit returned matches for large trees.
 - Results exclude gitignored entries unless they are always-visible metadata files.
-- Use this to discover candidate files before \`read\` or \`patch\`.`,
+- Use this to discover candidate files before \`read\` or \`edit\`.`,
   grep: `Search file contents by pattern inside the workspace using ripgrep.
 
 Usage guidelines:
@@ -30,41 +38,25 @@ Usage guidelines:
 - Use \`case_sensitive\` when exact casing matters.
 - Use \`max_results\` to constrain very broad searches.
 - Use returned file paths and line numbers with \`read\` for follow-up context.`,
-  patch: `Apply structured file edits with a patch envelope under the workspace root.
+  edit: `Edit files with robust anchored replacements under the workspace root.
 
 Usage guidelines:
-- The patch must start with \`*** Begin Patch\` and end with \`*** End Patch\`.
-- Supported hunks: \`*** Add File:\`, \`*** Update File:\`, \`*** Delete File:\`, optional \`*** Move to:\`.
-- In an \`*** Update File:\` hunk, every change line must start with exactly one prefix: space (\` \`), plus (\`+\`), or minus (\`-\`).
-- Never include raw/unprefixed lines inside update hunks.
-- Patch preflight: before calling patch, verify each Update File hunk line begins with space/+/-. 
-- Empty lines are allowed only when prefixed (for example a blank added line is just \`+\`).
-- If you are inserting a line without deleting/replacing existing lines, prefix it with \`+\`.
-- If a line is unchanged context, prefix it with a leading space.
-- Send only patch text in the patch argument; do not include markdown fences or narrative text.
-- Do not include markdown fences, explanations, or unified-diff headers like \`@@ -1,3 +1,3 @@\`.
-- Use context markers as \`@@\` or \`@@ optional context text\`.
-- Prefer precise hunks that target the smallest necessary change.
-- Use \`read\` before patching to confirm context and avoid mismatches.
+- Provide one edit operation per call with \`absolute_path\`.
+- Replace mode: provide \`old_string\` and \`new_string\` (optional \`replace_all\`).
+- Full-write mode: provide \`content\` to set the entire file content.
+- Use \`read\` first so \`old_string\` includes enough context to uniquely match.
+- If multiple matches exist, make \`old_string\` more specific or set \`replace_all: true\`.
+- Matching is resilient to line endings, indentation shifts, whitespace differences, and escaped text.
+- For creating a new file with replace mode, use \`old_string: ""\` and \`new_string\` with the full file content.
+- For multiple files, issue multiple edit tool calls; path-exclusive scheduling allows safe parallelism.`,
+  write: `Write or overwrite a file at an absolute path inside the workspace root.
 
-Valid update hunk example:
-\`\`\`
-*** Begin Patch
-*** Update File: src/app.ts
-@@
--const version = 1
-+const version = 2
-*** End Patch
-\`\`\`
-
-Invalid update hunk example (will fail):
-\`\`\`
-*** Begin Patch
-*** Update File: src/app.ts
-@@
-const version = 2
-*** End Patch
-\`\`\``,
+Usage guidelines:
+- Provide \`absolute_path\` as an absolute file path.
+- Provide \`content\` as the full target file contents.
+- Existing files are overwritten in full.
+- Use \`write\` when you already know the complete final file content.
+- Use \`edit\` for targeted anchored replacements.`,
   exec_command: `Run a shell command in a managed terminal session and return output.
 
 Usage guidelines:
@@ -81,14 +73,6 @@ Usage guidelines:
 - Send an empty \`chars\` string to poll output without new input.
 - Use \`yield_time_ms\` and \`max_output_tokens\` to control output size and wait time.
 - Repeat calls while \`commandRunning\` is true.`,
-  write: `Write or overwrite a file at an absolute path inside the workspace root.
-
-Usage guidelines:
-- Provide \`absolute_path\` as an absolute file path.
-- Provide \`content\` as the full target file contents.
-- Existing files are overwritten in full; this tool does not apply partial edits.
-- Prefer \`patch\` for targeted modifications to existing files.
-- Use \`read\` before writing when preserving unrelated content matters.`,
 } as const
 
 export type OpenAICompatibleToolDescriptionName = keyof typeof TOOL_DESCRIPTIONS

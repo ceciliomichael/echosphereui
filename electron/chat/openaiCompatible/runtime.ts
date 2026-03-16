@@ -23,13 +23,16 @@ import {
 } from '../providers/openaiShared'
 import { buildReplayableMessageHistory } from './messageHistory'
 import { collectToolCalls, type ToolCallAccumulator, toToolCallList } from './toolCallStreaming'
-import { createHydratedToolExecutionTurnState, createToolExecutionScheduler } from './toolExecution'
+import { shouldRecoverFromTextOnlyToolTurn } from './toolRecovery'
+import { createHydratedToolExecutionTurnState, createToolExecutionScheduler, resolveWorkflowTurnToolChoice } from './toolExecution'
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import type { OpenAICompatibleToolCall } from './toolTypes'
+import { appendWorkflowPlanContextMessage } from './workflowPlanContext'
 
 interface StreamOpenAICompatibleResponseInput {
   agentContextRootPath: string
   chatMode: ChatMode
+  forceToolChoice?: 'none' | 'required'
   messages: Message[]
   modelId: string
   reasoningEffort: ReasoningEffort
@@ -161,6 +164,7 @@ async function buildOpenAICompatibleCompletionRequest(
     store: false,
     stream: true,
     tools: getOpenAICompatibleToolDefinitions().map((toolDefinition) => toolDefinition.tool),
+    ...(request.forceToolChoice ? { tool_choice: request.forceToolChoice } : {}),
   }
 
   if (includeReasoningEffort) {
@@ -238,6 +242,15 @@ function buildInMemoryAssistantMessage(content: string): Message {
   }
 }
 
+function buildInMemoryUserMessage(content: string): Message {
+  return {
+    content,
+    id: randomUUID(),
+    role: 'user',
+    timestamp: Date.now(),
+  }
+}
+
 export async function streamOpenAICompatibleResponseWithTools(
   client: ReturnType<typeof buildOpenAIClient>,
   request: StreamOpenAICompatibleResponseInput,
@@ -251,15 +264,23 @@ export async function streamOpenAICompatibleResponseWithTools(
     inMemoryMessages,
     turnState,
   })
+  let pseudoToolCallRecoveryAttempted = false
+  let missingRequiredToolCallRecoveryCount = 0
 
   while (!context.signal.aborted) {
-    const replayableMessagesForTurn = buildReplayableMessageHistory(inMemoryMessages)
+    const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
+    const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
+    const replayableMessagesForTurn = appendWorkflowPlanContextMessage(
+      buildReplayableMessageHistory(inMemoryMessages),
+      turnState,
+    )
     const scheduledToolCallIds = new Set<string>()
     const turnResult = await streamOpenAICompatibleTurn(
       client,
       {
         agentContextRootPath: request.agentContextRootPath,
         chatMode: request.chatMode,
+        forceToolChoice: forcedToolChoiceForTurn,
         messages: replayableMessagesForTurn,
         modelId: request.modelId,
         reasoningEffort: request.reasoningEffort,
@@ -274,8 +295,37 @@ export async function streamOpenAICompatibleResponseWithTools(
     )
 
     if (turnResult.toolCalls.length === 0) {
+      if (forcedToolChoiceForTurn === 'required' && missingRequiredToolCallRecoveryCount < 2) {
+        missingRequiredToolCallRecoveryCount += 1
+        if (turnResult.assistantContent.trim().length > 0) {
+          inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
+        }
+        inMemoryMessages.push(
+          buildInMemoryUserMessage(
+            'You have incomplete tasks. Continue your work on the current in_progress task. Use update_plan only when task statuses change.',
+          ),
+        )
+        continue
+      }
+
+      if (
+        !pseudoToolCallRecoveryAttempted &&
+        shouldRecoverFromTextOnlyToolTurn(turnResult.assistantContent) &&
+        turnResult.assistantContent.trim().length > 0
+      ) {
+        pseudoToolCallRecoveryAttempted = true
+        inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
+        inMemoryMessages.push(
+          buildInMemoryUserMessage(
+            'System notice: You output pseudo tool-call text. Do not describe tool calls in text. Invoke the appropriate tool directly.',
+          ),
+        )
+        continue
+      }
+
       return
     }
+    missingRequiredToolCallRecoveryCount = 0
 
     if (turnResult.assistantContent.trim().length > 0) {
       inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))

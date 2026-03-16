@@ -4,6 +4,7 @@ import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { parseUpdatePlanResultBody, UpdatePlanResult } from './UpdatePlanResult'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
@@ -112,6 +113,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     invocation.resultContent ??
     ''
   const readResultPresentation = invocation.toolName === 'read' ? parseReadToolResult(resultBody) : null
+  const updatePlanResultPresentation = invocation.toolName === 'update_plan' ? parseUpdatePlanResultBody(resultBody) : null
   const readResultDisplayPath =
     workspaceRootPath && readResultPresentation
       ? getRelativeDisplayPath(workspaceRootPath, readResultPresentation.filePath)
@@ -176,6 +178,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
                 showCopyButton={false}
               />
             </div>
+          ) : updatePlanResultPresentation ? (
+            <UpdatePlanResult parsedResult={updatePlanResultPresentation} />
           ) : (
             <MarkdownRenderer
               content={resultBody}

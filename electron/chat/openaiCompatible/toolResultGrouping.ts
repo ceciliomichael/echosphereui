@@ -67,7 +67,7 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       latestInspectionStateByKey.set(inspectionStateKey, inspectionStateLine)
     }
 
-    if (metadata.toolName !== 'patch' && metadata.toolName !== 'write') {
+    if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
       continue
     }
 
@@ -95,16 +95,16 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   }
 
   const latestMutationStateLines = Array.from(latestMutationStateByPath.values()).map((entry) => {
-    if (entry.toolName === 'patch') {
-      if (entry.operation === 'noop') {
-        return `- ${entry.path} already matched the requested patch outcome and remains unchanged.`
-      }
-
-      return `- ${entry.path} now reflects the latest successful patch changes.`
-    }
-
     if (entry.toolName === 'write') {
       return `- ${entry.path} now reflects the latest successful write changes.`
+    }
+
+    if (entry.toolName === 'edit') {
+      if (entry.operation === 'noop') {
+        return `- ${entry.path} already matched the requested edit outcome and remains unchanged.`
+      }
+
+      return `- ${entry.path} now reflects the latest successful edit changes.`
     }
 
     const operationSuffix = entry.operation ? ` (${entry.operation})` : ''
