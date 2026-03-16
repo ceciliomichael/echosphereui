@@ -50,7 +50,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.artifact_name }}
-          path: release/**/*
+          path: |
+            release/**/*.AppImage
+            release/**/*-Setup.exe
+            release/**/*.dmg
+            release/**/*.blockmap
+            release/**/latest*.yml
+            release/**/app-update.yml
           if-no-files-found: error
 
   publish:
@@ -73,10 +79,9 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            release-artifacts/**/*.exe
+            release-artifacts/**/*-Setup.exe
             release-artifacts/**/*.dmg
             release-artifacts/**/*.AppImage
-            release-artifacts/**/*.zip
-            release-artifacts/**/*.yml
-            release-artifacts/**/*.yaml
             release-artifacts/**/*.blockmap
+            release-artifacts/**/latest*.yml
+            release-artifacts/**/app-update.yml
