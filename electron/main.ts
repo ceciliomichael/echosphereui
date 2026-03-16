@@ -9,6 +9,7 @@ import {
   type BrowserWindowConstructorOptions,
   type OpenDialogOptions,
 } from 'electron'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import type {
@@ -138,6 +139,7 @@ async function createWindow() {
   const initialBounds = getInitialWindowBounds()
   const initialSettings = await getStoredSettings().catch(() => null)
   const initialAppearance = initialSettings?.appearance ?? 'system'
+  const appIconPath = path.join(process.env.APP_ROOT, 'public', 'logo', 'icon.svg')
   syncNativeThemeSource(initialAppearance)
   const windowOptions: BrowserWindowConstructorOptions = {
     autoHideMenuBar: true,
@@ -154,6 +156,10 @@ async function createWindow() {
       additionalArguments: initialSettings ? [serializeInitialSettingsArg(initialSettings)] : [],
       preload: path.join(__dirname, 'preload.mjs'),
     },
+  }
+
+  if (existsSync(appIconPath)) {
+    windowOptions.icon = appIconPath
   }
 
   if (process.platform === 'win32' || process.platform === 'linux') {

@@ -7,7 +7,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && vite build",
+    "icons:generate": "node ./scripts/generate-electron-icons.mjs",
+    "dist": "npm run build && npm run icons:generate && electron-builder",
+    "dist:win": "npm run build && npm run icons:generate && electron-builder --win --x64",
+    "dist:linux": "npm run build && npm run icons:generate && electron-builder --linux AppImage --x64",
+    "dist:mac": "npm run build && npm run icons:generate && electron-builder --mac dmg",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts tests/codex/*.test.ts"
@@ -45,6 +51,8 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.5",
     "tsx": "^4.21.0",
     "typescript": "^5.2.2",
     "vite": "^5.1.6",

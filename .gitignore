@@ -21,6 +21,7 @@ coverage
 node_modules
 
 # Build and packaging outputs
+build
 dist
 dist-ssr
 dist-electron
