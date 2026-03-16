@@ -1,12 +1,20 @@
 import { memo, useLayoutEffect, useRef } from 'react'
 import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
-import type { AssistantWaitingIndicatorVariant, ChatAttachment, ChatMode, Message, ReasoningEffort } from '../types/chat'
+import type {
+  AssistantWaitingIndicatorVariant,
+  ChatAttachment,
+  ChatMode,
+  Message,
+  ReasoningEffort,
+  ToolInvocationTrace,
+} from '../types/chat'
 import { AssistantMessage } from './AssistantMessage'
 import { ChatInput } from './ChatInput'
 import { UserMessage } from './UserMessage'
 import type { ChatModeOption } from './chat/ChatModeSelectorField'
 import type { ModelSelectorOption } from './chat/ModelSelectorField'
+import type { ToolDecisionSubmission } from './chat/ToolDecisionRequestCard'
 
 interface MessageListProps {
   chatModeOptions?: readonly ChatModeOption[]
@@ -22,6 +30,7 @@ interface MessageListProps {
   onAbortStreamingResponse?: () => void
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
   onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
@@ -56,6 +65,7 @@ interface MessageRowProps {
   onAbortStreamingResponse?: () => void
   onCancelEditingMessage: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
   onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
   onComposerValueChange: (value: string) => void
   onEditUserMessage?: (messageId: string) => void
@@ -90,6 +100,7 @@ const MessageRow = memo(
     onAbortStreamingResponse,
     onCancelEditingMessage,
     onChatModeChange,
+    onToolDecisionSubmit,
     onComposerAttachmentsChange,
     onComposerValueChange,
     onEditUserMessage,
@@ -157,6 +168,9 @@ const MessageRow = memo(
           <AssistantMessage
             content={message.content}
             isStreaming={isStreaming}
+            onToolDecisionSubmit={(invocation, submission) => {
+              onToolDecisionSubmit?.(invocation, submission)
+            }}
             reasoningCompletedAt={message.reasoningCompletedAt}
             reasoningContent={message.reasoningContent}
             timestamp={message.timestamp}
@@ -221,6 +235,7 @@ export function MessageList({
   onSendEditedMessage,
   onCancelEditingMessage,
   onChatModeChange,
+  onToolDecisionSubmit,
   composerFocusSignal,
   isSending = false,
   selectedChatMode,
@@ -285,6 +300,7 @@ export function MessageList({
             onAbortStreamingResponse={onAbortStreamingResponse}
             onCancelEditingMessage={onCancelEditingMessage}
             onChatModeChange={onChatModeChange}
+            onToolDecisionSubmit={onToolDecisionSubmit}
             onComposerAttachmentsChange={onComposerAttachmentsChange}
             onComposerValueChange={onComposerValueChange}
             onEditUserMessage={onEditUserMessage}

@@ -4,6 +4,7 @@ import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
 import { parseUpdatePlanResultBody, UpdatePlanResult } from './UpdatePlanResult'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
@@ -11,6 +12,10 @@ import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
   invocation: ToolInvocationTrace
+  onToolDecisionSubmit?: (
+    invocation: ToolInvocationTrace,
+    submission: ToolDecisionSubmission,
+  ) => void
   workspaceRootPath?: string | null
 }
 
@@ -72,10 +77,31 @@ function renderDiffCountSummary(invocation: ToolInvocationTrace) {
 
 export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   invocation,
+  onToolDecisionSubmit,
   workspaceRootPath = null,
 }: ToolInvocationBlockProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [submittedDecisionRequestKey, setSubmittedDecisionRequestKey] = useState<string | null>(null)
   const [displayedState, setDisplayedState] = useState<ToolInvocationTrace['state']>(invocation.state)
+  const decisionRequestKey = invocation.decisionRequest
+    ? [
+        invocation.id,
+        invocation.decisionRequest.streamId,
+        invocation.decisionRequest.kind,
+        invocation.decisionRequest.options.map((option) => option.id).join(','),
+      ].join(':')
+    : null
+
+  useEffect(() => {
+    const hasUnsubmittedDecisionRequest =
+      decisionRequestKey !== null && decisionRequestKey !== submittedDecisionRequestKey
+    const shouldAutoOpenReadyImplementCompletion =
+      invocation.toolName === 'ready_implement' && invocation.state === 'completed' && submittedDecisionRequestKey === null
+
+    if (hasUnsubmittedDecisionRequest || shouldAutoOpenReadyImplementCompletion) {
+      setIsOpen(true)
+    }
+  }, [decisionRequestKey, invocation.state, invocation.toolName, submittedDecisionRequestKey])
 
   useEffect(() => {
     if (invocation.state === 'running') {
@@ -101,7 +127,9 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     }
   }, [invocation.startedAt, invocation.state])
 
+  const hasPendingDecision = invocation.decisionRequest !== undefined
   const isRunning = displayedState === 'running'
+  const disableHeaderToggle = isRunning && !hasPendingDecision
   const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState, workspaceRootPath)
   const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
@@ -123,9 +151,9 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     <div className="w-full">
       <button
         type="button"
-        disabled={isRunning}
+        disabled={disableHeaderToggle}
         onClick={() => {
-          if (isRunning) {
+          if (disableHeaderToggle) {
             return
           }
 
@@ -133,14 +161,14 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
         }}
         className={[
           'group flex items-center gap-1 text-sm text-muted-foreground transition-colors',
-          isRunning ? 'cursor-default opacity-90' : 'hover:text-foreground',
+          disableHeaderToggle ? 'cursor-default opacity-90' : 'hover:text-foreground',
         ].join(' ')}
       >
         <span className={`inline-flex items-center gap-1.5 ${isRunning ? 'thinking-shimmer' : ''}`}>
           <span>{headerLabel}</span>
           {diffCountSummary ? <span className="inline-flex items-center gap-1">{diffCountSummary}</span> : null}
         </span>
-        {!isRunning ? (
+        {!disableHeaderToggle ? (
           <ChevronRight
             className={[
               'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
@@ -188,6 +216,25 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               preserveLineBreaks={shouldPreserveLineBreaks}
             />
           )}
+        </div>
+      ) : null}
+
+      {isOpen && invocation.decisionRequest ? (
+        <div className="mt-1.5 w-full text-sm text-muted-foreground/90">
+          <ToolDecisionRequestCard
+            onSubmit={(submission) => {
+              if (!onToolDecisionSubmit) {
+                return
+              }
+
+              setIsOpen(false)
+              if (decisionRequestKey) {
+                setSubmittedDecisionRequestKey(decisionRequestKey)
+              }
+              onToolDecisionSubmit(invocation, submission)
+            }}
+            request={invocation.decisionRequest}
+          />
         </div>
       ) : null}
     </div>

@@ -42,6 +42,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
   >(persistedRevertEditSessionsByConversation)
   const revertEditSessionsRef = useRef<Record<string, RevertEditSession>>(persistedRevertEditSessionsByConversation)
   const resumeSessionKeyRef = useRef<string | null>(null)
+  const syncedConversationModeIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     revertEditSessionsRef.current = persistedRevertEditSessionsByConversation
@@ -104,6 +105,26 @@ export function useChatMessages(input: UseChatMessagesInput) {
     setError: sessionState.setError,
     upsertConversation: sessionState.upsertConversation,
   })
+
+  useEffect(() => {
+    const activeConversationId = sessionState.activeConversationId
+    if (!activeConversationId) {
+      syncedConversationModeIdRef.current = null
+      return
+    }
+
+    if (syncedConversationModeIdRef.current === activeConversationId) {
+      return
+    }
+
+    syncedConversationModeIdRef.current = activeConversationId
+    const activeConversationChatMode = sessionState.activeConversationChatMode
+    if (!activeConversationChatMode) {
+      return
+    }
+
+    setDraftChatMode(activeConversationChatMode)
+  }, [sessionState.activeConversationChatMode, sessionState.activeConversationId])
 
   const beginRevertEditingMessage = useCallback(
     (conversationId: string, messageId: string, redoCheckpointId: string) => {
@@ -307,6 +328,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     revertUserMessage: sendActions.revertUserMessage,
     sendEditedMessage: sendActions.sendEditedMessage,
     sendNewMessage: sendActions.sendNewMessage,
+    sendProgrammaticMessage: sendActions.sendProgrammaticMessage,
   }
 }
 

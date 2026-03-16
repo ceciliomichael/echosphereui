@@ -115,9 +115,5 @@ export function resolveWorkflowTurnToolChoice(turnState: ToolExecutionTurnState)
     return 'auto'
   }
 
-  if (workflowPlan.allStepsCompleted) {
-    return 'none'
-  }
-
   return 'auto'
 }

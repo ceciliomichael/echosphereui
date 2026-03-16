@@ -158,7 +158,7 @@ async function buildOpenAICompatibleCompletionRequest(
     parallel_tool_calls: true,
     store: false,
     stream: true,
-    tools: getOpenAICompatibleToolDefinitions().map((toolDefinition) => toolDefinition.tool),
+    tools: getOpenAICompatibleToolDefinitions(request.chatMode).map((toolDefinition) => toolDefinition.tool),
     ...(request.forceToolChoice ? { tool_choice: request.forceToolChoice } : {}),
   }
 

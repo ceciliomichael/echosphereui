@@ -88,8 +88,8 @@ function toResponsesToolChoice(forceToolChoice: 'none' | 'required' | undefined)
   return forceToolChoice
 }
 
-function buildResponsesTools() {
-  return getCodexToolDefinitions().map((toolDefinition) => ({
+function buildResponsesTools(chatMode: StreamOpenAICompatibleResponseInput['chatMode']) {
+  return getCodexToolDefinitions(chatMode).map((toolDefinition) => ({
     ...toolDefinition,
     strict: false,
   }))
@@ -119,7 +119,7 @@ async function buildOpenAICompatibleResponsesStreamRequest(
     store: false,
     stream: true,
     tool_choice: toResponsesToolChoice(request.forceToolChoice),
-    tools: buildResponsesTools(),
+    tools: buildResponsesTools(request.chatMode),
     truncation: 'auto',
   }
 }

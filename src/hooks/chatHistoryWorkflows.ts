@@ -186,6 +186,7 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
 
     const rewrittenMessages = [...currentConversation.messages.slice(0, targetMessageIndex), userMessage]
     const conversation = await window.echosphereHistory.replaceMessages({
+      chatMode: input.chatMode,
       conversationId: currentConversation.id,
       messages: rewrittenMessages,
       title:
@@ -227,6 +228,7 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
     runCheckpoint,
   )
   const conversation = await window.echosphereHistory.appendMessages({
+    chatMode: input.chatMode,
     conversationId,
     messages: [userMessage],
     title: shouldUpdateTitle ? getConversationTitleFromInput(input.trimmedText, input.attachments) : undefined,

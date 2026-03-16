@@ -1,4 +1,4 @@
-import type { Message } from '../../../src/types/chat'
+import type { ChatMode, Message } from '../../../src/types/chat'
 import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
 import { getOpenAICompatibleToolDefinition } from './toolRegistry'
 import { buildFailedToolArtifacts, buildSuccessfulToolArtifacts } from './toolResultFormatter'
@@ -20,15 +20,18 @@ export type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 interface ToolExecutionSchedulerInput {
   agentContextRootPath: string
+  chatMode?: ChatMode
   context: ProviderStreamContext
+  getChatMode?: () => ChatMode
   inMemoryMessages: Message[]
+  onChatModeChange?: (nextMode: ChatMode) => void
   turnState: ToolExecutionTurnState
 }
 
 interface ToolExecutionSchedulerDependencies {
   executeToolCall?: typeof executeToolCallWithPolicies
-  resolveExecutionMode?: (toolName: string) => OpenAICompatibleToolExecutionMode
-  resolveExecutionResourceKey?: (toolCall: OpenAICompatibleToolCall) => string | null
+  resolveExecutionMode?: (toolName: string, chatMode: ChatMode) => OpenAICompatibleToolExecutionMode
+  resolveExecutionResourceKey?: (toolCall: OpenAICompatibleToolCall, chatMode: ChatMode) => string | null
 }
 
 export interface ToolExecutionScheduler {
@@ -70,8 +73,11 @@ function emitFailureEvent(
   inMemoryMessages.push(failedArtifacts.syntheticMessage)
 }
 
-export function resolveToolExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
-  return getOpenAICompatibleToolDefinition(toolName)?.executionMode ?? 'exclusive'
+export function resolveToolExecutionMode(
+  toolName: string,
+  chatMode: ChatMode,
+): OpenAICompatibleToolExecutionMode {
+  return getOpenAICompatibleToolDefinition(toolName, chatMode)?.executionMode ?? 'exclusive'
 }
 
 export function createHydratedToolExecutionTurnState(messages: Message[], agentContextRootPath: string) {
@@ -83,6 +89,15 @@ export function createHydratedToolExecutionTurnState(messages: Message[], agentC
 function normalizeExecutionResourceKey(absolutePath: string) {
   const normalizedPath = absolutePath.replace(/\\/g, '/')
   return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
+}
+
+function readNextChatMode(semanticResult: Record<string, unknown>): ChatMode | null {
+  const nextChatMode = semanticResult.nextChatMode
+  if (nextChatMode === 'agent' || nextChatMode === 'plan') {
+    return nextChatMode
+  }
+
+  return null
 }
 
 interface NormalizedWorkflowStepSnapshot {
@@ -213,8 +228,8 @@ function buildNoopUpdatePlanResult(snapshot: NormalizedWorkflowPlanSnapshot): No
   }
 }
 
-export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall) {
-  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
+export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall, chatMode: ChatMode) {
+  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
   if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
     return null
   }
@@ -236,15 +251,26 @@ export async function executeToolCallWithPolicies(
   toolCall: OpenAICompatibleToolCall,
   context: ProviderStreamContext,
   agentContextRootPath: string,
-  inMemoryMessages: Message[],
-  turnState: ToolExecutionTurnState,
+  chatModeOrInMemoryMessages: ChatMode | Message[],
+  inMemoryMessagesOrTurnState: Message[] | ToolExecutionTurnState,
+  maybeTurnState?: ToolExecutionTurnState,
+  onChatModeChange?: (nextMode: ChatMode) => void,
 ) {
-  void turnState
+  const chatMode = typeof chatModeOrInMemoryMessages === 'string' ? chatModeOrInMemoryMessages : 'agent'
+  const inMemoryMessages = Array.isArray(chatModeOrInMemoryMessages)
+    ? chatModeOrInMemoryMessages
+    : (inMemoryMessagesOrTurnState as Message[])
+  const turnState = Array.isArray(chatModeOrInMemoryMessages)
+    ? (inMemoryMessagesOrTurnState as ToolExecutionTurnState)
+    : maybeTurnState
+
+  const ensuredTurnState = turnState ?? createToolExecutionTurnState()
+
   const startedAt = toolCall.startedAt
-  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
+  const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
 
   if (!toolDefinition) {
-    emitFailureEvent(toolCall, context, inMemoryMessages, `Unsupported tool: ${toolCall.name}`, startedAt)
+    emitFailureEvent(toolCall, context, inMemoryMessages, 'Unsupported tool in the current mode.', startedAt)
     return
   }
 
@@ -258,13 +284,13 @@ export async function executeToolCallWithPolicies(
     return
   }
 
-  if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(turnState, argumentsValue)) {
+  if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(ensuredTurnState, argumentsValue)) {
     const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
     if (incomingPlan) {
       const completedAt = Date.now()
       const noopResult = buildNoopUpdatePlanResult(incomingPlan)
       const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, noopResult, startedAt, completedAt)
-      recordSuccessfulToolExecution(toolCall, argumentsValue, noopResult, agentContextRootPath, turnState)
+      recordSuccessfulToolExecution(toolCall, argumentsValue, noopResult, agentContextRootPath, ensuredTurnState)
 
       context.emitDelta({
         argumentsText: successfulArtifacts.toolInvocation.argumentsText,
@@ -285,14 +311,29 @@ export async function executeToolCallWithPolicies(
   try {
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
+      requestUserDecision: context.awaitUserDecision
+        ? (input) =>
+            context.awaitUserDecision?.({
+              allowCustomAnswer: input.allowCustomAnswer,
+              invocationId: toolCall.id,
+              kind: input.kind,
+              options: input.options,
+              prompt: input.prompt,
+              toolName: toolCall.name,
+            }) ?? Promise.reject(new Error('User decision support is unavailable in this runtime context.'))
+        : undefined,
       signal: context.signal,
       streamId: context.streamId,
       terminalExecutionMode: context.terminalExecutionMode,
       workspaceCheckpointId: context.workspaceCheckpointId,
     })
+    const nextChatMode = readNextChatMode(semanticResult)
+    if (nextChatMode) {
+      onChatModeChange?.(nextChatMode)
+    }
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
-    recordSuccessfulToolExecution(toolCall, argumentsValue, semanticResult, agentContextRootPath, turnState)
+    recordSuccessfulToolExecution(toolCall, argumentsValue, semanticResult, agentContextRootPath, ensuredTurnState)
 
     context.emitDelta({
       argumentsText: successfulArtifacts.toolInvocation.argumentsText,
@@ -320,6 +361,12 @@ export function createToolExecutionScheduler(
   const executeToolCall = dependencies.executeToolCall ?? executeToolCallWithPolicies
   const resolveExecutionMode = dependencies.resolveExecutionMode ?? resolveToolExecutionMode
   const resolveExecutionResourceKey = dependencies.resolveExecutionResourceKey ?? resolveToolExecutionResourceKey
+  const getCurrentChatMode =
+    input.getChatMode ??
+    (() => {
+      const resolvedChatMode = input.chatMode
+      return resolvedChatMode === 'plan' ? 'plan' : 'agent'
+    })
   let exclusiveBarrier: Promise<void> = Promise.resolve()
   const activeNonExclusiveExecutions = new Set<Promise<void>>()
   const resourceBarriers = new Map<string, Promise<void>>()
@@ -342,7 +389,8 @@ export function createToolExecutionScheduler(
   }
 
   function schedule(toolCall: OpenAICompatibleToolCall) {
-    const executionMode = resolveExecutionMode(toolCall.name)
+    const currentChatMode = getCurrentChatMode()
+    const executionMode = resolveExecutionMode(toolCall.name, currentChatMode)
     if (executionMode === 'parallel') {
       return trackExecution(
         exclusiveBarrier.then(() =>
@@ -350,8 +398,10 @@ export function createToolExecutionScheduler(
             toolCall,
             input.context,
             input.agentContextRootPath,
+            currentChatMode,
             input.inMemoryMessages,
             input.turnState,
+            input.onChatModeChange,
           ),
         ),
         activeNonExclusiveExecutions,
@@ -359,7 +409,7 @@ export function createToolExecutionScheduler(
     }
 
     if (executionMode === 'path-exclusive') {
-      const resourceKey = resolveExecutionResourceKey(toolCall)
+      const resourceKey = resolveExecutionResourceKey(toolCall, currentChatMode)
       if (resourceKey) {
         const resourceBarrier = resourceBarriers.get(resourceKey) ?? Promise.resolve()
         const resourceExecution = exclusiveBarrier
@@ -369,8 +419,10 @@ export function createToolExecutionScheduler(
               toolCall,
               input.context,
               input.agentContextRootPath,
+              getCurrentChatMode(),
               input.inMemoryMessages,
               input.turnState,
+              input.onChatModeChange,
             ),
           )
 
@@ -397,8 +449,10 @@ export function createToolExecutionScheduler(
           toolCall,
           input.context,
           input.agentContextRootPath,
+          getCurrentChatMode(),
           input.inMemoryMessages,
           input.turnState,
+          input.onChatModeChange,
         ),
       )
 

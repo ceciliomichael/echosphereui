@@ -21,7 +21,7 @@ interface FolderStoreDocument {
 }
 
 function normalizeChatMode(value: unknown): ChatMode {
-  return value === 'agent' ? 'agent' : 'agent'
+  return value === 'plan' ? 'plan' : 'agent'
 }
 
 function isToolInvocationResultPresentation(value: unknown): value is ToolInvocationResultPresentation {

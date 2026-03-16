@@ -27,7 +27,7 @@ async function ensureVirtualAgentContextDirectory(conversationId: string) {
 }
 
 async function resolveAgentContextRootPath(conversationId: string, folderId: string | null, chatMode: ChatMode) {
-  if (chatMode !== 'agent') {
+  if (chatMode !== 'agent' && chatMode !== 'plan') {
     return ensureVirtualAgentContextDirectory(conversationId)
   }
 
@@ -219,6 +219,7 @@ export async function appendStoredMessages(input: AppendConversationMessagesInpu
 
   const nextConversation: ConversationRecord = {
     ...existingConversation,
+    chatMode: input.chatMode ?? existingConversation.chatMode,
     title: nextTitle,
     updatedAt:
       uniqueMessages.at(-1)?.timestamp ?? (hasTitleChange ? Date.now() : existingConversation.updatedAt),
@@ -245,6 +246,7 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
 
   const nextConversation: ConversationRecord = {
     ...existingConversation,
+    chatMode: input.chatMode ?? existingConversation.chatMode,
     title: input.title?.trim() ? input.title.trim() : existingConversation.title,
     updatedAt: input.messages.at(-1)?.timestamp ?? Date.now(),
     messages: input.messages,

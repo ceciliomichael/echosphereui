@@ -9,10 +9,29 @@ Usage guidelines:
 - Keep step ids stable across updates so progress tracking stays consistent.
 - Do not resend an identical \`steps\` array; execute work first, then update statuses.
 - Payload template: \`{"plan":"default","steps":[{"id":"inspect","title":"Inspect files","status":"in_progress"},{"id":"edit","title":"Apply edits","status":"pending"}]}\`.`,
+  ready_implement: `Ask for explicit user approval before implementation begins.
+
+Usage guidelines:
+- Call this only after presenting the implementation plan and updating plan steps via \`update_plan\`.
+- Optional fields: \`prompt\`, \`yes_label\`, and \`no_label\`.
+- The tool renders a user-facing choice gate and waits for user decision.
+- If the user chooses yes, continue in Agent mode and implement the approved plan.
+- If the user chooses no, refine the plan based on feedback and call this again after updating the plan.`,
+  ask_question: `Ask the user a focused planning question with predefined answer options.
+
+Usage guidelines:
+- Provide \`question\` as a concise planning question.
+- Provide \`options\` with 2 or 3 choices (each with \`id\` and \`label\`).
+- \`options\` is required; each option must be an object like \`{"id":"option_a","label":"Option A"}\`.
+- Valid payload example: \`{"question":"Which layout should we use?","options":[{"id":"keep","label":"Keep existing layout"},{"id":"new","label":"Add a new section"}],"allow_custom_answer":true}\`.
+- Optional \`allow_custom_answer\` controls whether free-form user input is allowed (default: true).
+- Use this only when a missing decision materially affects implementation correctness or scope.
+- Ask one question per call and avoid bundling unrelated decisions.`,
   list: `List files and directories at an absolute path inside the workspace root.
 
 Usage guidelines:
 - Provide \`absolute_path\` as an absolute directory path.
+- Path chaining rule: if \`<cwd>/src\` succeeded, list child folders as \`<cwd>/src/app\` (not just \`app\`).
 - Use \`limit\` to cap returned entries when listing large directories.
 - Results are sorted and filtered to hide gitignored entries by default.
 - The system prompt may include only a folder tree for context; use \`list\` to discover exact file names before \`read\`, \`edit\`, or \`write\`.
@@ -29,6 +48,7 @@ Usage guidelines:
 
 Usage guidelines:
 - Provide \`absolute_path\` as an absolute file or directory search root.
+- Use an existing root from prior tool output (typically \`<cwd>\` or a previously listed subdirectory).
 - Provide \`pattern\` as a glob expression (for example \`**/*.ts\`).
 - Use \`max_results\` to limit returned matches for large trees.
 - Results exclude gitignored entries unless they are always-visible metadata files.
@@ -37,6 +57,7 @@ Usage guidelines:
 
 Usage guidelines:
 - Provide \`absolute_path\` as an absolute file or directory search root.
+- Use an existing root from prior tool output (typically \`<cwd>\` or a previously listed subdirectory).
 - Provide \`pattern\` as a fixed string by default; set \`is_regex\` for regex mode.
 - Use \`case_sensitive\` when exact casing matters.
 - Use \`max_results\` to constrain very broad searches.

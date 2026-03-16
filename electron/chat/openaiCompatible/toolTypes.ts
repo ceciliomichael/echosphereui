@@ -1,5 +1,5 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions/completions'
-import type { AppTerminalExecutionMode } from '../../../src/types/chat'
+import type { AppTerminalExecutionMode, ToolDecisionKind, ToolDecisionOption } from '../../../src/types/chat'
 
 export interface OpenAICompatibleToolCall {
   argumentsText: string
@@ -12,6 +12,17 @@ export type OpenAICompatibleToolExecutionMode = 'exclusive' | 'parallel' | 'path
 
 export interface OpenAICompatibleToolExecutionContext {
   agentContextRootPath: string
+  requestUserDecision?: (input: {
+    allowCustomAnswer: boolean
+    kind: ToolDecisionKind
+    options: ToolDecisionOption[]
+    prompt: string
+  }) => Promise<{
+    answerText: string
+    selectedOptionId: string | null
+    selectedOptionLabel: string | null
+    usedCustomAnswer: boolean
+  }>
   signal: AbortSignal
   streamId: string
   terminalExecutionMode: AppTerminalExecutionMode

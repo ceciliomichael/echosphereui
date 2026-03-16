@@ -41,7 +41,7 @@ interface CreateChatAssistantDraftManagerInput {
 function buildToolInvocationState(
   invocationId: string,
   nextValue:
-    | Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>
+    | Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName' | 'decisionRequest'>
     | Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
   currentValue: ToolInvocationTrace | null,
   message: Message,
@@ -50,9 +50,17 @@ function buildToolInvocationState(
   return {
     argumentsText: nextValue.argumentsText,
     ...(state === 'running'
-      ? {}
+      ? {
+          decisionRequest:
+            'decisionRequest' in nextValue
+              ? nextValue.decisionRequest
+              : (currentValue?.decisionRequest ?? undefined),
+          resultContent: currentValue?.resultContent,
+          resultPresentation: currentValue?.resultPresentation,
+        }
       : {
           completedAt: (nextValue as Pick<ToolInvocationTrace, 'completedAt'>).completedAt,
+          decisionRequest: undefined,
           resultContent: (nextValue as Pick<ToolInvocationTrace, 'resultContent'>).resultContent,
           resultPresentation: (nextValue as Pick<ToolInvocationTrace, 'resultPresentation'>).resultPresentation,
         }),
@@ -260,7 +268,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     invocationId: string,
     state: ToolInvocationTrace['state'],
     nextValue:
-      | Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>
+      | Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName' | 'decisionRequest'>
       | Pick<ToolInvocationTrace, 'argumentsText' | 'completedAt' | 'resultContent' | 'resultPresentation' | 'toolName'>,
     options?: { immediate?: boolean },
   ) => {
@@ -342,6 +350,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
         ...message,
         toolInvocations: upsertToolInvocation(message.toolInvocations ?? [], invocationId, (currentValue) => ({
           argumentsText: nextValue.argumentsText,
+          decisionRequest: currentValue?.decisionRequest,
           id: invocationId,
           resultContent: currentValue?.resultContent,
           resultPresentation: currentValue?.resultPresentation,
@@ -350,6 +359,30 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
           toolName: nextValue.toolName,
         })),
       }), undefined, { deltaCharCount })
+    },
+    handleToolInvocationDecisionRequested(
+      invocationId: string,
+      nextValue: Pick<ToolInvocationTrace, 'toolName' | 'decisionRequest'>,
+    ) {
+      input.stopTextStreaming(input.conversationId)
+      const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
+      toolInvocationMessageIds.set(invocationId, draftAssistantId)
+      const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
+      const currentInvocation =
+        draftAssistantMessage.toolInvocations?.find((invocation) => invocation.id === invocationId) ?? null
+
+      updateToolInvocation(
+        draftAssistantId,
+        invocationId,
+        'running',
+        {
+          argumentsText: currentInvocation?.argumentsText ?? '',
+          decisionRequest: nextValue.decisionRequest,
+          startedAt: currentInvocation?.startedAt ?? Date.now(),
+          toolName: nextValue.toolName,
+        },
+        { immediate: true },
+      )
     },
     handleToolInvocationFailed(
       invocationId: string,

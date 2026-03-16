@@ -4,6 +4,7 @@ Usage guidelines:
 - Provide one edit operation per call with `absolute_path`.
 - Replace mode: provide `old_string` and `new_string` (optional `replace_all`).
 - Use `read` first so `old_string` includes enough context to uniquely match.
+- If `old_string` was copied from numbered `read` output (`line | text`), line-number prefixes are accepted automatically.
 - If multiple matches exist, make `old_string` more specific or set `replace_all: true`.
 - Matching is resilient to line endings, indentation shifts, whitespace differences, and escaped text.
 - For creating a new file with replace mode, use `old_string: ""` and `new_string` with the full file content.

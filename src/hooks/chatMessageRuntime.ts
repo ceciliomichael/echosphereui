@@ -4,6 +4,7 @@ import type {
   ChatProviderId,
   Message,
   ReasoningEffort,
+  ToolDecisionRequest,
   ToolInvocationTrace,
 } from '../types/chat'
 
@@ -43,6 +44,12 @@ interface StreamAssistantResponseInput {
   onToolInvocationDelta: (
     invocationId: string,
     nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'toolName'>,
+  ) => void
+  onToolInvocationDecisionRequested: (
+    invocationId: string,
+    nextValue: Pick<ToolInvocationTrace, 'toolName'> & {
+      decisionRequest: ToolDecisionRequest
+    },
   ) => void
 }
 
@@ -132,6 +139,20 @@ export async function streamAssistantResponse(
       if (event.type === 'tool_invocation_delta') {
         input.onToolInvocationDelta(event.invocationId, {
           argumentsText: event.argumentsText,
+          toolName: event.toolName,
+        })
+        return
+      }
+
+      if (event.type === 'tool_invocation_decision_requested') {
+        input.onToolInvocationDecisionRequested(event.invocationId, {
+          decisionRequest: {
+            allowCustomAnswer: event.allowCustomAnswer,
+            kind: event.kind,
+            options: event.options,
+            prompt: event.prompt,
+            streamId: event.streamId,
+          },
           toolName: event.toolName,
         })
         return

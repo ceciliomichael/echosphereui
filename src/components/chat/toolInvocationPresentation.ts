@@ -190,6 +190,30 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Update plan failed'
   }
 
+  if (invocation.toolName === 'ready_implement') {
+    if (invocation.state === 'running' && invocation.decisionRequest) {
+      return 'Awaiting implementation approval'
+    }
+
+    return invocation.state === 'running'
+      ? 'Preparing implementation gate'
+      : invocation.state === 'completed'
+        ? 'Recorded implementation decision'
+        : 'Implementation gate failed'
+  }
+
+  if (invocation.toolName === 'ask_question') {
+    if (invocation.state === 'running' && invocation.decisionRequest) {
+      return 'Awaiting answer'
+    }
+
+    return invocation.state === 'running'
+      ? 'Asking question'
+      : invocation.state === 'completed'
+        ? 'Question answered'
+        : 'Question failed'
+  }
+
   return invocation.state === 'running'
     ? `Running ${invocation.toolName}`
     : invocation.state === 'completed'

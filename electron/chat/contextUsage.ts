@@ -85,7 +85,7 @@ async function getSystemPromptSegments(input: EstimateContextUsageInput) {
         chatMode: input.chatMode,
         supportsNativeTools: true,
       }),
-      JSON.stringify(getCodexToolDefinitions()),
+      JSON.stringify(getCodexToolDefinitions(input.chatMode)),
     ]
   }
 
@@ -100,7 +100,7 @@ async function getSystemPromptSegments(input: EstimateContextUsageInput) {
         chatMode: input.chatMode,
         supportsNativeTools: true,
       }),
-      JSON.stringify(getOpenAICompatibleToolDefinitions().map((toolDefinition) => toolDefinition.tool)),
+      JSON.stringify(getOpenAICompatibleToolDefinitions(input.chatMode).map((toolDefinition) => toolDefinition.tool)),
     ]
   }
 

@@ -16,6 +16,8 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     toolName: 'list',
     rules: [
       'Use absolute_path rooted in the workspace.',
+      'Never pass bare nested folder names (for example "app") without the parent path.',
+      'Build child paths from the last successful path (for example <cwd>/src -> <cwd>/src/app).',
       'Use limit to keep large listings focused.',
     ],
   },
@@ -32,6 +34,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     toolName: 'glob',
     rules: [
       'Use glob to discover candidate files before read or edit.',
+      'Set absolute_path to a real existing directory path, usually <cwd> or a listed subdirectory.',
       'Constrain broad searches with max_results.',
     ],
   },
@@ -39,6 +42,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     description: 'Find content matches with ripgrep semantics.',
     toolName: 'grep',
     rules: [
+      'Set absolute_path to a real existing directory or file path, usually <cwd> or a listed subdirectory.',
       'Set is_regex only when regex matching is required.',
       'Use returned file paths and line numbers with read for context.',
     ],

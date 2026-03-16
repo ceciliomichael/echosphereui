@@ -3,6 +3,7 @@ import { prepareRevertSessionForMessage, restoreWorkspaceCheckpointForMessage } 
 import { persistAndStreamMessage } from './chatMessageSendWorkflow'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
+import type { ChatMode } from '../types/chat'
 
 interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'runtimeSelection' | 'targetEditMessageId' | 'trimmedText' | 'attachments'> {
   activeConversationStateIsSending: boolean
@@ -159,6 +160,39 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
     [input],
   )
 
+  const sendProgrammaticMessage = useCallback(
+    async (
+      runtimeSelection: ChatRuntimeSelection,
+      messageText: string,
+      options?: {
+        chatMode?: ChatMode
+      },
+    ) => {
+      if (
+        actionInFlightRef.current ||
+        input.activeConversationStateIsSending ||
+        (input.activeConversationId === null && input.pendingDraftSendCount > 0)
+      ) {
+        return
+      }
+
+      const trimmedText = messageText.trim()
+      if (trimmedText.length === 0) {
+        return
+      }
+
+      await persistAndStreamMessage({
+        ...input,
+        attachments: [],
+        draftChatMode: options?.chatMode ?? input.draftChatMode,
+        runtimeSelection,
+        targetEditMessageId: null,
+        trimmedText,
+      })
+    },
+    [input],
+  )
+
   const sendEditedMessage = useCallback(
     async (runtimeSelection: ChatRuntimeSelection) => {
       const conversationId = input.activeConversationIdRef.current ?? input.activeConversationId
@@ -256,5 +290,6 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
     revertUserMessage,
     sendEditedMessage,
     sendNewMessage,
+    sendProgrammaticMessage,
   }
 }

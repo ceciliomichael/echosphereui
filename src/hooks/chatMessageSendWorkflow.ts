@@ -169,20 +169,27 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       targetEditMessageId: input.targetEditMessageId,
       trimmedText: input.trimmedText,
     })
+    const conversationForRun =
+      conversation.chatMode === input.draftChatMode
+        ? conversation
+        : {
+            ...conversation,
+            chatMode: input.draftChatMode,
+          }
 
-    conversationIdForCleanup = conversation.id
+    conversationIdForCleanup = conversationForRun.id
     const shouldKeepSelected =
       initiatingConversationId === null
         ? input.activeConversationIdRef.current === null && input.selectedFolderIdRef.current === initiatingFolderId
-        : input.activeConversationIdRef.current === conversation.id
+        : input.activeConversationIdRef.current === conversationForRun.id
 
-    input.upsertConversation(conversation)
-    input.updateConversationRuntimeState(conversation.id, {
+    input.upsertConversation(conversationForRun)
+    input.updateConversationRuntimeState(conversationForRun.id, {
       isSending: true,
     })
 
     if (shouldKeepSelected) {
-      input.applyConversation(conversation)
+      input.applyConversation(conversationForRun)
     }
 
     if (input.targetEditMessageId !== null) {
@@ -195,14 +202,14 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     }
 
     streamProgressPersistence = createStreamProgressPersistenceController({
-      conversationId: conversation.id,
+      conversationId: conversationForRun.id,
       setError: input.setError,
     })
 
     draftManager = createChatAssistantDraftManager({
       appendLocalMessage: input.appendLocalMessage,
-      conversationId: conversation.id,
-      initialConversationMessages: conversation.messages,
+      conversationId: conversationForRun.id,
+      initialConversationMessages: conversationForRun.messages,
       markTextStreamingPulse: input.markTextStreamingPulse,
       onConversationMessagesUpdated: (messages, options, hint) => {
         streamProgressPersistence?.queueSnapshot(messages, options, hint)
@@ -217,15 +224,16 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
 
     draftManager.appendPlaceholderDraft()
     const streamedAssistant = await streamAssistantResponse({
-      agentContextRootPath: conversation.agentContextRootPath,
-      chatMode: conversation.chatMode,
-      messages: conversation.messages,
+      agentContextRootPath: conversationForRun.agentContextRootPath,
+      chatMode: input.draftChatMode,
+      messages: conversationForRun.messages,
       modelId: input.runtimeSelection.modelId,
       onContentDelta: draftManager.handleContentDelta,
       onReasoningDelta: draftManager.handleReasoningDelta,
       onStreamStarted: draftManager.handleStreamStarted,
       onSyntheticToolMessage: draftManager.handleSyntheticToolMessage,
       onToolInvocationCompleted: draftManager.handleToolInvocationCompleted,
+      onToolInvocationDecisionRequested: draftManager.handleToolInvocationDecisionRequested,
       onToolInvocationDelta: draftManager.handleToolInvocationDelta,
       onToolInvocationFailed: draftManager.handleToolInvocationFailed,
       onToolInvocationStarted: draftManager.handleToolInvocationStarted,
@@ -251,22 +259,29 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.updateLocalMessage(conversation.id, message.id, () => message)
     }
 
-    const finalizedConversationMessages = [...conversation.messages, ...streamedMessages]
+    const finalizedConversationMessages = [...conversationForRun.messages, ...streamedMessages]
     streamProgressPersistence?.queueSnapshot(finalizedConversationMessages, { immediate: true })
 
-    if (!(conversation.id in input.conversationRuntimeStatesRef.current)) {
+    if (!(conversationForRun.id in input.conversationRuntimeStatesRef.current)) {
       return
     }
 
     const savedConversation =
       (await streamProgressPersistence?.flush()) ??
-      (await persistConversationSnapshot(conversation.id, finalizedConversationMessages))
-    if (!(savedConversation.id in input.conversationRuntimeStatesRef.current)) {
+      (await persistConversationSnapshot(conversationForRun.id, finalizedConversationMessages))
+    const savedConversationForRun =
+      savedConversation.chatMode === input.draftChatMode
+        ? savedConversation
+        : {
+            ...savedConversation,
+            chatMode: input.draftChatMode,
+          }
+    if (!(savedConversationForRun.id in input.conversationRuntimeStatesRef.current)) {
       return
     }
 
-    input.upsertConversation(savedConversation)
-    input.updateConversationSummary(savedConversation)
+    input.upsertConversation(savedConversationForRun)
+    input.updateConversationSummary(savedConversationForRun)
   } catch (caughtError) {
     console.error(caughtError)
     const shouldRetainProgress = isRateLimitError(caughtError)

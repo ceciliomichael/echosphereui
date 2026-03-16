@@ -38,5 +38,12 @@ export async function executeCodexToolCall(
   inMemoryMessages: Message[],
   turnState: ReturnType<typeof createToolExecutionTurnState>,
 ) {
-  await executeToolCallWithPolicies(toolCall, context, request.agentContextRootPath, inMemoryMessages, turnState)
+  await executeToolCallWithPolicies(
+    toolCall,
+    context,
+    request.agentContextRootPath,
+    request.chatMode,
+    inMemoryMessages,
+    turnState,
+  )
 }

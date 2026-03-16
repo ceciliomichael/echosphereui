@@ -30,6 +30,7 @@ import type {
   CreateTerminalSessionInput,
   OpenExternalTerminalLinkInput,
   ResizeTerminalSessionInput,
+  SubmitToolDecisionInput,
   StartChatStreamInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
@@ -108,6 +109,7 @@ const chatApi: EchosphereChatApi = {
       ipcRenderer.off('chat:stream:event', wrappedListener)
     }
   },
+  submitToolDecision: (input: SubmitToolDecisionInput) => ipcRenderer.invoke('chat:stream:submitToolDecision', input),
   startStream: (input: StartChatStreamInput) => ipcRenderer.invoke('chat:stream:start', input),
 }
 

@@ -120,7 +120,9 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
     /^Acknowledged file read result: Read tailwind\.config\.js lines 1-1 of 42\./iu,
   )
   assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1 of 42\)/u)
+  assert.match(parsedContent.body ?? '', /Line-indexed content \(line_number \| text\):/u)
   assert.match(parsedContent.body ?? '', /```js/u)
+  assert.match(parsedContent.body ?? '', /1 \| module\.exports = \{\}/u)
   assert.equal(parsedContent.metadata?.semantics?.start_line, 1)
   assert.equal(parsedContent.metadata?.semantics?.end_line, 1)
   assert.equal(parsedContent.metadata?.semantics?.total_line_count, 42)

@@ -1,4 +1,4 @@
-import type { Message } from '../../../src/types/chat'
+import type { ChatMode, Message } from '../../../src/types/chat'
 import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
@@ -120,8 +120,8 @@ export function buildCodexInputMessages(messages: Message[]) {
   return inputMessages
 }
 
-export function getCodexToolDefinitions(): CodexFunctionToolDefinition[] {
-  return getOpenAICompatibleToolDefinitions().map((toolDefinition) => {
+export function getCodexToolDefinitions(chatMode: ChatMode): CodexFunctionToolDefinition[] {
+  return getOpenAICompatibleToolDefinitions(chatMode).map((toolDefinition) => {
     if (toolDefinition.tool.type !== 'function') {
       throw new Error(`Unsupported tool type for Codex: ${toolDefinition.tool.type}`)
     }
@@ -160,6 +160,6 @@ export async function buildCodexPayload(
     store: false,
     stream: true,
     tool_choice: 'auto',
-    tools: getCodexToolDefinitions(),
+    tools: getCodexToolDefinitions(request.chatMode),
   }
 }

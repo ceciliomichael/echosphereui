@@ -4,6 +4,8 @@ import type {
   ChatProviderId,
   Message,
   ReasoningEffort,
+  ToolDecisionKind,
+  ToolDecisionOption,
   ToolInvocationResultPresentation,
 } from '../../src/types/chat'
 
@@ -15,6 +17,15 @@ export type StreamDeltaEvent =
   | {
       delta: string
       type: 'reasoning_delta'
+    }
+  | {
+      allowCustomAnswer: boolean
+      invocationId: string
+      kind: ToolDecisionKind
+      options: ToolDecisionOption[]
+      prompt: string
+      toolName: string
+      type: 'tool_invocation_decision_requested'
     }
   | {
       argumentsText: string
@@ -62,6 +73,19 @@ export interface ProviderStreamRequest {
 }
 
 export interface ProviderStreamContext {
+  awaitUserDecision?: (input: {
+    allowCustomAnswer: boolean
+    invocationId: string
+    kind: ToolDecisionKind
+    options: ToolDecisionOption[]
+    prompt: string
+    toolName: string
+  }) => Promise<{
+    answerText: string
+    selectedOptionId: string | null
+    selectedOptionLabel: string | null
+    usedCustomAnswer: boolean
+  }>
   emitDelta: (event: StreamDeltaEvent) => void
   signal: AbortSignal
   streamId: string

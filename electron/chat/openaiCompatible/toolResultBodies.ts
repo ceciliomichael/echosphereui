@@ -46,10 +46,16 @@ function formatReadResultBody(semanticResult: Record<string, unknown>) {
   const totalLineCount = readNumber(semanticResult.totalLineCount)
   const content = typeof semanticResult.content === 'string' ? semanticResult.content : ''
   const fenceLanguage = inferFenceLanguage(subjectPath)
+  const contentLines = content.length === 0 ? [] : content.split('\n')
+  const lineNumberWidth = contentLines.length > 0 ? String(startLine + contentLines.length - 1).length : String(startLine).length
+  const numberedContent = contentLines
+    .map((line, index) => `${String(startLine + index).padStart(lineNumberWidth, ' ')} | ${line}`)
+    .join('\n')
   const lines = [
     `File ${subjectPath} (lines ${startLine}-${endLine}${totalLineCount === null ? '' : ` of ${totalLineCount}`})`,
+    'Line-indexed content (line_number | text):',
     `\`\`\`${fenceLanguage ?? ''}`,
-    content,
+    numberedContent,
     '```',
   ]
 
@@ -159,6 +165,48 @@ function formatUpdatePlanResultBody(semanticResult: Record<string, unknown>) {
   return lines.join('\n')
 }
 
+function formatReadyImplementResultBody(semanticResult: Record<string, unknown>) {
+  const selectedOptionLabel = readString(semanticResult.selectedOptionLabel)
+  const answerText = readString(semanticResult.answerText)
+  const message = readString(semanticResult.message)
+  const lines = [message ?? 'Implementation gate decision received.']
+
+  if (selectedOptionLabel) {
+    lines.push(`Selected option: ${selectedOptionLabel}`)
+  } else if (answerText) {
+    lines.push(`Answer: ${answerText}`)
+  }
+
+  const nextChatMode = readString(semanticResult.nextChatMode)
+  if (nextChatMode === 'agent') {
+    lines.push('Next mode: agent')
+  } else if (nextChatMode === 'plan') {
+    lines.push('Next mode: plan')
+  }
+
+  return lines.join('\n')
+}
+
+function formatAskQuestionResultBody(semanticResult: Record<string, unknown>) {
+  const message = readString(semanticResult.message) ?? 'Planning question answered.'
+  const answerText = readString(semanticResult.answerText)
+  const selectedOptionLabel = readString(semanticResult.selectedOptionLabel)
+  const lines = [message]
+
+  if (selectedOptionLabel) {
+    lines.push(`Selected option: ${selectedOptionLabel}`)
+  } else if (answerText) {
+    lines.push(`Custom answer: ${answerText}`)
+  }
+
+  const usedCustomAnswer = readBoolean(semanticResult.usedCustomAnswer)
+  if (usedCustomAnswer) {
+    lines.push('Source: custom answer')
+  }
+
+  return lines.join('\n')
+}
+
 function formatFallbackResultBody(semanticResult: Record<string, unknown>) {
   return JSON.stringify(semanticResult, null, 2)
 }
@@ -190,6 +238,14 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
 
   if (toolName === 'update_plan') {
     return formatUpdatePlanResultBody(semanticResult)
+  }
+
+  if (toolName === 'ready_implement') {
+    return formatReadyImplementResultBody(semanticResult)
+  }
+
+  if (toolName === 'ask_question') {
+    return formatAskQuestionResultBody(semanticResult)
   }
 
   return formatFallbackResultBody(semanticResult)

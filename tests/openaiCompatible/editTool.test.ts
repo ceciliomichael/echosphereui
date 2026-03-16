@@ -191,3 +191,22 @@ test('edit tool supports replace_all for repeated occurrences', async () => {
     assert.equal(await fs.readFile(filePath, 'utf8'), 'bar\nbar\n')
   })
 })
+
+test('edit tool matches old_string copied from numbered read output', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'numbered.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['import x from "x"', 'export default x'].join('\n'), 'utf8')
+
+    await editTool.execute(
+      {
+        absolute_path: filePath,
+        new_string: 'export default y',
+        old_string: '2 | export default x',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(await fs.readFile(filePath, 'utf8'), 'import x from "x"\nexport default y')
+  })
+})

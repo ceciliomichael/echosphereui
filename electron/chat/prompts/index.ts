@@ -1,5 +1,6 @@
 import type { AppTerminalExecutionMode, ChatMode, ChatProviderId } from '../../../src/types/chat'
 import { buildAgentPrompt } from './agent/prompt'
+import { buildPlanPrompt } from './plan/prompt'
 import { buildSharedAgentsInstructions } from './shared/agentsInstructions'
 import { buildWorkspaceFileTree } from './shared/workspaceFileTree'
 
@@ -14,14 +15,22 @@ interface BuildSystemPromptInput {
 export async function buildSystemPrompt(input: BuildSystemPromptInput) {
   const [workspaceFileTree, sharedAgentsInstructions] = await Promise.all([
     buildWorkspaceFileTree(input.agentContextRootPath),
-    buildSharedAgentsInstructions({
-      agentContextRootPath: input.agentContextRootPath,
-    }),
+    input.chatMode === 'agent'
+      ? buildSharedAgentsInstructions({
+          agentContextRootPath: input.agentContextRootPath,
+        })
+      : Promise.resolve(null),
   ])
-  const builtInPrompt = buildAgentPrompt({
-    ...input,
-    workspaceFileTree,
-  })
+  const builtInPrompt =
+    input.chatMode === 'plan'
+      ? buildPlanPrompt({
+          ...input,
+          workspaceFileTree,
+        })
+      : buildAgentPrompt({
+          ...input,
+          workspaceFileTree,
+        })
 
   if (!sharedAgentsInstructions) {
     return builtInPrompt

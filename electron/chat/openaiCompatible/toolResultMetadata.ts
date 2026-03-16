@@ -95,6 +95,25 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
+  if (toolName === 'ready_implement') {
+    return {
+      no_label: readString(argumentsValue.no_label) ?? undefined,
+      prompt: readString(argumentsValue.prompt) ?? undefined,
+      yes_label: readString(argumentsValue.yes_label) ?? undefined,
+    }
+  }
+
+  if (toolName === 'ask_question') {
+    const options = Array.isArray(argumentsValue.options)
+      ? argumentsValue.options.filter((option): option is Record<string, unknown> => typeof option === 'object' && option !== null)
+      : []
+    return {
+      allow_custom_answer: readBoolean(argumentsValue.allow_custom_answer),
+      option_count: options.length,
+      question: readString(argumentsValue.question) ?? undefined,
+    }
+  }
+
   return undefined
 }
 
@@ -188,6 +207,29 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return allStepsCompleted
       ? `Plan ${planId} is complete (${completedStepCount}/${totalStepCount} steps).`
       : `Plan ${planId} updated (${completedStepCount}/${totalStepCount} steps completed).`
+  }
+
+  if (toolName === 'ready_implement') {
+    const selectedOptionLabel = readString(semanticResult.selectedOptionLabel)
+    const answerText = readString(semanticResult.answerText)
+    if (selectedOptionLabel) {
+      return `Implementation decision received: ${selectedOptionLabel}.`
+    }
+
+    if (answerText) {
+      return `Implementation decision received: ${answerText}.`
+    }
+
+    return 'Implementation decision received.'
+  }
+
+  if (toolName === 'ask_question') {
+    const answerText = readString(semanticResult.answerText)
+    if (answerText) {
+      return `User answered planning question: ${answerText}.`
+    }
+
+    return 'User answered planning question.'
   }
 
   return 'Tool completed successfully.'
@@ -346,6 +388,31 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
       session_id: readNumber(semanticResult.sessionId) ?? undefined,
       start_line_number: undefined,
       target_exists_after_call: true,
+      workspace_effect: 'no_file_change',
+    })
+  }
+
+  if (toolName === 'ready_implement') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      answer_text: readString(semanticResult.answerText) ?? undefined,
+      next_chat_mode: readString(semanticResult.nextChatMode) ?? undefined,
+      operation: readString(semanticResult.operation) ?? 'ready_implement',
+      selected_option_id: readString(semanticResult.selectedOptionId) ?? undefined,
+      selected_option_label: readString(semanticResult.selectedOptionLabel) ?? undefined,
+      workspace_effect: 'no_file_change',
+    })
+  }
+
+  if (toolName === 'ask_question') {
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      allow_custom_answer: readBoolean(semanticResult.allowCustomAnswer),
+      answer_text: readString(semanticResult.answerText) ?? undefined,
+      operation: readString(semanticResult.operation) ?? 'ask_question',
+      selected_option_id: readString(semanticResult.selectedOptionId) ?? undefined,
+      selected_option_label: readString(semanticResult.selectedOptionLabel) ?? undefined,
+      used_custom_answer: readBoolean(semanticResult.usedCustomAnswer),
       workspace_effect: 'no_file_change',
     })
   }

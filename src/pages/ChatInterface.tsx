@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
@@ -8,6 +8,7 @@ import { CommitModal } from '../components/commit/CommitModal'
 import { CommitSuccessDialog } from '../components/commit/CommitSuccessDialog'
 import type { ChatModeOption } from '../components/chat/ChatModeSelectorField'
 import { ConversationDiffPanel, type DiffPanelScope } from '../components/chat/ConversationDiffPanel'
+import type { ToolDecisionSubmission } from '../components/chat/ToolDecisionRequestCard'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
 import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
@@ -28,7 +29,7 @@ import {
 } from '../hooks/useChatInterfaceController'
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
 import type { ResolvedTheme } from '../lib/theme'
-import type { AppSettings } from '../types/chat'
+import type { AppSettings, ToolInvocationTrace } from '../types/chat'
 
 export type RightPanelTab = ChatInterfaceRightPanelTab
 
@@ -137,14 +138,24 @@ export function ChatInterface({
     startEditingMessage,
     abortStreamingResponse,
   } = chatMessages
-  const runtimeSelection: ChatRuntimeSelection = {
-    hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
-    modelId: chatRuntimeConfig.selectedRuntimeModelId,
-    providerId: chatRuntimeConfig.providerId,
-    providerLabel: chatRuntimeConfig.providerLabel,
-    reasoningEffort: chatRuntimeConfig.reasoningEffort,
-    terminalExecutionMode: settings.terminalExecutionMode,
-  }
+  const runtimeSelection: ChatRuntimeSelection = useMemo(
+    () => ({
+      hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
+      modelId: chatRuntimeConfig.selectedRuntimeModelId,
+      providerId: chatRuntimeConfig.providerId,
+      providerLabel: chatRuntimeConfig.providerLabel,
+      reasoningEffort: chatRuntimeConfig.reasoningEffort,
+      terminalExecutionMode: settings.terminalExecutionMode,
+    }),
+    [
+      chatRuntimeConfig.hasConfiguredProvider,
+      chatRuntimeConfig.providerId,
+      chatRuntimeConfig.providerLabel,
+      chatRuntimeConfig.reasoningEffort,
+      chatRuntimeConfig.selectedRuntimeModelId,
+      settings.terminalExecutionMode,
+    ],
+  )
   const contextUsage = useChatContextUsage({
     agentContextRootPath: activeConversationRootPath ?? selectedFolderPath,
     chatMode: selectedChatMode,
@@ -177,13 +188,48 @@ export function ChatInterface({
   const chatModeOptions = useMemo(
     () =>
       [
-          {
-            description: 'Echo can inspect and edit code',
-            label: 'Agent',
-            value: 'agent',
-          },
+        {
+          description: 'Echo can inspect and edit code',
+          label: 'Agent',
+          value: 'agent',
+        },
+        {
+          description: 'Echo explores and plans with list/read/glob/grep + ask_question + update_plan + ready_implement',
+          label: 'Plan',
+          value: 'plan',
+        },
       ] satisfies ChatModeOption[],
     [],
+  )
+  const handleToolDecisionSubmit = useCallback(
+    (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => {
+      const decisionRequest = invocation.decisionRequest
+      if (!decisionRequest) {
+        return
+      }
+
+      if (invocation.toolName === 'ready_implement') {
+        const nextMode =
+          submission.selectedOptionId === 'yes_implement'
+            ? 'agent'
+            : submission.selectedOptionId === 'no_modify'
+              ? 'plan'
+              : selectedChatMode
+        setSelectedChatMode(nextMode)
+      }
+
+      void window.echosphereChat
+        .submitToolDecision({
+          customAnswer: submission.customAnswer,
+          invocationId: invocation.id,
+          selectedOptionId: submission.selectedOptionId,
+          streamId: decisionRequest.streamId,
+        })
+        .catch((error) => {
+          console.error(error)
+        })
+    },
+    [selectedChatMode, setSelectedChatMode],
   )
   const hasRepository = gitBranchState.branchState.hasRepository
   const { refresh: refreshGitDiffSnapshot, snapshot: gitDiffSnapshot } = useGitDiffSnapshot({
@@ -370,6 +416,7 @@ export function ChatInterface({
                   editingMessageId={editingMessageId}
                   editComposerDirty={isEditComposerDirty}
                   onChatModeChange={setSelectedChatMode}
+                  onToolDecisionSubmit={handleToolDecisionSubmit}
                   onEditUserMessage={startEditingMessage}
                   onRevertUserMessage={revertUserMessage}
                   composerAttachments={editComposerAttachments}

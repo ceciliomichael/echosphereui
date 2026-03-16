@@ -39,6 +39,35 @@ function convertToLineEnding(text: string, ending: '\n' | '\r\n') {
   return text.replace(/\n/g, '\r\n')
 }
 
+function stripCommonLineNumberPrefixes(text: string) {
+  const lines = text.split('\n')
+  let strippedLineCount = 0
+  const strippedLines = lines.map((line) => {
+    if (line.trim().length === 0) {
+      return line
+    }
+
+    const prefixedLineMatch = line.match(/^\s*\d+\s*(?:\||:)\s?(.*)$/u)
+    if (!prefixedLineMatch) {
+      return line
+    }
+
+    strippedLineCount += 1
+    return prefixedLineMatch[1]
+  })
+
+  if (strippedLineCount === 0) {
+    return text
+  }
+
+  const nonEmptyLineCount = lines.filter((line) => line.trim().length > 0).length
+  if (strippedLineCount !== nonEmptyLineCount) {
+    return text
+  }
+
+  return strippedLines.join('\n')
+}
+
 function levenshtein(a: string, b: string) {
   if (a.length === 0 || b.length === 0) {
     return Math.max(a.length, b.length)
@@ -536,7 +565,27 @@ export const editTool: OpenAICompatibleToolDefinition = {
       const lineEnding = detectLineEnding(existingFile.content)
       const normalizedOldString = convertToLineEnding(normalizeLineEndings(oldString), lineEnding)
       const normalizedNewString = convertToLineEnding(normalizeLineEndings(newString), lineEnding)
-      nextContent = replaceWithAnchors(existingFile.content, normalizedOldString, normalizedNewString, edit.replace_all)
+      const normalizedOldStringWithoutLineNumbers = stripCommonLineNumberPrefixes(normalizedOldString)
+
+      try {
+        nextContent = replaceWithAnchors(existingFile.content, normalizedOldString, normalizedNewString, edit.replace_all)
+      } catch (error) {
+        const shouldRetryWithStrippedLineNumbers =
+          error instanceof OpenAICompatibleToolError &&
+          error.message.includes('Could not find old_string in file content') &&
+          normalizedOldStringWithoutLineNumbers !== normalizedOldString
+
+        if (!shouldRetryWithStrippedLineNumbers) {
+          throw error
+        }
+
+        nextContent = replaceWithAnchors(
+          existingFile.content,
+          normalizedOldStringWithoutLineNumbers,
+          normalizedNewString,
+          edit.replace_all,
+        )
+      }
     }
 
     if (context.workspaceCheckpointId && !trackedCheckpointPaths.has(normalizedTargetPath)) {

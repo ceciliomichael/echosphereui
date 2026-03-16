@@ -1,11 +1,25 @@
 import type { AppAppearance, AppLanguage } from '../lib/appSettings'
 
 export type MessageRole = 'user' | 'assistant' | 'tool'
-export type ChatMode = 'agent'
+export type ChatMode = 'agent' | 'plan'
 export type UserMessageKind = 'human' | 'tool_result'
 export type ToolInvocationState = 'running' | 'completed' | 'failed'
 export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash' | 'rate_limit_retry'
 export type ChatAttachmentKind = 'image' | 'text'
+export type ToolDecisionKind = 'ready_implement' | 'ask_question'
+
+export interface ToolDecisionOption {
+  id: string
+  label: string
+}
+
+export interface ToolDecisionRequest {
+  allowCustomAnswer: boolean
+  kind: ToolDecisionKind
+  options: ToolDecisionOption[]
+  prompt: string
+  streamId: string
+}
 
 export interface FileDiffToolResultPresentation {
   addedLineCount?: number
@@ -44,6 +58,7 @@ export type ChatAttachment = ChatImageAttachment | ChatTextAttachment
 export interface ToolInvocationTrace {
   argumentsText: string
   completedAt?: number
+  decisionRequest?: ToolDecisionRequest
   id: string
   resultContent?: string
   resultPresentation?: ToolInvocationResultPresentation
@@ -151,12 +166,14 @@ export interface RenameConversationFolderInput {
 }
 
 export interface AppendConversationMessagesInput {
+  chatMode?: ChatMode
   conversationId: string
   messages: Message[]
   title?: string
 }
 
 export interface ReplaceConversationMessagesInput {
+  chatMode?: ChatMode
   conversationId: string
   messages: Message[]
   title?: string
@@ -275,6 +292,17 @@ export interface StartChatStreamInput {
 
 export interface StartChatStreamResult {
   streamId: string
+}
+
+export interface SubmitToolDecisionInput {
+  customAnswer?: string
+  invocationId: string
+  selectedOptionId?: string
+  streamId: string
+}
+
+export interface SubmitToolDecisionResult {
+  accepted: boolean
 }
 
 export interface EstimateContextUsageInput {
@@ -496,6 +524,16 @@ export type ChatStreamEvent =
       type: 'reasoning_delta'
     }
   | {
+      allowCustomAnswer: boolean
+      invocationId: string
+      kind: ToolDecisionKind
+      options: ToolDecisionOption[]
+      prompt: string
+      streamId: string
+      toolName: string
+      type: 'tool_invocation_decision_requested'
+    }
+  | {
       argumentsText: string
       invocationId: string
       startedAt: number
@@ -589,6 +627,7 @@ export interface EchosphereChatApi {
   cancelStream: (streamId: string) => Promise<void>
   estimateContextUsage: (input: EstimateContextUsageInput) => Promise<ContextUsageEstimate>
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
+  submitToolDecision: (input: SubmitToolDecisionInput) => Promise<SubmitToolDecisionResult>
   startStream: (input: StartChatStreamInput) => Promise<StartChatStreamResult>
 }
 

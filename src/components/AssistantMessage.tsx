@@ -4,6 +4,7 @@ import { MarkdownRenderer } from './chat/MarkdownRenderer'
 import { ThinkingBlock } from './chat/ThinkingBlock'
 import { ThinkingIndicator } from './chat/ThinkingIndicator'
 import { ToolInvocationBlock } from './chat/ToolInvocationBlock'
+import type { ToolDecisionSubmission } from './chat/ToolDecisionRequestCard'
 
 interface AssistantMessageProps {
   content: string
@@ -13,6 +14,7 @@ interface AssistantMessageProps {
   reasoningContent?: string
   timestamp: number
   toolInvocations?: ToolInvocationTrace[]
+  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
   waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
   workspaceRootPath?: string | null
 }
@@ -25,6 +27,7 @@ export function AssistantMessage({
   reasoningContent = '',
   timestamp,
   toolInvocations = [],
+  onToolDecisionSubmit,
   waitingIndicatorVariant = 'thinking',
   workspaceRootPath = null,
 }: AssistantMessageProps) {
@@ -47,7 +50,12 @@ export function AssistantMessage({
       ) : null}
 
       {toolInvocations.map((invocation) => (
-        <ToolInvocationBlock key={invocation.id} invocation={invocation} workspaceRootPath={workspaceRootPath} />
+        <ToolInvocationBlock
+          key={invocation.id}
+          invocation={invocation}
+          onToolDecisionSubmit={onToolDecisionSubmit}
+          workspaceRootPath={workspaceRootPath}
+        />
       ))}
 
       {hasContent ? (

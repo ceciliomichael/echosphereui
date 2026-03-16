@@ -36,6 +36,7 @@ import type {
   CreateConversationInput,
   ReplaceConversationMessagesInput,
   SaveApiKeyProviderInput,
+  SubmitToolDecisionInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
 import {
@@ -65,7 +66,7 @@ import {
   switchCodexAccount,
 } from './providers/service'
 import { estimateChatContextUsage } from './chat/contextUsage'
-import { cancelChatStream, startChatStream } from './chat/service'
+import { cancelChatStream, startChatStream, submitToolDecision } from './chat/service'
 import {
   checkoutGitBranch,
   createAndCheckoutGitBranch,
@@ -263,6 +264,9 @@ function registerHistoryHandlers() {
     startChatStream(event.sender, input),
   )
   ipcMain.handle('chat:stream:cancel', async (event, streamId: string) => cancelChatStream(event.sender, streamId))
+  ipcMain.handle('chat:stream:submitToolDecision', async (event, input: SubmitToolDecisionInput) =>
+    submitToolDecision(event.sender, input),
+  )
   ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) =>
     estimateChatContextUsage(input),
   )
