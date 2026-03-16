@@ -33,10 +33,11 @@ function main() {
   let resolved = "";
 
   if (input) {
-    if (!SEMVER_REGEX.test(input)) {
+    const normalizedInput = normalizeTagToVersion(input);
+    if (!SEMVER_REGEX.test(normalizedInput)) {
       fail(`Invalid workflow_dispatch version input: ${input}`);
     }
-    resolved = input;
+    resolved = normalizedInput;
   } else if (refType.toLowerCase() === "tag" || refFull.startsWith("refs/tags/")) {
     const rawTag = refName || refFull;
     const fromTag = normalizeTagToVersion(rawTag);
