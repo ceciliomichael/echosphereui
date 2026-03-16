@@ -4,6 +4,7 @@ import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { MarkdownRenderer } from './MarkdownRenderer'
+import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
 import { parseUpdatePlanResultBody, UpdatePlanResult } from './UpdatePlanResult'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
@@ -133,6 +134,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState, workspaceRootPath)
   const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
+  const terminalToolName =
+    invocation.toolName === 'exec_command' || invocation.toolName === 'write_stdin' ? invocation.toolName : null
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
   const parsedStructuredResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const resultBody =
@@ -208,6 +211,12 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
             </div>
           ) : updatePlanResultPresentation ? (
             <UpdatePlanResult parsedResult={updatePlanResultPresentation} />
+          ) : terminalToolName ? (
+            <TerminalToolResult
+              content={resultBody}
+              isStreaming={invocation.state === 'running'}
+              toolName={terminalToolName}
+            />
           ) : (
             <MarkdownRenderer
               content={resultBody}
