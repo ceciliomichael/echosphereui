@@ -258,7 +258,7 @@ test('executeToolCallWithPolicies allows post-edit reads when they request genui
   })
 })
 
-test('executeToolCallWithPolicies rejects repeated unchanged update_plan calls while work is incomplete', async () => {
+test('executeToolCallWithPolicies treats repeated unchanged update_plan calls as noop success', async () => {
   const emittedEvents: StreamDeltaEvent[] = []
   const inMemoryMessages: Message[] = []
   const turnState = createToolExecutionTurnState()
@@ -300,9 +300,10 @@ test('executeToolCallWithPolicies rejects repeated unchanged update_plan calls w
 
   const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
   const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-  assert.equal(completedEvents.length, 1)
-  assert.equal(failedEvents.length, 1)
-  assert.match(failedEvents[0]?.errorMessage ?? '', /has no changes/u)
+  assert.equal(completedEvents.length, 2)
+  assert.equal(failedEvents.length, 0)
+  const secondResult = completedEvents[1]?.resultContent ?? ''
+  assert.match(secondResult, /Plan .* unchanged/u)
 })
 
 test('createToolExecutionScheduler runs parallel tool calls without serial buffering', async () => {

@@ -181,6 +181,10 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     const completedStepCount = readNumber(semanticResult.completedStepCount) ?? 0
     const totalStepCount = readNumber(semanticResult.totalStepCount) ?? completedStepCount
     const allStepsCompleted = readBoolean(semanticResult.allStepsCompleted)
+    const operation = readString(semanticResult.operation)
+    if (operation === 'noop') {
+      return `Plan ${planId} unchanged (${completedStepCount}/${totalStepCount} steps completed).`
+    }
     return allStepsCompleted
       ? `Plan ${planId} is complete (${completedStepCount}/${totalStepCount} steps).`
       : `Plan ${planId} updated (${completedStepCount}/${totalStepCount} steps completed).`

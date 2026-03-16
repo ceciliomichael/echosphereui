@@ -142,7 +142,9 @@ export async function buildCodexPayload(
   const instructions = await buildSystemPrompt({
     agentContextRootPath: request.agentContextRootPath,
     chatMode: request.chatMode,
+    providerId: request.providerId,
     supportsNativeTools: true,
+    terminalExecutionMode: request.terminalExecutionMode,
   })
 
   return {

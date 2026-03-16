@@ -93,6 +93,7 @@ export function ResizableSidebarPanel({
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
       <div
+        data-sidebar-root="true"
         className={[
           'hidden h-full shrink-0 overflow-hidden lg:flex',
           isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',

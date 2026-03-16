@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import type {
   ChatCompletionChunk,
   ChatCompletionContentPart,
@@ -7,7 +6,8 @@ import type {
   ChatCompletionCreateParamsStreaming,
   ChatCompletionMessageParam,
 } from 'openai/resources/chat/completions/completions'
-import type { ChatMode, Message, ReasoningEffort } from '../../../src/types/chat'
+import type { AppTerminalExecutionMode, ChatMode, ChatProviderId, Message, ReasoningEffort } from '../../../src/types/chat'
+import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
 import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
@@ -21,14 +21,9 @@ import {
   readNestedRecord,
   readTextLikeValue,
 } from '../providers/openaiShared'
-import { buildReplayableMessageHistory } from './messageHistory'
 import { collectToolCalls, type ToolCallAccumulator, toToolCallList } from './toolCallStreaming'
-import { shouldRecoverFromTextOnlyToolTurn } from './toolRecovery'
-import { createHydratedToolExecutionTurnState, createToolExecutionScheduler, resolveWorkflowTurnToolChoice } from './toolExecution'
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import type { OpenAICompatibleToolCall } from './toolTypes'
-import { appendWorkflowPlanContextMessage } from './workflowPlanContext'
-import { resolveForcedToolChoiceForTurn } from './workflowToolChoice'
 
 interface StreamOpenAICompatibleResponseInput {
   agentContextRootPath: string
@@ -36,20 +31,15 @@ interface StreamOpenAICompatibleResponseInput {
   forceToolChoice?: 'none' | 'required'
   messages: Message[]
   modelId: string
+  providerId?: ChatProviderId
   reasoningEffort: ReasoningEffort
+  terminalExecutionMode?: AppTerminalExecutionMode
 }
 
 interface StreamOpenAICompatibleTurnResult {
   assistantContent: string
   toolCalls: OpenAICompatibleToolCall[]
 }
-
-interface StreamOpenAICompatibleTurnOptions {
-  onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
-}
-
-const MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES = 4
-const REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD = 3
 
 function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
   if (message.role === 'user') {
@@ -109,7 +99,9 @@ async function buildOpenAICompatibleMessages(
   const systemPrompt = await buildSystemPrompt({
     agentContextRootPath: request.agentContextRootPath,
     chatMode: request.chatMode,
+    providerId: request.providerId,
     supportsNativeTools: true,
+    terminalExecutionMode: request.terminalExecutionMode,
   })
 
   return [
@@ -136,7 +128,6 @@ function extractOpenAICompatibleReasoningDelta(delta: unknown): string | null {
     readTextLikeValue(deltaRecord.thinking)
   )
 }
-
 
 function emitChunkDeltas(chunk: ChatCompletionChunk, emitDelta: ProviderStreamContext['emitDelta']) {
   for (const choice of chunk.choices) {
@@ -203,11 +194,11 @@ async function createOpenAICompatibleChatCompletionStream(
   }
 }
 
-async function streamOpenAICompatibleTurn(
+export async function streamOpenAICompatibleChatCompletionsTurn(
   client: ReturnType<typeof buildOpenAIClient>,
   request: StreamOpenAICompatibleResponseInput,
   context: ProviderStreamContext,
-  options: StreamOpenAICompatibleTurnOptions = {},
+  options: AgentLoopTurnOptions = {},
 ): Promise<StreamOpenAICompatibleTurnResult> {
   const stream = await createOpenAICompatibleChatCompletionStream(client, request, context.signal)
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
@@ -237,125 +228,39 @@ async function streamOpenAICompatibleTurn(
   }
 }
 
-function buildInMemoryAssistantMessage(content: string): Message {
-  return {
-    content,
-    id: randomUUID(),
-    role: 'assistant',
-    timestamp: Date.now(),
-  }
-}
-
-function buildInMemoryUserMessage(content: string): Message {
-  return {
-    content,
-    id: randomUUID(),
-    role: 'user',
-    timestamp: Date.now(),
-  }
-}
-
 export async function streamOpenAICompatibleResponseWithTools(
   client: ReturnType<typeof buildOpenAIClient>,
   request: StreamOpenAICompatibleResponseInput,
   context: ProviderStreamContext,
 ) {
-  const inMemoryMessages = buildReplayableMessageHistory(request.messages)
-  const turnState = createHydratedToolExecutionTurnState(request.messages, request.agentContextRootPath)
-  const toolExecutionScheduler = createToolExecutionScheduler({
-    agentContextRootPath: request.agentContextRootPath,
+  await streamAgentLoopWithTools(
+    {
+      agentContextRootPath: request.agentContextRootPath,
+      chatMode: request.chatMode,
+      messages: request.messages,
+      modelId: request.modelId,
+      providerId: 'openai-compatible',
+      reasoningEffort: request.reasoningEffort,
+      terminalExecutionMode: context.terminalExecutionMode,
+    },
     context,
-    inMemoryMessages,
-    turnState,
-  })
-  let pseudoToolCallRecoveryAttempted = false
-  let missingToolCallRecoveryCount = 0
-  let enforceRequiredToolChoiceForNextTurn = false
-
-  while (!context.signal.aborted) {
-    const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
-    const forcedToolChoiceForTurn = resolveForcedToolChoiceForTurn(
-      resolvedToolChoiceForTurn,
-      enforceRequiredToolChoiceForNextTurn,
-    )
-    const replayableMessagesForTurn = appendWorkflowPlanContextMessage(
-      buildReplayableMessageHistory(inMemoryMessages),
-      turnState,
-    )
-    const scheduledToolCallIds = new Set<string>()
-    const turnResult = await streamOpenAICompatibleTurn(
-      client,
-      {
-        agentContextRootPath: request.agentContextRootPath,
-        chatMode: request.chatMode,
-        forceToolChoice: forcedToolChoiceForTurn,
-        messages: replayableMessagesForTurn,
-        modelId: request.modelId,
-        reasoningEffort: request.reasoningEffort,
-      },
-      context,
-      {
-        onToolCallReady(toolCall) {
-          scheduledToolCallIds.add(toolCall.id)
-          toolExecutionScheduler.schedule(toolCall)
+    (turnRequest, turnContext, options) =>
+      streamOpenAICompatibleChatCompletionsTurn(
+        client,
+        {
+          agentContextRootPath: turnRequest.agentContextRootPath,
+          chatMode: turnRequest.chatMode,
+          forceToolChoice: turnRequest.forceToolChoice,
+          messages: turnRequest.messages,
+          modelId: turnRequest.modelId,
+          providerId: request.providerId,
+          reasoningEffort: turnRequest.reasoningEffort,
+          terminalExecutionMode: request.terminalExecutionMode,
         },
-      },
-    )
-
-    if (turnResult.toolCalls.length === 0) {
-      const hasIncompleteWorkflowPlan = turnState.workflowPlan !== null && !turnState.workflowPlan.allStepsCompleted
-
-      if (hasIncompleteWorkflowPlan && missingToolCallRecoveryCount < MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES) {
-        missingToolCallRecoveryCount += 1
-        enforceRequiredToolChoiceForNextTurn =
-          missingToolCallRecoveryCount >= REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD
-        if (turnResult.assistantContent.trim().length > 0) {
-          inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
-        }
-        inMemoryMessages.push(
-          buildInMemoryUserMessage(
-            'You have incomplete tasks. Continue your work on the current in_progress tasks. Use update_plan only when task statuses change.',
-          ),
-        )
-        continue
-      }
-
-      if (
-        !pseudoToolCallRecoveryAttempted &&
-        shouldRecoverFromTextOnlyToolTurn(turnResult.assistantContent) &&
-        turnResult.assistantContent.trim().length > 0
-      ) {
-        pseudoToolCallRecoveryAttempted = true
-        inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
-        inMemoryMessages.push(
-          buildInMemoryUserMessage(
-            'System notice: You output pseudo tool-call text. Do not describe tool calls in text. Invoke the appropriate tool directly.',
-          ),
-        )
-        continue
-      }
-
-      return
-    }
-    missingToolCallRecoveryCount = 0
-    enforceRequiredToolChoiceForNextTurn = false
-
-    if (turnResult.assistantContent.trim().length > 0) {
-      inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
-    }
-
-    for (const toolCall of turnResult.toolCalls) {
-      if (scheduledToolCallIds.has(toolCall.id)) {
-        continue
-      }
-
-      toolExecutionScheduler.schedule(toolCall)
-    }
-
-    await toolExecutionScheduler.drain()
-
-    if (context.signal.aborted) {
-      return
-    }
-  }
+        turnContext,
+        options,
+      ),
+  )
 }
+
+export type { StreamOpenAICompatibleResponseInput, StreamOpenAICompatibleTurnResult }

@@ -96,6 +96,23 @@ interface NormalizedWorkflowPlanSnapshot {
   steps: NormalizedWorkflowStepSnapshot[]
 }
 
+type NoopUpdatePlanResult = Record<string, unknown> & {
+  allStepsCompleted: boolean
+  completedStepCount: number
+  hasIncompleteSteps: boolean
+  inProgressStepCount: number
+  inProgressStepId: string | null
+  inProgressStepIds: string[]
+  message: string
+  operation: 'noop'
+  path: '.'
+  pendingStepCount: number
+  planId: string
+  steps: NormalizedWorkflowStepSnapshot[]
+  targetKind: 'plan'
+  totalStepCount: number
+}
+
 function readTrimmedString(value: unknown) {
   if (typeof value !== 'string') {
     return null
@@ -171,6 +188,31 @@ function isUnchangedWorkflowPlanUpdate(
   })
 }
 
+function buildNoopUpdatePlanResult(snapshot: NormalizedWorkflowPlanSnapshot): NoopUpdatePlanResult {
+  const completedStepCount = snapshot.steps.filter((step) => step.status === 'completed').length
+  const inProgressSteps = snapshot.steps.filter((step) => step.status === 'in_progress')
+  const pendingStepCount = snapshot.steps.filter((step) => step.status === 'pending').length
+  const allStepsCompleted = completedStepCount === snapshot.steps.length
+
+  return {
+    allStepsCompleted,
+    completedStepCount,
+    hasIncompleteSteps: !allStepsCompleted,
+    inProgressStepCount: inProgressSteps.length,
+    inProgressStepId: inProgressSteps[0]?.id ?? null,
+    inProgressStepIds: inProgressSteps.map((step) => step.id),
+    message:
+      'Plan unchanged. Continue executing the current in_progress steps and call update_plan again only after statuses change.',
+    operation: 'noop',
+    path: '.',
+    pendingStepCount,
+    planId: snapshot.planId,
+    steps: snapshot.steps.map((step) => ({ ...step })),
+    targetKind: 'plan',
+    totalStepCount: snapshot.steps.length,
+  }
+}
+
 export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall) {
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name)
   if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
@@ -217,14 +259,27 @@ export async function executeToolCallWithPolicies(
   }
 
   if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(turnState, argumentsValue)) {
-    emitFailureEvent(
-      toolCall,
-      context,
-      inMemoryMessages,
-      'update_plan has no changes. Execute the current in_progress step with an execution tool, then call update_plan only when step statuses change.',
-      startedAt,
-    )
-    return
+    const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
+    if (incomingPlan) {
+      const completedAt = Date.now()
+      const noopResult = buildNoopUpdatePlanResult(incomingPlan)
+      const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, noopResult, startedAt, completedAt)
+      recordSuccessfulToolExecution(toolCall, argumentsValue, noopResult, agentContextRootPath, turnState)
+
+      context.emitDelta({
+        argumentsText: successfulArtifacts.toolInvocation.argumentsText,
+        completedAt,
+        invocationId: toolCall.id,
+        resultContent: successfulArtifacts.resultContent,
+        resultPresentation: successfulArtifacts.resultPresentation,
+        syntheticMessage: successfulArtifacts.syntheticMessage,
+        toolName: toolCall.name,
+        type: 'tool_invocation_completed',
+      } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }>)
+
+      inMemoryMessages.push(successfulArtifacts.syntheticMessage)
+      return
+    }
   }
 
   try {

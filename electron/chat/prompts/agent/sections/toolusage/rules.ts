@@ -6,6 +6,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
       'For substantial multi-step work, call update_plan before making code changes.',
       'Use in_progress for active work; multiple in_progress steps are allowed when work happens in parallel.',
       'Keep step ids stable across updates and only change statuses when progress actually changes.',
+      'Do not call update_plan with an unchanged step list; continue execution first.',
       'Update step statuses as work completes; do not mark completed prematurely.',
       'When all steps are complete, update_plan should reflect no remaining incomplete steps.',
     ],

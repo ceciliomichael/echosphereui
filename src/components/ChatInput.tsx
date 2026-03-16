@@ -253,8 +253,14 @@ export function ChatInput({
       }
 
       if (event.target instanceof Node && !container.contains(event.target)) {
-        if (event.target instanceof Element && event.target.closest('[data-floating-menu-root="true"]')) {
-          return
+        if (event.target instanceof Element) {
+          if (event.target.closest('[data-floating-menu-root="true"]')) {
+            return
+          }
+
+          if (event.target.closest('[data-sidebar-root="true"]')) {
+            return
+          }
         }
 
         cancelEditing?.()

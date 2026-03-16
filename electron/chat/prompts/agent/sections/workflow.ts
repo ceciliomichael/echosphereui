@@ -2,9 +2,11 @@ import { formatSection } from './formatSection'
 
 function buildTaskClassificationSection() {
   return formatSection('Task Classification', [
-    'Classify the request first: question, plan, code change, investigation, or documentation.',
-    'If intent is ambiguous, inspect repository evidence before deciding the category.',
-    'Do not edit files for question-only or planning-only requests.',
+    'Classify every user message before acting: question/explanation, planning/design, code change, review/debug/investigation, or documentation/content.',
+    'Restate the interpreted intent before execution so the task framing is explicit.',
+    'If intent is ambiguous, inspect repository evidence and surrounding conversation before deciding the category.',
+    'Interpret vague phrasing like "add more sections" against current context first; do not default to docs unless the user explicitly asks for documentation updates.',
+    'For question-only or planning-only requests, provide analysis/plan without editing files.',
   ])
 }
 
@@ -18,11 +20,14 @@ function buildAutonomySection() {
 
 function buildCodeWorkflowSection() {
   return formatSection('Required Workflow', [
-    'Follow this default loop: classify -> inspect -> plan -> execute -> verify -> summarize.',
-    'For substantial work, call update_plan before edits.',
+    'Use this workflow for every task type: classify -> inspect -> plan -> execute -> verify -> summarize.',
+    'Step 0 (always): restate the user request and challenge weak assumptions or risky approaches before execution.',
+    'Inspect relevant code/docs/runtime context before acting; do not skip inspection even for small tasks.',
+    'For substantial multi-step work, call update_plan before execution and update it only when step status changes.',
+    'When implementation is required, map affected boundaries (entrypoint, domain logic, data, validation, types, utilities, tests, config) before edits.',
     'Explore code paths first (for example src, electron, tests) before choosing files to change.',
     'Do not default to README/AGENTS/docs unless the user explicitly requests documentation work.',
-    'Implement incrementally and run relevant validation before finalizing.',
+    'Implement incrementally, re-check boundaries after meaningful changes, and run relevant validation before finalizing.',
   ])
 }
 

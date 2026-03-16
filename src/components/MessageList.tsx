@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react'
+import { memo, useLayoutEffect, useRef } from 'react'
 import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
 import { useAutoScroll } from '../hooks/useAutoScroll'
 import type { AssistantWaitingIndicatorVariant, ChatAttachment, ChatMode, Message, ReasoningEffort } from '../types/chat'
@@ -107,9 +107,12 @@ const MessageRow = memo(
     waitingIndicatorVariant,
     isTextStreaming = false,
     workspaceRootPath = null,
-  }: MessageRowProps) {
+}: MessageRowProps) {
     return (
-      <div className={message.role === 'user' ? 'flex w-full min-w-0 justify-start' : 'flex w-full min-w-0 justify-start'}>
+      <div
+        data-message-id={message.id}
+        className={message.role === 'user' ? 'flex w-full min-w-0 justify-start' : 'flex w-full min-w-0 justify-start'}
+      >
         {message.role === 'user' ? (
           isEditing ? (
             <div className="-mx-4 flex-1 min-w-0 w-[calc(100%+2rem)]">
@@ -146,9 +149,7 @@ const MessageRow = memo(
               <UserMessage
                 content={message.content}
                 onEdit={onEditUserMessage ? () => onEditUserMessage(message.id) : undefined}
-                onRevert={
-                  message.runCheckpoint && onRevertUserMessage ? () => onRevertUserMessage(message.id) : undefined
-                }
+                onRevert={onRevertUserMessage ? () => onRevertUserMessage(message.id) : undefined}
               />
             </div>
           )
@@ -243,6 +244,27 @@ export function MessageList({
     resetKey: conversationId,
     shouldAutoScroll: true,
   })
+
+  useLayoutEffect(() => {
+    if (!editingMessageId) {
+      return
+    }
+
+    const container = scrollContainerRef.current
+    if (!container) {
+      return
+    }
+
+    const targetMessage = container.querySelector<HTMLElement>(`[data-message-id="${editingMessageId}"]`)
+    if (!targetMessage) {
+      return
+    }
+
+    targetMessage.scrollIntoView({
+      block: 'center',
+      behavior: 'auto',
+    })
+  }, [conversationId, editingMessageId, visibleMessages.length])
 
   return (
     <div ref={scrollContainerRef} className="scroll-stable flex-1 w-full overflow-y-auto">

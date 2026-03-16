@@ -6,14 +6,17 @@ Usage guidelines:
 - Optional \`plan\`: short plan title.
 - Required \`steps\`: ordered objects with \`id\`, \`title\`, and \`status\`.
 - Status rules: use \`in_progress\` for active work (multiple steps are allowed); other items should be \`pending\` or \`completed\`.
-- Keep step ids stable across updates so progress tracking stays consistent.`,
+- Keep step ids stable across updates so progress tracking stays consistent.
+- Do not resend an identical \`steps\` array; execute work first, then update statuses.
+- Payload template: \`{"plan":"default","steps":[{"id":"inspect","title":"Inspect files","status":"in_progress"},{"id":"edit","title":"Apply edits","status":"pending"}]}\`.`,
   list: `List files and directories at an absolute path inside the workspace root.
 
 Usage guidelines:
 - Provide \`absolute_path\` as an absolute directory path.
 - Use \`limit\` to cap returned entries when listing large directories.
 - Results are sorted and filtered to hide gitignored entries by default.
-- Use this before \`read\` when you need to discover exact file names.`,
+- The system prompt may include only a folder tree for context; use \`list\` to discover exact file names before \`read\`, \`edit\`, or \`write\`.
+- Do not assume file-level details from folder-only context.`,
   read: `Read text file contents from an absolute path inside the workspace root.
 
 Usage guidelines:

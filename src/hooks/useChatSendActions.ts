@@ -21,7 +21,7 @@ type ConversationStateSnapshot =
   | null
 
 function isMissingCheckpointError(error: unknown) {
-  return error instanceof Error && error.message === 'This message does not have a workspace checkpoint.'
+  return error instanceof Error && error.message.toLowerCase().includes('workspace checkpoint')
 }
 
 function toActionErrorMessage(error: unknown, fallbackMessage: string) {
