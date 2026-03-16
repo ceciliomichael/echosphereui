@@ -19,13 +19,13 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: windows
-            dist_command: npm run dist:win
+            dist_command: npm run dist:win -- --publish never
           - os: ubuntu-latest
             artifact_name: linux
-            dist_command: npm run dist:linux
+            dist_command: npm run dist:linux -- --publish never
           - os: macos-latest
             artifact_name: macos
-            dist_command: npm run dist:mac
+            dist_command: npm run dist:mac -- --publish never
 
     steps:
       - name: Checkout
