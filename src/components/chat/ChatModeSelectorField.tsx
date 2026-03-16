@@ -2,6 +2,7 @@ import { Bot, Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
+import { Tooltip } from '../Tooltip'
 import type { ChatMode } from '../../types/chat'
 
 export interface ChatModeOption {
@@ -33,6 +34,7 @@ export function ChatModeSelectorField({
     anchorRef: buttonRef,
     isOpen,
     menuRef,
+    preferredPlacement: 'above',
   })
 
   useEffect(() => {
@@ -70,6 +72,18 @@ export function ChatModeSelectorField({
     }
   }
 
+  function getGenericOptionTooltip(option: ChatModeOption) {
+    if (option.value === 'agent') {
+      return 'Interactive mode for direct coding help'
+    }
+
+    if (option.value === 'plan') {
+      return 'Structured mode for planning before implementation'
+    }
+
+    return 'Choose how Echo should handle your request'
+  }
+
   return (
     <div ref={containerRef} className="relative w-fit max-w-full">
       <button
@@ -93,7 +107,7 @@ export function ChatModeSelectorField({
             <div
               ref={menuRef}
               data-floating-menu-root="true"
-              className="fixed z-40 w-[min(14rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-border bg-surface shadow-soft"
+              className="fixed z-40 w-[min(9rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-border bg-surface shadow-soft"
               style={menuStyle}
             >
               <div role="listbox" onMouseLeave={() => setHighlightedValue(value)} className="space-y-0.5 p-1.5">
@@ -102,26 +116,24 @@ export function ChatModeSelectorField({
                   const isHighlighted = option.value === highlightedValue
 
                   return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      onMouseEnter={() => setHighlightedValue(option.value)}
-                      onClick={() => handleSelect(option.value)}
-                      className={[
-                        'flex w-full items-start justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
-                        isHighlighted
-                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
-                          : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
-                      ].join(' ')}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] leading-5">{option.label}</span>
-                        <span className="mt-0.5 block text-[11px] text-muted-foreground">{option.description}</span>
-                      </span>
-                      {isSelected ? <Check size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-foreground" /> : null}
-                    </button>
+                    <Tooltip key={option.value} content={getGenericOptionTooltip(option)} side="right" fullWidthTrigger>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onMouseEnter={() => setHighlightedValue(option.value)}
+                        onClick={() => handleSelect(option.value)}
+                        className={[
+                          'flex w-full items-start justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+                          isHighlighted
+                            ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                            : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+                        ].join(' ')}
+                      >
+                        <span className="block min-w-0 flex-1 truncate text-[15px] leading-5">{option.label}</span>
+                        {isSelected ? <Check size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-foreground" /> : null}
+                      </button>
+                    </Tooltip>
                   )
                 })}
               </div>

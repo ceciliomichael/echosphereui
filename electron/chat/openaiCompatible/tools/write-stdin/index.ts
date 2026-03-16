@@ -90,8 +90,8 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
     const formattedOutput = formatTerminalToolOutput(pollResult)
     const message =
       pollResult.processId === null
-        ? `Updated session ${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.`
-        : `Updated session ${sessionId}. Session is still running.`
+        ? `Updated session \n${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.`
+        : `Updated session \n${sessionId}. Session is still running.`
 
     return {
       chunkId: pollResult.chunkId,
