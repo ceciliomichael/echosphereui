@@ -50,8 +50,7 @@ jobs:
         run: npm ci
 
       - name: Resolve build version
-        run: |
-          node -e "const fs=require('node:fs'); const semver=/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$/; const pkgPath='package.json'; const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8')); const input=(process.env.WORKFLOW_INPUT_VERSION||'').trim(); const refType=process.env.GITHUB_REF_TYPE||''; const refName=process.env.GITHUB_REF_NAME||''; let resolved=''; if (input) { if (!semver.test(input)) { console.error('Invalid workflow_dispatch version input:', input); process.exit(1); } resolved=input; } else if (refType==='tag') { const fromTag=refName.replace(/^v/,''); if (!semver.test(fromTag)) { console.error('Invalid tag for versioning:', refName); process.exit(1); } resolved=fromTag; } else { resolved=pkg.version; } if (!semver.test(resolved)) { console.error('Resolved version is invalid:', resolved); process.exit(1); } if (pkg.version!==resolved) { pkg.version=resolved; fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\\n'); } console.log('Resolved build version:', resolved);"
+        run: node ./scripts/resolve-build-version.mjs
 
       - name: Build distributable
         run: ${{ matrix.dist_command }}
