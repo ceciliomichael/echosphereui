@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { restoreWorkspaceCheckpointForMessage } from './chatHistoryWorkflows'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import { useChatComposerState } from './useChatComposerState'
 import { useChatConversationActions } from './useChatConversationActions'
@@ -7,22 +8,68 @@ import { useChatSessionState } from './useChatSessionState'
 import { useChatStreamingState } from './useChatStreamingState'
 import { useInitializeChatHistory } from './useInitializeChatHistory'
 import type { AppLanguage } from '../lib/appSettings'
-import type { ChatMode } from '../types/chat'
+import type { ChatMode, RevertEditSession } from '../types/chat'
 
 interface UseChatMessagesInput {
   language: AppLanguage
   preferredConversationId: string | null
+  revertEditSessionsByConversation: Record<string, RevertEditSession>
+  persistRevertEditSessionsByConversation: (nextValue: Record<string, RevertEditSession>) => void
   shouldInitializeHistory: boolean
 }
 
 export function useChatMessages(input: UseChatMessagesInput) {
-  const { language, preferredConversationId, shouldInitializeHistory } = input
+  const {
+    language,
+    persistRevertEditSessionsByConversation,
+    preferredConversationId,
+    revertEditSessionsByConversation: persistedRevertEditSessionsByConversation,
+    shouldInitializeHistory,
+  } = input
   const sessionState = useChatSessionState(language)
   const messages = sessionState.activeConversationState?.conversation.messages ?? []
   const isSending = sessionState.activeConversationState?.isSending ?? false
   const composerState = useChatComposerState(messages)
+  const activeConversationId = sessionState.activeConversationId
+  const setSessionError = sessionState.setError
+  const editingMessageId = composerState.editingMessageId
+  const startComposerEditingMessage = composerState.startEditingMessage
+  const cancelComposerEditingMessage = composerState.cancelEditingMessage
   const [draftChatMode, setDraftChatMode] = useState<ChatMode>('agent')
   const [pendingDraftSendCount, setPendingDraftSendCount] = useState(0)
+  const [revertEditSessionsByConversation, setRevertEditSessionsByConversation] = useState<
+    Record<string, RevertEditSession>
+  >(persistedRevertEditSessionsByConversation)
+  const revertEditSessionsRef = useRef<Record<string, RevertEditSession>>(persistedRevertEditSessionsByConversation)
+  const resumeSessionKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    revertEditSessionsRef.current = persistedRevertEditSessionsByConversation
+    setRevertEditSessionsByConversation(persistedRevertEditSessionsByConversation)
+  }, [persistedRevertEditSessionsByConversation])
+
+  const setRevertEditSessions = useCallback(
+    (nextValue: Record<string, RevertEditSession>) => {
+      revertEditSessionsRef.current = nextValue
+      setRevertEditSessionsByConversation(nextValue)
+      persistRevertEditSessionsByConversation(nextValue)
+    },
+    [persistRevertEditSessionsByConversation],
+  )
+
+  const clearRevertEditSession = useCallback(
+    (conversationId: string) => {
+      const currentValue = revertEditSessionsRef.current
+      if (!(conversationId in currentValue)) {
+        return
+      }
+
+      const nextValue = { ...currentValue }
+      delete nextValue[conversationId]
+      setRevertEditSessions(nextValue)
+    },
+    [setRevertEditSessions],
+  )
 
   const streamingState = useChatStreamingState({
     activeConversationId: sessionState.activeConversationId,
@@ -40,10 +87,10 @@ export function useChatMessages(input: UseChatMessagesInput) {
   })
 
   const conversationActions = useChatConversationActions({
-    activeConversationId: sessionState.activeConversationId,
+    activeConversationId,
     addFolder: sessionState.addFolder,
     applyConversation: sessionState.applyConversation,
-    beginEditingMessage: composerState.startEditingMessage,
+    beginEditingMessage: startComposerEditingMessage,
     clearConversationSelection: sessionState.clearConversationSelection,
     clearError: sessionState.clearError,
     conversationRuntimeStatesRef: streamingState.conversationRuntimeStatesRef,
@@ -58,21 +105,145 @@ export function useChatMessages(input: UseChatMessagesInput) {
     upsertConversation: sessionState.upsertConversation,
   })
 
+  const beginRevertEditingMessage = useCallback(
+    (conversationId: string, messageId: string, redoCheckpointId: string) => {
+      const currentValue = revertEditSessionsRef.current
+      const existingSession = currentValue[conversationId]
+      if (
+        !existingSession ||
+        existingSession.messageId !== messageId ||
+        existingSession.redoCheckpointId !== redoCheckpointId
+      ) {
+        setRevertEditSessions({
+          ...currentValue,
+          [conversationId]: {
+            messageId,
+            redoCheckpointId,
+          },
+        })
+      }
+
+      startComposerEditingMessage(messageId)
+    },
+    [setRevertEditSessions, startComposerEditingMessage],
+  )
+
+  const completeEditingMessage = useCallback(() => {
+    cancelComposerEditingMessage()
+    if (activeConversationId) {
+      clearRevertEditSession(activeConversationId)
+    }
+  }, [activeConversationId, cancelComposerEditingMessage, clearRevertEditSession])
+
+  const cancelEditingMessage = useCallback(() => {
+    const activeEditingMessageId = editingMessageId
+    cancelComposerEditingMessage()
+
+    if (!activeConversationId || !activeEditingMessageId) {
+      return
+    }
+
+    const revertSession = revertEditSessionsRef.current[activeConversationId]
+    if (!revertSession || revertSession.messageId !== activeEditingMessageId) {
+      return
+    }
+
+    clearRevertEditSession(activeConversationId)
+    void window.echosphereWorkspace
+      .restoreCheckpoint(revertSession.redoCheckpointId)
+      .catch((caughtError) => {
+        console.error(caughtError)
+        setSessionError('Unable to redo reverted workspace changes.')
+      })
+  }, [
+    clearRevertEditSession,
+    activeConversationId,
+    cancelComposerEditingMessage,
+    editingMessageId,
+    setSessionError,
+  ])
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      resumeSessionKeyRef.current = null
+      return
+    }
+
+    const activeRevertSession = revertEditSessionsByConversation[activeConversationId]
+    if (!activeRevertSession) {
+      resumeSessionKeyRef.current = null
+      return
+    }
+
+    if (editingMessageId === activeRevertSession.messageId) {
+      return
+    }
+
+    const resumeSessionKey = `${activeConversationId}:${activeRevertSession.messageId}:${activeRevertSession.redoCheckpointId}`
+    if (resumeSessionKeyRef.current === resumeSessionKey) {
+      return
+    }
+
+    resumeSessionKeyRef.current = resumeSessionKey
+    let isDisposed = false
+
+    void restoreWorkspaceCheckpointForMessage(activeConversationId, activeRevertSession.messageId)
+      .then(() => {
+        if (isDisposed) {
+          return
+        }
+
+        startComposerEditingMessage(activeRevertSession.messageId)
+      })
+      .catch((caughtError) => {
+        console.error(caughtError)
+        if (isDisposed) {
+          return
+        }
+
+        clearRevertEditSession(activeConversationId)
+        setSessionError('Unable to resume reverted edit mode for this thread.')
+      })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [
+    clearRevertEditSession,
+    activeConversationId,
+    editingMessageId,
+    revertEditSessionsByConversation,
+    setSessionError,
+    startComposerEditingMessage,
+  ])
+
+  const startEditingMessage = useCallback(
+    (messageId: string) => {
+      if (activeConversationId) {
+        clearRevertEditSession(activeConversationId)
+      }
+
+      conversationActions.startEditingMessage(messageId)
+    },
+    [activeConversationId, clearRevertEditSession, conversationActions],
+  )
+
   const sendActions = useChatSendActions({
-    activeConversationId: sessionState.activeConversationId,
+    activeConversationId,
     activeConversationIdRef: streamingState.activeConversationIdRef,
     activeConversationStateIsSending: isSending,
     applyConversation: sessionState.applyConversation,
     appendLocalMessage: sessionState.appendLocalMessage,
-    beginEditingMessage: composerState.startEditingMessage,
-    cancelEditingMessage: composerState.cancelEditingMessage,
+    beginRevertEditingMessage,
+    cancelEditingMessage,
     clearError: sessionState.clearError,
     clearTextStreamingIdleTimeout: streamingState.clearTextStreamingIdleTimeout,
+    completeEditingMessage,
     conversationRuntimeStatesRef: streamingState.conversationRuntimeStatesRef,
     draftChatMode,
     editComposerAttachments: composerState.editComposerAttachments,
     editComposerValue: composerState.editComposerValue,
-    editingMessageId: composerState.editingMessageId,
+    editingMessageId,
     mainComposerAttachments: composerState.mainComposerAttachments,
     mainComposerValue: composerState.mainComposerValue,
     markTextStreamingPulse: streamingState.markTextStreamingPulse,
@@ -91,13 +262,13 @@ export function useChatMessages(input: UseChatMessagesInput) {
     upsertConversation: sessionState.upsertConversation,
   })
 
-  const isActiveDraftSending = sessionState.activeConversationId === null && pendingDraftSendCount > 0
+  const isActiveDraftSending = activeConversationId === null && pendingDraftSendCount > 0
 
   return {
-    activeConversationId: sessionState.activeConversationId,
+    activeConversationId,
     activeConversationRootPath: sessionState.activeConversationState?.conversation.agentContextRootPath ?? null,
     activeConversationTitle: sessionState.activeConversationTitle,
-    cancelEditingMessage: composerState.cancelEditingMessage,
+    cancelEditingMessage,
     conversationGroups: sessionState.conversationGroups,
     createConversation: conversationActions.createConversation,
     createFolder: conversationActions.createFolder,
@@ -106,9 +277,9 @@ export function useChatMessages(input: UseChatMessagesInput) {
     editComposerAttachments: composerState.editComposerAttachments,
     editComposerFocusSignal: composerState.editComposerFocusSignal,
     editComposerValue: composerState.editComposerValue,
-    editingMessageId: composerState.editingMessageId,
+    editingMessageId,
     error: sessionState.error,
-    isEditingMessage: composerState.editingMessageId !== null,
+    isEditingMessage: editingMessageId !== null,
     isEditComposerDirty: composerState.isEditComposerDirty,
     isLoading: sessionState.isLoading,
     isSending: sessionState.activeConversationState?.isSending ?? isActiveDraftSending,
@@ -129,7 +300,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     setMainComposerAttachments: composerState.setMainComposerAttachments,
     setMainComposerValue: composerState.setMainComposerValue,
     setSelectedChatMode: setDraftChatMode,
-    startEditingMessage: conversationActions.startEditingMessage,
+    startEditingMessage,
     streamingAssistantMessageId: sessionState.activeConversationState?.streamingAssistantMessageId ?? null,
     streamingWaitingIndicatorVariant: sessionState.activeConversationState?.streamingWaitingIndicatorVariant ?? null,
     abortStreamingResponse: sendActions.abortStreamingResponse,

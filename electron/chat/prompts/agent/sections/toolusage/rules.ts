@@ -59,6 +59,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
       'Use edit for targeted mutations where only part of a file should change.',
       'Edit payload shape: { "absolute_path": "...", ... }.',
       'Replace operation: include old_string + new_string (+ optional replace_all).',
+      'Do not send content in edit; use write for full-file writes.',
       'When old_string is non-empty, read the file first and provide enough surrounding context for uniqueness.',
       'If the tool reports multiple matches, expand old_string context or set replace_all: true.',
       'For new files in replace mode, set old_string to an empty string and put full file text in new_string.',

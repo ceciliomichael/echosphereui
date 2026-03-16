@@ -25,14 +25,15 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('edit tool can create a new file via full content mode', async () => {
+test('edit tool can create a new file via replace mode with empty old_string', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'src', 'new-file.ts')
 
     const result = await editTool.execute(
       {
         absolute_path: filePath,
-        content: 'export const value = 1\n',
+        old_string: '',
+        new_string: 'export const value = 1\n',
       },
       buildExecutionContext(workspacePath),
     )
@@ -42,6 +43,28 @@ test('edit tool can create a new file via full content mode', async () => {
     assert.deepEqual(result.addedPaths, ['src/new-file.ts'])
     assert.deepEqual(result.modifiedPaths, [])
     assert.equal(await fs.readFile(filePath, 'utf8'), 'export const value = 1\n')
+  })
+})
+
+test('edit tool rejects content payloads and requires old_string/new_string', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'invalid.ts')
+
+    await assert.rejects(
+      () =>
+        editTool.execute(
+          {
+            absolute_path: filePath,
+            content: 'export const value = 1\n',
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /old_string/u)
+        return true
+      },
+    )
   })
 })
 

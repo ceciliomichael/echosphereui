@@ -20,6 +20,7 @@ interface WorkspaceCheckpointDocument {
 interface WorkspaceCheckpointStore {
   captureFileState: (checkpointId: string, absolutePath: string) => Promise<void>
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
+  createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
 }
 
@@ -283,6 +284,20 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
         }
       })
     },
+
+    async createRedoCheckpointFromSource(sourceCheckpointId: string) {
+      const sourceManifest = await readManifest(sourceCheckpointId)
+      const redoCheckpoint = await this.createCheckpoint({
+        workspaceRootPath: sourceManifest.workspaceRootPath,
+      })
+
+      for (const sourceEntry of sourceManifest.entries) {
+        const absolutePath = path.join(sourceManifest.workspaceRootPath, sourceEntry.relativePath)
+        await this.captureFileState(redoCheckpoint.id, absolutePath)
+      }
+
+      return redoCheckpoint
+    },
   }
 }
 
@@ -309,4 +324,9 @@ export async function captureWorkspaceCheckpointFileState(checkpointId: string, 
 export async function restoreWorkspaceCheckpoint(checkpointId: string) {
   const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
   return workspaceCheckpointStore.restoreCheckpoint(checkpointId)
+}
+
+export async function createWorkspaceRedoCheckpointFromSource(sourceCheckpointId: string) {
+  const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
+  return workspaceCheckpointStore.createRedoCheckpointFromSource(sourceCheckpointId)
 }

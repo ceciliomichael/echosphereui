@@ -150,7 +150,7 @@ export const CodeBlock = memo(function CodeBlock({
       </div>
       <div
         className={[
-          'overflow-x-scroll',
+          'overflow-x-auto',
           maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
         ]
           .filter((value) => value.length > 0)

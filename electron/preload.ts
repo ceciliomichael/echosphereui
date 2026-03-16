@@ -128,6 +128,8 @@ const gitApi: EchosphereGitApi = {
 
 const workspaceApi: EchosphereWorkspaceApi = {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => ipcRenderer.invoke('workspace:checkpoint:create', input),
+  createRedoCheckpointFromSource: (sourceCheckpointId: string) =>
+    ipcRenderer.invoke('workspace:checkpoint:createRedoFromSource', sourceCheckpointId),
   restoreCheckpoint: (checkpointId: string) => ipcRenderer.invoke('workspace:checkpoint:restore', checkpointId),
 }
 

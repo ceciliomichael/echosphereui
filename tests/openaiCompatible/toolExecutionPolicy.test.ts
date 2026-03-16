@@ -389,13 +389,13 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
   )
 
   scheduler.schedule({
-    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero' }),
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', old_string: '', new_string: 'hero' }),
     id: 'edit-hero',
     name: 'edit',
     startedAt: 1_700_000_000_000,
   })
   scheduler.schedule({
-    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Footer.tsx', content: 'footer' }),
+    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Footer.tsx', old_string: '', new_string: 'footer' }),
     id: 'edit-footer',
     name: 'edit',
     startedAt: 1_700_000_000_000,

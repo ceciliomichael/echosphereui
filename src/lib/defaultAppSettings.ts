@@ -10,6 +10,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   diffPanelWidth: DEFAULT_DIFF_PANEL_WIDTH,
   language: DEFAULT_APP_LANGUAGE,
   lastActiveConversationId: null,
+  revertEditSessionsByConversation: {},
   sendMessageOnEnter: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
   sourceControlSectionOrder: ['commit', 'changes', 'history'],

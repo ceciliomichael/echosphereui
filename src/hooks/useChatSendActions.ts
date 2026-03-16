@@ -1,12 +1,13 @@
 import { useCallback, useRef } from 'react'
-import { restoreWorkspaceCheckpointForMessage } from './chatHistoryWorkflows'
+import { prepareRevertSessionForMessage, restoreWorkspaceCheckpointForMessage } from './chatHistoryWorkflows'
 import { persistAndStreamMessage } from './chatMessageSendWorkflow'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
 
 interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'runtimeSelection' | 'targetEditMessageId' | 'trimmedText' | 'attachments'> {
   activeConversationStateIsSending: boolean
-  beginEditingMessage: (messageId: string) => void
+  beginRevertEditingMessage: (conversationId: string, messageId: string, redoCheckpointId: string) => void
+  cancelEditingMessage: () => void
   editComposerAttachments: PersistAndStreamMessageInput['attachments']
   editComposerValue: string
   editingMessageId: string | null
@@ -229,6 +230,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       try {
         input.clearError()
         await abortActiveStreamIfNeeded()
+        const revertPreparation = await prepareRevertSessionForMessage(conversationId, messageId)
         try {
           await restoreWorkspaceCheckpointForMessage(conversationId, messageId)
         } catch (caughtError) {
@@ -237,7 +239,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
           }
         }
 
-        input.beginEditingMessage(messageId)
+        input.beginRevertEditingMessage(conversationId, messageId, revertPreparation.redoCheckpointId)
       } catch (caughtError) {
         console.error(caughtError)
         input.cancelEditingMessage()

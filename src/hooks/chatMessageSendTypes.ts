@@ -27,9 +27,9 @@ export interface PersistAndStreamMessageInput {
   applyConversation: (conversation: ConversationRecord) => void
   appendLocalMessage: (conversationId: string, message: Message) => void
   attachments: ChatAttachment[]
-  cancelEditingMessage: () => void
   clearError: () => void
   clearTextStreamingIdleTimeout: (conversationId: string) => void
+  completeEditingMessage: () => void
   conversationRuntimeStatesRef: { current: Record<string, ConversationRuntimeSnapshot> }
   draftChatMode: ChatMode
   markTextStreamingPulse: (conversationId: string) => void

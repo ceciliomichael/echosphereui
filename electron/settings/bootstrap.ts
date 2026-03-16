@@ -117,6 +117,41 @@ function sanitizeTerminalPanelHeightsByWorkspace(value: unknown): AppSettings['t
   return sanitizedValue
 }
 
+function sanitizeRevertEditSessionsByConversation(value: unknown): AppSettings['revertEditSessionsByConversation'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.revertEditSessionsByConversation }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['revertEditSessionsByConversation'] = {}
+  for (const [conversationId, candidateSession] of candidateEntries) {
+    const normalizedConversationId = conversationId.trim()
+    if (normalizedConversationId.length === 0 || !candidateSession || typeof candidateSession !== 'object') {
+      continue
+    }
+
+    const messageId =
+      typeof (candidateSession as { messageId?: unknown }).messageId === 'string'
+        ? (candidateSession as { messageId: string }).messageId.trim()
+        : ''
+    const redoCheckpointId =
+      typeof (candidateSession as { redoCheckpointId?: unknown }).redoCheckpointId === 'string'
+        ? (candidateSession as { redoCheckpointId: string }).redoCheckpointId.trim()
+        : ''
+
+    if (messageId.length === 0 || redoCheckpointId.length === 0) {
+      continue
+    }
+
+    sanitizedValue[normalizedConversationId] = {
+      messageId,
+      redoCheckpointId,
+    }
+  }
+
+  return sanitizedValue
+}
+
 function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   const candidate = input as Partial<AppSettings> | null | undefined
 
@@ -135,6 +170,9 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0
         ? candidate.lastActiveConversationId.trim()
         : DEFAULT_APP_SETTINGS.lastActiveConversationId,
+    revertEditSessionsByConversation: sanitizeRevertEditSessionsByConversation(
+      candidate?.revertEditSessionsByConversation,
+    ),
     sendMessageOnEnter:
       typeof candidate?.sendMessageOnEnter === 'boolean'
         ? candidate.sendMessageOnEnter

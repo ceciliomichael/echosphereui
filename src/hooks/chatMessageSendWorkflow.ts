@@ -173,7 +173,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
 
     if (input.targetEditMessageId !== null) {
       if (shouldKeepSelected) {
-        input.cancelEditingMessage()
+        input.completeEditingMessage()
       }
     } else if (shouldKeepSelected) {
       input.setMainComposerValue('')

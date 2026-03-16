@@ -18,7 +18,6 @@ const TOOL_DESCRIPTION = getToolDescription('edit')
 interface EditOperation {
   [key: string]: unknown
   absolute_path: string
-  content?: string
   new_string?: string
   old_string?: string
   replace_all: boolean
@@ -450,24 +449,6 @@ function replaceWithAnchors(content: string, oldString: string, newString: strin
 function normalizeEditOperation(input: Record<string, unknown>): EditOperation {
   const absolutePath = readRequiredString(input, 'absolute_path')
   const replaceAll = readOptionalBoolean(input, 'replace_all', false)
-  const contentValue = input.content
-  const oldStringValue = input.old_string
-  const newStringValue = input.new_string
-
-  if (typeof contentValue === 'string') {
-    if (oldStringValue !== undefined || newStringValue !== undefined) {
-      throw new OpenAICompatibleToolError(
-        'Edit operation with content must not include old_string or new_string.',
-      )
-    }
-
-    return {
-      absolute_path: absolutePath,
-      content: contentValue,
-      replace_all: replaceAll,
-    }
-  }
-
   const oldString = readRequiredText(input, 'old_string', true)
   const newString = readRequiredText(input, 'new_string', true)
   return {
@@ -539,28 +520,23 @@ export const editTool: OpenAICompatibleToolDefinition = {
     const trackedCheckpointPaths = new Set<string>()
     const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, edit.absolute_path)
     const existingFile = await readExistingFile(normalizedTargetPath)
+    const oldString = edit.old_string ?? ''
+    const newString = edit.new_string ?? ''
     let nextContent: string
 
-    if (edit.content !== undefined) {
-      nextContent = edit.content
+    if (!existingFile.exists && oldString.length > 0) {
+      throw new OpenAICompatibleToolError('Cannot apply edit because file does not exist and old_string is non-empty.', {
+        absolute_path: normalizedTargetPath,
+      })
+    }
+
+    if (oldString.length === 0) {
+      nextContent = newString
     } else {
-      const oldString = edit.old_string ?? ''
-      const newString = edit.new_string ?? ''
-
-      if (!existingFile.exists && oldString.length > 0) {
-        throw new OpenAICompatibleToolError('Cannot apply edit because file does not exist and old_string is non-empty.', {
-          absolute_path: normalizedTargetPath,
-        })
-      }
-
-      if (oldString.length === 0) {
-        nextContent = newString
-      } else {
-        const lineEnding = detectLineEnding(existingFile.content)
-        const normalizedOldString = convertToLineEnding(normalizeLineEndings(oldString), lineEnding)
-        const normalizedNewString = convertToLineEnding(normalizeLineEndings(newString), lineEnding)
-        nextContent = replaceWithAnchors(existingFile.content, normalizedOldString, normalizedNewString, edit.replace_all)
-      }
+      const lineEnding = detectLineEnding(existingFile.content)
+      const normalizedOldString = convertToLineEnding(normalizeLineEndings(oldString), lineEnding)
+      const normalizedNewString = convertToLineEnding(normalizeLineEndings(newString), lineEnding)
+      nextContent = replaceWithAnchors(existingFile.content, normalizedOldString, normalizedNewString, edit.replace_all)
     }
 
     if (context.workspaceCheckpointId && !trackedCheckpointPaths.has(normalizedTargetPath)) {
@@ -615,15 +591,11 @@ export const editTool: OpenAICompatibleToolDefinition = {
         additionalProperties: false,
         properties: {
           absolute_path: { type: 'string' },
-          content: { type: 'string' },
           old_string: { type: 'string' },
           replace_all: { type: 'boolean' },
           new_string: { type: 'string' },
         },
-        anyOf: [
-          { required: ['absolute_path', 'content'] },
-          { required: ['absolute_path', 'old_string', 'new_string'] },
-        ],
+        required: ['absolute_path', 'old_string', 'new_string'],
         type: 'object',
       },
     },

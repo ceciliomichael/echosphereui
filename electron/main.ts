@@ -88,7 +88,11 @@ import {
   resizeTerminalSession,
   writeToTerminalSession,
 } from './terminal/service'
-import { createWorkspaceCheckpoint, restoreWorkspaceCheckpoint } from './workspace/checkpoints'
+import {
+  createWorkspaceCheckpoint,
+  createWorkspaceRedoCheckpointFromSource,
+  restoreWorkspaceCheckpoint,
+} from './workspace/checkpoints'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -292,6 +296,9 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:checkpoint:restore', async (_event, checkpointId: string) =>
     restoreWorkspaceCheckpoint(checkpointId),
+  )
+  ipcMain.handle('workspace:checkpoint:createRedoFromSource', async (_event, sourceCheckpointId: string) =>
+    createWorkspaceRedoCheckpointFromSource(sourceCheckpointId),
   )
 }
 

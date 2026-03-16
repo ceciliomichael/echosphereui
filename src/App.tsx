@@ -21,7 +21,11 @@ export default function App() {
   const persistingConversationIdRef = useRef<string | null>(null)
   const chatMessages = useChatMessages({
     language: settings.language,
+    persistRevertEditSessionsByConversation: (nextValue) => {
+      void updateSettings({ revertEditSessionsByConversation: nextValue })
+    },
     preferredConversationId: bootPreferredConversationId ?? null,
+    revertEditSessionsByConversation: settings.revertEditSessionsByConversation,
     shouldInitializeHistory: bootPreferredConversationId !== undefined,
   })
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {

@@ -214,7 +214,7 @@ const DiffViewerComponent = ({
           className={[
             isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
             maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
-            'overflow-x-scroll',
+            'overflow-x-auto',
           ]
             .filter((value) => value.length > 0)
             .join(' ')}

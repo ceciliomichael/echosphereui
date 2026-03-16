@@ -123,6 +123,42 @@ function sanitizeTerminalPanelHeightsByWorkspace(value: unknown): Record<string,
   return sanitizedValue
 }
 
+function sanitizeRevertEditSessionsByConversation(value: unknown): AppSettings['revertEditSessionsByConversation'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.revertEditSessionsByConversation }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['revertEditSessionsByConversation'] = {}
+
+  for (const [conversationId, candidateSession] of candidateEntries) {
+    const normalizedConversationId = conversationId.trim()
+    if (normalizedConversationId.length === 0 || !candidateSession || typeof candidateSession !== 'object') {
+      continue
+    }
+
+    const messageId =
+      typeof (candidateSession as { messageId?: unknown }).messageId === 'string'
+        ? (candidateSession as { messageId: string }).messageId.trim()
+        : ''
+    const redoCheckpointId =
+      typeof (candidateSession as { redoCheckpointId?: unknown }).redoCheckpointId === 'string'
+        ? (candidateSession as { redoCheckpointId: string }).redoCheckpointId.trim()
+        : ''
+
+    if (messageId.length === 0 || redoCheckpointId.length === 0) {
+      continue
+    }
+
+    sanitizedValue[normalizedConversationId] = {
+      messageId,
+      redoCheckpointId,
+    }
+  }
+
+  return sanitizedValue
+}
+
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
 }
@@ -159,6 +195,9 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
       ? input.lastActiveConversationId.trim()
       : DEFAULT_APP_SETTINGS.lastActiveConversationId
+  const revertEditSessionsByConversation = sanitizeRevertEditSessionsByConversation(
+    input?.revertEditSessionsByConversation,
+  )
   const sendMessageOnEnter =
     typeof input?.sendMessageOnEnter === 'boolean'
       ? input.sendMessageOnEnter
@@ -179,6 +218,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     diffPanelWidth,
     language,
     lastActiveConversationId,
+    revertEditSessionsByConversation,
     sendMessageOnEnter,
     sidebarWidth,
     sourceControlSectionOrder,

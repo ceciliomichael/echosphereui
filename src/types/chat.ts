@@ -169,6 +169,7 @@ export interface AppSettings {
   diffPanelWidth: number
   language: AppLanguage
   lastActiveConversationId: string | null
+  revertEditSessionsByConversation: Record<string, RevertEditSession>
   sendMessageOnEnter: boolean
   sidebarWidth: number
   sourceControlSectionOrder: SourceControlSectionId[]
@@ -182,6 +183,11 @@ export interface AppSettings {
 export type SourceControlSectionId = 'commit' | 'changes' | 'history'
 export type SourceControlSectionOpenId = SourceControlSectionId | 'staged' | 'unstaged'
 export type AppTerminalExecutionMode = 'full' | 'sandbox'
+
+export interface RevertEditSession {
+  messageId: string
+  redoCheckpointId: string
+}
 
 export interface CodexProviderConnectionStatus {
   accountId: string | null
@@ -588,6 +594,7 @@ export interface EchosphereChatApi {
 
 export interface EchosphereWorkspaceApi {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
+  createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
 }
 
