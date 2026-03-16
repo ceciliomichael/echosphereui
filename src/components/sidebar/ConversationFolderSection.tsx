@@ -33,9 +33,18 @@ export function ConversationFolderSection({
 }: ConversationFolderSectionProps) {
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
   const isProjectFolder = group.folder.id !== null
+  const [visibleProjectThreadCount, setVisibleProjectThreadCount] = useState(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+  const [recentlyAddedStartIndex, setRecentlyAddedStartIndex] = useState<number | null>(null)
+  const [isProjectThreadListCollapsing, setIsProjectThreadListCollapsing] = useState(false)
+  const showMoreResetTimeoutRef = useRef<number | null>(null)
+  const addAnimationResetTimeoutRef = useRef<number | null>(null)
   const visibleConversations = isProjectFolder
-    ? group.conversations.slice(0, MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+    ? group.conversations.slice(0, visibleProjectThreadCount)
     : group.conversations
+  const remainingProjectThreadCount = isProjectFolder
+    ? Math.max(group.conversations.length - visibleConversations.length, 0)
+    : 0
+  const canShowLessProjectThreads = isProjectFolder && remainingProjectThreadCount === 0 && group.conversations.length > 5
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false)
   const [isRemovingFolder, setIsRemovingFolder] = useState(false)
@@ -121,6 +130,17 @@ export function ConversationFolderSection({
   }, [isActionsMenuOpen])
 
   useEffect(() => {
+    return () => {
+      if (showMoreResetTimeoutRef.current !== null) {
+        window.clearTimeout(showMoreResetTimeoutRef.current)
+      }
+      if (addAnimationResetTimeoutRef.current !== null) {
+        window.clearTimeout(addAnimationResetTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!isProjectFolder || !isActionsMenuOpen) {
       return
     }
@@ -152,6 +172,45 @@ export function ConversationFolderSection({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isActionsMenuOpen, isProjectFolder])
+
+  function handleShowMoreThreads() {
+    if (!isProjectFolder || remainingProjectThreadCount <= 0) {
+      return
+    }
+
+    setVisibleProjectThreadCount((currentValue) => {
+      const nextValue = Math.min(currentValue + MAX_VISIBLE_PROJECT_FOLDER_THREADS, group.conversations.length)
+      if (nextValue > currentValue) {
+        setRecentlyAddedStartIndex(currentValue)
+        if (addAnimationResetTimeoutRef.current !== null) {
+          window.clearTimeout(addAnimationResetTimeoutRef.current)
+        }
+
+        addAnimationResetTimeoutRef.current = window.setTimeout(() => {
+          setRecentlyAddedStartIndex(null)
+        }, 280)
+      }
+
+      return nextValue
+    })
+  }
+
+  function handleShowLessThreads() {
+    if (!canShowLessProjectThreads) {
+      return
+    }
+
+    setIsProjectThreadListCollapsing(true)
+    if (showMoreResetTimeoutRef.current !== null) {
+      window.clearTimeout(showMoreResetTimeoutRef.current)
+    }
+
+    showMoreResetTimeoutRef.current = window.setTimeout(() => {
+      setVisibleProjectThreadCount(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+      setIsProjectThreadListCollapsing(false)
+      setRecentlyAddedStartIndex(null)
+    }, 170)
+  }
 
   function handleRenameFolder() {
     if (!group.folder.id) {
@@ -303,14 +362,52 @@ export function ConversationFolderSection({
               </div>
             ) : (
               <div className="space-y-1.5">
-                {visibleConversations.map((conversation) => (
-                  <ConversationHistoryItem
-                    key={conversation.id}
-                    conversation={conversation}
-                    onSelectConversation={onSelectConversation}
-                    onDeleteConversation={onDeleteConversation}
-                  />
-                ))}
+                {visibleConversations.map((conversation, index) => {
+                  const isRecentlyAdded =
+                    recentlyAddedStartIndex !== null &&
+                    !isProjectThreadListCollapsing &&
+                    index >= recentlyAddedStartIndex
+                  const isCollapsingAway =
+                    isProjectThreadListCollapsing && isProjectFolder && index >= MAX_VISIBLE_PROJECT_FOLDER_THREADS
+
+                  return (
+                    <div
+                      key={conversation.id}
+                      className={[
+                        'transition-[opacity,transform] duration-180 ease-out',
+                        isRecentlyAdded ? 'sidebar-thread-item-enter' : '',
+                        isCollapsingAway ? 'translate-y-1 opacity-0' : 'translate-y-0 opacity-100',
+                      ].join(' ')}
+                    >
+                      <ConversationHistoryItem
+                        conversation={conversation}
+                        onSelectConversation={onSelectConversation}
+                        onDeleteConversation={onDeleteConversation}
+                      />
+                    </div>
+                  )
+                })}
+                {isProjectFolder && (remainingProjectThreadCount > 0 || canShowLessProjectThreads) ? (
+                  <div className="px-4 py-1">
+                    {remainingProjectThreadCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={handleShowMoreThreads}
+                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Show more
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleShowLessThreads}
+                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Show less
+                      </button>
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

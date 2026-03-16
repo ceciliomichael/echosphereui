@@ -48,15 +48,81 @@ function getSessionDimensions(terminal: Terminal) {
   }
 }
 
-function getTerminalTheme(hostElement: HTMLElement): TerminalTheme {
+function getNativeSelectionTextWithinHost(hostElement: HTMLElement) {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return ''
+  }
+
+  const anchorNode = selection.anchorNode
+  const focusNode = selection.focusNode
+  if (!anchorNode || !focusNode) {
+    return ''
+  }
+
+  const isAnchorInsideHost = hostElement.contains(anchorNode)
+  const isFocusInsideHost = hostElement.contains(focusNode)
+  if (!isAnchorInsideHost && !isFocusInsideHost) {
+    return ''
+  }
+
+  return selection.toString()
+}
+
+function getTerminalTheme(hostElement: HTMLElement, resolvedTheme: ResolvedTheme): TerminalTheme {
   const hostStyles = window.getComputedStyle(hostElement)
+  const foreground = hostStyles.color
+  const background = hostStyles.backgroundColor
+  const lightModeTextColor = '#101011'
+
+  if (resolvedTheme === 'dark') {
+    return {
+      background,
+      foreground,
+      cursor: foreground,
+      selectionBackground: 'rgb(135 113 255 / 0.34)',
+      selectionInactiveBackground: 'rgb(135 113 255 / 0.22)',
+      black: '#1f1f21',
+      red: '#f48771',
+      green: '#9ad792',
+      yellow: '#f5d76e',
+      blue: '#7aa2f7',
+      magenta: '#bb9af7',
+      cyan: '#7dcfff',
+      white: '#d9d9da',
+      brightBlack: '#7d7d83',
+      brightRed: '#ffb3a7',
+      brightGreen: '#b8e8ae',
+      brightYellow: '#f8e194',
+      brightBlue: '#a6bcff',
+      brightMagenta: '#d8c1ff',
+      brightCyan: '#9be6ff',
+      brightWhite: '#ffffff',
+    }
+  }
 
   return {
-    background: hostStyles.backgroundColor,
-    brightYellow: hostStyles.color,
-    cursor: hostStyles.color,
-    foreground: hostStyles.color,
-    yellow: hostStyles.color,
+    background,
+    foreground: lightModeTextColor,
+    cursor: lightModeTextColor,
+    selectionBackground: 'rgb(59 130 246 / 0.30)',
+    selectionInactiveBackground: 'rgb(59 130 246 / 0.20)',
+    black: lightModeTextColor,
+    red: lightModeTextColor,
+    green: lightModeTextColor,
+    yellow: lightModeTextColor,
+    blue: lightModeTextColor,
+    magenta: lightModeTextColor,
+    cyan: lightModeTextColor,
+    white: lightModeTextColor,
+    brightBlack: lightModeTextColor,
+    brightRed: lightModeTextColor,
+    brightGreen: lightModeTextColor,
+    brightYellow: lightModeTextColor,
+    brightBlue: lightModeTextColor,
+    brightMagenta: lightModeTextColor,
+    brightCyan: lightModeTextColor,
+    brightWhite: '#ffffff',
   }
 }
 
@@ -167,9 +233,9 @@ export function WorkspaceTerminalPanel({
       return
     }
 
-    terminal.options.theme = { ...getTerminalTheme(hostElement) }
+    terminal.options.theme = { ...getTerminalTheme(hostElement, resolvedTheme) }
     terminal.refresh(0, Math.max(terminal.rows - 1, 0))
-  }, [])
+  }, [resolvedTheme])
 
   const ensureTerminal = useCallback(() => {
     const hostElement = terminalHostRef.current
@@ -183,8 +249,9 @@ export function WorkspaceTerminalPanel({
       fontFamily: '"Cascadia Mono", Consolas, "Courier New", monospace',
       fontSize: 13,
       lineHeight: 1.24,
+      minimumContrastRatio: 4.5,
       scrollback: 5_000,
-      theme: getTerminalTheme(hostElement),
+      theme: getTerminalTheme(hostElement, resolvedTheme),
     })
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon((event, uri) => {
@@ -202,6 +269,32 @@ export function WorkspaceTerminalPanel({
     terminal.open(hostElement)
     terminal.focus()
     fitAddon.fit()
+    terminal.attachCustomKeyEventHandler((event) => {
+      const isCopyShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'c'
+      if (!isCopyShortcut) {
+        return true
+      }
+
+      const copySelectedText = (text: string) => {
+        void navigator.clipboard.writeText(text).catch((error) => {
+          console.error('Failed to copy selected terminal text', error)
+        })
+      }
+
+      const terminalSelection = terminal.getSelection()
+      if (terminalSelection) {
+        copySelectedText(terminalSelection)
+        return false
+      }
+
+      const nativeSelection = getNativeSelectionTextWithinHost(hostElement)
+      if (nativeSelection) {
+        copySelectedText(nativeSelection)
+        return false
+      }
+
+      return true
+    })
 
     terminalInputDisposableRef.current = terminal.onData((data) => {
       const activeSessionId = sessionIdRef.current
@@ -224,7 +317,7 @@ export function WorkspaceTerminalPanel({
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
-  }, [sendTerminalSizeToSession])
+  }, [resolvedTheme, sendTerminalSizeToSession])
 
   const disposeTerminal = useCallback(() => {
     terminalInputDisposableRef.current?.dispose()
@@ -499,7 +592,10 @@ export function WorkspaceTerminalPanel({
           {cwdLabel ? (
             <>
               <span className="h-4 w-px bg-border" />
-              <span className="truncate text-sm text-foreground" title={cwdLabel}>
+              <span
+                className="select-text truncate text-sm text-foreground selection:bg-[#101011]/70 selection:text-white"
+                title={cwdLabel}
+              >
                 {cwdLabel}
               </span>
             </>
@@ -521,7 +617,7 @@ export function WorkspaceTerminalPanel({
       </div>
       <div
         ref={terminalHostRef}
-        className="min-h-0 flex-1 overflow-hidden bg-[var(--workspace-panel-surface)] px-4 py-3 text-foreground"
+        className="workspace-terminal-host min-h-0 flex-1 overflow-hidden bg-[var(--workspace-panel-surface)] px-4 py-3 text-foreground"
       />
       {errorMessage ? (
         <div className="border-t border-danger-border bg-danger-surface px-4 py-1.5 text-xs text-danger-foreground">
