@@ -4,7 +4,7 @@ export type MessageRole = 'user' | 'assistant' | 'tool'
 export type ChatMode = 'agent'
 export type UserMessageKind = 'human' | 'tool_result'
 export type ToolInvocationState = 'running' | 'completed' | 'failed'
-export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash'
+export type AssistantWaitingIndicatorVariant = 'thinking' | 'splash' | 'rate_limit_retry'
 export type ChatAttachmentKind = 'image' | 'text'
 
 export interface FileDiffToolResultPresentation {

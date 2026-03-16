@@ -27,6 +27,19 @@ function validateRuntimeSelection(input: PersistAndStreamMessageInput) {
   return input.runtimeSelection.providerId
 }
 
+function isRateLimitError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const normalizedMessage = error.message.toLowerCase()
+  return (
+    normalizedMessage.includes('429') ||
+    normalizedMessage.includes('rate limit') ||
+    normalizedMessage.includes('too many requests')
+  )
+}
+
 function createStreamProgressPersistenceController(input: {
   conversationId: string
   setError: (errorMessage: string | null) => void
@@ -132,6 +145,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   let conversationIdForCleanup = initiatingConversationId
   let draftManager: ReturnType<typeof createChatAssistantDraftManager> | null = null
   let streamProgressPersistence: ReturnType<typeof createStreamProgressPersistenceController> | null = null
+  let shouldKeepWaitingIndicatorActive = false
 
   input.clearError()
 
@@ -255,29 +269,47 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     input.updateConversationSummary(savedConversation)
   } catch (caughtError) {
     console.error(caughtError)
+    const shouldRetainProgress = isRateLimitError(caughtError)
     if (draftManager) {
-      draftManager.removeInsertedMessages()
+      if (shouldRetainProgress) {
+        draftManager.showRateLimitRetryIndicator()
+      } else {
+        draftManager.removeInsertedMessages()
+      }
     }
 
     if (streamProgressPersistence) {
       await streamProgressPersistence.flush()
     }
 
-    const providerLabel = input.runtimeSelection.providerLabel ?? 'the selected provider'
-    input.setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
+    if (shouldRetainProgress) {
+      shouldKeepWaitingIndicatorActive = true
+      input.setError(null)
+    } else {
+      const providerLabel = input.runtimeSelection.providerLabel ?? 'the selected provider'
+      input.setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
+    }
   } finally {
     if (initiatingConversationId === null) {
       input.setPendingDraftSendCount((currentValue) => Math.max(0, currentValue - 1))
     }
 
     if (conversationIdForCleanup) {
-      input.updateConversationRuntimeState(conversationIdForCleanup, {
-        activeStreamId: null,
-        isSending: false,
-        isStreamingTextActive: false,
-        streamingAssistantMessageId: null,
-        streamingWaitingIndicatorVariant: null,
-      })
+      if (shouldKeepWaitingIndicatorActive) {
+        input.updateConversationRuntimeState(conversationIdForCleanup, {
+          activeStreamId: null,
+          isSending: false,
+          isStreamingTextActive: false,
+        })
+      } else {
+        input.updateConversationRuntimeState(conversationIdForCleanup, {
+          activeStreamId: null,
+          isSending: false,
+          isStreamingTextActive: false,
+          streamingAssistantMessageId: null,
+          streamingWaitingIndicatorVariant: null,
+        })
+      }
       input.clearTextStreamingIdleTimeout(conversationIdForCleanup)
     }
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { ConversationFolderSection } from './ConversationFolderSection'
 
@@ -12,6 +12,41 @@ interface ConversationHistoryListProps {
   onSelectFolder: (folderId: string | null) => void
 }
 
+const COLLAPSED_FOLDER_STATE_STORAGE_KEY = 'echosphere:sidebar-collapsed-folders'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function readCollapsedFolderState(): Record<string, boolean> {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_FOLDER_STATE_STORAGE_KEY)
+    if (!raw) {
+      return {}
+    }
+
+    const parsed = JSON.parse(raw) as unknown
+    if (!isRecord(parsed)) {
+      return {}
+    }
+
+    const nextState: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'boolean') {
+        nextState[key] = value
+      }
+    }
+
+    return nextState
+  } catch {
+    return {}
+  }
+}
+
 export function ConversationHistoryList({
   conversationGroups,
   onCreateConversation,
@@ -21,7 +56,21 @@ export function ConversationHistoryList({
   onRenameFolder,
   onSelectFolder,
 }: ConversationHistoryListProps) {
-  const [collapsedFolderState, setCollapsedFolderState] = useState<Record<string, boolean>>({})
+  const [collapsedFolderState, setCollapsedFolderState] = useState<Record<string, boolean>>(() =>
+    readCollapsedFolderState(),
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      window.localStorage.setItem(COLLAPSED_FOLDER_STATE_STORAGE_KEY, JSON.stringify(collapsedFolderState))
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [collapsedFolderState])
 
   function handleToggleFolder(folderId: string | null) {
     const stateKey = folderId ?? 'unfiled'

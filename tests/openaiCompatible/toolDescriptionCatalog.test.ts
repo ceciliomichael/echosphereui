@@ -14,5 +14,5 @@ test('update_plan tool description includes workflow synchronization guidance', 
   const description = getToolDescription('update_plan')
   assert.match(description, /Create or update the active execution plan/u)
   assert.match(description, /Optional `plan`: short plan title/u)
-  assert.match(description, /exactly one `in_progress` while work remains/u)
+  assert.match(description, /multiple steps are allowed/u)
 })

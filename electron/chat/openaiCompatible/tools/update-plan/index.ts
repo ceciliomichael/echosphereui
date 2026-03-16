@@ -83,13 +83,6 @@ function normalizePlanSteps(input: Record<string, unknown>) {
     uniqueStepIds.add(step.id)
   }
 
-  const inProgressSteps = normalizedSteps.filter((step) => step.status === 'in_progress')
-  if (inProgressSteps.length > 1) {
-    throw new OpenAICompatibleToolError('Only one step can be in_progress at a time.', {
-      inProgressCount: inProgressSteps.length,
-    })
-  }
-
   return normalizedSteps
 }
 
@@ -101,17 +94,18 @@ export const updatePlanTool: OpenAICompatibleToolDefinition = {
     const planId = readOptionalString(argumentsValue, 'plan') ?? 'default'
     const steps = normalizePlanSteps(argumentsValue)
     const hasIncompleteSteps = steps.some((step) => step.status !== 'completed')
-    const inProgressStep = steps.find((step) => step.status === 'in_progress') ?? null
+    const inProgressSteps = steps.filter((step) => step.status === 'in_progress')
     const completedStepCount = steps.filter((step) => step.status === 'completed').length
     const pendingStepCount = steps.filter((step) => step.status === 'pending').length
-    const inProgressStepCount = inProgressStep ? 1 : 0
+    const inProgressStepCount = inProgressSteps.length
 
     return {
       allStepsCompleted: !hasIncompleteSteps,
       completedStepCount,
       hasIncompleteSteps,
       inProgressStepCount,
-      inProgressStepId: inProgressStep?.id ?? null,
+      inProgressStepId: inProgressSteps[0]?.id ?? null,
+      inProgressStepIds: inProgressSteps.map((step) => step.id),
       message: `Plan ${planId} updated: ${completedStepCount}/${steps.length} completed.`,
       operation: 'update_plan',
       path: '.',
@@ -134,7 +128,7 @@ export const updatePlanTool: OpenAICompatibleToolDefinition = {
             type: 'string',
           },
           steps: {
-            description: 'Ordered workflow steps. Keep exactly one step in_progress when active work remains.',
+            description: 'Ordered workflow steps. Use in_progress for active work; multiple steps may be in_progress at once.',
             items: {
               additionalProperties: false,
               properties: {

@@ -112,12 +112,12 @@ function normalizeWorkflowPlanState(semanticResult: Record<string, unknown>): Wo
 export function resolveWorkflowTurnToolChoice(turnState: ToolExecutionTurnState): 'auto' | 'none' | 'required' {
   const workflowPlan = turnState.workflowPlan
   if (!workflowPlan) {
-    return 'required'
+    return 'auto'
   }
 
   if (workflowPlan.allStepsCompleted) {
     return 'none'
   }
 
-  return workflowPlan.hasIncompleteSteps ? 'required' : 'auto'
+  return 'auto'
 }

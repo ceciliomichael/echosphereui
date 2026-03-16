@@ -18,6 +18,8 @@ interface ConversationFolderSectionProps {
   onToggleCollapsed: () => void
 }
 
+const MAX_VISIBLE_PROJECT_FOLDER_THREADS = 5
+
 export function ConversationFolderSection({
   group,
   isCollapsed,
@@ -31,6 +33,9 @@ export function ConversationFolderSection({
 }: ConversationFolderSectionProps) {
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
   const isProjectFolder = group.folder.id !== null
+  const visibleConversations = isProjectFolder
+    ? group.conversations.slice(0, MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+    : group.conversations
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false)
   const [isRemovingFolder, setIsRemovingFolder] = useState(false)
@@ -298,7 +303,7 @@ export function ConversationFolderSection({
               </div>
             ) : (
               <div className="space-y-1.5">
-                {group.conversations.map((conversation) => (
+                {visibleConversations.map((conversation) => (
                   <ConversationHistoryItem
                     key={conversation.id}
                     conversation={conversation}

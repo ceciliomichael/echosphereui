@@ -35,27 +35,24 @@ test('update_plan tool normalizes valid workflow steps and returns workflow summ
   assert.equal(result.planId, 'plan-main')
   assert.equal(result.totalStepCount, 2)
   assert.equal(result.inProgressStepId, 'step-1')
+  assert.deepEqual(result.inProgressStepIds, ['step-1'])
   assert.equal(result.allStepsCompleted, false)
 })
 
-test('update_plan tool rejects multiple in_progress steps', async () => {
-  await assert.rejects(
-    () =>
-      updatePlanTool.execute(
-        {
-          steps: [
-            { id: 'a', status: 'in_progress', title: 'A' },
-            { id: 'b', status: 'in_progress', title: 'B' },
-          ],
-        },
-        buildExecutionContext(),
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof OpenAICompatibleToolError)
-      assert.match(error.message, /Only one step can be in_progress/u)
-      return true
+test('update_plan tool allows multiple in_progress steps', async () => {
+  const result = await updatePlanTool.execute(
+    {
+      steps: [
+        { id: 'a', status: 'in_progress', title: 'A' },
+        { id: 'b', status: 'in_progress', title: 'B' },
+      ],
     },
+    buildExecutionContext(),
   )
+
+  assert.equal(result.inProgressStepCount, 2)
+  assert.equal(result.inProgressStepId, 'a')
+  assert.deepEqual(result.inProgressStepIds, ['a', 'b'])
 })
 
 test('update_plan tool rejects duplicate step ids', async () => {

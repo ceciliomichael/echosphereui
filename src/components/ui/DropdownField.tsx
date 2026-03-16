@@ -28,6 +28,10 @@ interface DropdownFieldProps {
   variant?: 'default' | 'text'
 }
 
+const OPTION_HEIGHT_PX = 36
+const VIRTUAL_OVERSCAN_OPTION_COUNT = 6
+const VIRTUALIZATION_THRESHOLD = 200
+
 export function DropdownField({
   ariaLabel,
   className,
@@ -47,6 +51,8 @@ export function DropdownField({
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const listboxRef = useRef<HTMLDivElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [listboxScrollTop, setListboxScrollTop] = useState(0)
+  const [listboxViewportHeight, setListboxViewportHeight] = useState(0)
   const [highlightedIndex, setHighlightedIndex] = useState(() =>
     Math.max(
       0,
@@ -62,6 +68,16 @@ export function DropdownField({
     () => options.find((option) => option.value === value) ?? options[0],
     [options, value],
   )
+  const shouldVirtualizeOptions = options.length > VIRTUALIZATION_THRESHOLD
+  const estimatedVisibleOptionCount = Math.max(1, Math.ceil(listboxViewportHeight / OPTION_HEIGHT_PX))
+  const virtualStartIndex = Math.max(0, Math.floor(listboxScrollTop / OPTION_HEIGHT_PX) - VIRTUAL_OVERSCAN_OPTION_COUNT)
+  const virtualEndIndex = Math.min(
+    options.length,
+    virtualStartIndex + estimatedVisibleOptionCount + VIRTUAL_OVERSCAN_OPTION_COUNT * 2,
+  )
+  const virtualOptions = options.slice(virtualStartIndex, virtualEndIndex)
+  const virtualTopOffset = virtualStartIndex * OPTION_HEIGHT_PX
+  const virtualTotalHeight = options.length * OPTION_HEIGHT_PX
 
   useEffect(() => {
     const selectedIndex = options.findIndex((option) => option.value === value)
@@ -72,6 +88,8 @@ export function DropdownField({
 
   useEffect(() => {
     if (!isOpen) {
+      setListboxScrollTop(0)
+      setListboxViewportHeight(0)
       return
     }
 
@@ -119,9 +137,30 @@ export function DropdownField({
     }
 
     listboxRef.current?.focus()
-    const activeOption = listboxRef.current?.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`)
+    const listboxElement = listboxRef.current
+    if (!listboxElement) {
+      return
+    }
+
+    setListboxViewportHeight(listboxElement.clientHeight)
+    setListboxScrollTop(listboxElement.scrollTop)
+
+    if (shouldVirtualizeOptions) {
+      const optionTop = highlightedIndex * OPTION_HEIGHT_PX
+      const optionBottom = optionTop + OPTION_HEIGHT_PX
+      const visibleTop = listboxElement.scrollTop
+      const visibleBottom = visibleTop + listboxElement.clientHeight
+      if (optionTop < visibleTop) {
+        listboxElement.scrollTop = optionTop
+      } else if (optionBottom > visibleBottom) {
+        listboxElement.scrollTop = optionBottom - listboxElement.clientHeight
+      }
+      return
+    }
+
+    const activeOption = listboxElement.querySelector<HTMLElement>(`[data-option-index="${highlightedIndex}"]`)
     activeOption?.scrollIntoView({ block: 'nearest' })
-  }, [highlightedIndex, isOpen])
+  }, [highlightedIndex, isOpen, shouldVirtualizeOptions])
 
   function commitValue(nextValue: string) {
     setIsOpen(false)
@@ -249,39 +288,78 @@ export function DropdownField({
               aria-labelledby={controlId}
               onKeyDown={handleListboxKeyDown}
               onMouseLeave={resetHighlightToSelected}
+              onScroll={(event) => {
+                setListboxScrollTop(event.currentTarget.scrollTop)
+                setListboxViewportHeight(event.currentTarget.clientHeight)
+              }}
               className={[
                 'fixed z-50 overflow-y-auto rounded-xl border border-border bg-surface shadow-soft',
                 flushOptions ? 'p-0' : fitToContent ? 'p-0.5' : 'p-1',
               ].join(' ')}
               style={menuStyle}
             >
-              {options.map((option, index) => {
-                const isSelected = option.value === value
-                const isHighlighted = index === highlightedIndex
+              {shouldVirtualizeOptions ? (
+                <div style={{ height: `${virtualTotalHeight}px`, position: 'relative' }}>
+                  <div style={{ transform: `translateY(${virtualTopOffset}px)` }}>
+                    {virtualOptions.map((option, index) => {
+                      const optionIndex = virtualStartIndex + index
+                      const isSelected = option.value === value
+                      const isHighlighted = optionIndex === highlightedIndex
 
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    data-option-index={index}
-                    onMouseEnter={() => setHighlightedIndex(index)}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => commitValue(option.value)}
-                    className={[
-                      'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
-                      flushOptions ? 'rounded-none' : 'rounded-lg',
-                      isHighlighted
-                        ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
-                        : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
-                    ].join(' ')}
-                  >
-                    <span className="truncate pr-3">{option.label}</span>
-                    {isSelected ? <Check size={16} strokeWidth={2.2} className="shrink-0 text-foreground" /> : null}
-                  </button>
-                )
-              })}
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          data-option-index={optionIndex}
+                          onMouseEnter={() => setHighlightedIndex(optionIndex)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => commitValue(option.value)}
+                          className={[
+                            'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
+                            flushOptions ? 'rounded-none' : 'rounded-lg',
+                            isHighlighted
+                              ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                              : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+                          ].join(' ')}
+                        >
+                          <span className="truncate pr-3">{option.label}</span>
+                          {isSelected ? <Check size={16} strokeWidth={2.2} className="shrink-0 text-foreground" /> : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                options.map((option, index) => {
+                  const isSelected = option.value === value
+                  const isHighlighted = index === highlightedIndex
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      data-option-index={index}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => commitValue(option.value)}
+                      className={[
+                        'flex h-9 w-full items-center justify-between px-3 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
+                        flushOptions ? 'rounded-none' : 'rounded-lg',
+                        isHighlighted
+                          ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
+                          : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
+                      ].join(' ')}
+                    >
+                      <span className="truncate pr-3">{option.label}</span>
+                      {isSelected ? <Check size={16} strokeWidth={2.2} className="shrink-0 text-foreground" /> : null}
+                    </button>
+                  )
+                })
+              )}
             </div>,
             document.body,
           )

@@ -51,8 +51,6 @@ export async function buildSharedAgentsInstructions({
   }
 
   return [
-    '## Project Overrides',
-    '- The built-in system prompt remains the highest-priority instruction source and already carries the repository core workflow, engineering, and tool-use policy.',
     '<user_instructions>',
     agentsFileContent,
     '</user_instructions>',

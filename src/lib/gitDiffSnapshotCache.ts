@@ -6,9 +6,26 @@ const EMPTY_DIFF_SNAPSHOT: ConversationDiffSnapshot = {
   totalAddedLineCount: 0,
   totalRemovedLineCount: 0,
 }
+const MAX_DIFF_SNAPSHOT_CACHE_ENTRIES = 12
 
 const diffSnapshotCache = new Map<string, ConversationDiffSnapshot>()
 const inFlightDiffSnapshotRequests = new Map<string, Promise<ConversationDiffSnapshot>>()
+
+function setCachedDiffSnapshot(cacheKey: string, snapshot: ConversationDiffSnapshot) {
+  if (diffSnapshotCache.has(cacheKey)) {
+    diffSnapshotCache.delete(cacheKey)
+  }
+
+  diffSnapshotCache.set(cacheKey, snapshot)
+  while (diffSnapshotCache.size > MAX_DIFF_SNAPSHOT_CACHE_ENTRIES) {
+    const oldestKey = diffSnapshotCache.keys().next().value
+    if (typeof oldestKey !== 'string') {
+      break
+    }
+
+    diffSnapshotCache.delete(oldestKey)
+  }
+}
 
 export function getEmptyGitDiffSnapshot() {
   return EMPTY_DIFF_SNAPSHOT
@@ -20,7 +37,14 @@ export function getCachedGitDiffSnapshot(workspacePath: string | null | undefine
     return null
   }
 
-  return diffSnapshotCache.get(normalizedWorkspacePath) ?? null
+  const cachedSnapshot = diffSnapshotCache.get(normalizedWorkspacePath)
+  if (!cachedSnapshot) {
+    return null
+  }
+
+  // Keep most recently accessed entries alive while older snapshots are evicted.
+  setCachedDiffSnapshot(normalizedWorkspacePath, cachedSnapshot)
+  return cachedSnapshot
 }
 
 export async function loadGitDiffSnapshot(
@@ -50,7 +74,7 @@ export async function loadGitDiffSnapshot(
       const normalizedSnapshot = diffSnapshot.hasRepository
         ? buildFileDiffSnapshot(diffSnapshot.fileDiffs)
         : EMPTY_DIFF_SNAPSHOT
-      diffSnapshotCache.set(normalizedWorkspacePath, normalizedSnapshot)
+      setCachedDiffSnapshot(normalizedWorkspacePath, normalizedSnapshot)
       return normalizedSnapshot
     })
     .finally(() => {

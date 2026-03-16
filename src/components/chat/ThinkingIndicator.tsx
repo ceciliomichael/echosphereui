@@ -9,6 +9,8 @@ const SPLASH_MESSAGES = [
 ] as const
 
 const MESSAGE_ROTATION_INTERVAL_MS = 5000
+const RATE_LIMIT_ERROR_STAGE_MS = 1500
+const RATE_LIMIT_RETRY_STAGE_MS = 1500
 
 interface ThinkingIndicatorProps {
   variant?: AssistantWaitingIndicatorVariant
@@ -16,9 +18,41 @@ interface ThinkingIndicatorProps {
 
 export function ThinkingIndicator({ variant = 'thinking' }: ThinkingIndicatorProps) {
   const [messageIndex, setMessageIndex] = useState(0)
+  const [effectiveVariant, setEffectiveVariant] = useState<Exclude<AssistantWaitingIndicatorVariant, 'rate_limit_retry'>>(
+    variant === 'rate_limit_retry' ? 'thinking' : variant,
+  )
+  const [transientMessage, setTransientMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    if (variant !== 'splash') {
+    setMessageIndex(0)
+
+    if (variant !== 'rate_limit_retry') {
+      setTransientMessage(null)
+      setEffectiveVariant(variant)
+      return undefined
+    }
+
+    setEffectiveVariant('thinking')
+    setTransientMessage('Error 429')
+
+    const retryStageTimeoutId = window.setTimeout(() => {
+      setTransientMessage('Trying again')
+    }, RATE_LIMIT_ERROR_STAGE_MS)
+
+    const resumeSplashTimeoutId = window.setTimeout(() => {
+      setTransientMessage(null)
+      setEffectiveVariant('splash')
+      setMessageIndex(0)
+    }, RATE_LIMIT_ERROR_STAGE_MS + RATE_LIMIT_RETRY_STAGE_MS)
+
+    return () => {
+      window.clearTimeout(retryStageTimeoutId)
+      window.clearTimeout(resumeSplashTimeoutId)
+    }
+  }, [variant])
+
+  useEffect(() => {
+    if (effectiveVariant !== 'splash') {
       setMessageIndex(0)
       return undefined
     }
@@ -30,9 +64,17 @@ export function ThinkingIndicator({ variant = 'thinking' }: ThinkingIndicatorPro
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [variant])
+  }, [effectiveVariant])
 
-  const statusText = variant === 'splash' ? SPLASH_MESSAGES[messageIndex] : 'Thinking'
+  const statusText = transientMessage ?? (effectiveVariant === 'splash' ? SPLASH_MESSAGES[messageIndex] : 'Thinking')
+  const ariaLabel =
+    transientMessage === 'Error 429'
+      ? 'Assistant encountered a rate limit error'
+      : transientMessage === 'Trying again'
+        ? 'Assistant is trying again'
+        : effectiveVariant === 'splash'
+          ? 'Assistant is working'
+          : 'Assistant is thinking'
 
   return (
     <span
@@ -40,7 +82,7 @@ export function ThinkingIndicator({ variant = 'thinking' }: ThinkingIndicatorPro
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={variant === 'splash' ? 'Assistant is working' : 'Assistant is thinking'}
+      aria-label={ariaLabel}
     >
       {statusText}
     </span>

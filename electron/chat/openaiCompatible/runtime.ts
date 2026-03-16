@@ -28,6 +28,7 @@ import { createHydratedToolExecutionTurnState, createToolExecutionScheduler, res
 import { getOpenAICompatibleToolDefinitions } from './toolRegistry'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 import { appendWorkflowPlanContextMessage } from './workflowPlanContext'
+import { resolveForcedToolChoiceForTurn } from './workflowToolChoice'
 
 interface StreamOpenAICompatibleResponseInput {
   agentContextRootPath: string
@@ -46,6 +47,9 @@ interface StreamOpenAICompatibleTurnResult {
 interface StreamOpenAICompatibleTurnOptions {
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
 }
+
+const MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES = 4
+const REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD = 3
 
 function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
   if (message.role === 'user') {
@@ -265,11 +269,15 @@ export async function streamOpenAICompatibleResponseWithTools(
     turnState,
   })
   let pseudoToolCallRecoveryAttempted = false
-  let missingRequiredToolCallRecoveryCount = 0
+  let missingToolCallRecoveryCount = 0
+  let enforceRequiredToolChoiceForNextTurn = false
 
   while (!context.signal.aborted) {
     const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
-    const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
+    const forcedToolChoiceForTurn = resolveForcedToolChoiceForTurn(
+      resolvedToolChoiceForTurn,
+      enforceRequiredToolChoiceForNextTurn,
+    )
     const replayableMessagesForTurn = appendWorkflowPlanContextMessage(
       buildReplayableMessageHistory(inMemoryMessages),
       turnState,
@@ -295,14 +303,18 @@ export async function streamOpenAICompatibleResponseWithTools(
     )
 
     if (turnResult.toolCalls.length === 0) {
-      if (forcedToolChoiceForTurn === 'required' && missingRequiredToolCallRecoveryCount < 2) {
-        missingRequiredToolCallRecoveryCount += 1
+      const hasIncompleteWorkflowPlan = turnState.workflowPlan !== null && !turnState.workflowPlan.allStepsCompleted
+
+      if (hasIncompleteWorkflowPlan && missingToolCallRecoveryCount < MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES) {
+        missingToolCallRecoveryCount += 1
+        enforceRequiredToolChoiceForNextTurn =
+          missingToolCallRecoveryCount >= REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD
         if (turnResult.assistantContent.trim().length > 0) {
           inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
         }
         inMemoryMessages.push(
           buildInMemoryUserMessage(
-            'You have incomplete tasks. Continue your work on the current in_progress task. Use update_plan only when task statuses change.',
+            'You have incomplete tasks. Continue your work on the current in_progress tasks. Use update_plan only when task statuses change.',
           ),
         )
         continue
@@ -325,7 +337,8 @@ export async function streamOpenAICompatibleResponseWithTools(
 
       return
     }
-    missingRequiredToolCallRecoveryCount = 0
+    missingToolCallRecoveryCount = 0
+    enforceRequiredToolChoiceForNextTurn = false
 
     if (turnResult.assistantContent.trim().length > 0) {
       inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))

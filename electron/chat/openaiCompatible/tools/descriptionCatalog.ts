@@ -5,7 +5,7 @@ Usage guidelines:
 - Call this at the start of substantial multi-step work, then only when plan status changes.
 - Optional \`plan\`: short plan title.
 - Required \`steps\`: ordered objects with \`id\`, \`title\`, and \`status\`.
-- Status rules: exactly one \`in_progress\` while work remains; remaining items should be \`pending\` or \`completed\`.
+- Status rules: use \`in_progress\` for active work (multiple steps are allowed); other items should be \`pending\` or \`completed\`.
 - Keep step ids stable across updates so progress tracking stays consistent.`,
   list: `List files and directories at an absolute path inside the workspace root.
 

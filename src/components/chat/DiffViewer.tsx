@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 import { computeDiffLines, type DiffLine } from '../../lib/textDiff'
@@ -26,6 +26,27 @@ interface DiffViewerProps {
 }
 
 const DEFAULT_DIFF_CONTEXT_LINES = 5
+const DIFF_LINE_HEIGHT_PX = 20
+const DIFF_LINE_OVERSCAN_COUNT = 40
+const DIFF_VIRTUALIZATION_THRESHOLD = 800
+
+function getScrollContainer(element: HTMLElement | null): HTMLElement | Window {
+  if (!element) {
+    return window
+  }
+
+  let currentElement: HTMLElement | null = element.parentElement
+  while (currentElement) {
+    const computedStyle = window.getComputedStyle(currentElement)
+    if (/(auto|scroll|overlay)/.test(computedStyle.overflowY)) {
+      return currentElement
+    }
+
+    currentElement = currentElement.parentElement
+  }
+
+  return window
+}
 
 function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | undefined) {
   if (contextLines === undefined) {
@@ -125,15 +146,104 @@ const DiffViewerComponent = ({
   viewOnly = false,
 }: DiffViewerProps) => {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
+  const [virtualRange, setVirtualRange] = useState<{ startIndex: number; endIndex: number }>({
+    endIndex: DIFF_VIRTUALIZATION_THRESHOLD,
+    startIndex: 0,
+  })
+  const virtualRootRef = useRef<HTMLDivElement | null>(null)
   const isExpanded = expandedProp ?? internalExpanded
+  const shouldRenderDiffContent = !collapsible || isExpanded
   const diffLines = useMemo(() => {
+    if (!shouldRenderDiffContent) {
+      return []
+    }
+
     const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
     return filterDiffWithContext(diff, contextLines)
-  }, [contextLines, isStreaming, newContent, oldContent, startLineNumber])
+  }, [contextLines, isStreaming, newContent, oldContent, shouldRenderDiffContent, startLineNumber])
 
   const iconConfig = resolveFileIconConfig({ fileName: filePath })
   const FileIcon = iconConfig.icon
-  const hasOldSide = !viewOnly && diffLines.some((line) => line.type !== 'collapsed' && line.oldLineNumber !== undefined)
+  const renderedLines = useMemo(() => diffLines.filter((line) => line.type !== 'collapsed'), [diffLines])
+  const hasOldSide = !viewOnly && renderedLines.some((line) => line.oldLineNumber !== undefined)
+  const shouldVirtualizeLines = renderedLines.length >= DIFF_VIRTUALIZATION_THRESHOLD
+  const visibleStartIndex = shouldVirtualizeLines ? virtualRange.startIndex : 0
+  const visibleEndIndex = shouldVirtualizeLines ? Math.min(renderedLines.length, virtualRange.endIndex) : renderedLines.length
+  const visibleLines = shouldVirtualizeLines ? renderedLines.slice(visibleStartIndex, visibleEndIndex) : renderedLines
+  const topSpacerHeight = shouldVirtualizeLines ? visibleStartIndex * DIFF_LINE_HEIGHT_PX : 0
+  const bottomSpacerHeight = shouldVirtualizeLines ? (renderedLines.length - visibleEndIndex) * DIFF_LINE_HEIGHT_PX : 0
+  const bodyHeightClassName = maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : ''
+
+  useEffect(() => {
+    if (!shouldRenderDiffContent || !shouldVirtualizeLines) {
+      setVirtualRange({
+        endIndex: renderedLines.length,
+        startIndex: 0,
+      })
+      return
+    }
+
+    const rootElement = virtualRootRef.current
+    const scrollContainer = getScrollContainer(rootElement)
+
+    function updateVirtualRange() {
+      if (!rootElement) {
+        return
+      }
+
+      const totalHeight = renderedLines.length * DIFF_LINE_HEIGHT_PX
+      let viewportTop = 0
+      let viewportHeight = window.innerHeight
+      let elementTop = rootElement.getBoundingClientRect().top + window.scrollY
+
+      if (scrollContainer instanceof HTMLElement) {
+        const containerRect = scrollContainer.getBoundingClientRect()
+        viewportTop = scrollContainer.scrollTop
+        viewportHeight = scrollContainer.clientHeight
+        elementTop = rootElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
+      } else {
+        viewportTop = window.scrollY
+      }
+
+      const visibleTop = Math.max(0, Math.min(totalHeight, viewportTop - elementTop))
+      const visibleBottom = Math.max(0, Math.min(totalHeight, viewportTop + viewportHeight - elementTop))
+      const visibleStart = Math.max(0, Math.floor(visibleTop / DIFF_LINE_HEIGHT_PX) - DIFF_LINE_OVERSCAN_COUNT)
+      const visibleEnd = Math.min(
+        renderedLines.length,
+        Math.ceil(visibleBottom / DIFF_LINE_HEIGHT_PX) + DIFF_LINE_OVERSCAN_COUNT,
+      )
+
+      setVirtualRange((currentRange) => {
+        if (currentRange.startIndex === visibleStart && currentRange.endIndex === visibleEnd) {
+          return currentRange
+        }
+
+        return {
+          endIndex: visibleEnd,
+          startIndex: visibleStart,
+        }
+      })
+    }
+
+    updateVirtualRange()
+    const frameId = window.requestAnimationFrame(updateVirtualRange)
+    if (scrollContainer instanceof HTMLElement) {
+      scrollContainer.addEventListener('scroll', updateVirtualRange, { passive: true })
+    } else {
+      window.addEventListener('scroll', updateVirtualRange, { passive: true })
+    }
+    window.addEventListener('resize', updateVirtualRange)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      if (scrollContainer instanceof HTMLElement) {
+        scrollContainer.removeEventListener('scroll', updateVirtualRange)
+      } else {
+        window.removeEventListener('scroll', updateVirtualRange)
+      }
+      window.removeEventListener('resize', updateVirtualRange)
+    }
+  }, [renderedLines.length, shouldRenderDiffContent, shouldVirtualizeLines])
   const headerMainContent = (
     <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
       <span className="relative flex h-4 w-4 items-center justify-center">
@@ -209,11 +319,12 @@ const DiffViewerComponent = ({
         </div>
       )}
 
-      {(!collapsible || isExpanded) && (
+      {shouldRenderDiffContent && (
         <div
+          ref={virtualRootRef}
           className={[
             isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
-            maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
+            bodyHeightClassName,
             'overflow-x-auto',
           ]
             .filter((value) => value.length > 0)
@@ -222,13 +333,10 @@ const DiffViewerComponent = ({
           <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
             <div className="flex min-w-0 items-stretch">
               <div className={`sticky left-0 z-10 shrink-0 border-r border-border ${getLineGutterClassName()}`}>
-                {diffLines.map((line, index) => {
-                  if (line.type === 'collapsed') {
-                    return null
-                  }
-
+                {topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
+                {visibleLines.map((line, index) => {
                   return (
-                    <div key={`gutter-${line.type}-${index}`} className="flex min-h-5 items-stretch px-2 text-right">
+                    <div key={`gutter-${line.type}-${visibleStartIndex + index}`} className="flex h-5 items-stretch px-2 text-right">
                       {viewOnly || !hasOldSide ? (
                         <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
                       ) : (
@@ -243,21 +351,20 @@ const DiffViewerComponent = ({
                     </div>
                   )
                 })}
+                {bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
               </div>
 
               <div className="min-w-0 flex-1 bg-surface">
                 <div className="min-w-full w-fit">
-                  {diffLines.map((line, index) => {
-                    if (line.type === 'collapsed') {
-                      return null
-                    }
-
+                  {topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
+                  {visibleLines.map((line, index) => {
                     return (
-                      <div key={`content-${line.type}-${index}`} className={`min-h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
+                      <div key={`content-${line.type}-${visibleStartIndex + index}`} className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
                         {line.content.length > 0 ? line.content : ' '}
                       </div>
                     )
                   })}
+                  {bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
                 </div>
               </div>
             </div>

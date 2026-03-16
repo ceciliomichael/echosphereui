@@ -16,12 +16,12 @@ function createUpdatePlanToolCall(): OpenAICompatibleToolCall {
   }
 }
 
-test('resolveWorkflowTurnToolChoice requires tool usage before any plan is set', () => {
+test('resolveWorkflowTurnToolChoice defaults to auto before any plan is set', () => {
   const turnState = createToolExecutionTurnState()
-  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'required')
+  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'auto')
 })
 
-test('resolveWorkflowTurnToolChoice returns required when a plan still has incomplete steps', () => {
+test('resolveWorkflowTurnToolChoice returns auto when a plan still has incomplete steps', () => {
   const turnState = createToolExecutionTurnState()
   recordSuccessfulToolExecution(
     createUpdatePlanToolCall(),
@@ -37,7 +37,7 @@ test('resolveWorkflowTurnToolChoice returns required when a plan still has incom
     turnState,
   )
 
-  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'required')
+  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'auto')
 })
 
 test('resolveWorkflowTurnToolChoice returns none when plan is complete', () => {

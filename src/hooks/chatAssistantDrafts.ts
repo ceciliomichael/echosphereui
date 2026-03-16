@@ -409,6 +409,16 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
 
       return streamedMessages
     },
+    showRateLimitRetryIndicator() {
+      const draftAssistantId = activeAssistantDraftId ?? appendAssistantDraft('placeholder')
+      waitingIndicatorVariantByDraftId.set(draftAssistantId, 'rate_limit_retry')
+      activeAssistantDraftId = draftAssistantId
+      input.stopTextStreaming(input.conversationId)
+      input.updateConversationRuntimeState(input.conversationId, {
+        streamingAssistantMessageId: draftAssistantId,
+        streamingWaitingIndicatorVariant: 'rate_limit_retry',
+      })
+    },
     removeInsertedMessages,
   }
 }
