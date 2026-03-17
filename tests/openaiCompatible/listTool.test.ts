@@ -56,3 +56,42 @@ test('list tool returns compact entry shapes without absolute-path metadata', as
     assert.equal('ignoredEntriesCount' in result, false)
   })
 })
+
+test('list tool resolves relative absolute_path inputs against the workspace root', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    await fs.mkdir(path.join(workspacePath, 'src'), { recursive: true })
+    await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
+
+    const result = await listTool.execute(
+      {
+        absolute_path: '.',
+      },
+      buildExecutionContext(workspacePath),
+    )
+    const entries = readEntries(result)
+
+    assert.equal(result.path, '.')
+    assert.deepEqual(entries, [
+      { kind: 'file', name: 'package.json' },
+      { kind: 'directory', name: 'src' },
+    ])
+  })
+})
+
+test('list tool falls back to a unique nested workspace directory when a relative root lookup misses', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    await fs.mkdir(path.join(workspacePath, 'src', 'app'), { recursive: true })
+    await fs.writeFile(path.join(workspacePath, 'src', 'app', 'page.tsx'), 'export default function Page() {}', 'utf8')
+
+    const result = await listTool.execute(
+      {
+        absolute_path: 'app',
+      },
+      buildExecutionContext(workspacePath),
+    )
+    const entries = readEntries(result)
+
+    assert.equal(result.path, 'src/app')
+    assert.deepEqual(entries, [{ kind: 'file', name: 'page.tsx' }])
+  })
+})

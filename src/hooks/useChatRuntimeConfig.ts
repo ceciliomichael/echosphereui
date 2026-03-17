@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/modelCatalog'
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
+import { toProviderModelCatalogItems } from '../components/settings/models/providerModelUtils'
 import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
 import { isProviderConfigured } from '../components/settings/models/modelViewUtils'
 import {
@@ -8,7 +9,14 @@ import {
   normalizeReasoningEffort,
   OPENAI_COMPATIBLE_REASONING_EFFORT_VALUES,
 } from '../lib/reasoningEffort'
-import type { AppSettings, ChatProviderId, CustomModelConfig, ProvidersState, ReasoningEffort } from '../types/chat'
+import type {
+  AppSettings,
+  ChatProviderId,
+  CustomModelConfig,
+  ProviderModelConfig,
+  ProvidersState,
+  ReasoningEffort,
+} from '../types/chat'
 
 interface ChatModelOption {
   id: string
@@ -23,9 +31,10 @@ interface ChatModelOption {
 function buildChatModelOptions(
   providersState: ProvidersState | null,
   customModels: readonly CustomModelConfig[],
+  providerModels: readonly ProviderModelConfig[],
 ): ChatModelOption[] {
   const modelToggleState = readStoredModelToggleState()
-  const modelCatalog = [...MODEL_CATALOG, ...toCustomModelCatalogItems(customModels)]
+  const modelCatalog = [...MODEL_CATALOG, ...toProviderModelCatalogItems(providerModels), ...toCustomModelCatalogItems(customModels)]
 
   return PROVIDER_SECTIONS.flatMap((provider) => {
     if (!isProviderConfigured(provider.id, providersState)) {
@@ -51,6 +60,7 @@ function buildChatModelOptions(
 }
 
 interface UseChatRuntimeConfigInput {
+  isActiveScreen: boolean
   providersState: ProvidersState | null
   settings: Pick<AppSettings, 'chatModelId' | 'chatReasoningEffort'>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
@@ -64,10 +74,14 @@ function getDefaultReasoningEfforts(providerId: ChatProviderId) {
   return DEFAULT_REASONING_EFFORT_VALUES
 }
 
-export function useChatRuntimeConfig({ providersState, settings, updateSettings }: UseChatRuntimeConfigInput) {
+export function useChatRuntimeConfig({ isActiveScreen, providersState, settings, updateSettings }: UseChatRuntimeConfigInput) {
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
+  const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
   const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
-  const modelOptions = useMemo(() => buildChatModelOptions(providersState, customModels), [customModels, providersState])
+  const modelOptions = useMemo(
+    () => buildChatModelOptions(providersState, customModels, providerModels),
+    [customModels, providerModels, providersState],
+  )
 
   const selectedModel = useMemo(
     () => modelOptions.find((model) => model.id === settings.chatModelId) ?? modelOptions[0] ?? null,
@@ -86,6 +100,10 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
   )
 
   useEffect(() => {
+    if (!isActiveScreen) {
+      return
+    }
+
     let isMounted = true
 
     void window.echosphereModels
@@ -111,7 +129,36 @@ export function useChatRuntimeConfig({ providersState, settings, updateSettings 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [isActiveScreen])
+
+  useEffect(() => {
+    if (!isActiveScreen || !isProviderConfigured('mistral', providersState)) {
+      setProviderModels((currentValue) => currentValue.filter((model) => model.providerId !== 'mistral'))
+      return
+    }
+
+    let isMounted = true
+
+    void window.echosphereModels
+      .listProviderModels('mistral')
+      .then((fetchedModels) => {
+        if (!isMounted) {
+          return
+        }
+
+        setProviderModels((currentValue) => {
+          const nonMistralModels = currentValue.filter((model) => model.providerId !== 'mistral')
+          return [...nonMistralModels, ...fetchedModels]
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to load Mistral models for chat runtime', error)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [isActiveScreen, providersState])
 
   useEffect(() => {
     if (!hasLoadedCustomModels) {

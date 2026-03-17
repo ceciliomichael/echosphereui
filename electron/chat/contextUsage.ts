@@ -39,7 +39,7 @@ function serializeMessageForEstimate(message: Message) {
 }
 
 function getProviderHistorySegments(messages: Message[], providerId: ChatProviderId) {
-  if (providerId === 'codex' || providerId === 'openai-compatible') {
+  if (providerId === 'codex' || providerId === 'openai-compatible' || providerId === 'mistral') {
     const replayableMessages = buildReplayableMessageHistory(messages)
     const historySegments: string[] = []
     const toolResultSegments: string[] = []
@@ -114,6 +114,21 @@ async function getSystemPromptSegments(input: EstimateContextUsageInput) {
 
   if (input.providerId === 'google') {
     return [PROVIDER_SYSTEM_INSTRUCTIONS]
+  }
+
+  if (input.providerId === 'mistral') {
+    const agentContextRootPath = hasText(input.agentContextRootPath)
+      ? input.agentContextRootPath
+      : PENDING_AGENT_CONTEXT_ROOT
+
+    return [
+      await buildSystemPrompt({
+        agentContextRootPath,
+        chatMode: input.chatMode,
+        supportsNativeTools: true,
+      }),
+      JSON.stringify(getOpenAICompatibleToolDefinitions(input.chatMode).map((toolDefinition) => toolDefinition.tool)),
+    ]
   }
 
   const fallbackRootPath = hasText(input.agentContextRootPath) ? input.agentContextRootPath : PENDING_AGENT_CONTEXT_ROOT

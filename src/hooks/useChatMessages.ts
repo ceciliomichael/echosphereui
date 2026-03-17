@@ -249,6 +249,25 @@ export function useChatMessages(input: UseChatMessagesInput) {
     [activeConversationId, clearRevertEditSession, conversationActions],
   )
 
+  useEffect(() => {
+    if (!editingMessageId) {
+      return
+    }
+
+    const editingMessageExists = messages.some((message) => message.id === editingMessageId && message.role === 'user')
+    if (editingMessageExists) {
+      return
+    }
+
+    cancelComposerEditingMessage()
+    if (activeConversationId) {
+      const activeRevertSession = revertEditSessionsRef.current[activeConversationId]
+      if (activeRevertSession?.messageId === editingMessageId) {
+        clearRevertEditSession(activeConversationId)
+      }
+    }
+  }, [activeConversationId, cancelComposerEditingMessage, clearRevertEditSession, editingMessageId, messages])
+
   const sendActions = useChatSendActions({
     activeConversationId,
     activeConversationIdRef: streamingState.activeConversationIdRef,

@@ -23,6 +23,11 @@ export const PROVIDER_SECTIONS: readonly ProviderSectionDefinition[] = [
     label: 'Google',
   },
   {
+    description: 'Mistral AI API key provider.',
+    id: 'mistral',
+    label: 'Mistral AI',
+  },
+  {
     description: 'Custom OpenAI-compatible endpoint.',
     id: 'openai-compatible',
     label: 'OpenAI Compatible',

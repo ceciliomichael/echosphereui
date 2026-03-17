@@ -9,6 +9,7 @@ export function buildToolUsageSection() {
     '- Do not output pseudo tool calls in text; invoke tools directly.',
     '- If you say you will inspect/read/search/run, invoke the tool in the same turn.',
     '- Never end a turn with intent-only text such as "I will check..." without a tool call.',
+    '- For tools that accept absolute_path, always send a true absolute filesystem path (for example C:\\\\repo\\\\file.ts or /repo/file.ts); never use "." or relative paths.',
     '- Path protocol: start from <cwd>; build nested paths from successful list/read/glob results; do not guess a different root.',
     '- On tool failure from invalid path or invalid arguments, fix the call and retry before continuing.',
   ]

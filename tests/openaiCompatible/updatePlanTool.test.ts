@@ -74,3 +74,47 @@ test('update_plan tool rejects duplicate step ids', async () => {
     },
   )
 })
+
+test('update_plan tool accepts a single step object by normalizing it to an array', async () => {
+  const result = await updatePlanTool.execute(
+    {
+      steps: {
+        id: 'single',
+        status: 'in_progress',
+        title: 'Do work',
+      },
+    },
+    buildExecutionContext(),
+  )
+
+  assert.equal(result.totalStepCount, 1)
+  assert.equal(result.inProgressStepCount, 1)
+  assert.deepEqual(result.inProgressStepIds, ['single'])
+})
+
+test('update_plan tool accepts JSON-stringified steps payloads', async () => {
+  const result = await updatePlanTool.execute(
+    {
+      steps: '[{"id":"json-step","title":"Parse","status":"pending"}]',
+    },
+    buildExecutionContext(),
+  )
+
+  assert.equal(result.totalStepCount, 1)
+  assert.equal(result.pendingStepCount, 1)
+})
+
+test('update_plan tool accepts legacy plan-array payload shape with step aliases', async () => {
+  const result = await updatePlanTool.execute(
+    {
+      plan: [{ step: 'Edit page.tsx', status: 'in_progress' }],
+    },
+    buildExecutionContext(),
+  )
+
+  assert.equal(result.totalStepCount, 1)
+  assert.equal(result.inProgressStepCount, 1)
+  assert.equal(result.steps[0]?.title, 'Edit page.tsx')
+  assert.equal(result.steps[0]?.id, 'edit-page-tsx')
+  assert.equal(result.planId, 'default')
+})

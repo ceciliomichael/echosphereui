@@ -91,6 +91,7 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
+    isActiveScreen,
     providersState: providersState.providersState,
     settings,
     updateSettings: onUpdateSettings,

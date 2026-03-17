@@ -47,6 +47,17 @@ export const API_KEY_PROVIDER_SCHEMAS: readonly ApiKeyProviderSchema[] = [
     showBaseUrl: false,
   },
   {
+    apiKeyOptional: false,
+    baseUrlLabel: 'Base URL',
+    baseUrlRequired: false,
+    defaultBaseUrl: 'https://api.mistral.ai',
+    description: 'Connect to Mistral AI using your API key.',
+    id: 'mistral',
+    label: 'Mistral AI',
+    showAdvancedDefaults: true,
+    showBaseUrl: true,
+  },
+  {
     apiKeyOptional: true,
     baseUrlLabel: 'Base URL',
     baseUrlRequired: true,

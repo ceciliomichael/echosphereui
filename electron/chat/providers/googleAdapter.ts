@@ -10,6 +10,7 @@ import {
 } from './messageAttachments'
 import {
   buildGoogleToolDefinitions,
+  normalizeToolCallPaths,
   parseToolArgumentsTextToObject,
   toGoogleFunctionCallingMode,
 } from './providerNativeTools'
@@ -394,14 +395,17 @@ export const googleChatProviderAdapter: ChatProviderAdapter = {
             turnContext.signal,
             options,
           )
+          const normalizedToolCalls = turnResult.toolCalls.map((toolCall) =>
+            normalizeToolCallPaths(toolCall, turnRequest.agentContextRootPath),
+          )
           pendingToolCallsById.clear()
-          for (const toolCall of turnResult.toolCalls) {
+          for (const toolCall of normalizedToolCalls) {
             pendingToolCallsById.set(toolCall.id, toolCall)
           }
 
           return {
             assistantContent: turnResult.assistantContent,
-            toolCalls: turnResult.toolCalls,
+            toolCalls: normalizedToolCalls,
           }
         },
       )

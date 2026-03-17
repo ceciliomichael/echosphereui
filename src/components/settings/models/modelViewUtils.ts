@@ -1,7 +1,8 @@
 import { MODEL_CATALOG, PROVIDER_SECTIONS } from './modelCatalog'
 import type { ModelCatalogItem, ModelProviderId, ProviderSectionDefinition } from './modelTypes'
 import { toCustomModelCatalogItems } from './customModelUtils'
-import type { CustomModelConfig, ProvidersState } from '../../../types/chat'
+import { toProviderModelCatalogItems } from './providerModelUtils'
+import type { CustomModelConfig, ProviderModelConfig, ProvidersState } from '../../../types/chat'
 
 export interface ModelProviderSectionView {
   configured: boolean
@@ -30,9 +31,10 @@ export function buildModelProviderSections(
   searchValue: string,
   providersState: ProvidersState | null,
   customModels: readonly CustomModelConfig[],
+  providerModels: readonly ProviderModelConfig[] = [],
 ): ModelProviderSectionView[] {
   const normalizedSearch = normalizeSearchValue(searchValue)
-  const modelCatalog = [...MODEL_CATALOG, ...toCustomModelCatalogItems(customModels)]
+  const modelCatalog = [...MODEL_CATALOG, ...toProviderModelCatalogItems(providerModels), ...toCustomModelCatalogItems(customModels)]
   const filteredModels =
     normalizedSearch.length === 0
       ? modelCatalog

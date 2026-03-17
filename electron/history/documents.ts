@@ -82,6 +82,7 @@ function isMessage(value: unknown): value is Message {
     message.providerId === 'openai' ||
     message.providerId === 'anthropic' ||
     message.providerId === 'google' ||
+    message.providerId === 'mistral' ||
     message.providerId === 'openai-compatible'
   const hasValidReasoningEffort =
     message.reasoningEffort === undefined ||

@@ -239,7 +239,7 @@ export interface CodexAccountSummary {
   usage: CodexUsageSnapshot | null
 }
 
-export type ApiKeyProviderId = 'anthropic' | 'google' | 'openai' | 'openai-compatible'
+export type ApiKeyProviderId = 'anthropic' | 'google' | 'mistral' | 'openai' | 'openai-compatible'
 export type ChatProviderId = 'codex' | ApiKeyProviderId
 export type CustomModelProviderId = 'openai' | 'openai-compatible'
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
@@ -292,6 +292,14 @@ export interface StartChatStreamInput {
 
 export interface StartChatStreamResult {
   streamId: string
+}
+
+export interface ProviderModelConfig {
+  apiModelId: string
+  id: string
+  label: string
+  providerId: ApiKeyProviderId
+  reasoningCapable: boolean
 }
 
 export interface SubmitToolDecisionInput {
@@ -619,6 +627,7 @@ export interface EchosphereProvidersApi {
 
 export interface EchosphereModelsApi {
   listCustomModels: () => Promise<CustomModelConfig[]>
+  listProviderModels: (providerId: ApiKeyProviderId) => Promise<ProviderModelConfig[]>
   removeCustomModel: (modelId: string) => Promise<CustomModelConfig[]>
   saveCustomModel: (input: SaveCustomModelInput) => Promise<CustomModelConfig[]>
 }

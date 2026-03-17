@@ -17,11 +17,12 @@ const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const PROVIDER_LABELS: Record<ApiKeyProviderId, string> = {
   anthropic: 'Anthropic',
   google: 'Google',
+  mistral: 'Mistral AI',
   openai: 'OpenAI',
   'openai-compatible': 'OpenAI Compatible',
 }
 
-const API_KEY_PROVIDER_ORDER: readonly ApiKeyProviderId[] = ['openai', 'anthropic', 'google', 'openai-compatible']
+const API_KEY_PROVIDER_ORDER: readonly ApiKeyProviderId[] = ['openai', 'anthropic', 'google', 'mistral', 'openai-compatible']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null

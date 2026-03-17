@@ -16,7 +16,7 @@ import {
   getUserMessageTextBlocks,
   parseInlineImageData,
 } from './messageAttachments'
-import { buildAnthropicToolDefinitions, parseToolArgumentsTextToObject } from './providerNativeTools'
+import { buildAnthropicToolDefinitions, normalizeToolCallPaths, parseToolArgumentsTextToObject } from './providerNativeTools'
 import {
   ANTHROPIC_DEFAULT_MAX_TOKENS,
   ANTHROPIC_MAX_RETRIES,
@@ -437,14 +437,17 @@ export const anthropicChatProviderAdapter: ChatProviderAdapter = {
             turnContext.signal,
             options,
           )
+          const normalizedToolCalls = turnResult.toolCalls.map((toolCall) =>
+            normalizeToolCallPaths(toolCall, turnRequest.agentContextRootPath),
+          )
           pendingToolCallsById.clear()
-          for (const toolCall of turnResult.toolCalls) {
+          for (const toolCall of normalizedToolCalls) {
             pendingToolCallsById.set(toolCall.id, toolCall)
           }
 
           return {
             assistantContent: assistantContentDeltas.join(''),
-            toolCalls: turnResult.toolCalls,
+            toolCalls: normalizedToolCalls,
           }
         },
       )

@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, type Dirent } from 'node:fs'
 import path from 'node:path'
 import {
   parseToolArguments,
@@ -15,6 +15,58 @@ import { OpenAICompatibleToolError } from '../../toolTypes'
 const DEFAULT_DIRECTORY_ENTRY_LIMIT = 200
 const TOOL_DESCRIPTION = getToolDescription('list')
 
+async function pathExistsAsDirectory(targetPath: string) {
+  try {
+    const stats = await fs.stat(targetPath)
+    return stats.isDirectory()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false
+    }
+
+    throw error
+  }
+}
+
+async function resolveNestedRelativeListFallback(
+  normalizedRootPath: string,
+  rawPathArgument: string,
+): Promise<string | null> {
+  if (path.isAbsolute(rawPathArgument)) {
+    return null
+  }
+
+  const trimmedPath = rawPathArgument.trim()
+  if (trimmedPath.length === 0 || trimmedPath === '.' || trimmedPath.startsWith('..')) {
+    return null
+  }
+
+  const normalizedRelativePath = trimmedPath.replace(/\\/g, '/').replace(/^\.\/+/, '')
+  if (normalizedRelativePath.length === 0 || normalizedRelativePath.startsWith('..')) {
+    return null
+  }
+
+  const rootEntries = await fs.readdir(normalizedRootPath, { withFileTypes: true })
+  const candidateMatches: string[] = []
+
+  for (const entry of rootEntries) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+
+    const candidatePath = path.join(normalizedRootPath, entry.name, normalizedRelativePath)
+    if (await pathExistsAsDirectory(candidatePath)) {
+      candidateMatches.push(candidatePath)
+    }
+  }
+
+  if (candidateMatches.length !== 1) {
+    return null
+  }
+
+  return candidateMatches[0]
+}
+
 export const listTool: OpenAICompatibleToolDefinition = {
   executionMode: 'parallel',
   name: 'list',
@@ -22,26 +74,42 @@ export const listTool: OpenAICompatibleToolDefinition = {
   async execute(argumentsValue, context) {
     const absolutePath = readRequiredString(argumentsValue, 'absolute_path')
     const limit = readOptionalPositiveInteger(argumentsValue, 'limit', DEFAULT_DIRECTORY_ENTRY_LIMIT)
-    const { normalizedRootPath, normalizedTargetPath, relativePath } = resolveToolPath(
+    const {
+      normalizedRootPath,
+      normalizedTargetPath: initiallyResolvedTargetPath,
+      relativePath: initiallyResolvedRelativePath,
+    } = resolveToolPath(
       context.agentContextRootPath,
       absolutePath,
     )
+    let normalizedTargetPath = initiallyResolvedTargetPath
+    let relativePath = initiallyResolvedRelativePath
+    let directoryEntries: Dirent[]
 
-    const directoryEntries = await fs.readdir(normalizedTargetPath, { withFileTypes: true }).catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new OpenAICompatibleToolError('The requested directory does not exist.', {
-          absolutePath: normalizedTargetPath,
-        })
-      }
+    try {
+      directoryEntries = await fs.readdir(normalizedTargetPath, { withFileTypes: true })
+    } catch (error) {
+      const errorCode = (error as NodeJS.ErrnoException).code
 
-      if ((error as NodeJS.ErrnoException).code === 'ENOTDIR') {
+      if (errorCode === 'ENOENT') {
+        const fallbackPath = await resolveNestedRelativeListFallback(normalizedRootPath, absolutePath)
+        if (fallbackPath) {
+          normalizedTargetPath = fallbackPath
+          relativePath = path.relative(normalizedRootPath, normalizedTargetPath) || '.'
+          directoryEntries = await fs.readdir(normalizedTargetPath, { withFileTypes: true })
+        } else {
+          throw new OpenAICompatibleToolError('The requested directory does not exist.', {
+            absolutePath: normalizedTargetPath,
+          })
+        }
+      } else if (errorCode === 'ENOTDIR') {
         throw new OpenAICompatibleToolError('absolute_path must point to a directory for list.', {
           absolutePath: normalizedTargetPath,
         })
+      } else {
+        throw error
       }
-
-      throw error
-    })
+    }
 
     const gitignoreMatchers = await loadGitignoreMatchers(normalizedRootPath, normalizedTargetPath)
     const visibleEntries = directoryEntries.filter((entry) => {

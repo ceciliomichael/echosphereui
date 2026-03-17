@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CustomModelConfig, CustomModelProviderId, ProvidersState } from '../../../types/chat'
+import type { CustomModelConfig, CustomModelProviderId, ProviderModelConfig, ProvidersState } from '../../../types/chat'
 import { SettingsPanelLayout } from '../shared/SettingsPanelPrimitives'
 import { ModelsProviderSection } from './ModelsProviderSection'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
@@ -31,6 +31,7 @@ interface CustomModelDraft {
 export function ModelsSettingsPanel({ isProvidersLoading, providersState }: ModelsSettingsPanelProps) {
   const [toggleState, setToggleState] = useState<ModelToggleState>(() => readStoredModelToggleState())
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
+  const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
   const [customModelsError, setCustomModelsError] = useState<string | null>(null)
   const [isCustomModelsLoading, setIsCustomModelsLoading] = useState(true)
   const [isSavingCustomModel, setIsSavingCustomModel] = useState(false)
@@ -78,9 +79,41 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
     }
   }, [])
 
+  useEffect(() => {
+    if (!isProviderConfigured('mistral', providersState)) {
+      setProviderModels((currentValue) => currentValue.filter((model) => model.providerId !== 'mistral'))
+      return
+    }
+
+    let isMounted = true
+
+    void window.echosphereModels
+      .listProviderModels('mistral')
+      .then((fetchedModels) => {
+        if (!isMounted) {
+          return
+        }
+
+        setProviderModels((currentValue) => {
+          const nonMistralModels = currentValue.filter((model) => model.providerId !== 'mistral')
+          return [...nonMistralModels, ...fetchedModels]
+        })
+      })
+      .catch((error) => {
+        console.error('Failed to load Mistral models', error)
+        if (isMounted) {
+          setCustomModelsError('Unable to load Mistral models from /v1/models.')
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [providersState])
+
   const providerSections = useMemo(
-    () => buildModelProviderSections('', providersState, customModels),
-    [customModels, providersState],
+    () => buildModelProviderSections('', providersState, customModels, providerModels),
+    [customModels, providerModels, providersState],
   )
   const customProviderOptions = useMemo(
     () =>

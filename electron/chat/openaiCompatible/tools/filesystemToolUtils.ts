@@ -115,15 +115,10 @@ export function readOptionalBoundedPositiveInteger(
 }
 
 export function resolveToolPath(agentContextRootPath: string, absolutePath: string) {
-  if (!path.isAbsolute(absolutePath)) {
-    throw new OpenAICompatibleToolError('absolute_path must be an absolute path.', {
-      absolutePath,
-      agentContextRootPath,
-    })
-  }
-
   const normalizedRootPath = path.resolve(agentContextRootPath)
-  const normalizedTargetPath = path.resolve(absolutePath)
+  const normalizedTargetPath = path.isAbsolute(absolutePath)
+    ? path.resolve(absolutePath)
+    : path.resolve(normalizedRootPath, absolutePath)
   const relativePath = path.relative(normalizedRootPath, normalizedTargetPath)
   const escapesRoot = relativePath.startsWith('..') || path.isAbsolute(relativePath)
 

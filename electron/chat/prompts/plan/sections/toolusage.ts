@@ -100,6 +100,7 @@ export function buildPlanToolUsageSection() {
       'Do not emit pseudo tool calls in plain text; call tools directly.',
       'If you say you will inspect/read/search, invoke the tool in the same turn.',
       'Never end a turn with intent-only text such as "Let me inspect..." without an actual tool call.',
+      'For tools that accept absolute_path, always send a true absolute filesystem path (for example C:\\\\repo\\\\file.ts or /repo/file.ts); never use "." or relative paths.',
       'Path protocol: start from <cwd>; for nested paths, extend from the last successful absolute_path; never reset to a guessed root.',
       'When a tool fails due to invalid path or bad arguments, correct arguments immediately and retry instead of continuing with assumptions.',
     ]),

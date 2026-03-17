@@ -25,6 +25,10 @@ function isMissingCheckpointError(error: unknown) {
   return error instanceof Error && error.message.toLowerCase().includes('workspace checkpoint')
 }
 
+function isMessageNotFoundError(error: unknown) {
+  return error instanceof Error && /^message not found:/i.test(error.message.trim())
+}
+
 function toActionErrorMessage(error: unknown, fallbackMessage: string) {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message
@@ -205,6 +209,30 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         return
       }
 
+      const persistedConversation = await window.echosphereHistory.getConversation(conversationId)
+      const hasPersistedEditableMessage = Boolean(
+        persistedConversation?.messages.some(
+          (message) => message.id === input.editingMessageId && message.role === 'user',
+        ),
+      )
+      if (!hasPersistedEditableMessage) {
+        input.cancelEditingMessage()
+        input.setError('This message is no longer available to edit.')
+        return
+      }
+
+      const conversationState = getConversationState(conversationId)
+      const hasEditableMessage = Boolean(
+        conversationState?.conversation.messages.some(
+          (message) => message.id === input.editingMessageId && message.role === 'user',
+        ),
+      )
+      if (!hasEditableMessage) {
+        input.cancelEditingMessage()
+        input.setError('This message is no longer available to edit.')
+        return
+      }
+
       actionInFlightRef.current = true
 
       let setupSuccessful = false
@@ -214,6 +242,12 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         try {
           await restoreWorkspaceCheckpointForMessage(conversationId, input.editingMessageId)
         } catch (caughtError) {
+          if (isMessageNotFoundError(caughtError)) {
+            input.cancelEditingMessage()
+            input.setError('This message is no longer available to edit.')
+            return
+          }
+
           if (!isMissingCheckpointError(caughtError)) {
             throw caughtError
           }
@@ -221,6 +255,12 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         setupSuccessful = true
       } catch (caughtError) {
         console.error(caughtError)
+        if (isMessageNotFoundError(caughtError)) {
+          input.cancelEditingMessage()
+          input.setError('This message is no longer available to edit.')
+          return
+        }
+
         input.setError(toActionErrorMessage(caughtError, 'Unable to resend your edit.'))
       } finally {
         actionInFlightRef.current = false

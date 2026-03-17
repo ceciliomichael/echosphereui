@@ -40,6 +40,10 @@ function isRateLimitError(error: unknown) {
   )
 }
 
+function isMessageNotFoundError(error: unknown) {
+  return error instanceof Error && /^message not found:/i.test(error.message.trim())
+}
+
 function createStreamProgressPersistenceController(input: {
   conversationId: string
   setError: (errorMessage: string | null) => void
@@ -193,9 +197,9 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     }
 
     if (input.targetEditMessageId !== null) {
-      if (shouldKeepSelected) {
-        input.completeEditingMessage()
-      }
+      // Always clear edit mode once the edited turn is persisted to avoid stale
+      // message ids being reused on later sends after history rewrites.
+      input.completeEditingMessage()
     } else if (shouldKeepSelected) {
       input.setMainComposerValue('')
       input.setMainComposerAttachments([])
@@ -284,6 +288,12 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     input.updateConversationSummary(savedConversationForRun)
   } catch (caughtError) {
     console.error(caughtError)
+    if (input.targetEditMessageId !== null && isMessageNotFoundError(caughtError)) {
+      input.completeEditingMessage()
+      input.setError('This message is no longer available to edit.')
+      return
+    }
+
     const shouldRetainProgress = isRateLimitError(caughtError)
     if (draftManager) {
       if (shouldRetainProgress) {

@@ -1,6 +1,10 @@
+import path from 'node:path'
 import type { Tool as AnthropicTool } from '@anthropic-ai/sdk/resources/messages'
 import { FunctionCallingConfigMode, type FunctionDeclaration, type Tool as GoogleTool } from '@google/genai/web'
+import type { FunctionTool } from '@mistralai/mistralai/models/components'
+import { ToolChoiceEnum } from '@mistralai/mistralai/models/components'
 import type { ChatMode } from '../../../src/types/chat'
+import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 
 function readOpenAIFunctionDefinition(toolDefinition: ReturnType<typeof getOpenAICompatibleToolDefinitions>[number]) {
@@ -85,6 +89,28 @@ export function buildGoogleToolDefinitions(chatMode: ChatMode) {
   return tools
 }
 
+export function buildMistralToolDefinitions(chatMode: ChatMode) {
+  const tools: FunctionTool[] = []
+
+  for (const toolDefinition of getOpenAICompatibleToolDefinitions(chatMode)) {
+    const functionDefinition = readOpenAIFunctionDefinition(toolDefinition)
+    if (!functionDefinition) {
+      continue
+    }
+
+    tools.push({
+      type: 'function',
+      function: {
+        description: functionDefinition.description ?? '',
+        name: functionDefinition.name,
+        parameters: ensureToolInputSchema(functionDefinition.parameters),
+      },
+    })
+  }
+
+  return tools
+}
+
 export function toGoogleFunctionCallingMode(forceToolChoice: 'none' | 'required' | undefined) {
   if (forceToolChoice === 'none') {
     return FunctionCallingConfigMode.NONE
@@ -97,6 +123,37 @@ export function toGoogleFunctionCallingMode(forceToolChoice: 'none' | 'required'
   return FunctionCallingConfigMode.AUTO
 }
 
+export function toMistralToolChoice(forceToolChoice: 'none' | 'required' | undefined) {
+  if (forceToolChoice === 'none') {
+    return ToolChoiceEnum.None
+  }
+
+  if (forceToolChoice === 'required') {
+    return ToolChoiceEnum.Required
+  }
+
+  return ToolChoiceEnum.Auto
+}
+
 export function parseToolArgumentsTextToObject(argumentsText: string) {
   return parseArgumentsToObject(argumentsText)
+}
+
+export function normalizeToolCallPaths(toolCall: OpenAICompatibleToolCall, agentContextRootPath: string) {
+  const argumentsValue = parseToolArgumentsTextToObject(toolCall.argumentsText)
+  const absolutePathValue = argumentsValue.absolute_path
+  if (typeof absolutePathValue !== 'string' || absolutePathValue.trim().length === 0 || path.isAbsolute(absolutePathValue)) {
+    return toolCall
+  }
+
+  const normalizedAbsolutePath = path.resolve(agentContextRootPath, absolutePathValue.trim())
+  const normalizedArgumentsValue: Record<string, unknown> = {
+    ...argumentsValue,
+    absolute_path: normalizedAbsolutePath,
+  }
+
+  return {
+    ...toolCall,
+    argumentsText: JSON.stringify(normalizedArgumentsValue),
+  }
 }

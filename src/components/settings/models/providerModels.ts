@@ -102,5 +102,6 @@ export const PROVIDER_MODELS = {
       reasoningEfforts: GOOGLE_REASONING_EFFORT_VALUES,
     },
   ],
+  mistral: [],
   'openai-compatible': [],
 } as const satisfies Record<ModelProviderId, readonly ProviderModelDefinition[]>
