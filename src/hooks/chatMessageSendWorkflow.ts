@@ -150,6 +150,16 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   let draftManager: ReturnType<typeof createChatAssistantDraftManager> | null = null
   let streamProgressPersistence: ReturnType<typeof createStreamProgressPersistenceController> | null = null
   let shouldKeepWaitingIndicatorActive = false
+  let hasPendingDraftReservation = false
+
+  const releasePendingDraftReservation = () => {
+    if (!hasPendingDraftReservation) {
+      return
+    }
+
+    hasPendingDraftReservation = false
+    input.setPendingDraftSendCount((currentValue) => Math.max(0, currentValue - 1))
+  }
 
   input.clearError()
 
@@ -158,6 +168,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       isSending: true,
     })
   } else {
+    hasPendingDraftReservation = true
     input.setPendingDraftSendCount((currentValue) => currentValue + 1)
   }
 
@@ -191,6 +202,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     input.updateConversationRuntimeState(conversationForRun.id, {
       isSending: true,
     })
+    releasePendingDraftReservation()
 
     if (shouldKeepSelected) {
       input.applyConversation(conversationForRun)
@@ -315,9 +327,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
     }
   } finally {
-    if (initiatingConversationId === null) {
-      input.setPendingDraftSendCount((currentValue) => Math.max(0, currentValue - 1))
-    }
+    releasePendingDraftReservation()
 
     if (conversationIdForCleanup) {
       if (shouldKeepWaitingIndicatorActive) {
