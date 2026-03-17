@@ -1,5 +1,5 @@
 import { Mistral } from '@mistralai/mistralai'
-import type { ModelList } from '@mistralai/mistralai/models/components'
+import type { ProviderModelConfig } from '../../../src/types/chat'
 import { readStoredApiKeyProviders } from '../../providers/store'
 
 export const MISTRAL_DEFAULT_BASE_URL = 'https://api.mistral.ai'
@@ -10,19 +10,28 @@ export interface MistralProviderConfig {
   baseURL: string
 }
 
-function hasText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-function toMistralModelListData(modelList: ModelList) {
-  return Array.isArray(modelList.data) ? modelList.data : []
-}
-
-function toBaseChatModelCards(modelList: ModelList) {
-  return toMistralModelListData(modelList)
-    .filter((model) => model.type === 'base')
-    .filter((model) => model.capabilities.completionChat)
-}
+const MISTRAL_MODEL_IDS = [
+  'codestral-2508',
+  'devstral-2512',
+  'devstral-medium-2507',
+  'devstral-small-2507',
+  'labs-devstral-small-2512',
+  'labs-leantral-2603',
+  'labs-mistral-small-creative',
+  'magistral-medium-2509',
+  'magistral-small-2509',
+  'minimal-14b-2512',
+  'minimal-3b-2512',
+  'minimal-8b-2512',
+  'mistral-large-2411',
+  'mistral-large-2512',
+  'mistral-medium-2505',
+  'mistral-small-2506',
+  'mistral-small-2603',
+  'open-mistral-nemo',
+  'pixtral-large-2411',
+  'voxtral-mini-2507',
+] as const
 
 export function buildMistralClient(providerConfig: MistralProviderConfig) {
   return new Mistral({
@@ -51,42 +60,14 @@ export async function loadMistralProviderConfig(): Promise<MistralProviderConfig
   }
 }
 
-export async function listMistralChatModels(client: Mistral) {
-  const response = await client.models.list()
-  const modelCards = toBaseChatModelCards(response)
-  const modelsByLabel = new Map<
-    string,
-    {
-      apiModelId: string
-      id: string
-      label: string
-      providerId: 'mistral'
-      reasoningCapable: boolean
-    }
-  >()
-
-  for (const model of modelCards) {
-    const label = hasText(model.name) ? model.name : model.id
-    const normalizedLabel = label.trim().toLowerCase()
-    const nextModel = {
-      apiModelId: model.id,
-      id: `mistral:${model.id}`,
-      label,
+export function listMistralCatalogModels(): ProviderModelConfig[] {
+  return [...MISTRAL_MODEL_IDS]
+    .sort((left, right) => left.localeCompare(right))
+    .map((modelId) => ({
+      apiModelId: modelId,
+      id: `mistral:${modelId}`,
+      label: modelId,
       providerId: 'mistral' as const,
       reasoningCapable: false,
-    }
-    const existingModel = modelsByLabel.get(normalizedLabel)
-
-    if (!existingModel) {
-      modelsByLabel.set(normalizedLabel, nextModel)
-      continue
-    }
-
-    // Prefer canonical "latest" ids when duplicates share the same display name.
-    if (!existingModel.apiModelId.endsWith('-latest') && nextModel.apiModelId.endsWith('-latest')) {
-      modelsByLabel.set(normalizedLabel, nextModel)
-    }
-  }
-
-  return Array.from(modelsByLabel.values()).sort((left, right) => left.label.localeCompare(right.label))
+    }))
 }

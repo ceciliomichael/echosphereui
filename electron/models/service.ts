@@ -1,5 +1,5 @@
 import type { ApiKeyProviderId, SaveCustomModelInput } from '../../src/types/chat'
-import { buildMistralClient, listMistralChatModels, loadMistralProviderConfig } from '../chat/providers/mistralShared'
+import { listMistralCatalogModels } from '../chat/providers/mistralShared'
 import { listStoredCustomModels, removeCustomModelConfig, saveCustomModelConfig } from './store'
 
 export async function listCustomModels() {
@@ -19,7 +19,5 @@ export async function listProviderModels(providerId: ApiKeyProviderId) {
     return []
   }
 
-  const providerConfig = await loadMistralProviderConfig()
-  const client = buildMistralClient(providerConfig)
-  return listMistralChatModels(client)
+  return listMistralCatalogModels()
 }

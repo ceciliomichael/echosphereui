@@ -78,6 +78,7 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
   const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
   const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
+  const [hasLoadedMistralModels, setHasLoadedMistralModels] = useState(false)
   const modelOptions = useMemo(
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
@@ -133,11 +134,13 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
 
   useEffect(() => {
     if (!isActiveScreen || !isProviderConfigured('mistral', providersState)) {
+      setHasLoadedMistralModels(true)
       setProviderModels((currentValue) => currentValue.filter((model) => model.providerId !== 'mistral'))
       return
     }
 
     let isMounted = true
+    setHasLoadedMistralModels(false)
 
     void window.echosphereModels
       .listProviderModels('mistral')
@@ -154,6 +157,13 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
       .catch((error) => {
         console.error('Failed to load Mistral models for chat runtime', error)
       })
+      .finally(() => {
+        if (!isMounted) {
+          return
+        }
+
+        setHasLoadedMistralModels(true)
+      })
 
     return () => {
       isMounted = false
@@ -161,7 +171,8 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
   }, [isActiveScreen, providersState])
 
   useEffect(() => {
-    if (!hasLoadedCustomModels) {
+    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedMistralModels
+    if (!hasLoadedRuntimeModelSources) {
       return
     }
 
@@ -171,10 +182,18 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
     }
 
     void updateSettings({ chatModelId: nextModelId })
-  }, [hasLoadedCustomModels, modelOptions.length, selectedModel?.id, settings.chatModelId, updateSettings])
+  }, [
+    hasLoadedCustomModels,
+    hasLoadedMistralModels,
+    modelOptions.length,
+    selectedModel?.id,
+    settings.chatModelId,
+    updateSettings,
+  ])
 
   useEffect(() => {
-    if (!hasLoadedCustomModels) {
+    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedMistralModels
+    if (!hasLoadedRuntimeModelSources) {
       return
     }
 
@@ -186,6 +205,7 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
   }, [
     availableReasoningEfforts.length,
     hasLoadedCustomModels,
+    hasLoadedMistralModels,
     reasoningEffort,
     settings.chatReasoningEffort,
     updateSettings,
