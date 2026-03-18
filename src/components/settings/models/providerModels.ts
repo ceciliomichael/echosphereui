@@ -13,7 +13,7 @@ type ProviderModelDefinition = Pick<
 export const PROVIDER_MODELS = {
   codex: [
     { enabledByDefault: true, id: 'gpt-5.4', label: 'gpt-5.4', reasoningCapable: true },
-    { enabledByDefault: true, id: 'gpt-5.4-mini', label: 'gpt-5.-mini', reasoningCapable: true },
+    { enabledByDefault: true, id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', reasoningCapable: true },
     { enabledByDefault: true, id: 'gpt-5.3-codex', label: 'gpt-5.3-codex', reasoningCapable: true },
     { enabledByDefault: false, id: 'gpt-5.2-codex', label: 'gpt-5.2-codex', reasoningCapable: true },
     { enabledByDefault: false, id: 'gpt-5.2', label: 'gpt-5.2', reasoningCapable: true },
