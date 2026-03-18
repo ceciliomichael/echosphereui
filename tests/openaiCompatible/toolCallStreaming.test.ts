@@ -256,6 +256,54 @@ test('collectToolCalls preserves whitespace-only argument deltas', () => {
   assert.equal(toolCall?.argumentsText, '{"content":"hello world"}')
 })
 
+test('collectToolCalls keeps invocation id stable after tool start when provider later emits a different id', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
+  const readyToolCallIndexes = new Set<number>()
+  const emittedEvents: StreamDeltaEvent[] = []
+
+  collectToolCalls(
+    createToolCallChunk(0, 'call_0187c2818fac48089c409468', 'list', ''),
+    toolCallsByIndex,
+    (event) => {
+      emittedEvents.push(event)
+    },
+    readyToolCallIndexes,
+  )
+
+  collectToolCalls(
+    createToolCallChunk(
+      0,
+      'chatcmpl-tool-8904b7980a18d243',
+      undefined,
+      '{"absolute_path":"C:\\\\Users\\\\Administrator\\\\Desktop\\\\test"}',
+    ),
+    toolCallsByIndex,
+    (event) => {
+      emittedEvents.push(event)
+    },
+    readyToolCallIndexes,
+  )
+
+  const startedEvent = emittedEvents.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }> =>
+      event.type === 'tool_invocation_started',
+  )
+  const deltaEvent = emittedEvents.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_delta' }> =>
+      event.type === 'tool_invocation_delta',
+  )
+
+  assert.ok(startedEvent)
+  assert.ok(deltaEvent)
+  assert.equal(startedEvent.invocationId, 'call_0187c2818fac48089c409468')
+  assert.equal(deltaEvent.invocationId, 'call_0187c2818fac48089c409468')
+
+  const [toolCall] = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCall?.id, 'call_0187c2818fac48089c409468')
+  assert.equal(toolCall?.name, 'list')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\Users\\\\Administrator\\\\Desktop\\\\test"}')
+})
+
 test('collectToolCalls reads terminal non-delta message tool_calls emitted by compatible providers', () => {
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
   const readyToolCallIndexes = new Set<number>()

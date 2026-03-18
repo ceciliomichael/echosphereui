@@ -2,11 +2,25 @@ import type { Message } from '../../../src/types/chat'
 import type { OpenAICompatibleToolCall } from './toolTypes'
 
 type WorkflowStepStatus = 'completed' | 'in_progress' | 'pending'
+const MAX_TRACKED_RECENT_TOOL_CALL_ATTEMPTS = 6
+
+export const MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS = 3
 
 interface WorkflowPlanStep {
   id: string
   status: WorkflowStepStatus
   title: string
+}
+
+interface RecentToolCallAttempt {
+  argumentsFingerprint: string
+  toolName: string
+}
+
+interface BlockedRepeatedToolCall {
+  argumentsFingerprint: string
+  consecutiveAttemptCount: number
+  toolName: string
 }
 
 interface WorkflowPlanState {
@@ -18,13 +32,17 @@ interface WorkflowPlanState {
 }
 
 export interface ToolExecutionTurnState {
+  blockedRepeatedToolCall: BlockedRepeatedToolCall | null
   readonly initialized: true
+  recentToolCallAttempts: RecentToolCallAttempt[]
   workflowPlan: WorkflowPlanState | null
 }
 
 export function createToolExecutionTurnState(): ToolExecutionTurnState {
   return {
+    blockedRepeatedToolCall: null,
     initialized: true,
+    recentToolCallAttempts: [],
     workflowPlan: null,
   }
 }
@@ -54,6 +72,59 @@ export function recordSuccessfulToolExecution(
   }
 
   turnState.workflowPlan = normalizedWorkflowPlan
+}
+
+export function countTrailingMatchingToolCallAttempts(
+  turnState: ToolExecutionTurnState,
+  toolName: string,
+  argumentsFingerprint: string,
+) {
+  let matchingAttemptCount = 0
+
+  for (let index = turnState.recentToolCallAttempts.length - 1; index >= 0; index -= 1) {
+    const attempt = turnState.recentToolCallAttempts[index]
+    if (!attempt || attempt.toolName !== toolName || attempt.argumentsFingerprint !== argumentsFingerprint) {
+      break
+    }
+
+    matchingAttemptCount += 1
+  }
+
+  return matchingAttemptCount
+}
+
+export function recordToolCallAttempt(
+  turnState: ToolExecutionTurnState,
+  toolCall: Pick<OpenAICompatibleToolCall, 'name'>,
+  argumentsFingerprint: string,
+) {
+  turnState.recentToolCallAttempts.push({
+    argumentsFingerprint,
+    toolName: toolCall.name,
+  })
+
+  if (turnState.recentToolCallAttempts.length > MAX_TRACKED_RECENT_TOOL_CALL_ATTEMPTS) {
+    turnState.recentToolCallAttempts.splice(0, turnState.recentToolCallAttempts.length - MAX_TRACKED_RECENT_TOOL_CALL_ATTEMPTS)
+  }
+}
+
+export function recordBlockedRepeatedToolCall(
+  turnState: ToolExecutionTurnState,
+  toolName: string,
+  argumentsFingerprint: string,
+  consecutiveAttemptCount: number,
+) {
+  turnState.blockedRepeatedToolCall = {
+    argumentsFingerprint,
+    consecutiveAttemptCount,
+    toolName,
+  }
+}
+
+export function consumeBlockedRepeatedToolCall(turnState: ToolExecutionTurnState) {
+  const blockedRepeatedToolCall = turnState.blockedRepeatedToolCall
+  turnState.blockedRepeatedToolCall = null
+  return blockedRepeatedToolCall
 }
 
 function readString(value: unknown) {

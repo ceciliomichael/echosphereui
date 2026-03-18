@@ -3,8 +3,12 @@ import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
 import { getOpenAICompatibleToolDefinition } from './toolRegistry'
 import { buildFailedToolArtifacts, buildSuccessfulToolArtifacts } from './toolResultFormatter'
 import {
+  countTrailingMatchingToolCallAttempts,
   createToolExecutionTurnState,
   hydrateToolExecutionTurnStateFromMessages,
+  MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+  recordBlockedRepeatedToolCall,
+  recordToolCallAttempt,
   recordSuccessfulToolExecution,
   type ToolExecutionTurnState,
 } from './toolExecutionTurnState'
@@ -15,6 +19,7 @@ import {
 } from './toolTypes'
 
 export { createToolExecutionTurnState } from './toolExecutionTurnState'
+export { consumeBlockedRepeatedToolCall } from './toolExecutionTurnState'
 export { resolveWorkflowTurnToolChoice } from './toolExecutionTurnState'
 export type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
@@ -135,6 +140,10 @@ function readTrimmedString(value: unknown) {
 
   const normalized = value.trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function buildToolArgumentsFingerprint(argumentsValue: Record<string, unknown>) {
+  return JSON.stringify(argumentsValue)
 }
 
 function normalizeUpdatePlanArguments(argumentsValue: Record<string, unknown>): NormalizedWorkflowPlanSnapshot | null {
@@ -280,9 +289,45 @@ export async function executeToolCallWithPolicies(
   } catch (error) {
     const errorMessage = toErrorMessage(error)
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
+    console.log('[tool-execution:parse-arguments-failed]', {
+      errorDetails: errorDetails ?? null,
+      errorMessage,
+      invocationId: toolCall.id,
+      rawArgumentsLength: toolCall.argumentsText.length,
+      rawArgumentsPreview:
+        toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
+      toolName: toolCall.name,
+    })
     emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, errorDetails)
     return
   }
+
+  const argumentsFingerprint = buildToolArgumentsFingerprint(argumentsValue)
+  const matchingAttemptCount = countTrailingMatchingToolCallAttempts(ensuredTurnState, toolCall.name, argumentsFingerprint)
+  if (matchingAttemptCount >= MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS - 1) {
+    const consecutiveAttemptCount = matchingAttemptCount + 1
+    const errorMessage =
+      `Repeated identical tool call detected for "${toolCall.name}". ` +
+      'Reuse the latest tool result or choose a different action instead of repeating the same call again.'
+    recordBlockedRepeatedToolCall(ensuredTurnState, toolCall.name, argumentsFingerprint, consecutiveAttemptCount)
+    console.log('[tool-execution:doom-loop-blocked]', {
+      argumentsFingerprintLength: argumentsFingerprint.length,
+      argumentsPreview:
+        toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
+      consecutiveAttemptCount,
+      invocationId: toolCall.id,
+      threshold: MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+      toolName: toolCall.name,
+    })
+    emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, {
+      consecutiveAttemptCount,
+      threshold: MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+      toolName: toolCall.name,
+    })
+    return
+  }
+
+  recordToolCallAttempt(ensuredTurnState, toolCall, argumentsFingerprint)
 
   if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(ensuredTurnState, argumentsValue)) {
     const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)

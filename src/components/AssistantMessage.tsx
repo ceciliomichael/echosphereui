@@ -1,4 +1,5 @@
 import { chatMessageContentWidthClassName } from '../lib/chatStyles'
+import { normalizeAssistantMessageContent } from '../lib/chatMessageContent'
 import type { AssistantWaitingIndicatorVariant, ToolInvocationTrace } from '../types/chat'
 import { MarkdownRenderer } from './chat/MarkdownRenderer'
 import { ThinkingBlock } from './chat/ThinkingBlock'
@@ -31,18 +32,26 @@ export function AssistantMessage({
   waitingIndicatorVariant = 'thinking',
   workspaceRootPath = null,
 }: AssistantMessageProps) {
-  const hasContent = content.trim().length > 0
-  const hasReasoningContent = reasoningContent.trim().length > 0
+  const normalizedContent = normalizeAssistantMessageContent({
+    content,
+    reasoningContent,
+  })
+  const hasContent = normalizedContent.content.trim().length > 0
+  const hasReasoningContent = normalizedContent.reasoningContent.trim().length > 0
   const hasActiveReasoningBlock = hasReasoningContent && reasoningCompletedAt === undefined
   const hasRunningToolInvocation = toolInvocations.some((invocation) => invocation.state === 'running')
   const shouldShowWaitingIndicator =
     isStreaming && !isTextStreaming && !hasRunningToolInvocation && !hasActiveReasoningBlock
 
+  if (!hasContent && !hasReasoningContent && toolInvocations.length === 0 && !shouldShowWaitingIndicator) {
+    return null
+  }
+
   return (
     <div className={[chatMessageContentWidthClassName, 'space-y-2'].join(' ')}>
       {hasReasoningContent ? (
         <ThinkingBlock
-          content={reasoningContent}
+          content={normalizedContent.reasoningContent}
           isComplete={!isStreaming}
           reasoningCompletedAt={reasoningCompletedAt}
           startTime={timestamp}
@@ -59,7 +68,7 @@ export function AssistantMessage({
       ))}
 
       {hasContent ? (
-        <MarkdownRenderer content={content} className="text-left text-[15px]" isStreaming={isStreaming} />
+        <MarkdownRenderer content={normalizedContent.content} className="text-left text-[15px]" isStreaming={isStreaming} />
       ) : null}
 
       {shouldShowWaitingIndicator ? <ThinkingIndicator variant={waitingIndicatorVariant} /> : null}

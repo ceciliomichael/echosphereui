@@ -181,3 +181,38 @@ test('parseSseResponseStream exposes tool calls as soon as arguments are finaliz
     ['call_1', 'call_2'],
   )
 })
+
+test('parseSseResponseStream keeps invocation id stable when codex emits a different call_id mid-stream', async () => {
+  const streamEvents = [
+    'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_item_1","type":"function_call","call_id":"call_1","name":"list","arguments":""}}\n\n',
+    'data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_item_1","call_id":"call_1","delta":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\src\\""}\n\n',
+    'data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_item_1","call_id":"call_renamed","delta":"}"}\n\n',
+    'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_item_1","call_id":"call_renamed","arguments":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\src\\"}"}\n\n',
+    'data: [DONE]\n\n',
+  ]
+  const emittedEvents: StreamDeltaEvent[] = []
+
+  const result = await parseSseResponseStream(
+    createSseResponse(streamEvents),
+    (event) => {
+      emittedEvents.push(event)
+    },
+    new AbortController().signal,
+  )
+
+  const startedEvent = emittedEvents.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }> =>
+      event.type === 'tool_invocation_started',
+  )
+  const deltaEvents = emittedEvents.filter(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_delta' }> =>
+      event.type === 'tool_invocation_delta',
+  )
+
+  assert.ok(startedEvent)
+  assert.equal(startedEvent.invocationId, 'call_1')
+  assert.ok(deltaEvents.length > 0)
+  assert.equal(deltaEvents.at(-1)?.invocationId, 'call_1')
+  assert.equal(result.toolCalls[0]?.id, 'call_1')
+  assert.equal(result.toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\src"}')
+})

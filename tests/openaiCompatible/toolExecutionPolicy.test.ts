@@ -108,6 +108,35 @@ test('executeToolCallWithPolicies allows repeating the same list call without an
   })
 })
 
+test('executeToolCallWithPolicies blocks the third consecutive identical tool call', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
+
+    const emittedEvents: StreamDeltaEvent[] = []
+    const inMemoryMessages: Message[] = []
+    const turnState = createToolExecutionTurnState()
+    const context = {
+      emitDelta(event: StreamDeltaEvent) {
+        emittedEvents.push(event)
+      },
+      signal: new AbortController().signal,
+      workspaceCheckpointId: null,
+    }
+
+    await executeToolCallWithPolicies(createListToolCall('call-1', workspacePath), context, workspacePath, inMemoryMessages, turnState)
+    await executeToolCallWithPolicies(createListToolCall('call-2', workspacePath), context, workspacePath, inMemoryMessages, turnState)
+    await executeToolCallWithPolicies(createListToolCall('call-3', workspacePath), context, workspacePath, inMemoryMessages, turnState)
+
+    assert.equal(inMemoryMessages.length, 3)
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
+    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
+
+    assert.equal(completedEvents.length, 2)
+    assert.equal(failedEvents.length, 1)
+    assert.match(failedEvents[0]?.errorMessage ?? '', /Repeated identical tool call detected/u)
+  })
+})
+
 test('executeToolCallWithPolicies allows rereading the same file without an intervening mutation', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'notes.txt')

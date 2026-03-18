@@ -22,6 +22,16 @@ interface CreateCodexToolCallAccumulatorOptions {
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
 }
 
+const TOOL_DEBUG_PREVIEW_LIMIT = 240
+
+function toToolDebugPreview(argumentsText: string) {
+  if (argumentsText.length <= TOOL_DEBUG_PREVIEW_LIMIT) {
+    return argumentsText
+  }
+
+  return `${argumentsText.slice(0, TOOL_DEBUG_PREVIEW_LIMIT)}…`
+}
+
 function readCodexToolOutputIndex(payload: CodexStreamEventPayload, item: Record<string, unknown> | null) {
   return readNonNegativeInteger(payload.output_index) ?? readNonNegativeInteger(item?.output_index)
 }
@@ -44,6 +54,12 @@ function emitToolAccumulatorLifecycleEvent(
 ) {
   if (accumulator.startedAt === null && accumulator.name.trim().length > 0) {
     accumulator.startedAt = Date.now()
+    console.log('[tool-lifecycle:started]', {
+      argumentsLength: accumulator.argumentsText.length,
+      argumentsPreview: toToolDebugPreview(accumulator.argumentsText),
+      invocationId: accumulator.id,
+      toolName: accumulator.name,
+    })
     emitDelta({
       argumentsText: accumulator.argumentsText,
       invocationId: accumulator.id,
@@ -55,6 +71,12 @@ function emitToolAccumulatorLifecycleEvent(
   }
 
   if (accumulator.startedAt !== null && accumulator.argumentsText !== previousArgumentsText) {
+    console.log('[tool-lifecycle:delta]', {
+      argumentsLength: accumulator.argumentsText.length,
+      argumentsPreview: toToolDebugPreview(accumulator.argumentsText),
+      invocationId: accumulator.id,
+      toolName: accumulator.name,
+    })
     emitDelta({
       argumentsText: accumulator.argumentsText,
       invocationId: accumulator.id,
@@ -160,7 +182,7 @@ export function createCodexToolCallAccumulator(options: CreateCodexToolCallAccum
         }),
         (accumulator) => {
           const nextToolId = readText(item.call_id) ?? readText(payload.call_id)
-          if (nextToolId) {
+          if (nextToolId && accumulator.startedAt === null) {
             accumulator.id = nextToolId
           }
 
@@ -206,7 +228,7 @@ export function createCodexToolCallAccumulator(options: CreateCodexToolCallAccum
           accumulator.argumentsText += delta
 
           const nextToolId = readText(payload.call_id) ?? readText(item?.call_id)
-          if (nextToolId) {
+          if (nextToolId && accumulator.startedAt === null) {
             accumulator.id = nextToolId
           }
 
@@ -237,7 +259,7 @@ export function createCodexToolCallAccumulator(options: CreateCodexToolCallAccum
       }
 
       const nextToolId = readText(payload.call_id) ?? readText(item?.call_id)
-      if (nextToolId) {
+      if (nextToolId && accumulator.startedAt === null) {
         accumulator.id = nextToolId
       }
 

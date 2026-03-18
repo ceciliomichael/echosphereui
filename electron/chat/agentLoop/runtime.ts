@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto'
 import type { AppTerminalExecutionMode, ChatMode, ChatProviderId, Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ProviderStreamContext } from '../providerTypes'
 import { buildReplayableMessageHistory } from '../openaiCompatible/messageHistory'
-import { createHydratedToolExecutionTurnState, createToolExecutionScheduler, resolveWorkflowTurnToolChoice } from '../openaiCompatible/toolExecution'
+import {
+  consumeBlockedRepeatedToolCall,
+  createHydratedToolExecutionTurnState,
+  createToolExecutionScheduler,
+  resolveWorkflowTurnToolChoice,
+} from '../openaiCompatible/toolExecution'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
-import { shouldRecoverFromTextOnlyToolTurn } from '../openaiCompatible/toolRecovery'
 import { appendWorkflowPlanContextMessage } from '../openaiCompatible/workflowPlanContext'
-import { resolveForcedToolChoiceForTurn } from '../openaiCompatible/workflowToolChoice'
 import {
   appendRuntimeContextMessageIfChanged,
   readLatestRuntimeContextSnapshot,
@@ -48,11 +51,40 @@ type StreamTurnFn = (
 ) => Promise<AgentLoopTurnResult>
 
 const MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES = 4
-const REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD = 3
 const MAX_TEXT_ONLY_TOOL_RECOVERIES = 3
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function shouldRecoverFromNoToolAssistantTurn(content: string) {
+  const normalizedContent = content.trim().toLowerCase()
+  if (normalizedContent.length === 0) {
+    return true
+  }
+
+  // Allow explicit user-facing completions and clarification questions to exit cleanly.
+  if (
+    normalizedContent.includes('need more information') ||
+    normalizedContent.includes('can you clarify') ||
+    normalizedContent.includes('could you clarify') ||
+    normalizedContent.includes('what would you like') ||
+    normalizedContent.includes('please clarify') ||
+    normalizedContent.includes('which option') ||
+    normalizedContent.includes('which one') ||
+    normalizedContent.includes('anything else') ||
+    normalizedContent.startsWith('done') ||
+    normalizedContent.startsWith('completed') ||
+    normalizedContent.startsWith('finished') ||
+    normalizedContent.startsWith('all done') ||
+    normalizedContent.startsWith('all set') ||
+    normalizedContent.startsWith('implemented') ||
+    normalizedContent.startsWith('fixed')
+  ) {
+    return false
+  }
+
+  return true
 }
 
 function buildInMemoryAssistantMessage(content: string): Message {
@@ -101,17 +133,13 @@ export async function streamAgentLoopWithTools(
   })
   let textOnlyToolRecoveryCount = 0
   let missingToolCallRecoveryCount = 0
-  let enforceRequiredToolChoiceForNextTurn = false
   let previousRuntimeContextSnapshot = readLatestRuntimeContextSnapshot(request.messages)
   const currentRuntimeContextSnapshot = toRuntimeContextSnapshot(request)
 
   while (!context.signal.aborted) {
     const shouldEnforceIncompletePlanRecovery = currentChatMode === 'agent'
     const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
-    const forcedToolChoiceForTurn = resolveForcedToolChoiceForTurn(
-      resolvedToolChoiceForTurn,
-      enforceRequiredToolChoiceForNextTurn,
-    )
+    const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
     const replayableMessages = buildReplayableMessageHistory(inMemoryMessages)
     const workflowMessages =
       currentChatMode === 'plan'
@@ -144,7 +172,9 @@ export async function streamAgentLoopWithTools(
       },
     )
 
-    if (turnResult.toolCalls.length === 0) {
+    const hasDetectedToolCallsThisTurn = turnResult.toolCalls.length > 0 || scheduledToolCallIds.size > 0
+
+    if (!hasDetectedToolCallsThisTurn) {
       const hasIncompleteWorkflowPlan = turnState.workflowPlan !== null && !turnState.workflowPlan.allStepsCompleted
 
       if (
@@ -153,8 +183,6 @@ export async function streamAgentLoopWithTools(
         missingToolCallRecoveryCount < MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES
       ) {
         missingToolCallRecoveryCount += 1
-        enforceRequiredToolChoiceForNextTurn =
-          missingToolCallRecoveryCount >= REQUIRED_TOOL_CHOICE_RECOVERY_THRESHOLD
         if (hasText(turnResult.assistantContent)) {
           inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
         }
@@ -169,14 +197,15 @@ export async function streamAgentLoopWithTools(
       if (
         forcedToolChoiceForTurn !== 'none' &&
         textOnlyToolRecoveryCount < MAX_TEXT_ONLY_TOOL_RECOVERIES &&
-        shouldRecoverFromTextOnlyToolTurn(turnResult.assistantContent) &&
-        hasText(turnResult.assistantContent)
+        shouldRecoverFromNoToolAssistantTurn(turnResult.assistantContent)
       ) {
         textOnlyToolRecoveryCount += 1
-        inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
+        if (hasText(turnResult.assistantContent)) {
+          inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
+        }
         inMemoryMessages.push(
           buildInMemoryUserMessage(
-            'System notice: You described a tool action in text but did not invoke a tool. Invoke the appropriate tool directly now.',
+            '<system-reminder>\nPlease address this message and continue with your tasks.\n</system-reminder>',
           ),
         )
         continue
@@ -186,7 +215,6 @@ export async function streamAgentLoopWithTools(
     }
 
     missingToolCallRecoveryCount = 0
-    enforceRequiredToolChoiceForNextTurn = false
     textOnlyToolRecoveryCount = 0
 
     if (hasText(turnResult.assistantContent)) {
@@ -202,6 +230,10 @@ export async function streamAgentLoopWithTools(
     }
 
     await toolExecutionScheduler.drain()
+
+    if (consumeBlockedRepeatedToolCall(turnState)) {
+      return
+    }
 
     if (context.signal.aborted) {
       return

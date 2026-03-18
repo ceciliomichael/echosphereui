@@ -41,6 +41,19 @@ interface StreamOpenAICompatibleTurnResult {
   toolCalls: OpenAICompatibleToolCall[]
 }
 
+function toToolChunkDebugPreview(value: unknown, limit = 800) {
+  try {
+    const serialized = JSON.stringify(value)
+    if (serialized.length <= limit) {
+      return serialized
+    }
+
+    return `${serialized.slice(0, limit)}…`
+  } catch {
+    return '[unserializable]'
+  }
+}
+
 function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
   if (message.role === 'user') {
     const contentParts: ChatCompletionContentPart[] = []
@@ -206,6 +219,31 @@ export async function streamOpenAICompatibleChatCompletionsTurn(
   let assistantContent = ''
 
   for await (const chunk of stream) {
+    for (const [choiceIndex, choice] of chunk.choices.entries()) {
+      const hasToolSignals =
+        choice.delta.tool_calls !== undefined ||
+        readNestedRecord(choice.delta)?.tool_call !== undefined ||
+        choice.delta.function_call !== undefined ||
+        readNestedRecord(choice as unknown as Record<string, unknown>)?.message !== undefined ||
+        choice.finish_reason === 'tool_calls'
+
+      if (!hasToolSignals) {
+        continue
+      }
+
+      console.log('[tool-chunk:openai-compatible:raw-choice]', {
+        chunkId: chunk.id,
+        choiceIndex,
+        finishReason: choice.finish_reason ?? null,
+        messageToolCallsPreview: toToolChunkDebugPreview(
+          readNestedRecord(readNestedRecord(choice as unknown as Record<string, unknown>)?.message)?.tool_calls,
+        ),
+        rawFunctionCallPreview: toToolChunkDebugPreview(choice.delta.function_call),
+        rawSingularToolCallPreview: toToolChunkDebugPreview(readNestedRecord(choice.delta)?.tool_call),
+        rawToolCallsPreview: toToolChunkDebugPreview(choice.delta.tool_calls),
+      })
+    }
+
     emitChunkDeltas(chunk, context.emitDelta)
     collectToolCalls(
       chunk,

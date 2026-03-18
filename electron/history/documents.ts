@@ -1,4 +1,5 @@
 import { isChatAttachment } from '../../src/lib/chatAttachments'
+import { normalizeAssistantMessageContent } from '../../src/lib/chatMessageContent'
 import { getConversationPreviewContent } from '../../src/lib/chatMessageMetadata'
 import type {
   ChatMode,
@@ -156,10 +157,18 @@ export function normalizeConversationRecord(
     agentContextRootPath:
       typeof conversation.agentContextRootPath === 'string' ? conversation.agentContextRootPath.trim() : '',
     folderId: typeof conversation.folderId === 'string' ? conversation.folderId : null,
-    messages: messages.map((message) => ({
-      ...message,
-      ...(message.runCheckpoint ? { runCheckpoint: message.runCheckpoint } : {}),
-    })),
+    messages: messages.map((message) =>
+      message.role === 'assistant'
+        ? {
+            ...message,
+            ...normalizeAssistantMessageContent(message),
+            ...(message.runCheckpoint ? { runCheckpoint: message.runCheckpoint } : {}),
+          }
+        : {
+            ...message,
+            ...(message.runCheckpoint ? { runCheckpoint: message.runCheckpoint } : {}),
+          },
+    ),
   }
 }
 

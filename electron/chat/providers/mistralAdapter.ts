@@ -175,7 +175,7 @@ function emitToolCallDeltaEvents(
       const previousArgumentsText = currentToolCall.argumentsText
       const argumentsText = stringifyToolArguments(toolCall.function.arguments)
 
-      if (hasText(toolCall.id)) {
+      if (hasText(toolCall.id) && currentToolCall.startedAt === null) {
         currentToolCall.id = toolCall.id
       }
 

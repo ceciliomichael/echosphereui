@@ -73,6 +73,33 @@ function buildToolInvocationState(
   } satisfies ToolInvocationTrace
 }
 
+function finalizeIncompleteToolInvocations(
+  message: Message,
+  input: {
+    completedAt: number
+    failureMessage: string
+  },
+) {
+  if (message.role !== 'assistant' || !message.toolInvocations?.some((invocation) => invocation.state === 'running')) {
+    return message
+  }
+
+  return {
+    ...message,
+    toolInvocations: message.toolInvocations.map((invocation) =>
+      invocation.state !== 'running'
+        ? invocation
+        : ({
+            ...invocation,
+            completedAt: input.completedAt,
+            decisionRequest: undefined,
+            resultContent: invocation.resultContent ?? input.failureMessage,
+            state: 'failed',
+          } satisfies ToolInvocationTrace),
+    ),
+  }
+}
+
 export function createChatAssistantDraftManager(input: CreateChatAssistantDraftManagerInput) {
   const insertedMessageIds: string[] = []
   const streamedMessageOrder: StreamedMessageOrderEntry[] = []
@@ -409,7 +436,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       toolInvocationMessageIds.set(invocationId, draftAssistantId)
       updateToolInvocation(draftAssistantId, invocationId, 'running', nextValue, { immediate: true })
     },
-    finalizeStreamedMessages(wasAborted: boolean) {
+    finalizeStreamedMessages(wasAborted: boolean, failureMessage?: string) {
       completeReasoningDraft()
       input.updateConversationRuntimeState(input.conversationId, {
         activeStreamId: null,
@@ -417,6 +444,10 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
         streamingWaitingIndicatorVariant: null,
       })
       input.stopTextStreaming(input.conversationId)
+      const finalizedAt = Date.now()
+      const incompleteToolFailureMessage =
+        failureMessage ??
+        (wasAborted ? 'Tool execution aborted before completion.' : 'Tool execution ended before completion.')
 
       const streamedMessages = streamedMessageOrder.flatMap((entry) => {
         if (entry.kind === 'message') {
@@ -428,7 +459,14 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
           return []
         }
 
-        return [normalizeAssistantMessage(draftAssistantMessage)]
+        return [
+          normalizeAssistantMessage(
+            finalizeIncompleteToolInvocations(draftAssistantMessage, {
+              completedAt: finalizedAt,
+              failureMessage: incompleteToolFailureMessage,
+            }),
+          ),
+        ]
       })
 
       if (streamedMessages.every((message) => !hasMeaningfulAssistantOutput(message))) {

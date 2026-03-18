@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { normalizeMarkdownText } from '../../lib/chatMessageContent'
 import { MarkdownRenderer } from './MarkdownRenderer'
 
 interface ThinkingBlockProps {
@@ -9,20 +10,16 @@ interface ThinkingBlockProps {
   startTime: number
 }
 
-function normalizeMarkdownText(input: string) {
-  return input
-    .replace(/\r\n/g, '\n')
-    .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
-}
-
 function formatDuration(seconds: number): string {
-  if (seconds >= 60) {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = Math.round(seconds % 60)
+  const normalizedSeconds = Math.max(seconds, 0.01)
+
+  if (normalizedSeconds >= 60) {
+    const minutes = Math.floor(normalizedSeconds / 60)
+    const remainingSeconds = Math.round(normalizedSeconds % 60)
     return `${minutes}m ${remainingSeconds}s`
   }
 
-  return `${seconds.toFixed(2)}s`
+  return `${normalizedSeconds.toFixed(2)}s`
 }
 
 export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, reasoningCompletedAt, startTime }: ThinkingBlockProps) {
@@ -60,21 +57,25 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, 
 
   useEffect(() => {
     if (!isReasoningComplete) {
-      setIsOpen(true)
+      setIsOpen(!isComplete)
       return
     }
 
     setIsOpen(false)
-  }, [isReasoningComplete])
+  }, [isComplete, isReasoningComplete])
 
   const stableDuration = frozenDurationRef.current ?? reasoningDurationSeconds ?? elapsedSeconds
   const normalizedContent = normalizeMarkdownText(content)
   const completedDuration = stableDuration ?? 0
-  const headerLabel = !isReasoningComplete
-    ? stableDuration !== null
-      ? `Thinking for ${formatDuration(stableDuration)}`
-      : 'Thinking'
-    : `Thought for ${formatDuration(completedDuration)}`
+  const headerLabel = isReasoningComplete
+    ? `Thought for ${formatDuration(completedDuration)}`
+    : isComplete
+      ? stableDuration !== null
+        ? `Thought for ${formatDuration(stableDuration)}`
+        : 'Thought'
+      : stableDuration !== null
+        ? `Thinking for ${formatDuration(stableDuration)}`
+        : 'Thinking'
 
   return (
     <div>
@@ -83,7 +84,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, 
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className={!isReasoningComplete ? 'thinking-shimmer' : ''}>{headerLabel}</span>
+        <span className={!isComplete ? 'thinking-shimmer' : ''}>{headerLabel}</span>
         <ChevronRight
           className={[
             'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',

@@ -26,3 +26,24 @@ test('normalizeConversationRecord keeps mistral messages', () => {
   assert.equal(normalizedConversation.messages[0].id, mistralUserMessage.id)
   assert.equal(normalizedConversation.messages[0].providerId, 'mistral')
 })
+
+test('normalizeConversationRecord strips think tags into assistant reasoning content', () => {
+  const assistantMessage: Message = {
+    content: '<think>Plan the response.</think>\n\nFinal answer.',
+    id: 'assistant-1',
+    role: 'assistant',
+    timestamp: Date.now(),
+  }
+
+  const inputConversation = {
+    chatMode: 'agent',
+    id: 'conversation-1',
+    messages: [assistantMessage],
+    title: 'Thinking Chat',
+  } satisfies Partial<ConversationRecord> & { id: string }
+
+  const normalizedConversation = normalizeConversationRecord(inputConversation)
+  assert.equal(normalizedConversation.messages.length, 1)
+  assert.equal(normalizedConversation.messages[0].content, 'Final answer.')
+  assert.equal(normalizedConversation.messages[0].reasoningContent, 'Plan the response.')
+})

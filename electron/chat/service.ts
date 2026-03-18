@@ -10,6 +10,7 @@ import type {
   ToolDecisionOption,
 } from '../../src/types/chat'
 import { terminateTerminalSessionsForStream } from './openaiCompatible/tools/terminalSessionManager'
+import { isRateLimitError, retryRateLimitedRequest } from './rateLimitRetry'
 import { streamProviderResponse } from './providerRegistry'
 
 const STREAM_EVENT_CHANNEL = 'chat:stream:event'
@@ -48,6 +49,31 @@ function getPendingToolDecisionKey(streamId: string, invocationId: string) {
 function emitStreamEvent(webContents: WebContents, event: ChatStreamEvent) {
   if (webContents.isDestroyed()) {
     return
+  }
+
+  if (
+    event.type === 'tool_invocation_started' ||
+    event.type === 'tool_invocation_delta' ||
+    event.type === 'tool_invocation_completed' ||
+    event.type === 'tool_invocation_failed' ||
+    event.type === 'aborted' ||
+    event.type === 'error' ||
+    event.type === 'completed'
+  ) {
+    console.log('[stream-event]', {
+      eventType: event.type,
+      streamId: event.streamId,
+      ...('invocationId' in event ? { invocationId: event.invocationId } : {}),
+      ...('toolName' in event ? { toolName: event.toolName } : {}),
+      ...('argumentsText' in event
+        ? {
+            argumentsLength: event.argumentsText.length,
+            argumentsPreview:
+              event.argumentsText.length > 240 ? `${event.argumentsText.slice(0, 240)}…` : event.argumentsText,
+          }
+        : {}),
+      ...('errorMessage' in event ? { errorMessage: event.errorMessage } : {}),
+    })
   }
 
   webContents.send(STREAM_EVENT_CHANNEL, event)
@@ -203,32 +229,41 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
       })
 
       try {
-        await streamProviderResponse(
-          {
-            agentContextRootPath: input.agentContextRootPath,
-            chatMode: input.chatMode,
-            messages: input.messages,
-            modelId: input.modelId,
-            providerId: input.providerId,
-            reasoningEffort: input.reasoningEffort,
-            terminalExecutionMode: input.terminalExecutionMode,
-          },
-          {
-            emitDelta: (deltaEvent) => {
-              emitStreamEvent(webContents, {
-                ...deltaEvent,
+        let hasStreamProgress = false
+        await retryRateLimitedRequest(
+          () =>
+            streamProviderResponse(
+              {
+                agentContextRootPath: input.agentContextRootPath,
+                chatMode: input.chatMode,
+                messages: input.messages,
+                modelId: input.modelId,
+                providerId: input.providerId,
+                reasoningEffort: input.reasoningEffort,
+                terminalExecutionMode: input.terminalExecutionMode,
+              },
+              {
+                emitDelta: (deltaEvent) => {
+                  hasStreamProgress = true
+                  emitStreamEvent(webContents, {
+                    ...deltaEvent,
+                    streamId,
+                  })
+                },
+                awaitUserDecision: (decisionInput) =>
+                  awaitToolUserDecision(webContents, abortController.signal, {
+                    ...decisionInput,
+                    streamId,
+                  }),
+                signal: abortController.signal,
                 streamId,
-              })
-            },
-            awaitUserDecision: (decisionInput) =>
-              awaitToolUserDecision(webContents, abortController.signal, {
-                ...decisionInput,
-                streamId,
-              }),
+                terminalExecutionMode: input.terminalExecutionMode,
+                workspaceCheckpointId,
+              },
+            ),
+          {
+            shouldRetryError: (error) => !hasStreamProgress && isRateLimitError(error),
             signal: abortController.signal,
-            streamId,
-            terminalExecutionMode: input.terminalExecutionMode,
-            workspaceCheckpointId,
           },
         )
 

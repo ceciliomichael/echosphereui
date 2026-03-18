@@ -17,3 +17,13 @@ test('shouldRecoverFromTextOnlyToolTurn does not trigger for regular explanatory
     'The issue happens because the final chunk ends with stop, so the stream loop exits without another turn.'
   assert.equal(shouldRecoverFromTextOnlyToolTurn(explanatoryText), false)
 })
+
+test('shouldRecoverFromTextOnlyToolTurn detects claimed verification reads without tool events', () => {
+  const claimedRead = 'I will now read the file to verify:'
+  assert.equal(shouldRecoverFromTextOnlyToolTurn(claimedRead), true)
+})
+
+test('shouldRecoverFromTextOnlyToolTurn detects pseudo execution status lines', () => {
+  const pseudoExecution = 'Verification: The hero section has been created. Let me verify the project builds correctly.\nExecuted .'
+  assert.equal(shouldRecoverFromTextOnlyToolTurn(pseudoExecution), true)
+})

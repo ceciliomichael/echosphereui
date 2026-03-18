@@ -7,6 +7,10 @@ import type {
   ToolDecisionRequest,
   ToolInvocationTrace,
 } from '../types/chat'
+import {
+  hasMeaningfulAssistantContent,
+  normalizeAssistantMessageContent,
+} from '../lib/chatMessageContent'
 
 export interface ChatRuntimeSelection {
   hasConfiguredProvider: boolean
@@ -57,19 +61,8 @@ interface StreamAssistantResponseOutput {
   wasAborted: boolean
 }
 
-function normalizeMarkdownText(input: string) {
-  return input
-    .replace(/\r\n/g, '\n')
-    .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
-}
-
 export function hasMeaningfulAssistantOutput(message: Message) {
-  return (
-    message.role === 'assistant' &&
-    (message.content.trim().length > 0 ||
-      (message.reasoningContent ?? '').trim().length > 0 ||
-      (message.toolInvocations?.length ?? 0) > 0)
-  )
+  return message.role === 'assistant' && hasMeaningfulAssistantContent(message)
 }
 
 export function normalizeAssistantMessage(message: Message): Message {
@@ -77,11 +70,12 @@ export function normalizeAssistantMessage(message: Message): Message {
     return message
   }
 
+  const normalizedContent = normalizeAssistantMessageContent(message)
+
   return {
     ...message,
-    content: normalizeMarkdownText(message.content),
-    reasoningContent:
-      message.reasoningContent === undefined ? undefined : normalizeMarkdownText(message.reasoningContent),
+    content: normalizedContent.content,
+    reasoningContent: normalizedContent.reasoningContent.length > 0 ? normalizedContent.reasoningContent : undefined,
   }
 }
 
@@ -117,6 +111,31 @@ export async function streamAssistantResponse(
     const queuedEvents: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0][] = []
 
     const handleStreamEvent = (event: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0]) => {
+      if (
+        event.type === 'tool_invocation_started' ||
+        event.type === 'tool_invocation_delta' ||
+        event.type === 'tool_invocation_completed' ||
+        event.type === 'tool_invocation_failed' ||
+        event.type === 'aborted' ||
+        event.type === 'completed' ||
+        event.type === 'error'
+      ) {
+        console.log('[renderer-stream-event]', {
+          eventType: event.type,
+          streamId: event.streamId,
+          ...('invocationId' in event ? { invocationId: event.invocationId } : {}),
+          ...('toolName' in event ? { toolName: event.toolName } : {}),
+          ...('argumentsText' in event
+            ? {
+                argumentsLength: event.argumentsText.length,
+                argumentsPreview:
+                  event.argumentsText.length > 240 ? `${event.argumentsText.slice(0, 240)}…` : event.argumentsText,
+              }
+            : {}),
+          ...('errorMessage' in event ? { errorMessage: event.errorMessage } : {}),
+        })
+      }
+
       if (event.type === 'content_delta') {
         input.onContentDelta(event.delta)
         return
