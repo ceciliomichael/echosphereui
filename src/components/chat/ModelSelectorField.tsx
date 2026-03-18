@@ -11,6 +11,7 @@ export interface ModelSelectorOption {
 
 interface ModelSelectorFieldProps {
   disabled?: boolean
+  isLoading?: boolean
   onChange: (value: string) => void
   options: readonly ModelSelectorOption[]
   value: string
@@ -22,6 +23,7 @@ function normalizeSearch(value: string) {
 
 export function ModelSelectorField({
   disabled = false,
+  isLoading = false,
   onChange,
   options,
   value,
@@ -39,7 +41,7 @@ export function ModelSelectorField({
     isOpen,
     menuRef,
   })
-
+  const hasOptions = options.length > 0
   const selectedOption = useMemo(() => options.find((option) => option.value === value) ?? options[0], [options, value])
   const filteredOptions = useMemo(() => {
     if (normalizedSearch.length === 0) {
@@ -48,6 +50,13 @@ export function ModelSelectorField({
 
     return options.filter((option) => option.label.toLowerCase().includes(normalizedSearch))
   }, [normalizedSearch, options])
+  const isControlDisabled = disabled || isLoading || !hasOptions
+
+  useEffect(() => {
+    if (isOpen && isControlDisabled) {
+      setIsOpen(false)
+    }
+  }, [isControlDisabled, isOpen])
 
   useEffect(() => {
     if (!isOpen) {
@@ -101,15 +110,29 @@ export function ModelSelectorField({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-busy={isLoading || undefined}
         data-open={isOpen ? 'true' : 'false'}
-        disabled={disabled}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        disabled={isControlDisabled}
+        onClick={() => {
+          if (isControlDisabled) {
+            return
+          }
+
+          setIsOpen((currentValue) => !currentValue)
+        }}
         className="chat-runtime-control-trigger w-auto max-w-full disabled:cursor-not-allowed"
       >
         <Cpu size={14} className="mr-1.5 shrink-0 text-current" />
-        <span className="chat-runtime-control-label min-w-0 max-w-[18rem] truncate text-left">
-          {selectedOption?.label ?? 'Select model'}
-        </span>
+        {isLoading ? (
+          <span className="flex min-w-0 max-w-[18rem] items-center gap-2 text-left">
+            <span aria-hidden="true" className="h-3 w-14 shrink-0 rounded-full bg-border opacity-80 animate-pulse" />
+            <span className="chat-runtime-control-label min-w-0 truncate text-subtle-foreground">Loading models...</span>
+          </span>
+        ) : (
+          <span className="chat-runtime-control-label min-w-0 max-w-[18rem] truncate text-left">
+            {selectedOption?.label ?? 'No models available'}
+          </span>
+        )}
       </button>
 
       {isOpen

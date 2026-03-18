@@ -61,6 +61,7 @@ function buildChatModelOptions(
 
 interface UseChatRuntimeConfigInput {
   isActiveScreen: boolean
+  isProvidersLoading: boolean
   providersState: ProvidersState | null
   settings: Pick<AppSettings, 'chatModelId' | 'chatReasoningEffort'>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
@@ -74,7 +75,13 @@ function getDefaultReasoningEfforts(providerId: ChatProviderId) {
   return DEFAULT_REASONING_EFFORT_VALUES
 }
 
-export function useChatRuntimeConfig({ isActiveScreen, providersState, settings, updateSettings }: UseChatRuntimeConfigInput) {
+export function useChatRuntimeConfig({
+  isActiveScreen,
+  isProvidersLoading,
+  providersState,
+  settings,
+  updateSettings,
+}: UseChatRuntimeConfigInput) {
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
   const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
   const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
@@ -99,6 +106,7 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
     () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),
     [availableReasoningEfforts, settings.chatReasoningEffort],
   )
+  const isModelOptionsLoading = isActiveScreen && (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedMistralModels)
 
   useEffect(() => {
     if (!isActiveScreen) {
@@ -236,6 +244,7 @@ export function useChatRuntimeConfig({ isActiveScreen, providersState, settings,
   return {
     availableReasoningEfforts,
     hasConfiguredProvider: modelOptions.length > 0,
+    isModelOptionsLoading,
     modelOptions,
     providerId: selectedModel?.providerId ?? null,
     providerLabel: selectedModel?.providerLabel ?? null,

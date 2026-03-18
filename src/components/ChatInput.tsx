@@ -35,6 +35,7 @@ interface ChatInputProps {
   isEditing?: boolean
   isStreaming?: boolean
   modelOptions?: readonly ModelSelectorOption[]
+  modelOptionsLoading?: boolean
   onAbort?: () => void
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void
   onCancelEdit?: () => void
@@ -70,6 +71,7 @@ export function ChatInput({
   chatModeOptions = [],
   chatModeSelectorDisabled = false,
   modelOptions = [],
+  modelOptionsLoading = false,
   onChatModeChange,
   onModelChange,
   onReasoningEffortChange,
@@ -106,7 +108,13 @@ export function ChatInput({
   const isInline = variant === 'inline'
   const canManageAttachments = typeof onAttachmentsChange === 'function'
   const showChatModeSelector = chatModeOptions.length > 0 && typeof onChatModeChange === 'function'
-  const showModelSelector = modelOptions.length > 0 && typeof onModelChange === 'function'
+  const showModelSelector = typeof onModelChange === 'function'
+  const isModelSelectorLoading = modelOptionsLoading && modelOptions.length === 0
+  const modelSelectorTooltipContent = isModelSelectorLoading
+    ? 'Loading models...'
+    : modelOptions.length > 0
+      ? 'Select model'
+      : 'No models available'
   const showReasoningControl = showReasoningEffortSelector && typeof onReasoningEffortChange === 'function'
   const showRuntimeTargetControl = variant === 'composer' && showRuntimeTargetSelector
   const showTerminalExecutionModeControl =
@@ -344,12 +352,13 @@ export function ChatInput({
               ) : null}
 
               {showModelSelector ? (
-                <Tooltip content="Select model" hideWhenTriggerExpanded>
+                <Tooltip content={modelSelectorTooltipContent} hideWhenTriggerExpanded>
                   <ModelSelectorField
                     value={selectedModelId}
                     onChange={onModelChange ?? (() => undefined)}
                     options={modelOptions}
                     disabled={disabled}
+                    isLoading={isModelSelectorLoading}
                   />
                 </Tooltip>
               ) : null}

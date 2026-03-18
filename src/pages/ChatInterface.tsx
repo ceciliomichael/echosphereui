@@ -92,6 +92,7 @@ export function ChatInterface({
   const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
     isActiveScreen,
+    isProvidersLoading: providersState.isLoading,
     providersState: providersState.providersState,
     settings,
     updateSettings: onUpdateSettings,
@@ -166,6 +167,7 @@ export function ChatInterface({
   const {
     availableReasoningEfforts,
     modelOptions,
+    isModelOptionsLoading,
     reasoningEffort,
     selectedModelId,
     setReasoningEffort,
@@ -430,6 +432,7 @@ export function ChatInterface({
                   composerFocusSignal={editComposerFocusSignal}
                   isSending={isSending}
                   modelOptions={selectorOptions}
+                  modelOptionsLoading={isModelOptionsLoading}
                   onModelChange={setSelectedModelId}
                   onReasoningEffortChange={setReasoningEffort}
                   reasoningEffort={reasoningEffort}
@@ -469,6 +472,7 @@ export function ChatInterface({
                   onGitBranchChange={gitBranchState.changeBranch}
                   onGitBranchRefresh={gitBranchState.refresh}
                   modelOptions={selectorOptions}
+                  modelOptionsLoading={isModelOptionsLoading}
                   selectedChatMode={selectedChatMode}
                   selectedModelId={selectedModelId}
                   onModelChange={setSelectedModelId}

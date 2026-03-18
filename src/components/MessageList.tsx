@@ -40,6 +40,7 @@ interface MessageListProps {
   onSendEditedMessage: () => void
   selectedChatMode?: ChatMode
   modelOptions?: readonly ModelSelectorOption[]
+  modelOptionsLoading?: boolean
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
@@ -75,6 +76,7 @@ interface MessageRowProps {
   onSendEditedMessage: () => void
   selectedChatMode?: ChatMode
   modelOptions?: readonly ModelSelectorOption[]
+  modelOptionsLoading?: boolean
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
@@ -106,6 +108,7 @@ const MessageRow = memo(
     onEditUserMessage,
     onRevertUserMessage,
     onModelChange,
+    modelOptionsLoading,
     onReasoningEffortChange,
     onSendEditedMessage,
     selectedChatMode,
@@ -147,6 +150,7 @@ const MessageRow = memo(
                 onAbort={onAbortStreamingResponse}
                 selectedChatMode={selectedChatMode}
                 modelOptions={modelOptions}
+                modelOptionsLoading={modelOptionsLoading}
                 onModelChange={onModelChange}
                 onReasoningEffortChange={onReasoningEffortChange}
                 reasoningEffort={reasoningEffort}
@@ -213,6 +217,7 @@ const MessageRow = memo(
       previousProps.selectedModelId === nextProps.selectedModelId &&
       previousProps.sendMessageOnEnter === nextProps.sendMessageOnEnter &&
       previousProps.showReasoningEffortSelector === nextProps.showReasoningEffortSelector &&
+      previousProps.modelOptionsLoading === nextProps.modelOptionsLoading &&
       previousProps.modelOptions === nextProps.modelOptions
     )
   },
@@ -240,6 +245,7 @@ export function MessageList({
   isSending = false,
   selectedChatMode,
   modelOptions,
+  modelOptionsLoading,
   onModelChange,
   onReasoningEffortChange,
   reasoningEffort,
@@ -310,6 +316,7 @@ export function MessageList({
             onSendEditedMessage={onSendEditedMessage}
             selectedChatMode={selectedChatMode}
             modelOptions={modelOptions}
+            modelOptionsLoading={modelOptionsLoading}
             reasoningEffort={reasoningEffort}
             reasoningEffortOptions={reasoningEffortOptions}
             selectedModelId={selectedModelId}
