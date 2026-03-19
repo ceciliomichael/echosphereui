@@ -69,7 +69,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
       'If the tool reports multiple matches, expand old_string context or set replace_all: true.',
       'For new files in replace mode, set old_string to an empty string and put full file text in new_string.',
       'For multiple files, issue multiple edit calls (parallel calls are allowed across different paths).',
-      'Never emit pseudo tool calls in plain text (for example functions.edit:{...}); always invoke the tool directly.',
+      'Never emit pseudo tool calls in plain text (for example edit:{...}); always invoke the tool directly.',
     ],
   },
   {

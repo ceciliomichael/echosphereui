@@ -12,7 +12,7 @@ import type { CodexAccountSummary } from '../../../src/types/chat'
 import { refreshCodexOAuthTokensIfNeeded } from './refresh'
 import { fetchCodexUsageSnapshot } from './usage'
 
-const USAGE_FETCH_TIMEOUT_MS = 1_200
+const USAGE_FETCH_TIMEOUT_MS = 5_000
 
 async function fetchUsageWithTimeout(input: { accessToken: string; accountId: string }) {
   const controller = new AbortController()

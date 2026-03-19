@@ -7,6 +7,7 @@ export function buildToolUsageSection() {
     '### Global Rules',
     '- Use only the tools exposed in this mode; do not mention missing tools or attempt unavailable tools.',
     '- Do not output pseudo tool calls in text; invoke tools directly.',
+    '- Refer to tools by their plain names such as `edit`, `read`, or `exec_command`, not legacy `functions.*` syntax.',
     '- If you say you will inspect/read/search/run, invoke the tool in the same turn.',
     '- Never end a turn with intent-only text such as "I will check..." without a tool call.',
     '- For tools that accept absolute_path, always send a true absolute filesystem path (for example C:\\\\repo\\\\file.ts or /repo/file.ts); never use "." or relative paths.',

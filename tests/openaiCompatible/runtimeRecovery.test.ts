@@ -6,6 +6,10 @@ test('shouldRecoverFromTextOnlyToolTurn detects explicit pseudo tool-call text',
   assert.equal(shouldRecoverFromTextOnlyToolTurn('functions.edit: {"edits":[...]}'), true)
 })
 
+test('shouldRecoverFromTextOnlyToolTurn detects plain-name pseudo tool-call text', () => {
+  assert.equal(shouldRecoverFromTextOnlyToolTurn('edit: {"absolute_path":"src/index.ts"}'), true)
+})
+
 test('shouldRecoverFromTextOnlyToolTurn detects prose tool intent and fake diff summary', () => {
   const proseOutput =
     "I'll add 2 more sections for you. Let me create a Services section and a Team section.\nCreated Services.tsx +54\nNow let me create the Team section:"

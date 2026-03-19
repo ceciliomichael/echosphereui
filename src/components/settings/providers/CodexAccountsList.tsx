@@ -38,9 +38,9 @@ function getUsageDetail(account: CodexAccountSummary): string {
     : '5h n/a'
   const secondary = account.usage.secondary
     ? `Week ${formatRemaining(account.usage.secondary)} (${formatReset(account.usage.secondary.resetAfterSeconds)})`
-    : 'Week n/a'
+    : null
 
-  return `${primary} • ${secondary}`
+  return secondary ? `${primary} • ${secondary}` : primary
 }
 
 export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAccountsListProps) {
@@ -83,12 +83,14 @@ export function CodexAccountsList({ accounts, isBusy, onSwitchAccount }: CodexAc
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
                     <Clock size={12} className="-mt-px shrink-0 text-muted-foreground" />
-                    <span className="leading-none">5h {formatRemaining(account.usage?.primary ?? null)}</span>
+                    <span className="leading-[12px]">5h {formatRemaining(account.usage?.primary ?? null)}</span>
                   </span>
-                  <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
-                    <Calendar size={12} className="-mt-px shrink-0 text-muted-foreground" />
-                    <span className="leading-none">Week {formatRemaining(account.usage?.secondary ?? null)}</span>
-                  </span>
+                  {account.usage?.secondary ? (
+                    <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
+                      <Calendar size={12} className="-mt-px shrink-0 text-muted-foreground" />
+                      <span className="leading-[12px]">Week {formatRemaining(account.usage.secondary)}</span>
+                    </span>
+                  ) : null}
                   {account.isActive ? (
                     <span className="inline-flex h-7 items-center rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-muted-foreground">
                       <span className="leading-none">active</span>

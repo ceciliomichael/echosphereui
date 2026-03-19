@@ -5,6 +5,11 @@ import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 interface ToolArgumentsValue {
   absolute_path?: unknown
   edits?: unknown
+  command?: unknown
+  changes?: unknown
+  query?: unknown
+  server?: unknown
+  tool?: unknown
   workdir?: unknown
 }
 
@@ -116,6 +121,137 @@ function getBasename(absolutePath: string) {
   return pathSegments[pathSegments.length - 1] ?? absolutePath
 }
 
+const MAX_EXEC_COMMAND_LABEL_LENGTH = 64
+
+function truncateDisplayText(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
+}
+
+function readFirstText(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nextValue = readFirstText(entry)
+      if (nextValue) {
+        return nextValue
+      }
+    }
+    return null
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim()
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>
+    for (const candidate of [
+      record.path,
+      record.absolute_path,
+      record.file_path,
+      record.name,
+      record.query,
+      record.command,
+      record.cmd,
+    ]) {
+      const nextValue = readFirstText(candidate)
+      if (nextValue) {
+        return nextValue
+      }
+    }
+  }
+
+  return null
+}
+
+function readTextList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => readTextList(entry))
+  }
+
+  const textValue = readFirstText(value)
+  return textValue ? [textValue] : []
+}
+
+function summarizeNativeToolTarget(invocation: ToolInvocationTrace) {
+  const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
+  if (!parsedArguments) {
+    return null
+  }
+
+  if (invocation.toolName === 'exec_command') {
+    const commandText = readFirstText(parsedArguments.command)
+    return commandText ? truncateDisplayText(commandText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+  }
+
+  if (invocation.toolName === 'file_change') {
+    const changeTargets = readTextList(parsedArguments.changes)
+    if (changeTargets.length === 0) {
+      return null
+    }
+
+    if (changeTargets.length === 1) {
+      return changeTargets[0]
+    }
+
+    return `${changeTargets[0]}, ${changeTargets[1]}${changeTargets.length > 2 ? `, +${changeTargets.length - 2} more` : ''}`
+  }
+
+  if (invocation.toolName === 'mcp_tool_call') {
+    const server = readFirstText(parsedArguments.server)
+    const tool = readFirstText(parsedArguments.tool)
+    if (server && tool) {
+      return `${server}/${tool}`
+    }
+    return server ?? tool
+  }
+
+  if (invocation.toolName === 'web_search') {
+    return readFirstText(parsedArguments.query) ?? null
+  }
+
+  return null
+}
+
+function getNativeToolVerb(invocation: ToolInvocationTrace) {
+  if (invocation.toolName === 'exec_command') {
+    return invocation.state === 'running'
+      ? 'Executing'
+      : invocation.state === 'completed'
+        ? 'Executed'
+        : 'Execution failed'
+  }
+
+  if (invocation.toolName === 'file_change') {
+    return invocation.state === 'running'
+      ? 'Applying'
+      : invocation.state === 'completed'
+        ? 'Applied'
+        : 'Apply failed'
+  }
+
+  if (invocation.toolName === 'mcp_tool_call') {
+    return invocation.state === 'running'
+      ? 'Calling'
+      : invocation.state === 'completed'
+        ? 'Called'
+        : 'Call failed'
+  }
+
+  if (invocation.toolName === 'web_search') {
+    return invocation.state === 'running'
+      ? 'Searching'
+      : invocation.state === 'completed'
+        ? 'Searched'
+        : 'Search failed'
+  }
+
+  return null
+}
+
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const operation =
@@ -164,6 +300,10 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       return 'Verified'
     }
     return addedPathCount !== null && addedPathCount > 0 ? 'Created' : 'Edited'
+  }
+
+  if (invocation.toolName === 'file_change' || invocation.toolName === 'mcp_tool_call' || invocation.toolName === 'web_search') {
+    return getNativeToolVerb(invocation) ?? `Running ${invocation.toolName}`
   }
 
   if (invocation.toolName === 'exec_command') {
@@ -222,6 +362,10 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 }
 
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
+  if (invocation.toolName === 'exec_command' || invocation.toolName === 'file_change' || invocation.toolName === 'mcp_tool_call' || invocation.toolName === 'web_search') {
+    return summarizeNativeToolTarget(invocation)
+  }
+
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
@@ -244,7 +388,8 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
 
   const absolutePath = getAbsolutePath(invocation)
   if (!absolutePath) {
-    return null
+    const nativeTarget = summarizeNativeToolTarget(invocation)
+    return nativeTarget
   }
 
   if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {

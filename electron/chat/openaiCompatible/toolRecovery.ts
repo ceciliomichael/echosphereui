@@ -1,10 +1,22 @@
 export function shouldRecoverFromTextOnlyToolTurn(content: string) {
   const normalizedContent = content.toLowerCase()
+  const plainPseudoToolCallPattern =
+    /(?:^|\n)\s*(?:edit|read|list|glob|grep|write|exec_command|write_stdin|update_plan)\s*:\s*\{/iu
   if (
     normalizedContent.includes('functions.') ||
     normalizedContent.includes('functions.edit') ||
+    normalizedContent.includes('edit:{') ||
+    normalizedContent.includes('read:{') ||
+    normalizedContent.includes('list:{') ||
+    normalizedContent.includes('glob:{') ||
+    normalizedContent.includes('grep:{') ||
+    normalizedContent.includes('write:{') ||
+    normalizedContent.includes('exec_command:{') ||
+    normalizedContent.includes('write_stdin:{') ||
+    normalizedContent.includes('update_plan:{') ||
     normalizedContent.includes('tool_call') ||
-    normalizedContent.includes('tool call:')
+    normalizedContent.includes('tool call:') ||
+    plainPseudoToolCallPattern.test(content)
   ) {
     return true
   }
