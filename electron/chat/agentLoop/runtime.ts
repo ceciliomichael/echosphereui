@@ -3,7 +3,6 @@ import type { AppTerminalExecutionMode, ChatMode, ChatProviderId, Message, Reaso
 import type { ProviderStreamContext } from '../providerTypes'
 import { buildReplayableMessageHistory } from '../openaiCompatible/messageHistory'
 import {
-  consumeBlockedRepeatedToolCall,
   createHydratedToolExecutionTurnState,
   createToolExecutionScheduler,
   resolveWorkflowTurnToolChoice,
@@ -19,6 +18,7 @@ import {
 interface AgentLoopStreamRequest {
   agentContextRootPath: string
   chatMode: ChatMode
+  haltOnPlanToAgentSwitch?: boolean
   messages: Message[]
   modelId: string
   providerId: ChatProviderId
@@ -42,6 +42,12 @@ interface AgentLoopTurnResult {
 
 interface AgentLoopTurnOptions {
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
+}
+
+interface AgentLoopStreamResult {
+  finalChatMode: ChatMode
+  messages: Message[]
+  transitionedPlanToAgent: boolean
 }
 
 type StreamTurnFn = (
@@ -117,16 +123,28 @@ export async function streamAgentLoopWithTools(
   request: AgentLoopStreamRequest,
   context: ProviderStreamContext,
   streamTurn: StreamTurnFn,
-) {
+): Promise<AgentLoopStreamResult> {
+  function buildStreamResult(): AgentLoopStreamResult {
+    return {
+      finalChatMode: currentChatMode,
+      messages: buildReplayableMessageHistory(inMemoryMessages),
+      transitionedPlanToAgent: sawPlanToAgentModeSwitch,
+    }
+  }
+
   const inMemoryMessages = buildReplayableMessageHistory(request.messages)
   const turnState = createHydratedToolExecutionTurnState(request.messages, request.agentContextRootPath)
   let currentChatMode: ChatMode = request.chatMode
+  let sawPlanToAgentModeSwitch = false
   const toolExecutionScheduler = createToolExecutionScheduler({
     agentContextRootPath: request.agentContextRootPath,
     context,
     getChatMode: () => currentChatMode,
     inMemoryMessages,
     onChatModeChange: (nextMode) => {
+      if (currentChatMode === 'plan' && nextMode === 'agent') {
+        sawPlanToAgentModeSwitch = true
+      }
       currentChatMode = nextMode
     },
     turnState,
@@ -211,7 +229,7 @@ export async function streamAgentLoopWithTools(
         continue
       }
 
-      return
+      return buildStreamResult()
     }
 
     missingToolCallRecoveryCount = 0
@@ -231,14 +249,23 @@ export async function streamAgentLoopWithTools(
 
     await toolExecutionScheduler.drain()
 
-    if (consumeBlockedRepeatedToolCall(turnState)) {
-      return
+    if (request.haltOnPlanToAgentSwitch && sawPlanToAgentModeSwitch) {
+      return buildStreamResult()
     }
 
     if (context.signal.aborted) {
-      return
+      return buildStreamResult()
     }
   }
+
+  return buildStreamResult()
 }
 
-export type { AgentLoopStreamRequest, AgentLoopTurnRequest, AgentLoopTurnResult, AgentLoopTurnOptions, StreamTurnFn }
+export type {
+  AgentLoopStreamRequest,
+  AgentLoopStreamResult,
+  AgentLoopTurnRequest,
+  AgentLoopTurnResult,
+  AgentLoopTurnOptions,
+  StreamTurnFn,
+}

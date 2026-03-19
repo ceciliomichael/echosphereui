@@ -115,3 +115,62 @@ test('codex sdk adapter streams assistant and reasoning deltas from item updates
     ['Hello', ' world'],
   )
 })
+
+test('codex sdk adapter maps native todo_list items to update_plan tool lifecycle events', () => {
+  const emitted = consumeEvents([
+    {
+      item: {
+        id: 'todo_1',
+        items: [
+          { completed: false, text: 'Inspect source files' },
+          { completed: false, text: 'Apply UI changes' },
+        ],
+        type: 'todo_list',
+      },
+      type: 'item.started',
+    },
+    {
+      item: {
+        id: 'todo_1',
+        items: [
+          { completed: true, text: 'Inspect source files' },
+          { completed: false, text: 'Apply UI changes' },
+        ],
+        type: 'todo_list',
+      },
+      type: 'item.updated',
+    },
+    {
+      item: {
+        id: 'todo_1',
+        items: [
+          { completed: true, text: 'Inspect source files' },
+          { completed: true, text: 'Apply UI changes' },
+        ],
+        type: 'todo_list',
+      },
+      type: 'item.completed',
+    },
+  ])
+
+  const startedEvent = emitted.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_started' }> =>
+      event.type === 'tool_invocation_started',
+  )
+  const deltaEvents = emitted.filter(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_delta' }> =>
+      event.type === 'tool_invocation_delta',
+  )
+  const completedEvent = emitted.find(
+    (event): event is Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }> =>
+      event.type === 'tool_invocation_completed',
+  )
+
+  assert.ok(startedEvent)
+  assert.equal(startedEvent.toolName, 'update_plan')
+  assert.ok(deltaEvents.length >= 1)
+  assert.ok(completedEvent)
+  assert.equal(completedEvent.toolName, 'update_plan')
+  assert.match(completedEvent.resultContent, /"toolName": "update_plan"/u)
+  assert.match(completedEvent.resultContent, /codex_native_plan/u)
+})

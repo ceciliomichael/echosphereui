@@ -3,6 +3,8 @@ import type { ThreadEvent, ThreadItem } from '@openai/codex-sdk'
 import { formatStructuredToolResultContent } from '../../../src/lib/toolResultContent'
 import type { Message } from '../../../src/types/chat'
 import type { ProviderStreamContext, StreamDeltaEvent } from '../providerTypes'
+import { buildSuccessfulToolArtifacts } from '../openaiCompatible/toolResultFormatter'
+import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import {
   isCodexNativeToolAllowed,
   type CodexNativeToolKind,
@@ -14,6 +16,12 @@ interface StartedToolInvocation {
   id: string
   startedAt: number
   toolName: string
+}
+
+interface NativePlanStep {
+  id: string
+  status: 'completed' | 'in_progress' | 'pending'
+  title: string
 }
 
 function hasText(value: unknown): value is string {
@@ -216,12 +224,81 @@ function emitToolFailed(
   } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_failed' }>)
 }
 
+function toPlanStepId(text: string, index: number) {
+  const normalizedValue = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return normalizedValue.length > 0 ? normalizedValue : `step-${index + 1}`
+}
+
+function buildNativePlanSteps(item: Extract<ThreadItem, { type: 'todo_list' }>): NativePlanStep[] {
+  const firstIncompleteIndex = item.items.findIndex((step) => !step.completed)
+
+  return item.items.map((step, index) => {
+    const normalizedTitle = step.text.trim()
+    const stepTitle = normalizedTitle.length > 0 ? normalizedTitle : `Step ${index + 1}`
+
+    if (step.completed) {
+      return {
+        id: toPlanStepId(stepTitle, index),
+        status: 'completed',
+        title: stepTitle,
+      }
+    }
+
+    return {
+      id: toPlanStepId(stepTitle, index),
+      status: index === firstIncompleteIndex ? 'in_progress' : 'pending',
+      title: stepTitle,
+    }
+  })
+}
+
+function buildPlanArgumentsText(steps: NativePlanStep[]) {
+  return JSON.stringify(
+    {
+      plan: 'codex_native_plan',
+      steps,
+    },
+    null,
+    2,
+  )
+}
+
+function buildPlanSemanticResult(steps: NativePlanStep[]) {
+  const completedStepCount = steps.filter((step) => step.status === 'completed').length
+  const inProgressSteps = steps.filter((step) => step.status === 'in_progress')
+  const pendingStepCount = steps.filter((step) => step.status === 'pending').length
+  const allStepsCompleted = steps.every((step) => step.status === 'completed')
+
+  return {
+    allStepsCompleted,
+    completedStepCount,
+    hasIncompleteSteps: !allStepsCompleted,
+    inProgressStepCount: inProgressSteps.length,
+    inProgressStepId: inProgressSteps[0]?.id ?? null,
+    inProgressStepIds: inProgressSteps.map((step) => step.id),
+    message: `Plan codex_native_plan updated: ${completedStepCount}/${steps.length} completed.`,
+    operation: 'update_plan',
+    path: '.',
+    pendingStepCount,
+    planId: 'codex_native_plan',
+    steps: steps.map((step) => ({ ...step })),
+    targetKind: 'plan',
+    totalStepCount: steps.length,
+  }
+}
+
 export function createCodexSdkEventAdapter(
   emitDelta: ProviderStreamContext['emitDelta'],
   nativeToolPolicy: CodexNativeToolPolicy,
 ) {
   const previousTextByItemId = new Map<string, string>()
   const startedToolInvocations = new Map<string, StartedToolInvocation>()
+  const completedToolInvocations = new Set<string>()
 
   function getOrCreateStartedToolInvocation(item: ThreadItem, argumentsText: string, toolName: string) {
     const existing = startedToolInvocations.get(item.id)
@@ -276,6 +353,69 @@ export function createCodexSdkEventAdapter(
     emitToolCompleted(emitDelta, invocation, resultContent, completedAt)
   }
 
+  function consumeNativePlanItem(
+    eventType: Extract<ThreadEvent, { type: 'item.started' | 'item.updated' | 'item.completed' }>['type'],
+    item: Extract<ThreadItem, { type: 'todo_list' }>,
+  ) {
+    const steps = buildNativePlanSteps(item)
+    const argumentsText = buildPlanArgumentsText(steps)
+    const existingInvocation = startedToolInvocations.get(item.id)
+    const invocation =
+      existingInvocation ??
+      (() => {
+        const createdInvocation: StartedToolInvocation = {
+          argumentsText,
+          id: item.id,
+          startedAt: Date.now(),
+          toolName: 'update_plan',
+        }
+        startedToolInvocations.set(item.id, createdInvocation)
+        emitToolStarted(emitDelta, createdInvocation)
+        return createdInvocation
+      })()
+
+    if (invocation.argumentsText !== argumentsText) {
+      invocation.argumentsText = argumentsText
+      emitDelta({
+        argumentsText,
+        invocationId: invocation.id,
+        toolName: invocation.toolName,
+        type: 'tool_invocation_delta',
+      } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_delta' }>)
+    }
+
+    if (eventType !== 'item.completed' || completedToolInvocations.has(item.id)) {
+      return
+    }
+
+    const semanticResult = buildPlanSemanticResult(steps)
+    const completedAt = Date.now()
+    const toolCall: OpenAICompatibleToolCall = {
+      argumentsText: invocation.argumentsText,
+      id: invocation.id,
+      name: 'update_plan',
+      startedAt: invocation.startedAt,
+    }
+    const successfulArtifacts = buildSuccessfulToolArtifacts(
+      toolCall,
+      semanticResult,
+      invocation.startedAt,
+      completedAt,
+    )
+
+    completedToolInvocations.add(item.id)
+    emitDelta({
+      argumentsText: successfulArtifacts.toolInvocation.argumentsText,
+      completedAt,
+      invocationId: invocation.id,
+      resultContent: successfulArtifacts.resultContent,
+      resultPresentation: successfulArtifacts.resultPresentation,
+      syntheticMessage: successfulArtifacts.syntheticMessage,
+      toolName: 'update_plan',
+      type: 'tool_invocation_completed',
+    } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }>)
+  }
+
   return {
     consumeEvent(event: ThreadEvent) {
       if (event.type === 'error') {
@@ -295,6 +435,11 @@ export function createCodexSdkEventAdapter(
       }
 
       const item = event.item
+      if (item.type === 'todo_list') {
+        consumeNativePlanItem(event.type, item)
+        return
+      }
+
       if (item.type === 'agent_message') {
         appendDeltaFromPreviousText(previousTextByItemId.get(item.id), item.text, (delta) => {
           emitDelta({

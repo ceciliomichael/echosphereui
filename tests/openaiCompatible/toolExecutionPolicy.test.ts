@@ -108,7 +108,7 @@ test('executeToolCallWithPolicies allows repeating the same list call without an
   })
 })
 
-test('executeToolCallWithPolicies blocks the third consecutive identical tool call', async () => {
+test('executeToolCallWithPolicies allows repeated identical tool calls', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -131,9 +131,8 @@ test('executeToolCallWithPolicies blocks the third consecutive identical tool ca
     const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
 
-    assert.equal(completedEvents.length, 2)
-    assert.equal(failedEvents.length, 1)
-    assert.match(failedEvents[0]?.errorMessage ?? '', /Repeated identical tool call detected/u)
+    assert.equal(completedEvents.length, 3)
+    assert.equal(failedEvents.length, 0)
   })
 })
 

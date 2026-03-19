@@ -259,7 +259,7 @@ test('agent loop recovers when a turn has neither assistant output nor tool invo
   )
 })
 
-test('agent loop stops after blocking a repeated identical tool-call loop', async () => {
+test('agent loop allows repeated identical tool calls until the model changes course', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -280,6 +280,13 @@ test('agent loop stops after blocking a repeated identical tool-call loop', asyn
       async () => {
         turnCount += 1
 
+        if (turnCount >= 4) {
+          return {
+            assistantContent: 'Done.',
+            toolCalls: [],
+          }
+        }
+
         return {
           assistantContent: '',
           toolCalls: [
@@ -294,9 +301,55 @@ test('agent loop stops after blocking a repeated identical tool-call loop', asyn
       },
     )
 
-    assert.equal(turnCount, 3)
+    assert.equal(turnCount, 4)
+    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(failedEvents.length, 1)
-    assert.match(failedEvents[0]?.errorMessage ?? '', /Repeated identical tool call detected/u)
+    assert.equal(completedEvents.length, 3)
+    assert.equal(failedEvents.length, 0)
   })
+})
+
+test('agent loop can halt immediately after plan-to-agent chat mode switch', async () => {
+  const { context } = createProviderContext()
+  const contextWithDecision: ProviderStreamContext = {
+    ...context,
+    awaitUserDecision: async () => ({
+      selectedOptionId: 'yes_implement',
+      selectedOptionLabel: 'Yes, implement the plan',
+    }),
+  }
+  let turnCount = 0
+
+  const loopResult = await streamAgentLoopWithTools(
+    {
+      agentContextRootPath: 'C:/workspace',
+      chatMode: 'plan',
+      haltOnPlanToAgentSwitch: true,
+      messages: [],
+      modelId: 'test-model',
+      providerId: 'openai-compatible',
+      reasoningEffort: 'medium',
+      terminalExecutionMode: 'full',
+    },
+    contextWithDecision,
+    async () => {
+      turnCount += 1
+
+      return {
+        assistantContent: '',
+        toolCalls: [
+          {
+            argumentsText: '{}',
+            id: 'ready-implement-1',
+            name: 'ready_implement',
+            startedAt: Date.now(),
+          },
+        ],
+      }
+    },
+  )
+
+  assert.equal(turnCount, 1)
+  assert.equal(loopResult.transitionedPlanToAgent, true)
+  assert.equal(loopResult.finalChatMode, 'agent')
 })
