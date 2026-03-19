@@ -58,6 +58,10 @@ export function AssistantMessage({
         />
       ) : null}
 
+      {hasContent ? (
+        <MarkdownRenderer content={normalizedContent.content} className="text-left text-[15px]" isStreaming={isStreaming} />
+      ) : null}
+
       {toolInvocations.map((invocation) => (
         <ToolInvocationBlock
           key={invocation.id}
@@ -66,10 +70,6 @@ export function AssistantMessage({
           workspaceRootPath={workspaceRootPath}
         />
       ))}
-
-      {hasContent ? (
-        <MarkdownRenderer content={normalizedContent.content} className="text-left text-[15px]" isStreaming={isStreaming} />
-      ) : null}
 
       {shouldShowWaitingIndicator ? <ThinkingIndicator variant={waitingIndicatorVariant} /> : null}
     </div>

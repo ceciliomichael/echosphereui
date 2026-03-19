@@ -87,3 +87,29 @@ test('finalizeStreamedMessages marks unfinished tool invocations as failed when 
   assert.equal(harness.getLatestConversationMessages().length > 0, true)
 })
 
+test('draft manager keeps streamed assistant segments ordered as separate messages', () => {
+  const harness = createDraftManagerHarness()
+
+  harness.manager.appendPlaceholderDraft()
+  harness.manager.handleContentDelta('I will create the Team section')
+  harness.manager.handleToolInvocationStarted('call-1', {
+    argumentsText: '{"absolute_path":"C:\\\\repo\\\\Team.tsx"}',
+    startedAt: 200,
+    toolName: 'write',
+  })
+  harness.manager.handleContentDelta(' before moving on.')
+
+  const assistantMessages = harness
+    .getLatestConversationMessages()
+    .filter((message): message is Message => message.role === 'assistant')
+
+  assert.equal(assistantMessages.length, 3)
+  assert.equal(assistantMessages[0]?.content, 'I will create the Team section')
+  assert.equal(assistantMessages[0]?.toolInvocations?.length ?? 0, 0)
+  assert.equal(assistantMessages[1]?.content, '')
+  assert.equal(assistantMessages[1]?.toolInvocations?.length, 1)
+  assert.equal(assistantMessages[1]?.toolInvocations?.[0]?.toolName, 'write')
+  assert.equal(assistantMessages[1]?.toolInvocations?.[0]?.state, 'running')
+  assert.equal(assistantMessages[2]?.content, ' before moving on.')
+  assert.equal(assistantMessages[2]?.toolInvocations?.length ?? 0, 0)
+})

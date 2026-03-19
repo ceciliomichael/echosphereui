@@ -1,8 +1,14 @@
+import { splitThinkingContent } from '../../src/lib/chatMessageContent'
+
 const MAX_COMMIT_SUBJECT_LENGTH = 72
 const CONVENTIONAL_PREFIX_PATTERN = /^(feat|fix|docs|style|refactor|test|build|ci|perf|chore)(\([^)]+\))?!?:\s+\S/u
 
 function stripCodeFences(rawMessage: string) {
   return rawMessage.replace(/```[\s\S]*?```/gu, '')
+}
+
+function stripThinkingMarkup(rawMessage: string) {
+  return splitThinkingContent(rawMessage).content
 }
 
 function ensureTrailingSentencePunctuation(text: string) {
@@ -64,7 +70,7 @@ function buildStructuredCommitDescription(input: {
 }
 
 export function extractCommitSubjectLine(rawMessage: string) {
-  return stripCodeFences(rawMessage)
+  return stripThinkingMarkup(stripCodeFences(rawMessage))
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .find((line) => line.length > 0) ?? ''
@@ -144,7 +150,7 @@ export function normalizeGeneratedCommitMessageWithDescription(
     return buildFallbackCommitMessageWithDescription(touchedFiles)
   }
 
-  const rawLines = stripCodeFences(rawMessage).split(/\r?\n/u)
+  const rawLines = stripThinkingMarkup(stripCodeFences(rawMessage)).split(/\r?\n/u)
   const firstNonEmptyLineIndex = rawLines.findIndex((line) => line.trim().length > 0)
   const bodyLines = firstNonEmptyLineIndex >= 0 ? rawLines.slice(firstNonEmptyLineIndex + 1) : []
   const normalizedPoints = bodyLines

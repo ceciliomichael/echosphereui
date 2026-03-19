@@ -52,3 +52,23 @@ test('normalizeGeneratedCommitMessageWithDescription removes merge request wordi
   assert.equal(/merge request/iu.test(normalized), false)
   assert.equal(normalized.includes('\n\n- '), true)
 })
+
+test('normalizeGeneratedCommitMessageWithDescription strips think blocks from generated content', () => {
+  const normalized = normalizeGeneratedCommitMessageWithDescription(
+    [
+      '<think>plan the response</think>',
+      'fix(commit): avoid leaking reasoning output into commits',
+      '',
+      '<think>ignore this</think>',
+      '- Keep commit bodies free of model reasoning tags',
+      '- Preserve visible commit text',
+    ].join('\n'),
+    ['electron/git/commitMessageFormatting.ts'],
+  )
+
+  assert.equal(normalized.startsWith('fix(commit): avoid leaking reasoning output into commits'), true)
+  assert.equal(normalized.includes('<think>'), false)
+  assert.equal(normalized.includes('plan the response'), false)
+  assert.equal(normalized.includes('ignore this'), false)
+  assert.equal(normalized.includes('Keep commit bodies free of model reasoning tags'), true)
+})
