@@ -33,7 +33,24 @@ export interface FileDiffToolResultPresentation {
   startLineNumber?: number
 }
 
-export type ToolInvocationResultPresentation = FileDiffToolResultPresentation
+export interface FileChangeDiffToolResultItem {
+  addedLineCount?: number
+  contextLines?: number
+  endLineNumber?: number
+  fileName: string
+  kind: 'add' | 'delete' | 'update'
+  newContent: string
+  oldContent: string | null
+  removedLineCount?: number
+  startLineNumber?: number
+}
+
+export interface FileChangeDiffToolResultPresentation {
+  changes: FileChangeDiffToolResultItem[]
+  kind: 'file_change_diff'
+}
+
+export type ToolInvocationResultPresentation = FileDiffToolResultPresentation | FileChangeDiffToolResultPresentation
 
 interface ChatAttachmentBase {
   fileName: string

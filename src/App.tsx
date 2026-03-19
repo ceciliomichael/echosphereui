@@ -5,6 +5,7 @@ import { SettingsInterface } from './pages/SettingsInterface'
 import { useAppSettings } from './hooks/useAppSettings'
 import { useChatMessages } from './hooks/useChatMessages'
 import { useDocumentTheme } from './hooks/useDocumentTheme'
+import { useProvidersState } from './hooks/useProvidersState'
 
 type AppScreen = 'chat' | 'settings'
 const CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST = '__clear_last_active_conversation__'
@@ -16,6 +17,7 @@ export default function App() {
   const [diffPanelSelectedScope, setDiffPanelSelectedScope] = useState<DiffPanelScope>('unstaged')
   const [diffPanelExpandedFilePaths, setDiffPanelExpandedFilePaths] = useState<string[]>([])
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
+  const providersState = useProvidersState()
   const [diffPanelWidth, setDiffPanelWidth] = useState(settings.diffPanelWidth)
   const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
   const persistingConversationIdRef = useRef<string | null>(null)
@@ -146,6 +148,10 @@ export default function App() {
         sendMessageOnEnter={settings.sendMessageOnEnter}
         sidebarWidth={settings.sidebarWidth}
         onOpenSettings={() => setActiveScreen('settings')}
+        providersState={{
+          isLoading: providersState.isLoading,
+          providersState: providersState.providersState,
+        }}
       />
 
       {activeScreen === 'settings' ? (
@@ -157,6 +163,18 @@ export default function App() {
             onBackToApp={() => setActiveScreen('chat')}
             onSidebarWidthChange={handleSidebarWidthChange}
             onUpdateSettings={updateSettings}
+            providersState={{
+              activeOperation: providersState.activeOperation,
+              addCodexAccountWithOAuth: providersState.addCodexAccountWithOAuth,
+              connectCodexWithOAuth: providersState.connectCodexWithOAuth,
+              errorMessage: providersState.errorMessage,
+              isLoading: providersState.isLoading,
+              onRemoveApiKeyProvider: providersState.removeApiKeyProvider,
+              onRefreshProvidersState: providersState.refreshInBackground,
+              onSaveApiKeyProvider: providersState.saveApiKeyProvider,
+              onSwitchCodexAccount: providersState.switchCodexAccount,
+              providersState: providersState.providersState,
+            }}
             sidebarWidth={settings.sidebarWidth}
           />
         </div>

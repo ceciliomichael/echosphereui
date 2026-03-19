@@ -1,4 +1,4 @@
-import { formatSection } from './formatSection'
+import { formatSection } from '../../shared/formatSection'
 
 export function buildAgentIdentitySection() {
   return formatSection('Identity', [

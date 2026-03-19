@@ -4,11 +4,12 @@ import type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 function buildWorkflowPlanContextContent(turnState: ToolExecutionTurnState) {
   const workflowPlan = turnState.workflowPlan
-  if (!workflowPlan || workflowPlan.allStepsCompleted) {
-    return null
-  }
+  const lines = ['This is your todo list:']
 
-  const lines = ['You have incomplete tasks:']
+  if (!workflowPlan) {
+    lines.push('- No active todo list.')
+    return lines.join('\n')
+  }
 
   for (const step of workflowPlan.steps) {
     if (step.status === 'in_progress') {
@@ -22,6 +23,10 @@ function buildWorkflowPlanContextContent(turnState: ToolExecutionTurnState) {
     }
 
     lines.push(`- [pending] ${step.title}`)
+  }
+
+  if (workflowPlan.steps.length === 0) {
+    lines.push('- No active todo list.')
   }
 
   return lines.join('\n')
@@ -39,9 +44,5 @@ function buildWorkflowPlanContextMessage(content: string): Message {
 
 export function appendWorkflowPlanContextMessage(messages: Message[], turnState: ToolExecutionTurnState) {
   const content = buildWorkflowPlanContextContent(turnState)
-  if (!content) {
-    return messages
-  }
-
   return [...messages, buildWorkflowPlanContextMessage(content)]
 }

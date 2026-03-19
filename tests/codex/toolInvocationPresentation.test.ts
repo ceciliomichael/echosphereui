@@ -16,7 +16,7 @@ function createInvocation(
   }
 }
 
-test('getToolInvocationHeaderLabel renders native Codex command execution labels', () => {
+test('getToolInvocationHeaderLabel renders command execution labels', () => {
   const running = createInvocation({
     argumentsText: '{"command":"npm test"}',
     id: 'cmd-1',
@@ -51,44 +51,4 @@ test('getToolInvocationHeaderLabel truncates long command execution labels', () 
   assert.ok(header.startsWith('Executing node ./scripts/some-really-long-command-name-with-many-argume'))
   assert.ok(header.length < `Executing ${longCommand}`.length)
   assert.match(header, /\.\.\.$/u)
-})
-
-test('getToolInvocationHeaderLabel renders native Codex file change labels', () => {
-  const running = createInvocation({
-    argumentsText: '{"changes":[{"path":"src/app.tsx","kind":"update"},{"path":"src/index.ts","kind":"add"}]}',
-    id: 'file-1',
-    startedAt: 1_700_000_000_000,
-    state: 'running',
-    toolName: 'file_change',
-  })
-  const completed = createInvocation({
-    argumentsText: '{"changes":[{"path":"src/app.tsx","kind":"update"},{"path":"src/index.ts","kind":"add"}]}',
-    id: 'file-1',
-    startedAt: 1_700_000_000_000,
-    state: 'completed',
-    toolName: 'file_change',
-  })
-
-  assert.equal(getToolInvocationHeaderLabel(running), 'Applying src/app.tsx, src/index.ts')
-  assert.equal(getToolInvocationHeaderLabel(completed), 'Applied src/app.tsx, src/index.ts')
-})
-
-test('getToolInvocationHeaderLabel renders native Codex MCP and web search labels', () => {
-  const mcpInvocation = createInvocation({
-    argumentsText: '{"server":"filesystem","tool":"read","arguments":{"path":"src/index.ts"}}',
-    id: 'mcp-1',
-    startedAt: 1_700_000_000_000,
-    state: 'running',
-    toolName: 'mcp_tool_call',
-  })
-  const webSearchInvocation = createInvocation({
-    argumentsText: '{"query":"openai codex sdk"}',
-    id: 'web-1',
-    startedAt: 1_700_000_000_000,
-    state: 'completed',
-    toolName: 'web_search',
-  })
-
-  assert.equal(getToolInvocationHeaderLabel(mcpInvocation), 'Calling filesystem/read')
-  assert.equal(getToolInvocationHeaderLabel(webSearchInvocation), 'Searched openai codex sdk')
 })

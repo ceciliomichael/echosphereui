@@ -1,4 +1,4 @@
-import { formatSection } from './formatSection'
+import { formatSection } from '../../shared/formatSection'
 
 function buildTaskClassificationSection() {
   return formatSection('Task Classification', [

@@ -50,11 +50,18 @@ const sampleEditCreateToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
+const sampleFileChangeToolCall: OpenAICompatibleToolCall = {
+  argumentsText: '{"changes":[{"path":"src/components/ProvidersSettingsPanel.tsx","kind":"update"},{"path":"src/components/SettingsSidebar.tsx","kind":"add"}]}',
+  id: 'tool-call-file-change-123',
+  name: 'file_change',
+  startedAt: 1_700_000_000_000,
+}
+
 test('buildSuccessfulToolArtifacts returns a native tool-role synthetic message', () => {
   const completedAt = 1_700_000_000_100
   const artifacts = buildSuccessfulToolArtifacts(
     sampleToolCall,
-    { entries: [{ kind: 'file', name: 'src/index.ts' }], path: '.' },
+    { absolutePath: '/workspace/src', entries: [{ kind: 'file', name: 'src/index.ts' }], path: '.' },
     sampleToolCall.startedAt,
     completedAt,
   )
@@ -71,8 +78,31 @@ test('buildSuccessfulToolArtifacts returns a native tool-role synthetic message'
   assert.equal(parsedContent.metadata?.status, 'success')
   assert.match(parsedContent.metadata?.summary ?? '', /Listed \./u)
   assert.equal(parsedContent.metadata?.semantics?.authoritative, true)
+  assert.equal(parsedContent.metadata?.semantics?.absolute_path, '/workspace/src')
   assert.match(parsedContent.body ?? '', /Directory \./u)
   assert.match(parsedContent.body ?? '', /└─ src\/index\.ts/u)
+})
+
+test('buildSuccessfulToolArtifacts keeps list display paths relative while exposing absolute path metadata', () => {
+  const completedAt = 1_700_000_000_105
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleToolCall,
+    {
+      absolutePath: '/workspace/src/app/components',
+      entries: [{ kind: 'file', name: 'component-name.tsx' }],
+      entryCount: 1,
+      path: 'src/app/components',
+      totalVisibleEntryCount: 1,
+    },
+    sampleToolCall.startedAt,
+    completedAt,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+
+  assert.equal(parsedContent.metadata?.semantics?.absolute_path, '/workspace/src/app/components')
+  assert.equal(parsedContent.metadata?.subject?.path, 'src/app/components')
+  assert.match(parsedContent.body ?? '', /Directory src\/app\/components/u)
 })
 
 test('buildFailedToolArtifacts returns a native tool-role synthetic message', () => {
@@ -302,6 +332,54 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for edi
     removedLineCount: 0,
     startLineNumber: 1,
   })
+})
+
+test('buildSuccessfulToolArtifacts exposes multi-file diff presentation for file_change results', () => {
+  const completedAt = 1_700_000_000_185
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleFileChangeToolCall,
+    {
+      added_path_count: 1,
+      changes: [
+        {
+          addedLineCount: 0,
+          fileName: 'src/components/ProvidersSettingsPanel.tsx',
+          kind: 'update',
+          newContent: 'export const x = 1;\n',
+          oldContent: 'export const x = 0;\n',
+          removedLineCount: 0,
+        },
+        {
+          addedLineCount: 2,
+          fileName: 'src/components/SettingsSidebar.tsx',
+          kind: 'add',
+          newContent: 'export function SettingsSidebar() {\n  return null\n}\n',
+          oldContent: null,
+          removedLineCount: 0,
+        },
+      ],
+      contentChanged: true,
+      deleted_path_count: 0,
+      message: 'Updated 2 files.',
+      modified_path_count: 1,
+      operation: 'file_change',
+      path: 'src/components/ProvidersSettingsPanel.tsx',
+      targetKind: 'file',
+    },
+    sampleFileChangeToolCall.startedAt,
+    completedAt,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+
+  assert.match(parsedContent.metadata?.summary ?? '', /Updated 2 files\./u)
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'file_change')
+  assert.equal(artifacts.resultPresentation?.kind, 'file_change_diff')
+  if (artifacts.resultPresentation?.kind === 'file_change_diff') {
+    assert.equal(artifacts.resultPresentation.changes.length, 2)
+    assert.equal(artifacts.resultPresentation.changes[0]?.fileName, 'src/components/ProvidersSettingsPanel.tsx')
+    assert.equal(artifacts.resultPresentation.changes[1]?.kind, 'add')
+  }
 })
 
 test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one context block', () => {

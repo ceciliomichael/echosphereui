@@ -18,7 +18,6 @@ import { WorkspaceTerminalPanel } from '../components/chat/WorkspaceTerminalPane
 import { Tooltip } from '../components/Tooltip'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
-import { useProvidersState } from '../hooks/useProvidersState'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
 import { useGitBranchState } from '../hooks/useGitBranchState'
 import { useGitCommit } from '../hooks/useGitCommit'
@@ -29,7 +28,7 @@ import {
 } from '../hooks/useChatInterfaceController'
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
 import type { ResolvedTheme } from '../lib/theme'
-import type { AppSettings, ToolInvocationTrace } from '../types/chat'
+import type { AppSettings, ProvidersState, ToolInvocationTrace } from '../types/chat'
 
 export type RightPanelTab = ChatInterfaceRightPanelTab
 
@@ -50,6 +49,10 @@ interface ChatInterfaceProps {
   onOpenSettings: () => void
   onSidebarWidthChange: (sidebarWidth: number) => void
   onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
+  providersState: {
+    isLoading: boolean
+    providersState: ProvidersState | null
+  }
   resolvedTheme: ResolvedTheme
   sendMessageOnEnter: boolean
   settings: AppSettings
@@ -84,12 +87,12 @@ export function ChatInterface({
   onOpenSettings,
   onSidebarWidthChange,
   onUpdateSettings,
+  providersState,
   resolvedTheme,
   sendMessageOnEnter,
   settings,
   sidebarWidth,
 }: ChatInterfaceProps) {
-  const providersState = useProvidersState()
   const chatRuntimeConfig = useChatRuntimeConfig({
     isActiveScreen,
     isProvidersLoading: providersState.isLoading,

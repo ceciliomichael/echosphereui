@@ -45,7 +45,7 @@ export function ProvidersSettingsPanel({
   onSwitchCodexAccount,
   providersState,
 }: ProvidersSettingsPanelProps) {
-  const [expandedProviderId, setExpandedProviderId] = useState<ExpandedProviderId>('codex')
+  const [expandedProviderId, setExpandedProviderId] = useState<ExpandedProviderId>(null)
   const [providerDrafts, setProviderDrafts] = useState<ApiKeyProviderDraftMap>(() => buildInitialDraftMap())
   const [validationErrors, setValidationErrors] = useState<ProviderValidationErrors>({})
   const [providerActionFeedback, setProviderActionFeedback] = useState<ProviderActionFeedbackMap>({})

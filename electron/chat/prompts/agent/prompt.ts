@@ -1,4 +1,5 @@
 import { buildAgentIdentitySection } from './sections/identity'
+import { buildShellContextSection } from '../shared/runtimeContext'
 import { buildToolUsageSection } from './sections/toolusage'
 import { buildWorkflowSection } from './sections/workflow'
 import type { BuildAgentPromptInput } from './types'
@@ -56,6 +57,7 @@ export function buildAgentPrompt(input: BuildAgentPromptInput) {
     ...(input.workspaceFileTree ? [buildWorkspaceFolderTreeSection(input.workspaceFileTree)] : []),
     buildRuntimePolicySection(input),
     buildEnvironmentContextBlock(input),
+    buildShellContextSection(input.terminalExecutionMode),
     buildWorkflowSection(),
     buildToolUsageSection(),
   ]

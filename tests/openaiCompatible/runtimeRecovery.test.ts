@@ -2,10 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { shouldRecoverFromTextOnlyToolTurn } from '../../electron/chat/openaiCompatible/toolRecovery'
 
-test('shouldRecoverFromTextOnlyToolTurn detects explicit pseudo tool-call text', () => {
-  assert.equal(shouldRecoverFromTextOnlyToolTurn('functions.edit: {"edits":[...]}'), true)
-})
-
 test('shouldRecoverFromTextOnlyToolTurn detects plain-name pseudo tool-call text', () => {
   assert.equal(shouldRecoverFromTextOnlyToolTurn('edit: {"absolute_path":"src/index.ts"}'), true)
 })

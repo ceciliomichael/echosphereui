@@ -35,6 +35,9 @@ export function hydrateToolExecutionTurnStateFromMessages(
   _turnState: ToolExecutionTurnState,
 ) {
   // state remains as a compatibility boundary for scheduler callers.
+  void _messages
+  void _agentContextRootPath
+  void _turnState
 }
 
 export function recordSuccessfulToolExecution(
@@ -109,11 +112,7 @@ function normalizeWorkflowPlanState(semanticResult: Record<string, unknown>): Wo
   }
 }
 
-export function resolveWorkflowTurnToolChoice(turnState: ToolExecutionTurnState): 'auto' | 'none' | 'required' {
-  const workflowPlan = turnState.workflowPlan
-  if (!workflowPlan) {
-    return 'auto'
-  }
-
+export function resolveWorkflowTurnToolChoice(_turnState: ToolExecutionTurnState): 'auto' {
+  void _turnState
   return 'auto'
 }

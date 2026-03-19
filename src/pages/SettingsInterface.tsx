@@ -11,9 +11,8 @@ import {
   type SettingsItemId,
 } from '../components/settings/settingsItems'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
-import { useProvidersState } from '../hooks/useProvidersState'
 import type { AppSettingsSaveState } from '../hooks/useAppSettings'
-import type { AppSettings } from '../types/chat'
+import type { AppSettings, ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../types/chat'
 
 interface SettingsInterfaceProps {
   isSettingsLoading: boolean
@@ -23,6 +22,18 @@ interface SettingsInterfaceProps {
   sidebarWidth: number
   settings: AppSettings
   settingsSaveState: AppSettingsSaveState
+  providersState: {
+    activeOperation: string | null
+    addCodexAccountWithOAuth: () => Promise<boolean>
+    connectCodexWithOAuth: () => Promise<boolean>
+    errorMessage: string | null
+    isLoading: boolean
+    onRemoveApiKeyProvider: (providerId: ApiKeyProviderId) => Promise<boolean>
+    onRefreshProvidersState: () => Promise<void>
+    onSaveApiKeyProvider: (input: SaveApiKeyProviderInput) => Promise<boolean>
+    onSwitchCodexAccount: (accountId: string) => Promise<boolean>
+    providersState: ProvidersState | null
+  }
 }
 
 export function SettingsInterface({
@@ -30,13 +41,13 @@ export function SettingsInterface({
   onBackToApp,
   onSidebarWidthChange,
   onUpdateSettings,
+  providersState,
   sidebarWidth,
   settings,
   settingsSaveState,
 }: SettingsInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(DEFAULT_SETTINGS_ITEM_ID)
-  const providersState = useProvidersState()
 
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
@@ -91,10 +102,10 @@ export function SettingsInterface({
             isLoading: providersState.isLoading,
             onAddCodexAccountWithOAuth: providersState.addCodexAccountWithOAuth,
             onConnectCodexWithOAuth: providersState.connectCodexWithOAuth,
-            onRemoveApiKeyProvider: providersState.removeApiKeyProvider,
-            onRefreshProvidersState: providersState.refreshInBackground,
-            onSaveApiKeyProvider: providersState.saveApiKeyProvider,
-            onSwitchCodexAccount: providersState.switchCodexAccount,
+            onRemoveApiKeyProvider: providersState.onRemoveApiKeyProvider,
+            onRefreshProvidersState: providersState.onRefreshProvidersState,
+            onSaveApiKeyProvider: providersState.onSaveApiKeyProvider,
+            onSwitchCodexAccount: providersState.onSwitchCodexAccount,
             providersState: providersState.providersState,
           }}
         />

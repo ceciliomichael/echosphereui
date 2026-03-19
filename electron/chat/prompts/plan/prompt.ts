@@ -1,4 +1,5 @@
 import { buildPlanIdentitySection } from './sections/identity'
+import { buildShellContextSection } from '../shared/runtimeContext'
 import { buildPlanToolUsageSection } from './sections/toolusage'
 import { buildPlanWorkflowSection } from './sections/workflow'
 import type { BuildPlanPromptInput } from './types'
@@ -56,6 +57,7 @@ export function buildPlanPrompt(input: BuildPlanPromptInput) {
     ...(input.workspaceFileTree ? [buildWorkspaceFolderTreeSection(input.workspaceFileTree)] : []),
     buildRuntimePolicySection(input),
     buildEnvironmentContextBlock(input),
+    buildShellContextSection(input.terminalExecutionMode),
     buildPlanWorkflowSection(),
     buildPlanToolUsageSection(),
   ]

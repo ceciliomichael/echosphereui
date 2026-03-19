@@ -30,8 +30,10 @@ Usage guidelines:
   list: `List files and directories at an absolute path inside the workspace root.
 
 Usage guidelines:
-- Provide \`absolute_path\` as an absolute directory path.
-- Path chaining rule: if \`<cwd>/src\` succeeded, list child folders as \`<cwd>/src/app\` (not just \`app\`).
+- Provide \`absolute_path\` as an absolute directory path and keep every path segment exactly as written.
+- Do not collapse or rewrite nested folders. If the target is \`<cwd>/src/app/components\`, pass that full directory path, not \`<cwd>/src/components\`, \`<cwd>/path/app\`, or any shortened variant.
+- Path chaining rule: if \`<cwd>/src\` succeeded, list child folders as \`<cwd>/src/app\` (not just \`app\`), and then \`<cwd>/src/app/components\` (not \`components\` alone).
+- The returned result includes \`absolutePath\` for the resolved full directory path, while \`path\` remains the UI display path.
 - Use \`limit\` to cap returned entries when listing large directories.
 - Results are sorted and filtered to hide gitignored entries by default.
 - The system prompt may include only a folder tree for context; use \`list\` to discover exact file names before \`read\`, \`edit\`, or \`write\`.
@@ -39,7 +41,8 @@ Usage guidelines:
   read: `Read text file contents from an absolute path inside the workspace root.
 
 Usage guidelines:
-- Provide \`absolute_path\` as an absolute file path.
+- Provide \`absolute_path\` as an absolute file path and keep every directory segment exactly as written.
+- If the file lives in \`src/app/components/component-name.tsx\`, pass that full path exactly; do not drop intermediate folders such as \`components\`.
 - Use \`start_line\` and \`end_line\` for explicit inclusive ranges.
 - Use \`max_lines\` to cap output when line ranges are broad.
 - If more lines exist, call again with \`nextStartLine\` or a higher \`start_line\`.

@@ -168,7 +168,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
         additionalProperties: false,
         properties: {
           absolute_path: {
-            description: 'Absolute file path to read.',
+            description: 'Absolute file path to read. Keep every directory segment exactly as written.',
             type: 'string',
           },
           max_lines: {

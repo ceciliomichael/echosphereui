@@ -89,6 +89,10 @@ test('agent loop does not trigger missing-tool recovery when a tool was already 
     .filter((message) => message.role === 'user')
     .map((message) => message.content)
   assert.equal(
+    secondTurnUserTexts.some((content) => content.includes('This is your todo list:')),
+    true,
+  )
+  assert.equal(
     secondTurnUserTexts.some((content) => content.includes('You have incomplete tasks. Continue your work on the current in_progress tasks.')),
     false,
   )
@@ -137,6 +141,10 @@ test('agent loop text-only recovery does not escalate provider tool choice to re
     .filter((message) => message.role === 'user')
     .map((message) => message.content)
   assert.equal(
+    secondTurnUserTexts.some((content) => content.includes('This is your todo list:')),
+    true,
+  )
+  assert.equal(
     secondTurnUserTexts.some((content) =>
       content.includes('Please address this message and continue with your tasks.'),
     ),
@@ -144,7 +152,7 @@ test('agent loop text-only recovery does not escalate provider tool choice to re
   )
 })
 
-test('agent loop recovers from generic no-tool assistant prose in agent mode', async () => {
+test('agent loop does not recover from regular explanatory prose in agent mode', async () => {
   const { context } = createProviderContext()
   const turnMessages: Message[][] = []
   let turnCount = 0
@@ -164,27 +172,24 @@ test('agent loop recovers from generic no-tool assistant prose in agent mode', a
       turnCount += 1
       turnMessages.push(request.messages)
 
-      if (turnCount === 1) {
-        return {
-          assistantContent: 'Proceeding with the implementation.',
-          toolCalls: [],
-        }
-      }
-
       return {
-        assistantContent: 'Done.',
+        assistantContent: 'Proceeding with the implementation.',
         toolCalls: [],
       }
     },
   )
 
-  assert.equal(turnCount, 2)
-  const secondTurnUserTexts = (turnMessages[1] ?? [])
+  assert.equal(turnCount, 1)
+  const firstTurnUserTexts = (turnMessages[0] ?? [])
     .filter((message) => message.role === 'user')
     .map((message) => message.content)
   assert.equal(
-    secondTurnUserTexts.some((content) => content.includes('Please address this message and continue with your tasks.')),
+    firstTurnUserTexts.some((content) => content.includes('This is your todo list:')),
     true,
+  )
+  assert.equal(
+    firstTurnUserTexts.some((content) => content.includes('Please address this message and continue with your tasks.')),
+    false,
   )
 })
 
@@ -253,6 +258,10 @@ test('agent loop recovers when a turn has neither assistant output nor tool invo
   const secondTurnUserTexts = (turnMessages[1] ?? [])
     .filter((message) => message.role === 'user')
     .map((message) => message.content)
+  assert.equal(
+    secondTurnUserTexts.some((content) => content.includes('This is your todo list:')),
+    true,
+  )
   assert.equal(
     secondTurnUserTexts.some((content) => content.includes('Please address this message and continue with your tasks.')),
     true,

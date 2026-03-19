@@ -40,7 +40,7 @@ test('resolveWorkflowTurnToolChoice returns auto when a plan still has incomplet
   assert.equal(resolveWorkflowTurnToolChoice(turnState), 'auto')
 })
 
-test('resolveWorkflowTurnToolChoice returns none when plan is complete', () => {
+test('resolveWorkflowTurnToolChoice returns auto when plan is complete', () => {
   const turnState = createToolExecutionTurnState()
   recordSuccessfulToolExecution(
     createUpdatePlanToolCall(),
@@ -53,5 +53,5 @@ test('resolveWorkflowTurnToolChoice returns none when plan is complete', () => {
     turnState,
   )
 
-  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'none')
+  assert.equal(resolveWorkflowTurnToolChoice(turnState), 'auto')
 })

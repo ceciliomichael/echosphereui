@@ -15,11 +15,9 @@ interface BuildSystemPromptInput {
 export async function buildSystemPrompt(input: BuildSystemPromptInput) {
   const [workspaceFileTree, sharedAgentsInstructions] = await Promise.all([
     buildWorkspaceFileTree(input.agentContextRootPath),
-    input.chatMode === 'agent'
-      ? buildSharedAgentsInstructions({
-          agentContextRootPath: input.agentContextRootPath,
-        })
-      : Promise.resolve(null),
+    buildSharedAgentsInstructions({
+      agentContextRootPath: input.agentContextRootPath,
+    }),
   ])
   const builtInPrompt =
     input.chatMode === 'plan'

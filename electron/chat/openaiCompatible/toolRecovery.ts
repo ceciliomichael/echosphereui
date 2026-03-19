@@ -3,8 +3,6 @@ export function shouldRecoverFromTextOnlyToolTurn(content: string) {
   const plainPseudoToolCallPattern =
     /(?:^|\n)\s*(?:edit|read|list|glob|grep|write|exec_command|write_stdin|update_plan)\s*:\s*\{/iu
   if (
-    normalizedContent.includes('functions.') ||
-    normalizedContent.includes('functions.edit') ||
     normalizedContent.includes('edit:{') ||
     normalizedContent.includes('read:{') ||
     normalizedContent.includes('list:{') ||

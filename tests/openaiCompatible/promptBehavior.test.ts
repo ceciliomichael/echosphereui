@@ -7,6 +7,7 @@ test('agent prompt includes identity and tool usage guidance sections', () => {
     agentContextRootPath: 'C:/workspace',
     chatMode: 'agent',
     supportsNativeTools: true,
+    terminalExecutionMode: 'full',
   })
 
   assert.match(prompt, /<agent_mode>/u)
@@ -20,6 +21,9 @@ test('agent prompt includes identity and tool usage guidance sections', () => {
   assert.match(prompt, /<production_readiness>\n## Production Readiness/u)
   assert.match(prompt, /<verification_gates>\n## Verification Gates/u)
   assert.match(prompt, /<completion_contract>\n## Completion Contract/u)
+  assert.match(prompt, /<shell_context>\n## Shell Context/u)
+  assert.match(prompt, /Host platform: `[A-Za-z]+` \(`\w+`\)/u)
+  assert.match(prompt, /Terminal execution mode: `full`/u)
   assert.match(prompt, /Use this workflow for every task type: classify -> inspect -> plan -> execute -> verify -> summarize\./u)
   assert.match(prompt, /Step 0 \(always\): restate the user request and challenge weak assumptions or risky approaches before execution\./u)
   assert.match(prompt, /For substantial multi-step work, call update_plan before execution and update it only when step status changes\./u)
@@ -33,5 +37,6 @@ test('agent prompt includes identity and tool usage guidance sections', () => {
   assert.match(prompt, /Use edit for targeted mutations where only part of a file should change\./u)
   assert.match(prompt, /Edit payload shape: \{ "absolute_path": "\.\.\.", \.\.\. \}\./u)
   assert.match(prompt, /Never emit pseudo tool calls in plain text/u)
+  assert.match(prompt, /Never prefix tool names with `functions\.` or any other namespace/u)
   assert.equal(prompt.includes('<tool_operating_model>'), false)
 })

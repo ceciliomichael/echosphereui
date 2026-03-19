@@ -123,6 +123,7 @@ export const listTool: OpenAICompatibleToolDefinition = {
     const limitedEntries = sortedEntries.slice(0, limit)
 
     return {
+      absolutePath: normalizedTargetPath,
       entryCount: limitedEntries.length,
       entries: limitedEntries.map((entry) => ({
         kind: entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'other',
@@ -143,7 +144,7 @@ export const listTool: OpenAICompatibleToolDefinition = {
         additionalProperties: false,
         properties: {
           absolute_path: {
-            description: 'Absolute directory path to inspect.',
+            description: 'Absolute directory path to inspect. Keep every path segment exactly as written.',
             type: 'string',
           },
           limit: {

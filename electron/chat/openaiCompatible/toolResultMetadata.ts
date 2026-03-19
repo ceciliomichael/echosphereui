@@ -65,6 +65,13 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
+  if (toolName === 'file_change') {
+    const changes = Array.isArray(argumentsValue.changes) ? argumentsValue.changes : []
+    return {
+      change_count: changes.length || undefined,
+    }
+  }
+
   if (toolName === 'exec_command') {
     return {
       cmd: readString(argumentsValue.cmd) ?? undefined,
@@ -173,6 +180,31 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return 'Applied edits successfully. Treat the reported changed paths as the current workspace state.'
   }
 
+  if (toolName === 'file_change') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+
+    if (changes.length === 0) {
+      return readString(semanticResult.message) ?? 'File changes completed.'
+    }
+
+    const totalChangedPaths =
+      (readNumber(semanticResult.added_path_count) ?? 0) +
+      (readNumber(semanticResult.modified_path_count) ?? 0) +
+      (readNumber(semanticResult.deleted_path_count) ?? 0)
+
+    if (totalChangedPaths === 1) {
+      const firstChange = changes[0] as Record<string, unknown>
+      const firstPath = readString(firstChange.fileName) ?? readString(firstChange.path) ?? 'unknown'
+      const firstKind = readString(firstChange.kind)
+      const verb = firstKind === 'add' ? 'Created' : firstKind === 'delete' ? 'Deleted' : 'Updated'
+      return `${verb} ${firstPath}.`
+    }
+
+    return `Updated ${totalChangedPaths} files.`
+  }
+
   if (toolName === 'exec_command') {
     const executionMode = readString(semanticResult.executionMode) ?? 'full'
     const sessionId = readNumber(semanticResult.processId)
@@ -236,6 +268,24 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
 }
 
 function buildSubject(toolName: string, semanticResult: Record<string, unknown>) {
+  if (toolName === 'file_change') {
+    const firstChange = Array.isArray(semanticResult.changes) ? semanticResult.changes[0] : null
+    if (!firstChange || typeof firstChange !== 'object') {
+      return undefined
+    }
+
+    const firstPath =
+      readString((firstChange as Record<string, unknown>).fileName) ?? readString((firstChange as Record<string, unknown>).path)
+    if (!firstPath) {
+      return undefined
+    }
+
+    return {
+      kind: 'file',
+      path: firstPath,
+    }
+  }
+
   const subjectPath = readString(semanticResult.path)
   if (!subjectPath) {
     return undefined
@@ -267,6 +317,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
   if (toolName === 'list') {
     return filterUndefinedEntries({
       ...sharedSemantics,
+      absolute_path: readString(semanticResult.absolutePath) ?? undefined,
       entry_count: readNumber(semanticResult.entryCount) ?? readListEntries(semanticResult.entries).length,
       total_visible_entry_count: readNumber(semanticResult.totalVisibleEntryCount) ?? undefined,
     })
@@ -353,6 +404,36 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
       operation,
       target_exists_after_call: true,
       workspace_effect: totalChangedPaths > 0 || contentChanged ? 'files_edited' : 'file_already_matched',
+    })
+  }
+
+  if (toolName === 'file_change') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+    const addedPaths = changes
+      .filter((change) => readString(change.kind) === 'add')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const modifiedPaths = changes
+      .filter((change) => readString(change.kind) === 'update')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const deletedPaths = changes
+      .filter((change) => readString(change.kind) === 'delete')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      added_path_count: addedPaths.length,
+      content_changed: totalChangedPaths > 0,
+      deleted_path_count: deletedPaths.length,
+      mutation_applied: totalChangedPaths > 0,
+      modified_path_count: modifiedPaths.length,
+      operation: 'file_change',
+      target_exists_after_call: totalChangedPaths > 0,
+      workspace_effect: totalChangedPaths > 0 ? 'files_edited' : 'file_already_matched',
     })
   }
 

@@ -1,42 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { Codex } from '@openai/codex-sdk'
 import type { ChatProviderAdapter, ProviderStreamContext, ProviderStreamRequest } from '../providerTypes'
 import { streamAgentLoopWithTools } from '../agentLoop/runtime'
 import { forceRefreshCodexAuthData, loadCodexAuthData } from './codexAuth'
-import { createCodexSdkEventAdapter } from './codexSdkEventAdapter'
-import { DEFAULT_CODEX_NATIVE_TOOL_POLICY } from './codexNativeTools'
-import { buildCodexSdkPrompt } from './codexSdkPrompt'
 import {
   buildCodexPayload,
   parseSseResponseStream,
   type CodexRequestPayload,
 } from './codexRuntime'
-
-const codexNativeToolPolicy = DEFAULT_CODEX_NATIVE_TOOL_POLICY
 const CODEX_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const CODEX_VERSION_HEADER = '0.101.0'
 const CODEX_USER_AGENT = 'codex_cli_rs/0.101.0 (Windows; x86_64)'
 const CODEX_ORIGINATOR = 'codex_cli_rs'
-
-function toCodexSandboxMode(terminalExecutionMode: ProviderStreamRequest['terminalExecutionMode']) {
-  if (terminalExecutionMode === 'full') {
-    return 'danger-full-access'
-  }
-
-  return 'workspace-write'
-}
-
-function buildCodexConfigOverrides() {
-  return {
-    features: {
-      shell_tool: codexNativeToolPolicy.allowCommandExecution,
-    },
-  } as const
-}
-
-function buildCodexWebSearchMode() {
-  return codexNativeToolPolicy.allowWebSearch ? 'live' : 'disabled'
-}
 
 function buildCodexHeaders(accessToken: string, accountId: string) {
   return {
@@ -76,12 +50,12 @@ async function sendCodexStreamingRequest(
   return response
 }
 
-async function streamCodexResponseWithEchosphereTools(request: ProviderStreamRequest, context: ProviderStreamContext) {
+async function streamCodexResponseViaProxy(request: ProviderStreamRequest, context: ProviderStreamContext) {
   return streamAgentLoopWithTools(
     {
       agentContextRootPath: request.agentContextRootPath,
       chatMode: request.chatMode,
-      haltOnPlanToAgentSwitch: true,
+      haltOnPlanToAgentSwitch: false,
       messages: request.messages,
       modelId: request.modelId,
       providerId: request.providerId,
@@ -109,48 +83,9 @@ async function streamCodexResponseWithEchosphereTools(request: ProviderStreamReq
   )
 }
 
-async function streamCodexResponseWithNativeTools(request: ProviderStreamRequest, context: ProviderStreamContext) {
-  const codex = new Codex({
-    config: buildCodexConfigOverrides(),
-  })
-  const thread = codex.startThread({
-    approvalPolicy: 'never',
-    model: request.modelId,
-    modelReasoningEffort: request.reasoningEffort,
-    sandboxMode: toCodexSandboxMode(request.terminalExecutionMode),
-    skipGitRepoCheck: true,
-    webSearchMode: buildCodexWebSearchMode(),
-    workingDirectory: request.agentContextRootPath,
-  })
-  const prompt = await buildCodexSdkPrompt(request, codexNativeToolPolicy)
-  const eventAdapter = createCodexSdkEventAdapter(context.emitDelta, codexNativeToolPolicy)
-  const streamedTurn = await thread.runStreamed(prompt, {
-    signal: context.signal,
-  })
-
-  for await (const event of streamedTurn.events) {
-    eventAdapter.consumeEvent(event)
-  }
-}
-
 export const codexChatProviderAdapter: ChatProviderAdapter = {
   providerId: 'codex',
   async streamResponse(request, context) {
-    if (request.chatMode === 'plan') {
-      const loopResult = await streamCodexResponseWithEchosphereTools(request, context)
-      if (loopResult.transitionedPlanToAgent && !context.signal.aborted) {
-        await streamCodexResponseWithNativeTools(
-          {
-            ...request,
-            chatMode: 'agent',
-            messages: loopResult.messages,
-          },
-          context,
-        )
-      }
-      return
-    }
-
-    await streamCodexResponseWithNativeTools(request, context)
+    await streamCodexResponseViaProxy(request, context)
   },
 }

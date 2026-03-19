@@ -184,6 +184,25 @@ async function createWindow() {
     win.show()
   })
 
+  // Handle external links: open in system browser instead of Electron popup
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    const activeWindow = win
+    if (!activeWindow) {
+      return
+    }
+
+    // Prevent in-app navigation to external URLs
+    if (url !== activeWindow.webContents.getURL()) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
+  })
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {

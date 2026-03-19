@@ -147,3 +147,22 @@ test('exec_command does not inherit parent NODE_ENV by default', async () => {
     }
   })
 })
+
+test('exec_command falls back when pwsh shell is requested on Windows', async () => {
+  if (process.platform !== 'win32') {
+    return
+  }
+
+  await withTemporaryDirectory(async (workspacePath) => {
+    const result = await execCommandTool.execute(
+      {
+        cmd: 'node -p "process.version"',
+        shell: 'pwsh.exe',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.ok, true)
+    assert.match(result.output, /^v\d+/u)
+  })
+})

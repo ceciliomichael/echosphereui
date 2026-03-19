@@ -8,22 +8,22 @@ interface BuildSharedAgentsInstructionsInput {
 const PROJECT_DOC_SEPARATOR = '\n\n--- project-doc ---\n\n'
 const PROJECT_DOC_MAX_BYTES = 64 * 1024
 const PROJECT_ROOT_MARKERS = ['.git']
-const PROJECT_DOC_CANDIDATE_FILENAMES = ['AGENTS.override.md', 'AGENTS.md'] as const
+const PROJECT_DOC_FILENAME = 'AGENTS.md'
 
-function normalizeAgentsOverrideContent(fileContent: string) {
+function normalizeProjectDocContent(fileContent: string) {
   const withoutStylingBlock = fileContent.replace(
     /<preferred_styling_everytime\b[\s\S]*?<\/preferred_styling_everytime>/giu,
     '',
   )
-  const withoutReservedSystemDirectives = withoutStylingBlock.replace(
-    /<SYSTEM_INSTRUCTIONS_DIRECTIVE\b[\s\S]*$/giu,
+  const withoutDirectiveTags = withoutStylingBlock.replace(
+    /<\/?SYSTEM_INSTRUCTIONS_DIRECTIVE\b[^>]*>/giu,
     '',
   )
-  const withoutOrphanedInstructionTags = withoutReservedSystemDirectives.replace(
-    /^\s*<\/?INSTRUCTIONS>\s*$/gimu,
+  const withoutInstructionTags = withoutDirectiveTags.replace(
+    /<\/?INSTRUCTIONS>/giu,
     '',
   )
-  const normalizedContent = withoutOrphanedInstructionTags.trim()
+  const normalizedContent = withoutInstructionTags.trim()
   return normalizedContent.length > 0 ? normalizedContent : null
 }
 
@@ -39,20 +39,19 @@ async function pathExists(targetPath: string) {
 async function resolveProjectRoot(agentContextRootPath: string) {
   let cursor = path.resolve(agentContextRootPath)
 
-  while (true) {
+  let parentPath = path.dirname(cursor)
+  while (parentPath !== cursor) {
     for (const marker of PROJECT_ROOT_MARKERS) {
       if (await pathExists(path.join(cursor, marker))) {
         return cursor
       }
     }
 
-    const parentPath = path.dirname(cursor)
-    if (parentPath === cursor) {
-      return path.resolve(agentContextRootPath)
-    }
-
     cursor = parentPath
+    parentPath = path.dirname(cursor)
   }
+
+  return path.resolve(agentContextRootPath)
 }
 
 function buildSearchDirectories(projectRootPath: string, targetPath: string) {
@@ -64,18 +63,15 @@ function buildSearchDirectories(projectRootPath: string, targetPath: string) {
 
   const directories: string[] = []
   let cursor = normalizedTarget
-  while (true) {
+  let parentPath = path.dirname(cursor)
+  while (parentPath !== cursor) {
     directories.push(cursor)
     if (cursor === normalizedRoot) {
       break
     }
 
-    const parentPath = path.dirname(cursor)
-    if (parentPath === cursor) {
-      return [normalizedTarget]
-    }
-
     cursor = parentPath
+    parentPath = path.dirname(cursor)
   }
 
   directories.reverse()
@@ -88,21 +84,18 @@ async function discoverProjectDocPaths(agentContextRootPath: string) {
   const docPaths: string[] = []
 
   for (const directoryPath of searchDirectories) {
-    for (const candidateFileName of PROJECT_DOC_CANDIDATE_FILENAMES) {
-      const candidatePath = path.join(directoryPath, candidateFileName)
-      try {
-        const stat = await fs.stat(candidatePath)
-        if (stat.isFile()) {
-          docPaths.push(candidatePath)
-          break
-        }
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          continue
-        }
-
-        throw error
+    const candidatePath = path.join(directoryPath, PROJECT_DOC_FILENAME)
+    try {
+      const stat = await fs.stat(candidatePath)
+      if (stat.isFile()) {
+        docPaths.push(candidatePath)
       }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue
+      }
+
+      throw error
     }
   }
 
@@ -124,7 +117,7 @@ async function readProjectDocContent(agentContextRootPath: string) {
     }
 
     const fileContent = await fs.readFile(docPath, 'utf8')
-    const normalizedContent = normalizeAgentsOverrideContent(fileContent)
+    const normalizedContent = normalizeProjectDocContent(fileContent)
     if (!normalizedContent) {
       continue
     }
@@ -162,7 +155,6 @@ export async function buildSharedAgentsInstructions({
 
   return [
     '<user_instructions>',
-    '## Project Overrides',
     agentsFileContent,
     '</user_instructions>',
   ].join('\n')

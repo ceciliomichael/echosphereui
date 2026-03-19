@@ -1,5 +1,5 @@
 import { getDiffSummary } from '../../../src/lib/textDiff'
-import type { ToolInvocationResultPresentation } from '../../../src/types/chat'
+import type { FileChangeDiffToolResultItem, ToolInvocationResultPresentation } from '../../../src/types/chat'
 import {
   inferFenceLanguage,
   readBoolean,
@@ -165,6 +165,57 @@ function formatUpdatePlanResultBody(semanticResult: Record<string, unknown>) {
   return lines.join('\n')
 }
 
+function formatFileChangeResultBody(semanticResult: Record<string, unknown>) {
+  const changes = Array.isArray(semanticResult.changes)
+    ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+    : []
+
+  if (changes.length === 0) {
+    return readString(semanticResult.message) ?? 'File changes completed.'
+  }
+
+  const groupedChanges = new Map<'add' | 'delete' | 'update', Record<string, unknown>[]>()
+  for (const change of changes) {
+    const kind = readString(change.kind)
+    if (kind !== 'add' && kind !== 'delete' && kind !== 'update') {
+      continue
+    }
+
+    const bucket = groupedChanges.get(kind) ?? []
+    bucket.push(change)
+    groupedChanges.set(kind, bucket)
+  }
+
+  const sections: string[] = []
+  for (const kind of ['update', 'add', 'delete'] as const) {
+    const grouped = groupedChanges.get(kind)
+    if (!grouped || grouped.length === 0) {
+      continue
+    }
+
+    const verb =
+      kind === 'add'
+        ? grouped.length === 1
+          ? 'Created'
+          : 'Created'
+        : kind === 'delete'
+          ? grouped.length === 1
+            ? 'Deleted'
+            : 'Deleted'
+          : grouped.length === 1
+            ? 'Updated'
+            : 'Updated'
+
+    sections.push(`${verb} ${grouped.length} file${grouped.length === 1 ? '' : 's'}.`)
+    for (const change of grouped) {
+      const fileName = readString(change.fileName) ?? 'unknown'
+      sections.push(`${verb} ${fileName}.`)
+    }
+  }
+
+  return sections.length > 0 ? sections.join('\n') : readString(semanticResult.message) ?? 'File changes completed.'
+}
+
 function formatReadyImplementResultBody(semanticResult: Record<string, unknown>) {
   const selectedOptionLabel = readString(semanticResult.selectedOptionLabel)
   const answerText = readString(semanticResult.answerText)
@@ -232,6 +283,10 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatMutationResultBody(semanticResult)
   }
 
+  if (toolName === 'file_change') {
+    return formatFileChangeResultBody(semanticResult)
+  }
+
   if (toolName === 'exec_command' || toolName === 'write_stdin') {
     return formatTerminalResultBody(semanticResult)
   }
@@ -270,7 +325,53 @@ export function buildResultPresentation(
   semanticResult: Record<string, unknown>,
 ): ToolInvocationResultPresentation | undefined {
   if (toolName !== 'write' && toolName !== 'edit') {
-    return undefined
+    if (toolName !== 'file_change') {
+      return undefined
+    }
+  }
+
+  if (toolName === 'file_change') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+
+    if (changes.length === 0) {
+      return undefined
+    }
+
+    const presentationChanges: FileChangeDiffToolResultItem[] = []
+    for (const change of changes) {
+      const fileName = readString(change.fileName)
+      const kind = readString(change.kind)
+      if (!fileName || (kind !== 'add' && kind !== 'delete' && kind !== 'update')) {
+        continue
+      }
+
+      const oldContent = typeof change.oldContent === 'string' || change.oldContent === null ? change.oldContent : null
+      const newContent = typeof change.newContent === 'string' ? change.newContent : ''
+      const { addedLineCount, removedLineCount } = getDiffSummary(oldContent, newContent)
+
+      presentationChanges.push({
+        addedLineCount,
+        fileName,
+        kind,
+        newContent,
+        oldContent,
+        removedLineCount,
+        ...(readNumber(change.contextLines) === null ? {} : { contextLines: readNumber(change.contextLines) ?? undefined }),
+        ...(readNumber(change.endLineNumber) === null ? {} : { endLineNumber: readNumber(change.endLineNumber) ?? undefined }),
+        ...(readNumber(change.startLineNumber) === null ? {} : { startLineNumber: readNumber(change.startLineNumber) ?? undefined }),
+      } as FileChangeDiffToolResultItem)
+    }
+
+    if (presentationChanges.length === 0) {
+      return undefined
+    }
+
+    return {
+      changes: presentationChanges,
+      kind: 'file_change_diff',
+    }
   }
 
   const fileName = readString(semanticResult.path)

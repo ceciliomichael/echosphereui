@@ -3,10 +3,12 @@ import { ChevronRight } from 'lucide-react'
 import type { ToolInvocationTrace } from '../../types/chat'
 import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
+import { FileChangeDiffResult } from './FileChangeDiffResult'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
-import { parseUpdatePlanResultBody, UpdatePlanResult } from './UpdatePlanResult'
+import { UpdatePlanResult } from './UpdatePlanResult'
+import { parseUpdatePlanResultBody } from './updatePlanResultParser'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
@@ -137,6 +139,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   const terminalToolName =
     invocation.toolName === 'exec_command' || invocation.toolName === 'write_stdin' ? invocation.toolName : null
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
+  const fileChangeResultPresentation =
+    invocation.resultPresentation?.kind === 'file_change_diff' ? invocation.resultPresentation : null
   const parsedStructuredResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const resultBody =
     parsedStructuredResult?.body ??
@@ -193,6 +197,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               startLineNumber={diffResultPresentation.startLineNumber}
               maxBodyHeightClassName="max-h-80"
             />
+          ) : fileChangeResultPresentation ? (
+            <FileChangeDiffResult parsedResult={fileChangeResultPresentation} />
           ) : readResultPresentation ? (
             <div className="w-full text-left">
               <CodeBlock

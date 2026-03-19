@@ -95,6 +95,33 @@ test('glob tool respects .gitignore', async () => {
   })
 })
 
+test('glob tool respects nested .gitignore files', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    await fs.mkdir(path.join(workspacePath, 'backend', 'src'), { recursive: true })
+    await fs.mkdir(path.join(workspacePath, 'frontend', 'src'), { recursive: true })
+    await fs.writeFile(path.join(workspacePath, '.gitignore'), 'root-ignored.txt\nbackend/dist/\nfrontend/dist/\n', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'root-ignored.txt'), 'export {}', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'visible.ts'), 'export {}', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'backend', '.gitignore'), 'src/ignored.ts\n', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'frontend', '.gitignore'), 'src/ignored.ts\n', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'backend', 'src', 'ignored.ts'), 'export {}', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'backend', 'src', 'visible.ts'), 'export {}', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'frontend', 'src', 'ignored.ts'), 'export {}', 'utf8')
+    await fs.writeFile(path.join(workspacePath, 'frontend', 'src', 'visible.ts'), 'export {}', 'utf8')
+
+    const result = await globTool.execute(
+      {
+        absolute_path: workspacePath,
+        pattern: '**/*.ts',
+      },
+      buildExecutionContext(workspacePath),
+    )
+    const matches = readMatches(result)
+
+    assert.deepEqual(new Set(matches), new Set(['backend/src/visible.ts', 'frontend/src/visible.ts', 'visible.ts']))
+  })
+})
+
 test('glob tool truncates results at max_results', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.mkdir(path.join(workspacePath, 'src'), { recursive: true })

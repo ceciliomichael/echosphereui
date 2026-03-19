@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import type { AppTerminalExecutionMode } from '../../../../../src/types/chat'
 import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
@@ -46,6 +47,42 @@ function isCmdShell(shellPath: string) {
   return shellName === 'cmd' || shellName === 'cmd.exe'
 }
 
+function resolveWindowsShellPath(shellPath: string | undefined) {
+  const windowsDirectory = process.env.WINDIR?.trim() || 'C:\\Windows'
+  const windowsPowerShellPath = path.join(windowsDirectory, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const shellName = shellPath ? path.basename(shellPath).toLowerCase() : null
+
+  if (shellPath && existsSync(shellPath)) {
+    return shellPath
+  }
+
+  if (shellName === 'pwsh' || shellName === 'pwsh.exe') {
+    if (existsSync(windowsPowerShellPath)) {
+      return windowsPowerShellPath
+    }
+
+    return 'powershell.exe'
+  }
+
+  if (shellName === 'powershell' || shellName === 'powershell.exe') {
+    if (existsSync(windowsPowerShellPath)) {
+      return windowsPowerShellPath
+    }
+
+    return 'powershell.exe'
+  }
+
+  if (shellName === 'cmd' || shellName === 'cmd.exe') {
+    return process.env.ComSpec?.trim() || 'cmd.exe'
+  }
+
+  if (existsSync(windowsPowerShellPath)) {
+    return windowsPowerShellPath
+  }
+
+  return process.env.ComSpec?.trim() || 'cmd.exe'
+}
+
 function toWslPath(inputPath: string) {
   const normalizedPath = inputPath.replace(/\\/g, '/')
   const drivePathMatch = normalizedPath.match(/^([a-zA-Z]):\/(.*)$/u)
@@ -87,7 +124,7 @@ async function isWslAvailable() {
 
 function resolveFullModeSpawnSpec(input: { cmd: string; cwd: string; login: boolean; shell?: string }): SpawnSpec {
   if (process.platform === 'win32') {
-    const shellPath = input.shell ?? 'powershell.exe'
+    const shellPath = resolveWindowsShellPath(input.shell)
 
     if (isPowerShellShell(shellPath)) {
       const powerShellArguments = input.login

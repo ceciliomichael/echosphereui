@@ -21,6 +21,18 @@ interface FolderStoreDocument {
   folders: ConversationFolderRecord[]
 }
 
+interface FileChangeDiffPresentationItem {
+  addedLineCount?: number
+  contextLines?: number
+  endLineNumber?: number
+  fileName: string
+  kind: 'add' | 'delete' | 'update'
+  newContent: string
+  oldContent: string | null
+  removedLineCount?: number
+  startLineNumber?: number
+}
+
 function normalizeChatMode(value: unknown): ChatMode {
   return value === 'plan' ? 'plan' : 'agent'
 }
@@ -31,16 +43,42 @@ function isToolInvocationResultPresentation(value: unknown): value is ToolInvoca
   }
 
   const presentation = value as Partial<ToolInvocationResultPresentation>
+  if (presentation.kind === 'file_diff') {
+    return (
+      typeof presentation.fileName === 'string' &&
+      (presentation.oldContent === null || typeof presentation.oldContent === 'string') &&
+      typeof presentation.newContent === 'string' &&
+      (presentation.addedLineCount === undefined || typeof presentation.addedLineCount === 'number') &&
+      (presentation.removedLineCount === undefined || typeof presentation.removedLineCount === 'number') &&
+      (presentation.startLineNumber === undefined || typeof presentation.startLineNumber === 'number') &&
+      (presentation.endLineNumber === undefined || typeof presentation.endLineNumber === 'number') &&
+      (presentation.contextLines === undefined || typeof presentation.contextLines === 'number')
+    )
+  }
+
+  if (presentation.kind === 'file_change_diff') {
+    return Array.isArray(presentation.changes) && presentation.changes.every((change) => isFileChangeDiffItem(change))
+  }
+
+  return false
+}
+
+function isFileChangeDiffItem(value: unknown): value is FileChangeDiffPresentationItem {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const item = value as Partial<FileChangeDiffPresentationItem>
   return (
-    presentation.kind === 'file_diff' &&
-    typeof presentation.fileName === 'string' &&
-    (presentation.oldContent === null || typeof presentation.oldContent === 'string') &&
-    typeof presentation.newContent === 'string' &&
-    (presentation.addedLineCount === undefined || typeof presentation.addedLineCount === 'number') &&
-    (presentation.removedLineCount === undefined || typeof presentation.removedLineCount === 'number') &&
-    (presentation.startLineNumber === undefined || typeof presentation.startLineNumber === 'number') &&
-    (presentation.endLineNumber === undefined || typeof presentation.endLineNumber === 'number') &&
-    (presentation.contextLines === undefined || typeof presentation.contextLines === 'number')
+    typeof item.fileName === 'string' &&
+    (item.kind === 'add' || item.kind === 'delete' || item.kind === 'update') &&
+    (item.oldContent === null || typeof item.oldContent === 'string') &&
+    typeof item.newContent === 'string' &&
+    (item.addedLineCount === undefined || typeof item.addedLineCount === 'number') &&
+    (item.removedLineCount === undefined || typeof item.removedLineCount === 'number') &&
+    (item.startLineNumber === undefined || typeof item.startLineNumber === 'number') &&
+    (item.endLineNumber === undefined || typeof item.endLineNumber === 'number') &&
+    (item.contextLines === undefined || typeof item.contextLines === 'number')
   )
 }
 

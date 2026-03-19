@@ -9,6 +9,7 @@ import {
 } from '../openaiCompatible/toolExecution'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import { appendWorkflowPlanContextMessage } from '../openaiCompatible/workflowPlanContext'
+import { shouldRecoverFromTextOnlyToolTurn } from '../openaiCompatible/toolRecovery'
 import {
   appendRuntimeContextMessageIfChanged,
   readLatestRuntimeContextSnapshot,
@@ -61,36 +62,6 @@ const MAX_TEXT_ONLY_TOOL_RECOVERIES = 3
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
-}
-
-function shouldRecoverFromNoToolAssistantTurn(content: string) {
-  const normalizedContent = content.trim().toLowerCase()
-  if (normalizedContent.length === 0) {
-    return true
-  }
-
-  // Allow explicit user-facing completions and clarification questions to exit cleanly.
-  if (
-    normalizedContent.includes('need more information') ||
-    normalizedContent.includes('can you clarify') ||
-    normalizedContent.includes('could you clarify') ||
-    normalizedContent.includes('what would you like') ||
-    normalizedContent.includes('please clarify') ||
-    normalizedContent.includes('which option') ||
-    normalizedContent.includes('which one') ||
-    normalizedContent.includes('anything else') ||
-    normalizedContent.startsWith('done') ||
-    normalizedContent.startsWith('completed') ||
-    normalizedContent.startsWith('finished') ||
-    normalizedContent.startsWith('all done') ||
-    normalizedContent.startsWith('all set') ||
-    normalizedContent.startsWith('implemented') ||
-    normalizedContent.startsWith('fixed')
-  ) {
-    return false
-  }
-
-  return true
 }
 
 function buildInMemoryAssistantMessage(content: string): Message {
@@ -159,10 +130,7 @@ export async function streamAgentLoopWithTools(
     const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
     const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
     const replayableMessages = buildReplayableMessageHistory(inMemoryMessages)
-    const workflowMessages =
-      currentChatMode === 'plan'
-        ? replayableMessages
-        : appendWorkflowPlanContextMessage(replayableMessages, turnState)
+    const workflowMessages = appendWorkflowPlanContextMessage(replayableMessages, turnState)
     const runtimeContextResult = appendRuntimeContextMessageIfChanged(
       workflowMessages,
       currentRuntimeContextSnapshot,
@@ -215,7 +183,10 @@ export async function streamAgentLoopWithTools(
       if (
         forcedToolChoiceForTurn !== 'none' &&
         textOnlyToolRecoveryCount < MAX_TEXT_ONLY_TOOL_RECOVERIES &&
-        shouldRecoverFromNoToolAssistantTurn(turnResult.assistantContent)
+        (
+          !hasText(turnResult.assistantContent) ||
+          shouldRecoverFromTextOnlyToolTurn(turnResult.assistantContent)
+        )
       ) {
         textOnlyToolRecoveryCount += 1
         if (hasText(turnResult.assistantContent)) {
