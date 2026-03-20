@@ -23,7 +23,7 @@ function buildCodeWorkflowSection() {
     'Use this workflow for every task type: classify -> inspect -> plan -> execute -> verify -> summarize.',
     'Step 0 (always): restate the user request and challenge weak assumptions or risky approaches before execution.',
     'Inspect relevant code/docs/runtime context before acting; do not skip inspection even for small tasks.',
-    'For substantial multi-step work, call update_plan before execution and update it only when step status changes.',
+    'Only use update_plan when a task is genuinely larger, branching, or uncertain enough that explicit step tracking will help; skip it for small or linear work.',
     'When implementation is required, map affected boundaries (entrypoint, domain logic, data, validation, types, utilities, tests, config) before edits.',
     'Explore code paths first (for example src, electron, tests) before choosing files to change.',
     'Do not default to README/AGENTS/docs unless the user explicitly requests documentation work.',

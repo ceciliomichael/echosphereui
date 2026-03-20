@@ -52,3 +52,45 @@ test('getToolInvocationHeaderLabel truncates long command execution labels', () 
   assert.ok(header.length < `Executing ${longCommand}`.length)
   assert.match(header, /\.\.\.$/u)
 })
+
+test('getToolInvocationHeaderLabel renders update plan labels without dot target', () => {
+  const completed = createInvocation({
+    argumentsText: '{"steps":[]}',
+    id: 'plan-1',
+    startedAt: 1_700_000_000_000,
+    state: 'completed',
+    toolName: 'update_plan',
+    resultContent:
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-1","toolName":"update_plan","subject":{"kind":"path","path":"."}}\n</tool_result>',
+  })
+
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Updated Plan')
+})
+
+test('getToolInvocationHeaderLabel renders grep labels with searched query', () => {
+  const completed = createInvocation({
+    argumentsText: JSON.stringify({ absolute_path: 'C:/repo', pattern: 'Updating Plan' }),
+    id: 'grep-1',
+    startedAt: 1_700_000_000_000,
+    state: 'completed',
+    toolName: 'grep',
+    resultContent:
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-2","toolName":"grep","subject":{"kind":"path","path":"."}}\n</tool_result>',
+  })
+
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Searched Updating Plan')
+})
+
+test('getToolInvocationHeaderLabel does not render dot target for exec command without command text', () => {
+  const completed = createInvocation({
+    argumentsText: '{}',
+    id: 'cmd-no-text',
+    startedAt: 1_700_000_000_000,
+    state: 'completed',
+    toolName: 'exec_command',
+    resultContent:
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-3","toolName":"exec_command","subject":{"kind":"directory","path":"."}}\n</tool_result>',
+  })
+
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Executed')
+})

@@ -8,8 +8,6 @@ import {
   resolveWorkflowTurnToolChoice,
 } from '../openaiCompatible/toolExecution'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
-import { appendWorkflowPlanContextMessage } from '../openaiCompatible/workflowPlanContext'
-import { shouldRecoverFromTextOnlyToolTurn } from '../openaiCompatible/toolRecovery'
 import {
   appendRuntimeContextMessageIfChanged,
   readLatestRuntimeContextSnapshot,
@@ -57,9 +55,6 @@ type StreamTurnFn = (
   options?: AgentLoopTurnOptions,
 ) => Promise<AgentLoopTurnResult>
 
-const MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES = 4
-const MAX_TEXT_ONLY_TOOL_RECOVERIES = 3
-
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -69,15 +64,6 @@ function buildInMemoryAssistantMessage(content: string): Message {
     content,
     id: randomUUID(),
     role: 'assistant',
-    timestamp: Date.now(),
-  }
-}
-
-function buildInMemoryUserMessage(content: string): Message {
-  return {
-    content,
-    id: randomUUID(),
-    role: 'user',
     timestamp: Date.now(),
   }
 }
@@ -120,19 +106,15 @@ export async function streamAgentLoopWithTools(
     },
     turnState,
   })
-  let textOnlyToolRecoveryCount = 0
-  let missingToolCallRecoveryCount = 0
   let previousRuntimeContextSnapshot = readLatestRuntimeContextSnapshot(request.messages)
   const currentRuntimeContextSnapshot = toRuntimeContextSnapshot(request)
 
   while (!context.signal.aborted) {
-    const shouldEnforceIncompletePlanRecovery = currentChatMode === 'agent'
     const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
     const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
     const replayableMessages = buildReplayableMessageHistory(inMemoryMessages)
-    const workflowMessages = appendWorkflowPlanContextMessage(replayableMessages, turnState)
     const runtimeContextResult = appendRuntimeContextMessageIfChanged(
-      workflowMessages,
+      replayableMessages,
       currentRuntimeContextSnapshot,
       previousRuntimeContextSnapshot,
     )
@@ -161,50 +143,8 @@ export async function streamAgentLoopWithTools(
     const hasDetectedToolCallsThisTurn = turnResult.toolCalls.length > 0 || scheduledToolCallIds.size > 0
 
     if (!hasDetectedToolCallsThisTurn) {
-      const hasIncompleteWorkflowPlan = turnState.workflowPlan !== null && !turnState.workflowPlan.allStepsCompleted
-
-      if (
-        shouldEnforceIncompletePlanRecovery &&
-        hasIncompleteWorkflowPlan &&
-        missingToolCallRecoveryCount < MAX_INCOMPLETE_PLAN_NO_TOOL_RECOVERIES
-      ) {
-        missingToolCallRecoveryCount += 1
-        if (hasText(turnResult.assistantContent)) {
-          inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
-        }
-        inMemoryMessages.push(
-          buildInMemoryUserMessage(
-            'You have incomplete tasks. Continue your work on the current in_progress tasks. Use update_plan only when task statuses change.',
-          ),
-        )
-        continue
-      }
-
-      if (
-        forcedToolChoiceForTurn !== 'none' &&
-        textOnlyToolRecoveryCount < MAX_TEXT_ONLY_TOOL_RECOVERIES &&
-        (
-          !hasText(turnResult.assistantContent) ||
-          shouldRecoverFromTextOnlyToolTurn(turnResult.assistantContent)
-        )
-      ) {
-        textOnlyToolRecoveryCount += 1
-        if (hasText(turnResult.assistantContent)) {
-          inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
-        }
-        inMemoryMessages.push(
-          buildInMemoryUserMessage(
-            '<system-reminder>\nPlease address this message and continue with your tasks.\n</system-reminder>',
-          ),
-        )
-        continue
-      }
-
       return buildStreamResult()
     }
-
-    missingToolCallRecoveryCount = 0
-    textOnlyToolRecoveryCount = 0
 
     if (hasText(turnResult.assistantContent)) {
       inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))

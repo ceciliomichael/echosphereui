@@ -13,6 +13,8 @@ test('edit tool description includes single-operation and anchored replacement g
 test('update_plan tool description includes workflow synchronization guidance', () => {
   const description = getToolDescription('update_plan')
   assert.match(description, /Create or update the active execution plan/u)
+  assert.match(description, /Call this only when explicit step tracking would help on genuinely larger, branching, or uncertain work\./u)
+  assert.match(description, /Skip it for small or linear tasks\./u)
   assert.match(description, /Optional `plan`: short plan title/u)
   assert.match(description, /multiple steps are allowed/u)
 })

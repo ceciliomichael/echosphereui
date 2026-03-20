@@ -3,7 +3,7 @@ export const TOOL_USAGE_RULES: ReadonlyArray<{ description: string; toolName: st
     description: 'Track and update execution workflow state for the current run.',
     toolName: 'update_plan',
     rules: [
-      'For substantial multi-step work, call update_plan before making code changes.',
+      'Use update_plan only when the task is genuinely larger, branching, or uncertain enough that explicit step tracking will help.',
       'Use in_progress for active work; multiple in_progress steps are allowed when work happens in parallel.',
       'Keep step ids stable across updates and only change statuses when progress actually changes.',
       'Do not call update_plan with an unchanged step list; continue execution first.',

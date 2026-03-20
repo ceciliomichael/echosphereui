@@ -5,7 +5,10 @@ import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 interface ToolArgumentsValue {
   absolute_path?: unknown
   command?: unknown
+  cmd?: unknown
   edits?: unknown
+  pattern?: unknown
+  query?: unknown
   workdir?: unknown
 }
 
@@ -155,6 +158,12 @@ function readFirstText(value: unknown): string | null {
   return null
 }
 
+function getSearchTarget(argumentsText: string): string | null {
+  const parsedArguments = parseCompleteToolArguments(argumentsText)
+  const searchText = readFirstText([parsedArguments?.pattern, parsedArguments?.query])
+  return searchText ? truncateDisplayText(searchText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+}
+
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const operation =
@@ -223,10 +232,10 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 
   if (invocation.toolName === 'update_plan') {
     return invocation.state === 'running'
-      ? 'Updating plan'
+      ? 'Updating Plan'
       : invocation.state === 'completed'
-        ? 'Updated plan'
-        : 'Update plan failed'
+        ? 'Updated Plan'
+        : 'Update Plan failed'
   }
 
   if (invocation.toolName === 'ready_implement') {
@@ -261,6 +270,24 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 }
 
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
+  const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
+
+  if (invocation.toolName === 'update_plan') {
+    return null
+  }
+
+  if (invocation.toolName === 'exec_command') {
+    const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
+    return commandText ? truncateDisplayText(commandText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+  }
+
+  if (invocation.toolName === 'glob' || invocation.toolName === 'grep') {
+    const searchTarget = getSearchTarget(invocation.argumentsText)
+    if (searchTarget) {
+      return searchTarget
+    }
+  }
+
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
@@ -278,8 +305,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   }
 
   if (invocation.toolName === 'exec_command') {
-    const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
-    const commandText = readFirstText(parsedArguments?.command)
+    const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
     return commandText ? truncateDisplayText(commandText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
   }
 

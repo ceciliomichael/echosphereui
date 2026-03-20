@@ -2,7 +2,8 @@ const TOOL_DESCRIPTIONS = {
   update_plan: `Create or update the active execution plan for this run.
 
 Usage guidelines:
-- Call this at the start of substantial multi-step work, then only when plan status changes.
+- Call this only when explicit step tracking would help on genuinely larger, branching, or uncertain work.
+- Skip it for small or linear tasks.
 - Optional \`plan\`: short plan title.
 - Required \`steps\`: ordered objects with \`id\`, \`title\`, and \`status\`.
 - Status rules: use \`in_progress\` for active work (multiple steps are allowed); other items should be \`pending\` or \`completed\`.

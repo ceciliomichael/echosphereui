@@ -26,7 +26,10 @@ test('agent prompt includes identity and tool usage guidance sections', () => {
   assert.match(prompt, /Terminal execution mode: `full`/u)
   assert.match(prompt, /Use this workflow for every task type: classify -> inspect -> plan -> execute -> verify -> summarize\./u)
   assert.match(prompt, /Step 0 \(always\): restate the user request and challenge weak assumptions or risky approaches before execution\./u)
-  assert.match(prompt, /For substantial multi-step work, call update_plan before execution and update it only when step status changes\./u)
+  assert.match(
+    prompt,
+    /Only use update_plan when a task is genuinely larger, branching, or uncertain enough that explicit step tracking will help; skip it for small or linear work\./u,
+  )
   assert.match(prompt, /Explore code paths first \(for example src, electron, tests\) before choosing files to change\./u)
   assert.match(prompt, /Do not default to README\/AGENTS\/docs unless the user explicitly requests documentation work\./u)
   assert.match(prompt, /Classify every user message before acting/u)

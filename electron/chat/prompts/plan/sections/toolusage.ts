@@ -47,7 +47,7 @@ const PLAN_TOOL_USAGE_RULES: ReadonlyArray<{
     description: 'Track implementation workflow state for the planned execution.',
     toolName: 'update_plan',
     rules: [
-      'After writing the implementation plan in chat, call update_plan with matching ordered steps.',
+      'Call update_plan only when the plan is large or branching enough that explicit step tracking will help.',
       'Keep step ids stable across updates and only change statuses when progress changes.',
       'Do not resend an unchanged step list.',
       'If all steps are approved and complete, plan state should show no incomplete steps.',
