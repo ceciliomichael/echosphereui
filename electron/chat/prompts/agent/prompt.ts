@@ -40,7 +40,7 @@ function buildTaskFlowSection() {
 function buildWorkspaceFolderTreeSection(workspaceFileTree: string) {
   return [
     '<workspace_folder_tree>',
-    '## Workspace Folder Tree',
+    '## Workspace Folder Tree (gitignore-filtered)',
     '```text',
     workspaceFileTree,
     '```',

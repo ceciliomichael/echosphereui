@@ -104,6 +104,32 @@ test('buildSystemPrompt includes project AGENTS.md content in plan mode', async 
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
 })
 
+test('buildSystemPrompt includes DESIGN.md content as preferred design guidelines', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'echosphere-system-prompt-design-mode-'))
+  temporaryDirectories.push(rootPath)
+
+  await writeFile(
+    path.join(rootPath, 'DESIGN.md'),
+    [
+      'Design guidance for the workspace.',
+      'Use calm neutrals, clear hierarchy, and descriptive labels.',
+    ].join('\n'),
+    'utf8',
+  )
+
+  const prompt = await buildSystemPrompt({
+    agentContextRootPath: rootPath,
+    chatMode: 'agent',
+    supportsNativeTools: true,
+    terminalExecutionMode: 'full',
+  })
+
+  assert.match(prompt, /<preferred_design_guidelines>/u)
+  assert.match(prompt, /Design guidance for the workspace\./u)
+  assert.match(prompt, /Use calm neutrals, clear hierarchy, and descriptive labels\./u)
+  assert.equal(prompt.includes('<user_instructions>'), false)
+})
+
 test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'echosphere-system-prompt-no-agents-'))
   temporaryDirectories.push(rootPath)

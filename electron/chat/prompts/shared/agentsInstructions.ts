@@ -8,7 +8,16 @@ interface BuildSharedAgentsInstructionsInput {
 const PROJECT_DOC_SEPARATOR = '\n\n--- project-doc ---\n\n'
 const PROJECT_DOC_MAX_BYTES = 64 * 1024
 const PROJECT_ROOT_MARKERS = ['.git']
-const PROJECT_DOC_FILENAME = 'AGENTS.md'
+const PROJECT_DOC_SPECS = [
+  {
+    filename: 'AGENTS.md',
+    sectionTag: 'user_instructions',
+  },
+  {
+    filename: 'DESIGN.md',
+    sectionTag: 'preferred_design_guidelines',
+  },
+] as const
 
 function normalizeProjectDocContent(fileContent: string) {
   const withoutStylingBlock = fileContent.replace(
@@ -78,13 +87,15 @@ function buildSearchDirectories(projectRootPath: string, targetPath: string) {
   return directories
 }
 
-async function discoverProjectDocPaths(agentContextRootPath: string) {
+type ProjectDocSpec = (typeof PROJECT_DOC_SPECS)[number]
+
+async function discoverProjectDocPaths(agentContextRootPath: string, docFilename: string) {
   const projectRootPath = await resolveProjectRoot(agentContextRootPath)
   const searchDirectories = buildSearchDirectories(projectRootPath, agentContextRootPath)
   const docPaths: string[] = []
 
   for (const directoryPath of searchDirectories) {
-    const candidatePath = path.join(directoryPath, PROJECT_DOC_FILENAME)
+    const candidatePath = path.join(directoryPath, docFilename)
     try {
       const stat = await fs.stat(candidatePath)
       if (stat.isFile()) {
@@ -102,8 +113,8 @@ async function discoverProjectDocPaths(agentContextRootPath: string) {
   return docPaths
 }
 
-async function readProjectDocContent(agentContextRootPath: string) {
-  const projectDocPaths = await discoverProjectDocPaths(agentContextRootPath)
+async function readProjectDocContent(agentContextRootPath: string, docFilename: string) {
+  const projectDocPaths = await discoverProjectDocPaths(agentContextRootPath, docFilename)
   if (projectDocPaths.length === 0) {
     return null
   }
@@ -145,17 +156,30 @@ async function readProjectDocContent(agentContextRootPath: string) {
   return segments.join(PROJECT_DOC_SEPARATOR)
 }
 
-export async function buildSharedAgentsInstructions({
-  agentContextRootPath,
-}: BuildSharedAgentsInstructionsInput) {
-  const agentsFileContent = await readProjectDocContent(agentContextRootPath)
-  if (!agentsFileContent) {
+async function buildProjectDocSection(agentContextRootPath: string, spec: ProjectDocSpec) {
+  const content = await readProjectDocContent(agentContextRootPath, spec.filename)
+  if (!content) {
     return null
   }
 
   return [
-    '<user_instructions>',
-    agentsFileContent,
-    '</user_instructions>',
+    `<${spec.sectionTag}>`,
+    content,
+    `</${spec.sectionTag}>`,
   ].join('\n')
+}
+
+export async function buildSharedAgentsInstructions({
+  agentContextRootPath,
+}: BuildSharedAgentsInstructionsInput) {
+  const sections = await Promise.all(
+    PROJECT_DOC_SPECS.map((spec) => buildProjectDocSection(agentContextRootPath, spec)),
+  )
+
+  const filteredSections = sections.filter((section): section is string => section !== null)
+  if (filteredSections.length === 0) {
+    return null
+  }
+
+  return filteredSections.join('\n\n')
 }
