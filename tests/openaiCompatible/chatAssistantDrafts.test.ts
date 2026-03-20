@@ -113,3 +113,38 @@ test('draft manager keeps streamed assistant segments ordered as separate messag
   assert.equal(assistantMessages[2]?.content, ' before moving on.')
   assert.equal(assistantMessages[2]?.toolInvocations?.length ?? 0, 0)
 })
+
+test('handleReasoningDelta completes reasoning as soon as </think> is received', () => {
+  const harness = createDraftManagerHarness()
+
+  harness.manager.appendPlaceholderDraft()
+  harness.manager.handleReasoningDelta('<think>Plan')
+
+  const activeReasoningMessage = harness
+    .getLatestConversationMessages()
+    .find((message): message is Message => message.role === 'assistant')
+  assert.equal(activeReasoningMessage?.reasoningCompletedAt, undefined)
+
+  harness.manager.handleReasoningDelta(' carefully</think>')
+
+  const completedReasoningMessage = harness
+    .getLatestConversationMessages()
+    .find((message): message is Message => message.role === 'assistant')
+
+  assert.equal(typeof completedReasoningMessage?.reasoningCompletedAt, 'number')
+  assert.equal(completedReasoningMessage?.reasoningContent, '<think>Plan carefully</think>')
+})
+
+test('handleContentDelta completes reasoning when a think block closes in content stream', () => {
+  const harness = createDraftManagerHarness()
+
+  harness.manager.appendPlaceholderDraft()
+  harness.manager.handleContentDelta('<think>Plan carefully</think>')
+
+  const completedMessage = harness
+    .getLatestConversationMessages()
+    .find((message): message is Message => message.role === 'assistant')
+
+  assert.equal(typeof completedMessage?.reasoningCompletedAt, 'number')
+  assert.equal(completedMessage?.content, '<think>Plan carefully</think>')
+})

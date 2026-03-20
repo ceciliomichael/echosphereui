@@ -47,7 +47,7 @@ test('buildSystemPrompt keeps built-in policy and strips reserved AGENTS directi
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
   assert.equal(prompt.includes('<preferred_styling_everytime>'), false)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
-  assert.match(prompt, /Terminal execution mode: `full`/u)
+  assert.match(prompt, /Terminal execution mode is `full`/u)
 })
 
 test('buildSystemPrompt merges hierarchical project docs from repo root to workspace path', async () => {

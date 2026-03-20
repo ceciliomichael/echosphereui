@@ -5,6 +5,7 @@ import {
   upsertToolInvocation,
   type ChatRuntimeSelection,
 } from './chatMessageRuntime'
+import { normalizeAssistantMessageContent, splitThinkingContent } from '../lib/chatMessageContent'
 import type { AssistantWaitingIndicatorVariant, Message, ToolInvocationTrace } from '../types/chat'
 import type { ConversationRuntimeStatePatch } from './chatMessageSendTypes'
 
@@ -243,7 +244,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       !draftAssistantMessage ||
       draftAssistantMessage.role !== 'assistant' ||
       draftAssistantMessage.reasoningCompletedAt !== undefined ||
-      (draftAssistantMessage.reasoningContent ?? '').trim().length === 0
+      normalizeAssistantMessageContent(draftAssistantMessage).reasoningContent.trim().length === 0
     ) {
       return
     }
@@ -313,25 +314,47 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     },
     completeReasoningDraft,
     handleContentDelta(delta: string) {
-      completeReasoningDraft()
       const draftAssistantId = ensureAssistantDraft('content')
+      const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
+      const nextContent = draftAssistantMessage.content + delta
+      const nextContentParts = splitThinkingContent(nextContent)
+      const hasCompletedThinkBlock = nextContentParts.reasoningContent.trim().length > 0 && nextContent.includes('</think>')
+
+      if (nextContentParts.reasoningContent.trim().length > 0) {
+        reasoningDraftAssistantId = draftAssistantId
+      }
+
       promoteWaitingIndicatorToSplash(draftAssistantId)
       input.markTextStreamingPulse(input.conversationId)
       updateDraftAssistantMessage(draftAssistantId, (message) => ({
         ...message,
-        content: message.content + delta,
+        content: nextContent,
       }), undefined, { deltaCharCount: delta.length })
+
+      if (hasCompletedThinkBlock) {
+        completeReasoningDraft()
+      }
     },
     handleReasoningDelta(delta: string) {
       const draftAssistantId = ensureAssistantDraft('content')
+      let shouldCompleteReasoning = false
       reasoningDraftAssistantId = draftAssistantId
       promoteWaitingIndicatorToSplash(draftAssistantId)
       input.markTextStreamingPulse(input.conversationId)
-      updateDraftAssistantMessage(draftAssistantId, (message) => ({
-        ...message,
-        reasoningContent: (message.reasoningContent ?? '') + delta,
-      }), undefined, { deltaCharCount: delta.length })
-    },
+      updateDraftAssistantMessage(draftAssistantId, (message) => {
+        const nextReasoningContent = (message.reasoningContent ?? '') + delta
+        shouldCompleteReasoning = splitThinkingContent(nextReasoningContent).hasThinkingTags && nextReasoningContent.includes('</think>')
+
+        return {
+          ...message,
+          reasoningContent: nextReasoningContent,
+        }
+      }, undefined, { deltaCharCount: delta.length })
+
+      if (shouldCompleteReasoning) {
+        completeReasoningDraft()
+      }
+    }, 
     handleSyntheticToolMessage(syntheticMessage: Message) {
       input.appendLocalMessage(input.conversationId, syntheticMessage)
       insertedMessageIds.push(syntheticMessage.id)

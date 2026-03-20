@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildAgentPrompt } from '../../electron/chat/prompts/agent/prompt'
+import { buildPlanPrompt } from '../../electron/chat/prompts/plan/prompt'
 
-test('agent prompt includes identity and tool usage guidance sections', () => {
+test('agent prompt stays compact and workspace-first', () => {
   const prompt = buildAgentPrompt({
     agentContextRootPath: 'C:/workspace',
     chatMode: 'agent',
@@ -12,34 +13,35 @@ test('agent prompt includes identity and tool usage guidance sections', () => {
 
   assert.match(prompt, /<agent_mode>/u)
   assert.match(prompt, /<identity>\n## Identity/u)
-  assert.match(prompt, /Operate like a pragmatic pair-programming partner/u)
-  assert.match(prompt, /<toolusage>\n## Tool Usage/u)
-  assert.match(prompt, /<task_classification>\n## Task Classification/u)
-  assert.match(prompt, /<required_workflow>\n## Required Workflow/u)
-  assert.match(prompt, /<structure_rules>\n## Structure Rules/u)
-  assert.match(prompt, /<typing_rules>\n## Typing Rules/u)
-  assert.match(prompt, /<production_readiness>\n## Production Readiness/u)
-  assert.match(prompt, /<verification_gates>\n## Verification Gates/u)
-  assert.match(prompt, /<completion_contract>\n## Completion Contract/u)
+  assert.match(prompt, /You are Echo, a senior coding agent\. Stay autonomous, context-first, and workspace-focused\./u)
+  assert.match(prompt, /<workspace_context>\n## Workspace Context/u)
+  assert.ok(prompt.includes('Workspace root: `C:/workspace`'))
+  assert.match(prompt, /When a tool requires a path, send a real absolute filesystem path rooted in the workspace and describe the target clearly/u)
+  assert.match(prompt, /Read the workspace context first\. Classify the request, then inspect the repository, form a brief plan, and act\./u)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
-  assert.match(prompt, /Host platform: `[A-Za-z]+` \(`\w+`\)/u)
-  assert.match(prompt, /Terminal execution mode: `full`/u)
-  assert.match(prompt, /Use this workflow for every task type: classify -> inspect -> plan -> execute -> verify -> summarize\./u)
-  assert.match(prompt, /Step 0 \(always\): restate the user request and challenge weak assumptions or risky approaches before execution\./u)
-  assert.match(
-    prompt,
-    /Only use update_plan when a task is genuinely larger, branching, or uncertain enough that explicit step tracking will help; skip it for small or linear work\./u,
-  )
-  assert.match(prompt, /Explore code paths first \(for example src, electron, tests\) before choosing files to change\./u)
-  assert.match(prompt, /Do not default to README\/AGENTS\/docs unless the user explicitly requests documentation work\./u)
-  assert.match(prompt, /Classify every user message before acting/u)
-  assert.match(prompt, /Interpret vague phrasing like "add more sections" against current context first/u)
-  assert.match(prompt, /### update_plan/u)
-  assert.match(prompt, /### edit/u)
-  assert.match(prompt, /### write/u)
-  assert.match(prompt, /Use edit for targeted mutations where only part of a file should change\./u)
-  assert.match(prompt, /Edit payload shape: \{ "absolute_path": "\.\.\.", \.\.\. \}\./u)
-  assert.match(prompt, /Never emit pseudo tool calls in plain text/u)
-  assert.match(prompt, /Never prefix tool names with `functions\.` or any other namespace/u)
-  assert.equal(prompt.includes('<tool_operating_model>'), false)
+  assert.match(prompt, /Terminal execution mode is `full`/u)
+  assert.equal(prompt.includes('\n- '), false)
+  assert.equal(prompt.includes('<task_classification>'), false)
+  assert.equal(prompt.includes('<required_workflow>'), false)
+  assert.equal(prompt.includes('<production_readiness>'), false)
+})
+
+test('plan prompt stays compact and scope-first', () => {
+  const prompt = buildPlanPrompt({
+    agentContextRootPath: 'C:/workspace',
+    chatMode: 'plan',
+    supportsNativeTools: true,
+    terminalExecutionMode: 'full',
+  })
+
+  assert.match(prompt, /<plan_mode>/u)
+  assert.match(prompt, /<identity>\n## Identity/u)
+  assert.match(prompt, /You are Echo in Plan mode\. Stay context-first and practical\./u)
+  assert.match(prompt, /<workspace_context>\n## Workspace Context/u)
+  assert.match(prompt, /Assume the user is asking about this workspace unless they say otherwise, and keep the plan anchored to files, folders, and behavior inside that root\./u)
+  assert.match(prompt, /Make a concrete plan with files, boundaries, and checks\./u)
+  assert.match(prompt, /Use update_plan only when the work is large enough to benefit from tracked steps\./u)
+  assert.match(prompt, /<shell_context>\n## Shell Context/u)
+  assert.match(prompt, /Terminal execution mode is `full`/u)
+  assert.equal(prompt.includes('\n- '), false)
 })

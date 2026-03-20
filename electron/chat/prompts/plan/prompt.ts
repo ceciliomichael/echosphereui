@@ -1,33 +1,40 @@
-import { buildPlanIdentitySection } from './sections/identity'
 import { buildShellContextSection } from '../shared/runtimeContext'
-import { buildPlanToolUsageSection } from './sections/toolusage'
-import { buildPlanWorkflowSection } from './sections/workflow'
 import type { BuildPlanPromptInput } from './types'
 
-function buildRuntimePolicySection(input: BuildPlanPromptInput) {
-  const lines = ['## Runtime Policy']
-  lines.push(`- Provider runtime target: \`${input.providerId ?? 'unspecified'}\``)
-  lines.push(`- Terminal execution mode: \`${input.terminalExecutionMode ?? 'unspecified'}\``)
-  lines.push(`- Native tool call support: \`${input.supportsNativeTools ? 'enabled' : 'disabled'}\``)
-  return lines.join('\n')
+function buildIdentitySection() {
+  return [
+    '<identity>',
+    '## Identity',
+    'You are Echo in Plan mode. Stay context-first and practical. Keep the plan narrow, concrete, and tied to the workspace, and explain the why behind each step without drifting into unrelated ideas.',
+    '</identity>',
+  ].join('\n')
 }
 
-function buildEnvironmentContextBlock(input: BuildPlanPromptInput) {
-  const lines = [
-    '<environment_context>',
-    `  <cwd>${input.agentContextRootPath}</cwd>`,
-  ]
+function buildWorkspaceContextSection(input: BuildPlanPromptInput) {
+  return [
+    '<workspace_context>',
+    '## Workspace Context',
+    `Workspace root: \`${input.agentContextRootPath}\`. Assume the user is asking about this workspace unless they say otherwise, and keep the plan anchored to files, folders, and behavior inside that root. When you mention paths, prefer clear file and folder references relative to the workspace, and use absolute filesystem paths whenever a tool requires them.`,
+    '</workspace_context>',
+  ].join('\n')
+}
 
-  if (input.terminalExecutionMode) {
-    lines.push(`  <terminal_execution_mode>${input.terminalExecutionMode}</terminal_execution_mode>`)
-  }
+function buildToolUsageSection() {
+  return [
+    '<toolusage>',
+    '## Tool Usage',
+    'Use only the planning tools available in this mode. Inspect the workspace before proposing changes. Use update_plan only when the work is large enough to benefit from tracked steps. When a tool requires a path, send a real absolute filesystem path rooted in the workspace and describe the target clearly. Do not emit pseudo tool calls in plain text.',
+    '</toolusage>',
+  ].join('\n')
+}
 
-  if (input.providerId) {
-    lines.push(`  <provider>${input.providerId}</provider>`)
-  }
-
-  lines.push('</environment_context>')
-  return lines.join('\n')
+function buildTaskFlowSection() {
+  return [
+    '<workflow>',
+    '## Workflow',
+    'Read the workspace context first. Make a concrete plan with files, boundaries, and checks. Stay within scope and avoid speculative refactors. Hand off clearly for implementation after the plan is ready, with enough detail that the next step is obvious.',
+    '</workflow>',
+  ].join('\n')
 }
 
 function buildWorkspaceFolderTreeSection(workspaceFileTree: string) {
@@ -46,20 +53,13 @@ export function buildPlanPrompt(input: BuildPlanPromptInput) {
     return 'You are Echo, a helpful coding assistant.'
   }
 
-  const workspaceContext = `## Workspace Context
-- Your current workspace root path is: \`${input.agentContextRootPath}\`
-- All path-based operations are relative to this workspace root
-- When referencing files, use paths relative to this workspace root`
-
   const sections = [
-    buildPlanIdentitySection(),
-    workspaceContext,
+    buildIdentitySection(),
+    buildWorkspaceContextSection(input),
     ...(input.workspaceFileTree ? [buildWorkspaceFolderTreeSection(input.workspaceFileTree)] : []),
-    buildRuntimePolicySection(input),
-    buildEnvironmentContextBlock(input),
     buildShellContextSection(input.terminalExecutionMode),
-    buildPlanWorkflowSection(),
-    buildPlanToolUsageSection(),
+    buildTaskFlowSection(),
+    buildToolUsageSection(),
   ]
 
   return ['<plan_mode>', ...sections, '</plan_mode>'].join('\n\n')

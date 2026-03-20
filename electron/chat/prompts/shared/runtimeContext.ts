@@ -1,5 +1,4 @@
 import type { AppTerminalExecutionMode } from '../../../../src/types/chat'
-import { formatSection } from './formatSection'
 
 function getHostPlatformLabel(platform: NodeJS.Platform) {
   if (platform === 'win32') {
@@ -30,13 +29,11 @@ export function buildShellContextSection(terminalExecutionMode?: AppTerminalExec
   const hostPlatformLabel = getHostPlatformLabel(hostPlatform)
   const defaultShellLabel = getDefaultShellLabel(hostPlatform, terminalExecutionMode)
 
-  return formatSection('Shell Context', [
-    `Host platform: \`${hostPlatformLabel}\` (\`${hostPlatform}\`)`,
-    `Terminal execution mode: \`${terminalExecutionMode ?? 'unspecified'}\``,
-    `Default shell for this runtime: \`${defaultShellLabel}\``,
-    hostPlatform === 'win32'
-      ? 'Sandbox mode routes commands through WSL when available; Full mode uses the native Windows shell.'
-      : 'Use the configured host shell for direct command execution and keep shell assumptions aligned with the tool arguments.',
-    'Treat the shell selected for the command as authoritative for that tool call.',
-  ])
+  return [
+    '<shell_context>',
+    '## Shell Context',
+    `Host platform is \`${hostPlatformLabel}\` (\`${hostPlatform}\`). Terminal execution mode is \`${terminalExecutionMode ?? 'unspecified'}\`. Default shell for this runtime is \`${defaultShellLabel}\`.`,
+    'Treat the selected shell as authoritative for the command, and keep command syntax aligned with the shell you actually invoke.',
+    '</shell_context>',
+  ].join('\n')
 }
