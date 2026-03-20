@@ -3,7 +3,7 @@
   "description": "Desktop AI workspace built with Electron, Vite, and React.",
   "author": "Echosphere Team",
   "private": true,
-  "version": "0.1.12",
+  "version": "0.1.13",
   "type": "module",
   "scripts": {
     "dev": "vite",
