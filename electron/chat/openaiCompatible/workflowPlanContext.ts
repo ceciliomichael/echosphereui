@@ -4,7 +4,7 @@ import type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 function buildWorkflowPlanContextContent(turnState: ToolExecutionTurnState) {
   const workflowPlan = turnState.workflowPlan
-  const lines = ['This is your todo list:']
+  const lines = ['Reminder that this is your active todo list, finish them 1 by 1 and also update them 1 by 1:']
 
   if (!workflowPlan) {
     lines.push('- No active todo list.')

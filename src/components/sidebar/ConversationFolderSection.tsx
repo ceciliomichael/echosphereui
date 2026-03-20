@@ -32,19 +32,16 @@ export function ConversationFolderSection({
   onDeleteConversation,
 }: ConversationFolderSectionProps) {
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
-  const isProjectFolder = group.folder.id !== null
-  const [visibleProjectThreadCount, setVisibleProjectThreadCount] = useState(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+  const hasFolderActions = group.folder.id !== null
+  const [visibleThreadCount, setVisibleThreadCount] = useState(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
   const [recentlyAddedStartIndex, setRecentlyAddedStartIndex] = useState<number | null>(null)
-  const [isProjectThreadListCollapsing, setIsProjectThreadListCollapsing] = useState(false)
+  const [isThreadListCollapsing, setIsThreadListCollapsing] = useState(false)
   const showMoreResetTimeoutRef = useRef<number | null>(null)
   const addAnimationResetTimeoutRef = useRef<number | null>(null)
-  const visibleConversations = isProjectFolder
-    ? group.conversations.slice(0, visibleProjectThreadCount)
-    : group.conversations
-  const remainingProjectThreadCount = isProjectFolder
-    ? Math.max(group.conversations.length - visibleConversations.length, 0)
-    : 0
-  const canShowLessProjectThreads = isProjectFolder && remainingProjectThreadCount === 0 && group.conversations.length > 5
+  const visibleConversations = group.conversations.slice(0, visibleThreadCount)
+  const remainingThreadCount = Math.max(group.conversations.length - visibleConversations.length, 0)
+  const canShowLessThreads = remainingThreadCount === 0 && group.conversations.length > MAX_VISIBLE_PROJECT_FOLDER_THREADS
+
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
   const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false)
   const [isRemovingFolder, setIsRemovingFolder] = useState(false)
@@ -141,7 +138,7 @@ export function ConversationFolderSection({
   }, [])
 
   useEffect(() => {
-    if (!isProjectFolder || !isActionsMenuOpen) {
+    if (!hasFolderActions || !isActionsMenuOpen) {
       return
     }
 
@@ -171,15 +168,16 @@ export function ConversationFolderSection({
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isActionsMenuOpen, isProjectFolder])
+  }, [hasFolderActions, isActionsMenuOpen])
 
   function handleShowMoreThreads() {
-    if (!isProjectFolder || remainingProjectThreadCount <= 0) {
+    if (remainingThreadCount <= 0) {
       return
     }
 
-    setVisibleProjectThreadCount((currentValue) => {
+    setVisibleThreadCount((currentValue) => {
       const nextValue = Math.min(currentValue + MAX_VISIBLE_PROJECT_FOLDER_THREADS, group.conversations.length)
+
       if (nextValue > currentValue) {
         setRecentlyAddedStartIndex(currentValue)
         if (addAnimationResetTimeoutRef.current !== null) {
@@ -196,18 +194,19 @@ export function ConversationFolderSection({
   }
 
   function handleShowLessThreads() {
-    if (!canShowLessProjectThreads) {
+    if (!canShowLessThreads) {
       return
     }
 
-    setIsProjectThreadListCollapsing(true)
+    setIsThreadListCollapsing(true)
+
     if (showMoreResetTimeoutRef.current !== null) {
       window.clearTimeout(showMoreResetTimeoutRef.current)
     }
 
     showMoreResetTimeoutRef.current = window.setTimeout(() => {
-      setVisibleProjectThreadCount(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
-      setIsProjectThreadListCollapsing(false)
+      setVisibleThreadCount(MAX_VISIBLE_PROJECT_FOLDER_THREADS)
+      setIsThreadListCollapsing(false)
       setRecentlyAddedStartIndex(null)
     }, 170)
   }
@@ -305,7 +304,7 @@ export function ConversationFolderSection({
           </span>
         </button>
 
-        {isProjectFolder ? (
+        {hasFolderActions ? (
           <div className="flex shrink-0 items-center gap-0.5">
             <div ref={actionsMenuRootRef} className="relative">
               <Tooltip content="Project folder actions" side="right">
@@ -365,10 +364,9 @@ export function ConversationFolderSection({
                 {visibleConversations.map((conversation, index) => {
                   const isRecentlyAdded =
                     recentlyAddedStartIndex !== null &&
-                    !isProjectThreadListCollapsing &&
+                    !isThreadListCollapsing &&
                     index >= recentlyAddedStartIndex
-                  const isCollapsingAway =
-                    isProjectThreadListCollapsing && isProjectFolder && index >= MAX_VISIBLE_PROJECT_FOLDER_THREADS
+                  const isCollapsingAway = isThreadListCollapsing && index >= MAX_VISIBLE_PROJECT_FOLDER_THREADS
 
                   return (
                     <div
@@ -387,9 +385,9 @@ export function ConversationFolderSection({
                     </div>
                   )
                 })}
-                {isProjectFolder && (remainingProjectThreadCount > 0 || canShowLessProjectThreads) ? (
+                {remainingThreadCount > 0 || canShowLessThreads ? (
                   <div className="px-4 py-1">
-                    {remainingProjectThreadCount > 0 ? (
+                    {remainingThreadCount > 0 ? (
                       <button
                         type="button"
                         onClick={handleShowMoreThreads}
