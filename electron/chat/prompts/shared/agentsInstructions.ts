@@ -11,20 +11,33 @@ const PROJECT_ROOT_MARKERS = ['.git']
 const PROJECT_DOC_SPECS = [
   {
     filename: 'AGENTS.md',
+    sourceLabel: 'AGENTS.md',
     sectionTag: 'user_instructions',
   },
   {
     filename: 'DESIGN.md',
+    sourceLabel: 'DESIGN.md',
     sectionTag: 'preferred_design_guidelines',
   },
 ] as const
 
 function normalizeProjectDocContent(fileContent: string) {
-  const withoutStylingBlock = fileContent.replace(
-    /<preferred_styling_everytime\b[\s\S]*?<\/preferred_styling_everytime>/giu,
-    '',
+  const withPreferredDesignGuidelines = fileContent.replace(
+    /<preferred_styling_everytime\b[^>]*>([\s\S]*?)<\/preferred_styling_everytime>/giu,
+    (_match, innerContent: string) => {
+      const normalizedInnerContent = innerContent.trim()
+      if (normalizedInnerContent.length === 0) {
+        return ''
+      }
+
+      return [
+        '<preferred_design_guidelines>',
+        normalizedInnerContent,
+        '</preferred_design_guidelines>',
+      ].join('\n')
+    },
   )
-  const withoutDirectiveTags = withoutStylingBlock.replace(
+  const withoutDirectiveTags = withPreferredDesignGuidelines.replace(
     /<\/?SYSTEM_INSTRUCTIONS_DIRECTIVE\b[^>]*>/giu,
     '',
   )
@@ -164,6 +177,7 @@ async function buildProjectDocSection(agentContextRootPath: string, spec: Projec
 
   return [
     `<${spec.sectionTag}>`,
+    `## ${spec.sourceLabel}`,
     content,
     `</${spec.sectionTag}>`,
   ].join('\n')

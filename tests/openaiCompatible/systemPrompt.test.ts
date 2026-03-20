@@ -13,7 +13,7 @@ after(async () => {
   )
 })
 
-test('buildSystemPrompt keeps built-in policy and strips reserved AGENTS directive blocks', async () => {
+test('buildSystemPrompt keeps built-in policy and preserves AGENTS design guidelines', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'echosphere-system-prompt-'))
   temporaryDirectories.push(rootPath)
 
@@ -42,8 +42,10 @@ test('buildSystemPrompt keeps built-in policy and strips reserved AGENTS directi
   assert.match(prompt, /<identity>/u)
   assert.match(prompt, /Act as a senior production-grade software engineering agent|You are Echo, a senior production-grade software engineering agent/u)
   assert.match(prompt, /<user_instructions>/u)
+  assert.match(prompt, /## AGENTS\.md/u)
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)
-  assert.equal(prompt.includes('Frontend styling rules that should not be promoted here.'), false)
+  assert.match(prompt, /<preferred_design_guidelines>/u)
+  assert.match(prompt, /Frontend styling rules that should not be promoted here\./u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
   assert.equal(prompt.includes('<preferred_styling_everytime>'), false)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
@@ -101,6 +103,7 @@ test('buildSystemPrompt includes project AGENTS.md content in plan mode', async 
 
   assert.match(prompt, /Project instructions for plan mode\./u)
   assert.match(prompt, /Follow the project instructions in every prompt\./u)
+  assert.match(prompt, /## AGENTS\.md/u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
 })
 
@@ -125,6 +128,7 @@ test('buildSystemPrompt includes DESIGN.md content as preferred design guideline
   })
 
   assert.match(prompt, /<preferred_design_guidelines>/u)
+  assert.match(prompt, /## DESIGN\.md/u)
   assert.match(prompt, /Design guidance for the workspace\./u)
   assert.match(prompt, /Use calm neutrals, clear hierarchy, and descriptive labels\./u)
   assert.equal(prompt.includes('<user_instructions>'), false)
