@@ -6,34 +6,31 @@ interface UpdatePlanResultProps {
 }
 
 export function UpdatePlanResult({ parsedResult }: UpdatePlanResultProps) {
-  const circleBaseClass = 'inline-flex h-5 w-5 shrink-0 items-center justify-center'
+  const circleBaseClass =
+    'inline-flex h-[1.1em] w-[1.1em] shrink-0 items-center justify-center rounded-full border border-black bg-black leading-none text-white dark:border-white dark:bg-white dark:text-black'
+  const numberBaseClass = 'text-[0.8em] font-semibold'
 
   const renderPendingCircle = () => {
     return (
-      <span className={`${circleBaseClass} relative`}>
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-full bg-[#8771FF]/20 blur-[1px] animate-pulse"
-        />
-        <svg aria-hidden className="relative z-10 h-5 w-5" viewBox="0 0 20 20">
-          <circle cx="10" cy="10" r="8.5" className="fill-[#F3F0FF] stroke-[#8771FF]" strokeWidth="1.25" />
-        </svg>
-      </span>
+      <span
+        className="inline-flex h-[1.1em] w-[1.1em] shrink-0 items-center justify-center rounded-full border border-dashed border-black bg-transparent dark:border-white"
+        aria-hidden
+      />
     )
   }
 
   const renderInProgressCircle = (displayLabel: string) => {
     return (
-      <span className={`${circleBaseClass} rounded-full bg-[#8771FF] text-[10px] font-semibold text-white shadow-[0_0_0_4px_rgba(135,113,255,0.14)]`}>
-        {displayLabel}
+      <span className={circleBaseClass}>
+        <span className={numberBaseClass}>{displayLabel}</span>
       </span>
     )
   }
 
   const renderCompletedCircle = () => {
     return (
-      <span className={`${circleBaseClass} rounded-full bg-[#8771FF] text-white shadow-sm`}>
-        <Check className="h-3 w-3 stroke-[3]" />
+      <span className={circleBaseClass}>
+        <Check className="h-[0.78em] w-[0.78em] stroke-[3]" />
       </span>
     )
   }
@@ -59,7 +56,7 @@ export function UpdatePlanResult({ parsedResult }: UpdatePlanResultProps) {
             <li
               key={`${step.idLabel}:${step.title}`}
               className={[
-                'flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px]',
+                'flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] leading-4',
                 step.status === 'completed' ? 'text-muted-foreground/80' : 'text-foreground/90',
               ].join(' ')}
             >
