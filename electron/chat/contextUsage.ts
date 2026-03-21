@@ -38,6 +38,15 @@ function serializeMessageForEstimate(message: Message) {
     .join('\n\n')
 }
 
+function isRuntimeContextUpdateMessage(message: Message) {
+  if (message.role !== 'user' || message.userMessageKind !== 'tool_result') {
+    return false
+  }
+
+  const content = message.content
+  return content.includes('<context_update>') && content.includes('echosphere.runtime_context/v1')
+}
+
 function getProviderHistorySegments(messages: Message[], providerId: ChatProviderId) {
   if (providerId === 'codex' || providerId === 'openai-compatible' || providerId === 'mistral') {
     const replayableMessages = buildReplayableMessageHistory(messages)
@@ -47,6 +56,11 @@ function getProviderHistorySegments(messages: Message[], providerId: ChatProvide
     for (const message of replayableMessages) {
       const serializedMessage = serializeMessageForEstimate(message)
       if (serializedMessage.length === 0) {
+        continue
+      }
+
+      if (isRuntimeContextUpdateMessage(message)) {
+        historySegments.push(serializedMessage)
         continue
       }
 

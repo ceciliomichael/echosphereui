@@ -57,6 +57,20 @@ const sampleFileChangeToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
+const sampleExecToolCall: OpenAICompatibleToolCall = {
+  argumentsText: '{"cmd":"npm test"}',
+  id: 'tool-call-exec-123',
+  name: 'exec_command',
+  startedAt: 1_700_000_000_000,
+}
+
+const sampleWriteStdinToolCall: OpenAICompatibleToolCall = {
+  argumentsText: '{"session_id":77,"chars":"\\n"}',
+  id: 'tool-call-write-stdin-123',
+  name: 'write_stdin',
+  startedAt: 1_700_000_000_000,
+}
+
 test('buildSuccessfulToolArtifacts returns a native tool-role synthetic message', () => {
   const completedAt = 1_700_000_000_100
   const artifacts = buildSuccessfulToolArtifacts(
@@ -468,4 +482,47 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
 
   assert.match(content ?? '', /Latest acknowledged workspace file state:/u)
   assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful edit changes\./u)
+})
+
+test('buildCodexGroupedToolResultContent compacts replay terminal bodies and keeps only latest terminal session output', () => {
+  const repeatedOutput = 'line output\n'.repeat(400)
+  const startedSessionContent = buildSuccessfulToolArtifacts(
+    sampleExecToolCall,
+    {
+      executionMode: 'full',
+      exitCode: null,
+      message: 'Started command in full mode with session 77.',
+      operation: 'exec_command',
+      originalTokenCount: 5_000,
+      output: repeatedOutput,
+      path: '.',
+      processId: 77,
+      targetKind: 'directory',
+    },
+    sampleExecToolCall.startedAt,
+    sampleExecToolCall.startedAt + 1,
+  ).resultContent
+  const latestSessionContent = buildSuccessfulToolArtifacts(
+    sampleWriteStdinToolCall,
+    {
+      exitCode: 0,
+      message: 'Updated session 77. Process exited with code 0.',
+      operation: 'write_stdin',
+      originalTokenCount: 3_000,
+      output: repeatedOutput,
+      path: '.',
+      processId: null,
+      sessionId: 77,
+      targetKind: 'terminal',
+    },
+    sampleWriteStdinToolCall.startedAt,
+    sampleWriteStdinToolCall.startedAt + 1,
+  ).resultContent
+
+  const groupedContent = buildCodexGroupedToolResultContent([startedSessionContent, latestSessionContent])
+  assert.ok(groupedContent)
+  assert.match(groupedContent ?? '', /write_stdin success: Updated terminal session 77 \(exit code 0\)\./u)
+  assert.match(groupedContent ?? '', /\[terminal replay context clipped to reduce context growth/u)
+  assert.equal((groupedContent ?? '').split('"toolName": "exec_command"').length - 1, 0)
+  assert.equal((groupedContent ?? '').split('"toolName": "write_stdin"').length - 1, 1)
 })

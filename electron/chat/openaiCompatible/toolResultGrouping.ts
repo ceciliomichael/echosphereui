@@ -1,4 +1,144 @@
-import { parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
+import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../../src/lib/toolResultContent'
+
+const TERMINAL_REPLAY_MAX_BODY_CHARACTERS = 1_600
+const INSPECTION_REPLAY_MAX_BODY_CHARACTERS = 1_000
+const MUTATION_REPLAY_MAX_BODY_CHARACTERS = 1_200
+const PLAN_REPLAY_MAX_BODY_CHARACTERS = 700
+const DEFAULT_REPLAY_MAX_BODY_CHARACTERS = 800
+const RAW_TOOL_CONTENT_MAX_CHARACTERS = 1_000
+
+function isTerminalToolName(toolName: string) {
+  return toolName === 'exec_command' || toolName === 'write_stdin'
+}
+
+function buildTerminalSessionReplayKey(metadata: StructuredToolResultMetadata) {
+  const semantics = metadata.semantics
+
+  const sessionId = typeof semantics?.session_id === 'number' ? semantics.session_id : null
+  const processId = typeof semantics?.process_id === 'number' ? semantics.process_id : null
+  const terminalSessionIdentifier = sessionId ?? processId
+  if (terminalSessionIdentifier !== null) {
+    return `terminal:${terminalSessionIdentifier}`
+  }
+
+  const toolCallId = typeof metadata.toolCallId === 'string' ? metadata.toolCallId : null
+  if (toolCallId) {
+    return `tool:${toolCallId}`
+  }
+
+  return `tool:${metadata.toolCallId}`
+}
+
+function buildTerminalBodyReplaySnippet(body: string | null) {
+  if (typeof body !== 'string' || body.length === 0) {
+    return null
+  }
+
+  if (body.length <= TERMINAL_REPLAY_MAX_BODY_CHARACTERS) {
+    return body
+  }
+
+  const clippedBody = body.slice(0, TERMINAL_REPLAY_MAX_BODY_CHARACTERS)
+  return [
+    clippedBody,
+    '',
+    '[terminal replay context clipped to reduce context growth; request a fresh poll if more output is needed]',
+  ].join('\n')
+}
+
+function resolveReplayBodyCharacterLimit(toolName: string) {
+  if (toolName === 'exec_command' || toolName === 'write_stdin') {
+    return TERMINAL_REPLAY_MAX_BODY_CHARACTERS
+  }
+
+  if (toolName === 'list' || toolName === 'read' || toolName === 'glob' || toolName === 'grep') {
+    return INSPECTION_REPLAY_MAX_BODY_CHARACTERS
+  }
+
+  if (toolName === 'write' || toolName === 'edit' || toolName === 'file_change') {
+    return MUTATION_REPLAY_MAX_BODY_CHARACTERS
+  }
+
+  if (toolName === 'todo_write') {
+    return PLAN_REPLAY_MAX_BODY_CHARACTERS
+  }
+
+  return DEFAULT_REPLAY_MAX_BODY_CHARACTERS
+}
+
+function buildClippedReplaySnippet(
+  body: string | null,
+  maxCharacters: number,
+  notice = '[tool replay context clipped to reduce context growth]',
+) {
+  if (typeof body !== 'string' || body.length === 0) {
+    return null
+  }
+
+  if (body.length <= maxCharacters) {
+    return body
+  }
+
+  return [body.slice(0, maxCharacters), '', notice].join('\n')
+}
+
+function buildRawToolContentReplaySnippet(toolContent: string) {
+  if (toolContent.length <= RAW_TOOL_CONTENT_MAX_CHARACTERS) {
+    return toolContent
+  }
+
+  return [
+    toolContent.slice(0, RAW_TOOL_CONTENT_MAX_CHARACTERS),
+    '',
+    '[legacy tool replay context clipped to reduce context growth]',
+  ].join('\n')
+}
+
+function buildCompactedToolContent(metadata: StructuredToolResultMetadata, body: string | null) {
+  const compactedBody = isTerminalToolName(metadata.toolName)
+    ? buildTerminalBodyReplaySnippet(body)
+    : buildClippedReplaySnippet(body, resolveReplayBodyCharacterLimit(metadata.toolName))
+  const metadataJson = JSON.stringify(metadata, null, 2)
+  const compactedParts = ['<tool_result>', metadataJson, '</tool_result>']
+
+  if (compactedBody !== null) {
+    compactedParts.push('<tool_result_body>', compactedBody, '</tool_result_body>')
+  }
+
+  return compactedParts.join('\n')
+}
+
+function buildReplayKeyForToolContent(metadata: StructuredToolResultMetadata) {
+  if (isTerminalToolName(metadata.toolName)) {
+    return buildTerminalSessionReplayKey(metadata)
+  }
+
+  const subjectPath = metadata.subject?.path ?? '.'
+  const semantics = metadata.semantics
+  if (metadata.toolName === 'glob' || metadata.toolName === 'grep') {
+    const pattern = typeof semantics?.pattern === 'string' ? semantics.pattern : ''
+    return `${metadata.toolName}:${subjectPath}:${pattern}`
+  }
+
+  if (metadata.toolName === 'list' || metadata.toolName === 'read') {
+    return `${metadata.toolName}:${subjectPath}`
+  }
+
+  if (metadata.toolName === 'write' || metadata.toolName === 'edit') {
+    return `mutation:${subjectPath}`
+  }
+
+  if (metadata.toolName === 'file_change') {
+    return `file_change:${subjectPath}`
+  }
+
+  if (metadata.toolName === 'todo_write') {
+    const planId = typeof semantics?.plan_id === 'string' ? semantics.plan_id : 'default'
+    return `todo_write:${planId}`
+  }
+
+  return `${metadata.toolName}:${metadata.toolCallId}`
+}
 
 export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   if (toolContents.length === 0) {
@@ -6,6 +146,8 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   }
 
   const toolSummaryLines: string[] = []
+  const replayToolContentByKey = new Map<string, string>()
+  let unknownToolContentCounter = 0
   const latestInspectionStateByKey = new Map<string, string>()
   const latestMutationStateByPath = new Map<string, { operation: string | null; path: string; toolName: string }>()
 
@@ -13,6 +155,8 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
     const parsedResult = parseStructuredToolResultContent(toolContent)
     const metadata = parsedResult.metadata
     if (!metadata) {
+      unknownToolContentCounter += 1
+      replayToolContentByKey.set(`legacy:${unknownToolContentCounter}`, buildRawToolContentReplaySnippet(toolContent))
       continue
     }
 
@@ -21,6 +165,13 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       const statusPrefix = metadata.status === 'success' ? 'success' : 'failure'
       toolSummaryLines.push(`- ${metadata.toolName} ${statusPrefix}: ${toolSummary}`)
     }
+
+    const compactedToolContent = buildCompactedToolContent(metadata, parsedResult.body)
+    const replayKey = buildReplayKeyForToolContent(metadata)
+    if (replayToolContentByKey.has(replayKey)) {
+      replayToolContentByKey.delete(replayKey)
+    }
+    replayToolContentByKey.set(replayKey, compactedToolContent)
 
     if (metadata.status !== 'success') {
       continue
@@ -121,12 +272,13 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       : null
   const toolSummarySection =
     toolSummaryLines.length > 0 ? ['Acknowledged tool result summaries:', ...toolSummaryLines].join('\n') : null
+  const replayToolContents = Array.from(replayToolContentByKey.values())
 
   return [
     'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state. Reuse the latest inspection state below before repeating the same inspection tool call.',
     ...(toolSummarySection ? [toolSummarySection] : []),
     ...(inspectionStateSummary ? [inspectionStateSummary] : []),
     ...(mutationStateSummary ? [mutationStateSummary] : []),
-    ...toolContents,
+    ...replayToolContents,
   ].join('\n\n')
 }

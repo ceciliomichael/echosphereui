@@ -113,3 +113,42 @@ test('estimateChatContextUsage counts replayed tool-result context for codex', a
   assert.equal(usage.totalTokens, usage.systemPromptTokens + usage.historyTokens + usage.toolResultsTokens)
   assert.equal(usage.maxTokens, 200_000)
 })
+
+test('estimateChatContextUsage treats runtime context update messages as history context, not tool output', async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'echosphere-context-runtime-'))
+  temporaryDirectories.push(rootPath)
+  await writeFile(path.join(rootPath, 'AGENTS.md'), 'Runtime context test instructions.', 'utf8')
+
+  const runtimeContextMessage: Message = {
+    content: [
+      'Runtime context update. Treat this as authoritative for the current turn.',
+      '<context_update>',
+      JSON.stringify(
+        {
+          agentContextRootPath: rootPath,
+          providerId: 'codex',
+          schema: 'echosphere.runtime_context/v1',
+          terminalExecutionMode: 'full',
+        },
+        null,
+        2,
+      ),
+      '</context_update>',
+    ].join('\n'),
+    id: 'runtime-context-1',
+    role: 'user',
+    timestamp: 1,
+    userMessageKind: 'tool_result',
+  }
+
+  const usage = await estimateChatContextUsage({
+    agentContextRootPath: rootPath,
+    chatMode: 'agent',
+    messages: [runtimeContextMessage],
+    providerId: 'codex',
+  })
+
+  assert.ok(usage.systemPromptTokens > 0)
+  assert.ok(usage.historyTokens > 0)
+  assert.equal(usage.toolResultsTokens, 0)
+})
