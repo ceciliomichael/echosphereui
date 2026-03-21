@@ -121,6 +121,48 @@ app.commandLine.appendSwitch(
 )
 
 let win: BrowserWindow | null
+
+// --- Instance / profile isolation ---
+//
+// You may run a dev instance (Vite dev server) *and* a packaged/built instance at the same time.
+// On Windows, Chromium's disk cache is sensitive to concurrent access; if both instances share the
+// same profile directories, you'll see:
+//   "Unable to move the cache: Access is denied (0x5)" / "Gpu Cache Creation failed"
+//
+// We solve this by giving dev and packaged runs distinct userData/cache directories.
+const isDevInstance = Boolean(VITE_DEV_SERVER_URL) || !app.isPackaged
+if (isDevInstance) {
+  const appDataPath = app.getPath('appData')
+  const devUserDataPath = path.join(appDataPath, `${app.getName()}-dev`)
+  app.setPath('userData', devUserDataPath)
+  // Keep cache within the dev profile too (avoids sharing GPUCache/Code Cache/etc.).
+  app.setPath('cache', path.join(devUserDataPath, 'Cache'))
+}
+
+// Prevent multiple running instances *within the same flavor* (dev or packaged) from contending
+// over the same Chromium profile/cache.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+  // Ensure we don't continue bootstrapping anything in this process.
+  process.exit(0)
+}
+
+app.on('second-instance', () => {
+  // Someone tried to run a second instance, focus our window instead.
+  if (win) {
+    if (win.isMinimized()) {
+      win.restore()
+    }
+    win.show()
+    win.focus()
+    return
+  }
+
+  // If we don't currently have a window (e.g. it was closed), recreate it.
+  void createWindow()
+})
+
 const MIN_WINDOW_WIDTH = 960
 const MIN_WINDOW_HEIGHT = 680
 let isQuitFlushInProgress = false

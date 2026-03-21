@@ -230,12 +230,12 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Session update failed'
   }
 
-  if (invocation.toolName === 'update_plan') {
+  if (invocation.toolName === 'todo_write') {
     return invocation.state === 'running'
-      ? 'Updating Plan'
+      ? 'Updating Todo List'
       : invocation.state === 'completed'
-        ? 'Updated Plan'
-        : 'Update Plan failed'
+        ? 'Updated Todo List'
+        : 'Todo List failed'
   }
 
   if (invocation.toolName === 'ready_implement') {
@@ -272,7 +272,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
   const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
 
-  if (invocation.toolName === 'update_plan') {
+  if (invocation.toolName === 'todo_write') {
     return null
   }
 

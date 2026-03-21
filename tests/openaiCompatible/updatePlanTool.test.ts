@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { updatePlanTool } from '../../electron/chat/openaiCompatible/tools/update-plan/index'
+import { todoWriteTool } from '../../electron/chat/openaiCompatible/tools/update-plan/index'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext() {
@@ -12,20 +12,20 @@ function buildExecutionContext() {
   }
 }
 
-test('update_plan tool normalizes valid workflow steps and returns workflow summary', async () => {
-  const result = await updatePlanTool.execute(
+test('todo_write tool normalizes valid todo items and returns workflow summary', async () => {
+  const result = await todoWriteTool.execute(
     {
-      plan: 'plan-main',
-      steps: [
+      sessionKey: 'plan-main',
+      tasks: [
         {
           id: 'step-1',
           status: 'in_progress',
-          title: 'Inspect files',
+          content: 'Inspect files',
         },
         {
           id: 'step-2',
           status: 'pending',
-          title: 'Summarize findings',
+          content: 'Summarize findings',
         },
       ],
     },
@@ -39,12 +39,12 @@ test('update_plan tool normalizes valid workflow steps and returns workflow summ
   assert.equal(result.allStepsCompleted, false)
 })
 
-test('update_plan tool allows multiple in_progress steps', async () => {
-  const result = await updatePlanTool.execute(
+test('todo_write tool allows multiple in_progress tasks', async () => {
+  const result = await todoWriteTool.execute(
     {
-      steps: [
-        { id: 'a', status: 'in_progress', title: 'A' },
-        { id: 'b', status: 'in_progress', title: 'B' },
+      tasks: [
+        { id: 'a', status: 'in_progress', content: 'A' },
+        { id: 'b', status: 'in_progress', content: 'B' },
       ],
     },
     buildExecutionContext(),
@@ -55,14 +55,14 @@ test('update_plan tool allows multiple in_progress steps', async () => {
   assert.deepEqual(result.inProgressStepIds, ['a', 'b'])
 })
 
-test('update_plan tool rejects duplicate step ids', async () => {
+test('todo_write tool rejects duplicate task ids', async () => {
   await assert.rejects(
     () =>
-      updatePlanTool.execute(
+      todoWriteTool.execute(
         {
-          steps: [
-            { id: 'dup', status: 'pending', title: 'A' },
-            { id: 'dup', status: 'completed', title: 'B' },
+          tasks: [
+            { id: 'dup', status: 'pending', content: 'A' },
+            { id: 'dup', status: 'completed', content: 'B' },
           ],
         },
         buildExecutionContext(),
@@ -75,13 +75,13 @@ test('update_plan tool rejects duplicate step ids', async () => {
   )
 })
 
-test('update_plan tool accepts a single step object by normalizing it to an array', async () => {
-  const result = await updatePlanTool.execute(
+test('todo_write tool accepts a single task object by normalizing it to an array', async () => {
+  const result = await todoWriteTool.execute(
     {
-      steps: {
+      tasks: {
         id: 'single',
         status: 'in_progress',
-        title: 'Do work',
+        content: 'Do work',
       },
     },
     buildExecutionContext(),
@@ -92,10 +92,10 @@ test('update_plan tool accepts a single step object by normalizing it to an arra
   assert.deepEqual(result.inProgressStepIds, ['single'])
 })
 
-test('update_plan tool accepts JSON-stringified steps payloads', async () => {
-  const result = await updatePlanTool.execute(
+test('todo_write tool accepts JSON-stringified tasks payloads', async () => {
+  const result = await todoWriteTool.execute(
     {
-      steps: '[{"id":"json-step","title":"Parse","status":"pending"}]',
+      tasks: '[{"id":"json-step","content":"Parse","status":"pending"}]',
     },
     buildExecutionContext(),
   )
@@ -104,8 +104,8 @@ test('update_plan tool accepts JSON-stringified steps payloads', async () => {
   assert.equal(result.pendingStepCount, 1)
 })
 
-test('update_plan tool accepts legacy plan-array payload shape with step aliases', async () => {
-  const result = await updatePlanTool.execute(
+test('todo_write tool accepts legacy plan-array payload shape with task aliases', async () => {
+  const result = await todoWriteTool.execute(
     {
       plan: [{ step: 'Edit page.tsx', status: 'in_progress' }],
     },

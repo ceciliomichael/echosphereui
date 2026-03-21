@@ -56,17 +56,17 @@ function createEditToolCall(id: string, filePath: string, oldContent: string, ne
   }
 }
 
-function createUpdatePlanToolCall(
+function createTodoWriteToolCall(
   id: string,
   payload: {
     plan?: string
-    steps: Array<{ id: string; status: 'completed' | 'in_progress' | 'pending'; title: string }>
+    tasks: Array<{ content: string; id: string; status: 'completed' | 'in_progress' | 'pending' }>
   },
 ): OpenAICompatibleToolCall {
   return {
     argumentsText: JSON.stringify(payload),
     id,
-    name: 'update_plan',
+    name: 'todo_write',
     startedAt: 1_700_000_000_000,
   }
 }
@@ -286,7 +286,7 @@ test('executeToolCallWithPolicies allows post-edit reads when they request genui
   })
 })
 
-test('executeToolCallWithPolicies treats repeated unchanged update_plan calls as noop success', async () => {
+test('executeToolCallWithPolicies treats repeated unchanged todo_write calls as noop success', async () => {
   const emittedEvents: StreamDeltaEvent[] = []
   const inMemoryMessages: Message[] = []
   const turnState = createToolExecutionTurnState()
@@ -299,11 +299,11 @@ test('executeToolCallWithPolicies treats repeated unchanged update_plan calls as
   }
 
   await executeToolCallWithPolicies(
-    createUpdatePlanToolCall('plan-1', {
+    createTodoWriteToolCall('plan-1', {
       plan: 'default',
-      steps: [
-        { id: '1', status: 'in_progress', title: 'Inspect files' },
-        { id: '2', status: 'pending', title: 'Apply edits' },
+      tasks: [
+        { content: 'Inspect files', id: '1', status: 'in_progress' },
+        { content: 'Apply edits', id: '2', status: 'pending' },
       ],
     }),
     context,
@@ -313,11 +313,11 @@ test('executeToolCallWithPolicies treats repeated unchanged update_plan calls as
   )
 
   await executeToolCallWithPolicies(
-    createUpdatePlanToolCall('plan-2', {
+    createTodoWriteToolCall('plan-2', {
       plan: 'default',
-      steps: [
-        { id: '1', status: 'in_progress', title: 'Inspect files' },
-        { id: '2', status: 'pending', title: 'Apply edits' },
+      tasks: [
+        { content: 'Inspect files', id: '1', status: 'in_progress' },
+        { content: 'Apply edits', id: '2', status: 'pending' },
       ],
     }),
     context,
@@ -331,7 +331,7 @@ test('executeToolCallWithPolicies treats repeated unchanged update_plan calls as
   assert.equal(completedEvents.length, 2)
   assert.equal(failedEvents.length, 0)
   const secondResult = completedEvents[1]?.resultContent ?? ''
-  assert.match(secondResult, /Plan .* unchanged/u)
+  assert.match(secondResult, /Todo list .* unchanged/u)
 })
 
 test('createToolExecutionScheduler runs parallel tool calls without serial buffering', async () => {

@@ -10,11 +10,11 @@ test('edit tool description includes single-operation and anchored replacement g
   assert.match(description, /Matching is resilient to line endings, indentation shifts, whitespace differences, and escaped text\./u)
 })
 
-test('update_plan tool description includes workflow synchronization guidance', () => {
-  const description = getToolDescription('update_plan')
-  assert.match(description, /Create or update the active execution plan/u)
-  assert.match(description, /Call this only when explicit step tracking would help on genuinely larger, branching, or uncertain work\./u)
+test('todo_write tool description includes task tracking guidance', () => {
+  const description = getToolDescription('todo_write')
+  assert.match(description, /Track task progress with a concise list\./u)
+  assert.match(description, /Call this only when explicit task tracking helps on genuinely larger, branching, or uncertain work\./u)
   assert.match(description, /Skip it for small or linear tasks\./u)
-  assert.match(description, /Optional `plan`: short plan title/u)
-  assert.match(description, /multiple steps are allowed/u)
+  assert.match(description, /Optional `sessionKey`: short session key for the current todo list/u)
+  assert.match(description, /multiple tasks are allowed/u)
 })

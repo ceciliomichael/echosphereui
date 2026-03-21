@@ -1,19 +1,19 @@
 const TOOL_DESCRIPTIONS = {
-  update_plan: `Create or update the active execution plan for this run.
+  todo_write: `Track task progress with a concise list.
 
 Usage guidelines:
-- Call this only when explicit step tracking would help on genuinely larger, branching, or uncertain work.
+- Call this only when explicit task tracking helps on genuinely larger, branching, or uncertain work.
 - Skip it for small or linear tasks.
-- Optional \`plan\`: short plan title.
-- Required \`steps\`: ordered objects with \`id\`, \`title\`, and \`status\`.
-- Status rules: use \`in_progress\` for active work (multiple steps are allowed); other items should be \`pending\` or \`completed\`.
-- Keep step ids stable across updates so progress tracking stays consistent.
-- Do not resend an identical \`steps\` array; execute work first, then update statuses.
-- Payload template: \`{"plan":"default","steps":[{"id":"inspect","title":"Inspect files","status":"in_progress"},{"id":"edit","title":"Apply edits","status":"pending"}]}\`.`,
+- Optional \`sessionKey\`: short session key for the current todo list.
+- Required \`tasks\`: ordered objects with \`id\`, \`content\`, and \`status\`.
+- Status rules: use \`in_progress\` for active work (multiple tasks are allowed); other items should be \`pending\` or \`completed\`.
+- Keep task ids stable across updates so progress tracking stays consistent.
+- Do not resend an identical \`tasks\` array; execute work first, then update statuses.
+- Payload template: \`{"sessionKey":"default","tasks":[{"id":"inspect","content":"Inspect files","status":"in_progress"},{"id":"edit","content":"Apply edits","status":"pending"}]}\`.`,
   ready_implement: `Ask for explicit user approval before implementation begins.
 
 Usage guidelines:
-- Call this only after presenting the implementation plan and updating plan steps via \`update_plan\`.
+- Call this only after presenting the implementation plan and updating todo tasks via \`todo_write\`.
 - Optional fields: \`prompt\`, \`yes_label\`, and \`no_label\`.
 - The tool renders a user-facing choice gate and waits for user decision.
 - If the user chooses yes, continue in Agent mode and implement the approved plan.

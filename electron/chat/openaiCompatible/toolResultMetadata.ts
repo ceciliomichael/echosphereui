@@ -93,12 +93,16 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
-  if (toolName === 'update_plan') {
-    const planId = readString(argumentsValue.plan)
-    const stepCount = Array.isArray(argumentsValue.steps) ? argumentsValue.steps.length : undefined
+  if (toolName === 'todo_write') {
+    const sessionKey = readString(argumentsValue.sessionKey) ?? readString(argumentsValue.plan)
+    const taskCount = Array.isArray(argumentsValue.tasks)
+      ? argumentsValue.tasks.length
+      : Array.isArray(argumentsValue.steps)
+        ? argumentsValue.steps.length
+        : undefined
     return {
-      plan: planId ?? undefined,
-      step_count: stepCount,
+      session_key: sessionKey ?? undefined,
+      task_count: taskCount,
     }
   }
 
@@ -227,18 +231,18 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Updated terminal session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
   }
 
-  if (toolName === 'update_plan') {
-    const planId = readString(semanticResult.planId) ?? 'default'
+  if (toolName === 'todo_write') {
+    const planId = readString(semanticResult.planId) ?? readString(semanticResult.sessionKey) ?? 'default'
     const completedStepCount = readNumber(semanticResult.completedStepCount) ?? 0
     const totalStepCount = readNumber(semanticResult.totalStepCount) ?? completedStepCount
     const allStepsCompleted = readBoolean(semanticResult.allStepsCompleted)
     const operation = readString(semanticResult.operation)
     if (operation === 'noop') {
-      return `Plan ${planId} unchanged (${completedStepCount}/${totalStepCount} steps completed).`
+      return `Todo list ${planId} unchanged (${completedStepCount}/${totalStepCount} tasks completed).`
     }
     return allStepsCompleted
-      ? `Plan ${planId} is complete (${completedStepCount}/${totalStepCount} steps).`
-      : `Plan ${planId} updated (${completedStepCount}/${totalStepCount} steps completed).`
+      ? `Todo list ${planId} is complete (${completedStepCount}/${totalStepCount} tasks).`
+      : `Todo list ${planId} updated (${completedStepCount}/${totalStepCount} tasks completed).`
   }
 
   if (toolName === 'ready_implement') {
@@ -284,6 +288,10 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
       kind: 'file',
       path: firstPath,
     }
+  }
+
+  if (toolName === 'todo_write') {
+    return undefined
   }
 
   const subjectPath = readString(semanticResult.path)

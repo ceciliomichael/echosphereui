@@ -1,6 +1,9 @@
 import { Check, Copy } from 'lucide-react'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
+import { useHighlightedCodeLines } from '../../hooks/useHighlightedCodeLines'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
+import { HighlightedCodeLine } from './HighlightedCodeLine'
+import type { HighlightedCodeLine as HighlightedCodeLineData } from '../../lib/codeHighlighting'
 
 interface CodeBlockProps {
   code: string
@@ -14,11 +17,6 @@ interface CodeBlockProps {
   startLineNumber?: number
 }
 
-interface TokenizedCode {
-  gutterWidthCh: number
-  lines: string[]
-}
-
 function toLanguageLabel(language: string | undefined, resolvedLabel: string) {
   if (!language || language.trim().length === 0) {
     return 'Text'
@@ -30,34 +28,26 @@ function toLanguageLabel(language: string | undefined, resolvedLabel: string) {
   return normalized.length <= 4 ? normalized.toUpperCase() : normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
-function tokenizeCode(code: string, startLineNumber = 1): TokenizedCode {
-  const normalizedCode = code.replace(/\n$/, '')
-  const lines = normalizedCode.length === 0 ? [''] : normalizedCode.split('\n')
-  const lastLineNumber = startLineNumber + lines.length - 1
-  const gutterWidthCh = Math.max(String(lastLineNumber).length + 1, 3)
-  return { gutterWidthCh, lines }
-}
-
 interface CodeRowsProps {
-  code: string
+  lines: readonly HighlightedCodeLineData[]
   startLineNumber: number
 }
 
-const CodeRows = memo(function CodeRows({ code, startLineNumber }: CodeRowsProps) {
-  const tokenizedCode = useMemo(() => tokenizeCode(code, startLineNumber), [code, startLineNumber])
+const CodeRows = memo(function CodeRows({ lines, startLineNumber }: CodeRowsProps) {
+  const gutterWidthCh = Math.max(String(startLineNumber + lines.length - 1).length + 1, 3)
 
   return (
     <div className="flex min-w-0 bg-surface">
       <div className="shrink-0 border-r border-border bg-surface">
         <pre className="m-0 py-2 text-[12px] leading-5 text-subtle-foreground">
           <code className="block">
-            {tokenizedCode.lines.map((_, index) => {
+            {lines.map((_, index) => {
               const lineNumber = startLineNumber + index
               return (
                 <div
                   key={`line-number-${lineNumber}`}
                   className="select-none px-2 text-right"
-                  style={{ minWidth: `${tokenizedCode.gutterWidthCh}ch` }}
+                  style={{ minWidth: `${gutterWidthCh}ch` }}
                 >
                   {lineNumber}
                 </div>
@@ -69,9 +59,9 @@ const CodeRows = memo(function CodeRows({ code, startLineNumber }: CodeRowsProps
       <div className="min-w-0 flex-1 bg-surface">
         <pre className="m-0 min-w-full bg-transparent px-3 py-2 text-[12px] leading-5 text-foreground">
           <code className="block w-fit min-w-full bg-transparent">
-            {tokenizedCode.lines.map((line, index) => (
-              <div key={`content-${index}-${line.slice(0, 16)}`} className="whitespace-pre">
-                {line.length > 0 ? line : '\u00A0'}
+            {lines.map((line, index) => (
+              <div key={`content-${index}-${line.text.slice(0, 16)}`} className="whitespace-pre">
+                <HighlightedCodeLine line={line} />
               </div>
             ))}
           </code>
@@ -87,12 +77,12 @@ export const CodeBlock = memo(function CodeBlock({
   headerLabel,
   headerRightLabel,
   language,
-  isStreaming = false,
   maxBodyHeightClassName,
   showCopyButton = true,
   startLineNumber = 1,
 }: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false)
+  const highlightedLines = useHighlightedCodeLines(code, { fileName, language, stripTrailingNewline: true })
   const iconConfig = resolveFileIconConfig({ fileName, languageId: language })
   const titleLabel = headerLabel ?? fileName ?? toLanguageLabel(language, iconConfig.label)
   const LanguageIcon = iconConfig.icon
@@ -157,7 +147,7 @@ export const CodeBlock = memo(function CodeBlock({
           .join(' ')}
       >
         <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
-          <CodeRows code={code} startLineNumber={startLineNumber} key={isStreaming ? `streaming:${code.length}` : 'static'} />
+          <CodeRows lines={highlightedLines} startLineNumber={startLineNumber} />
         </div>
       </div>
     </div>

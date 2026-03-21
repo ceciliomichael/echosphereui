@@ -3,14 +3,15 @@ import { OpenAICompatibleToolError } from '../../toolTypes'
 import { getToolDescription } from '../descriptionCatalog'
 import { parseToolArguments, readRequiredString } from '../filesystemToolUtils'
 
-interface PlanStepInput {
+interface TodoItemInput {
+  content: string
   id: string
   status: 'completed' | 'in_progress' | 'pending'
   title: string
 }
 
-const TOOL_DESCRIPTION = getToolDescription('update_plan')
-const VALID_STEP_STATUSES = new Set(['pending', 'in_progress', 'completed'])
+const TOOL_DESCRIPTION = getToolDescription('todo_write')
+const VALID_ITEM_STATUSES = new Set(['pending', 'in_progress', 'completed'])
 
 function readOptionalString(input: Record<string, unknown>, fieldName: string) {
   const value = input[fieldName]
@@ -33,60 +34,66 @@ function readOptionalString(input: Record<string, unknown>, fieldName: string) {
   return trimmedValue
 }
 
-function toStepIdFromTitle(title: string, index: number) {
-  const normalizedValue = title
+function toItemIdFromContent(content: string, index: number) {
+  const normalizedValue = content
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
-  return normalizedValue.length > 0 ? normalizedValue : `step-${index + 1}`
+  return normalizedValue.length > 0 ? normalizedValue : `item-${index + 1}`
 }
 
-function normalizePlanStep(rawStep: unknown, index: number): PlanStepInput {
-  if (typeof rawStep !== 'object' || rawStep === null || Array.isArray(rawStep)) {
-    throw new OpenAICompatibleToolError(`steps[${index}] must be an object.`, {
+function normalizeTodoItem(rawItem: unknown, index: number): TodoItemInput {
+  if (typeof rawItem !== 'object' || rawItem === null || Array.isArray(rawItem)) {
+    throw new OpenAICompatibleToolError(`tasks[${index}] must be an object.`, {
       index,
     })
   }
 
-  const stepRecord = rawStep as Record<string, unknown>
-  const title = readOptionalString(stepRecord, 'title') ?? readOptionalString(stepRecord, 'step')
-  if (!title) {
-    throw new OpenAICompatibleToolError(`steps[${index}].title must be a non-empty string.`, {
+  const itemRecord = rawItem as Record<string, unknown>
+  const content = readOptionalString(itemRecord, 'content') ?? readOptionalString(itemRecord, 'title') ?? readOptionalString(itemRecord, 'step')
+  if (!content) {
+    throw new OpenAICompatibleToolError(`tasks[${index}].content must be a non-empty string.`, {
       index,
     })
   }
 
-  const id = readOptionalString(stepRecord, 'id') ?? toStepIdFromTitle(title, index)
-  const statusValue = readRequiredString(stepRecord, 'status').toLowerCase()
-  if (!VALID_STEP_STATUSES.has(statusValue)) {
-    throw new OpenAICompatibleToolError(`steps[${index}].status must be one of pending, in_progress, or completed.`, {
+  const id = readOptionalString(itemRecord, 'id') ?? toItemIdFromContent(content, index)
+  const statusValue = readRequiredString(itemRecord, 'status').toLowerCase()
+  if (!VALID_ITEM_STATUSES.has(statusValue)) {
+    throw new OpenAICompatibleToolError(`tasks[${index}].status must be one of pending, in_progress, or completed.`, {
       index,
       status: statusValue,
     })
   }
 
   return {
+    content,
     id,
-    status: statusValue as PlanStepInput['status'],
-    title,
+    status: statusValue as TodoItemInput['status'],
+    title: content,
   }
 }
 
-function readRawStepsCandidate(input: Record<string, unknown>) {
+function readRawTasksCandidate(input: Record<string, unknown>) {
+  const directTasks = input.tasks
+  if (directTasks !== undefined) {
+    return directTasks
+  }
+
   const directSteps = input.steps
   if (directSteps !== undefined) {
     return directSteps
   }
 
-  const planAsSteps = input.plan
-  if (Array.isArray(planAsSteps) || (typeof planAsSteps === 'object' && planAsSteps !== null)) {
-    return planAsSteps
+  const planAsTasks = input.plan
+  if (Array.isArray(planAsTasks) || (typeof planAsTasks === 'object' && planAsTasks !== null)) {
+    return planAsTasks
   }
 
-  const alternativeSteps = input.plan_steps
-  if (alternativeSteps !== undefined) {
-    return alternativeSteps
+  const alternativeTasks = input.plan_steps
+  if (alternativeTasks !== undefined) {
+    return alternativeTasks
   }
 
   const items = input.items
@@ -94,14 +101,15 @@ function readRawStepsCandidate(input: Record<string, unknown>) {
     return items
   }
 
-  const singleStepTitle = readOptionalString(input, 'title') ?? readOptionalString(input, 'step')
-  const singleStepStatus = readOptionalString(input, 'status')
-  if (singleStepTitle && singleStepStatus) {
+  const singleTaskContent = readOptionalString(input, 'content') ?? readOptionalString(input, 'title') ?? readOptionalString(input, 'step')
+  const singleTaskStatus = readOptionalString(input, 'status')
+  if (singleTaskContent && singleTaskStatus) {
     return [
       {
-        id: readOptionalString(input, 'id') ?? toStepIdFromTitle(singleStepTitle, 0),
-        status: singleStepStatus,
-        title: singleStepTitle,
+        content: singleTaskContent,
+        id: readOptionalString(input, 'id') ?? toItemIdFromContent(singleTaskContent, 0),
+        status: singleTaskStatus,
+        title: singleTaskContent,
       },
     ]
   }
@@ -109,71 +117,79 @@ function readRawStepsCandidate(input: Record<string, unknown>) {
   return undefined
 }
 
-function normalizePlanSteps(input: Record<string, unknown>) {
-  const rawSteps = readRawStepsCandidate(input)
-  let normalizedRawSteps: unknown[]
+function normalizeTodoTasks(input: Record<string, unknown>) {
+  const rawTasks = readRawTasksCandidate(input)
+  let normalizedRawTasks: unknown[]
 
-  if (Array.isArray(rawSteps)) {
-    normalizedRawSteps = rawSteps
-  } else if (typeof rawSteps === 'object' && rawSteps !== null) {
-    normalizedRawSteps = [rawSteps]
-  } else if (typeof rawSteps === 'string') {
-    const trimmedValue = rawSteps.trim()
+  if (Array.isArray(rawTasks)) {
+    normalizedRawTasks = rawTasks
+  } else if (typeof rawTasks === 'object' && rawTasks !== null) {
+    normalizedRawTasks = [rawTasks]
+  } else if (typeof rawTasks === 'string') {
+    const trimmedValue = rawTasks.trim()
     if (trimmedValue.length === 0) {
-      throw new OpenAICompatibleToolError('steps must be an array.', {
-        fieldName: 'steps',
+      throw new OpenAICompatibleToolError('tasks must be an array.', {
+        fieldName: 'tasks',
         receivedType: 'string',
       })
     }
 
-    let parsedSteps: unknown
+    let parsedTasks: unknown
     try {
-      parsedSteps = JSON.parse(trimmedValue)
+      parsedTasks = JSON.parse(trimmedValue)
     } catch {
-      throw new OpenAICompatibleToolError('steps must be an array.', {
-        fieldName: 'steps',
+      throw new OpenAICompatibleToolError('tasks must be an array.', {
+        fieldName: 'tasks',
         receivedType: 'string',
       })
     }
 
-    if (Array.isArray(parsedSteps)) {
-      normalizedRawSteps = parsedSteps
-    } else if (typeof parsedSteps === 'object' && parsedSteps !== null) {
-      normalizedRawSteps = [parsedSteps]
+    if (Array.isArray(parsedTasks)) {
+      normalizedRawTasks = parsedTasks
+    } else if (typeof parsedTasks === 'object' && parsedTasks !== null) {
+      normalizedRawTasks = [parsedTasks]
     } else {
-      throw new OpenAICompatibleToolError('steps must be an array.', {
-        fieldName: 'steps',
-        receivedType: typeof parsedSteps,
+      throw new OpenAICompatibleToolError('tasks must be an array.', {
+        fieldName: 'tasks',
+        receivedType: typeof parsedTasks,
       })
     }
   } else {
-    throw new OpenAICompatibleToolError('steps must be an array.', {
-      fieldName: 'steps',
-      receivedType: rawSteps === null ? 'null' : typeof rawSteps,
+    throw new OpenAICompatibleToolError('tasks must be an array.', {
+      fieldName: 'tasks',
+      receivedType: rawTasks === null ? 'null' : typeof rawTasks,
     })
   }
 
-  if (normalizedRawSteps.length === 0) {
-    throw new OpenAICompatibleToolError('steps must contain at least one plan step.', {
-      fieldName: 'steps',
+  if (normalizedRawTasks.length === 0) {
+    throw new OpenAICompatibleToolError('tasks must contain at least one todo item.', {
+      fieldName: 'tasks',
     })
   }
 
-  const normalizedSteps = normalizedRawSteps.map((rawStep, index) => normalizePlanStep(rawStep, index))
-  const uniqueStepIds = new Set<string>()
-  for (const step of normalizedSteps) {
-    if (uniqueStepIds.has(step.id)) {
-      throw new OpenAICompatibleToolError('steps must use unique ids.', {
-        duplicateId: step.id,
+  const normalizedTasks = normalizedRawTasks.map((rawTask, index) => normalizeTodoItem(rawTask, index))
+  const uniqueTaskIds = new Set<string>()
+  for (const task of normalizedTasks) {
+    if (uniqueTaskIds.has(task.id)) {
+      throw new OpenAICompatibleToolError('tasks must use unique ids.', {
+        duplicateId: task.id,
       })
     }
-    uniqueStepIds.add(step.id)
+    uniqueTaskIds.add(task.id)
   }
 
-  return normalizedSteps
+  return normalizedTasks
 }
 
-function readPlanId(input: Record<string, unknown>) {
+function readTodoListId(input: Record<string, unknown>) {
+  const rawSessionKey = input.sessionKey
+  if (typeof rawSessionKey === 'string') {
+    const normalizedSessionKey = rawSessionKey.trim()
+    if (normalizedSessionKey.length > 0) {
+      return normalizedSessionKey
+    }
+  }
+
   const rawPlan = input.plan
   if (typeof rawPlan !== 'string') {
     return 'default'
@@ -183,52 +199,88 @@ function readPlanId(input: Record<string, unknown>) {
   return normalizedPlan.length > 0 ? normalizedPlan : 'default'
 }
 
-export const updatePlanTool: OpenAICompatibleToolDefinition = {
+export const todoWriteTool: OpenAICompatibleToolDefinition = {
   executionMode: 'exclusive',
-  name: 'update_plan',
+  name: 'todo_write',
   parseArguments: parseToolArguments,
   async execute(argumentsValue) {
-    const planId = readPlanId(argumentsValue)
-    const steps = normalizePlanSteps(argumentsValue)
-    const hasIncompleteSteps = steps.some((step) => step.status !== 'completed')
-    const inProgressSteps = steps.filter((step) => step.status === 'in_progress')
-    const completedStepCount = steps.filter((step) => step.status === 'completed').length
-    const pendingStepCount = steps.filter((step) => step.status === 'pending').length
-    const inProgressStepCount = inProgressSteps.length
+    const todoListId = readTodoListId(argumentsValue)
+    const tasks = normalizeTodoTasks(argumentsValue)
+    const hasIncompleteTasks = tasks.some((task) => task.status !== 'completed')
+    const inProgressTasks = tasks.filter((task) => task.status === 'in_progress')
+    const completedTaskCount = tasks.filter((task) => task.status === 'completed').length
+    const pendingTaskCount = tasks.filter((task) => task.status === 'pending').length
+    const inProgressTaskCount = inProgressTasks.length
 
     return {
-      allStepsCompleted: !hasIncompleteSteps,
-      completedStepCount,
-      hasIncompleteSteps,
-      inProgressStepCount,
-      inProgressStepId: inProgressSteps[0]?.id ?? null,
-      inProgressStepIds: inProgressSteps.map((step) => step.id),
-      message: `Plan ${planId} updated: ${completedStepCount}/${steps.length} completed.`,
-      operation: 'update_plan',
+      allStepsCompleted: !hasIncompleteTasks,
+      completedStepCount: completedTaskCount,
+      hasIncompleteSteps: hasIncompleteTasks,
+      inProgressStepCount: inProgressTaskCount,
+      inProgressStepId: inProgressTasks[0]?.id ?? null,
+      inProgressStepIds: inProgressTasks.map((task) => task.id),
+      message: `Todo list ${todoListId} updated: ${completedTaskCount}/${tasks.length} completed.`,
+      operation: 'todo_write',
       path: '.',
-      pendingStepCount,
-      planId,
-      steps: steps.map((step) => ({ id: step.id, status: step.status, title: step.title })),
+      pendingStepCount: pendingTaskCount,
+      planId: todoListId,
+      sessionKey: todoListId,
+      steps: tasks.map((task) => ({ id: task.id, status: task.status, title: task.title })),
+      tasks: tasks.map((task) => ({
+        content: task.content,
+        id: task.id,
+        status: task.status,
+        title: task.title,
+      })),
       targetKind: 'plan',
-      totalStepCount: steps.length,
+      totalStepCount: tasks.length,
     }
   },
   tool: {
     function: {
       description: TOOL_DESCRIPTION,
-      name: 'update_plan',
+      name: 'todo_write',
       parameters: {
         additionalProperties: false,
         properties: {
-          plan: {
-            description: 'Optional short plan title for this run.',
+          sessionKey: {
+            description: 'Optional short key for the todo list session.',
             type: 'string',
           },
-          steps: {
-            description: 'Ordered workflow steps. Use in_progress for active work; multiple steps may be in_progress at once.',
+          plan: {
+            description: 'Optional short todo list title for this run.',
+            type: 'string',
+          },
+          tasks: {
+            description: 'Ordered todo items. Use in_progress for active work; multiple tasks may be in_progress at once.',
             items: {
               additionalProperties: false,
               properties: {
+                content: {
+                  type: 'string',
+                },
+                id: {
+                  type: 'string',
+                },
+                status: {
+                  enum: ['pending', 'in_progress', 'completed'],
+                  type: 'string',
+                },
+              },
+              required: ['id', 'content', 'status'],
+              type: 'object',
+            },
+            minItems: 1,
+            type: 'array',
+          },
+          steps: {
+            description: 'Legacy alias for tasks. Use in_progress for active work; multiple tasks may be in_progress at once.',
+            items: {
+              additionalProperties: false,
+              properties: {
+                content: {
+                  type: 'string',
+                },
                 id: {
                   type: 'string',
                 },
@@ -240,14 +292,14 @@ export const updatePlanTool: OpenAICompatibleToolDefinition = {
                   type: 'string',
                 },
               },
-              required: ['id', 'title', 'status'],
+              required: ['id', 'status'],
               type: 'object',
             },
             minItems: 1,
             type: 'array',
           },
         },
-        required: ['steps'],
+        required: ['tasks'],
         type: 'object',
       },
     },

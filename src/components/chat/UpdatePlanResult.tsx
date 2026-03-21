@@ -61,7 +61,7 @@ export function UpdatePlanResult({ parsedResult }: UpdatePlanResultProps) {
               ].join(' ')}
             >
               <span className="shrink-0">{renderStepCircle(step, String(index + 1))}</span>
-              <span className="truncate">{step.title}</span>
+              <span className="truncate">{step.status === 'completed' ? `- ${step.title}` : step.title}</span>
             </li>
           ))}
         </ul>

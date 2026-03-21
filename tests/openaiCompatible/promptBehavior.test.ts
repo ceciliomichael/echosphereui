@@ -40,7 +40,7 @@ test('plan prompt stays compact and scope-first', () => {
   assert.match(prompt, /<workspace_context>\n## Workspace Context/u)
   assert.match(prompt, /Assume the user is asking about this workspace unless they say otherwise, and keep the plan anchored to files, folders, and behavior inside that root\./u)
   assert.match(prompt, /Make a concrete plan with files, boundaries, and checks\./u)
-  assert.match(prompt, /Use update_plan only when the work is large enough to benefit from tracked steps\./u)
+  assert.match(prompt, /Use todo_write only when the work is large enough to benefit from tracked tasks\./u)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
   assert.match(prompt, /Terminal execution mode is `full`/u)
   assert.equal(prompt.includes('\n- '), false)

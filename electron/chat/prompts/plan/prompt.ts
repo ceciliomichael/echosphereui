@@ -23,7 +23,7 @@ function buildToolUsageSection() {
   return [
     '<toolusage>',
     '## Tool Usage',
-    'Use only the planning tools available in this mode. Inspect the workspace before proposing changes. Use update_plan only when the work is large enough to benefit from tracked steps. When a tool requires a path, send a real absolute filesystem path rooted in the workspace and describe the target clearly. Do not emit pseudo tool calls in plain text.',
+    'Use only the planning tools available in this mode. Inspect the workspace before proposing changes. Use todo_write only when the work is large enough to benefit from tracked tasks. When a tool requires a path, send a real absolute filesystem path rooted in the workspace and describe the target clearly. Do not emit pseudo tool calls in plain text.',
     '</toolusage>',
   ].join('\n')
 }

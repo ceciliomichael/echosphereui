@@ -1,8 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { useHighlightedCodeLines } from '../../hooks/useHighlightedCodeLines'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 import { computeDiffLines, type DiffLine } from '../../lib/textDiff'
 import { PathLabel } from './PathLabel'
+import { HighlightedCodeTokens } from './HighlightedCodeLine'
+import type { HighlightedCodeLine as HighlightedCodeLineData } from '../../lib/codeHighlighting'
 
 interface DiffViewerProps {
   className?: string
@@ -125,6 +128,24 @@ function getLineNumberDividerClassName() {
   return 'bg-border/80'
 }
 
+function getLineTokens(
+  line: DiffLine,
+  oldLines: readonly HighlightedCodeLineData[],
+  newLines: readonly HighlightedCodeLineData[],
+  startLineNumber: number,
+) {
+  const lineIndex = line.lineNumber === null ? null : line.lineNumber - startLineNumber
+  if (lineIndex === null || lineIndex < 0) {
+    return []
+  }
+
+  if (line.type === 'removed') {
+    return oldLines[lineIndex]?.tokens ?? []
+  }
+
+  return newLines[lineIndex]?.tokens ?? oldLines[lineIndex]?.tokens ?? []
+}
+
 const DiffViewerComponent = ({
   className,
   collapsible = false,
@@ -165,6 +186,14 @@ const DiffViewerComponent = ({
   const iconConfig = resolveFileIconConfig({ fileName: filePath })
   const FileIcon = iconConfig.icon
   const renderedLines = useMemo(() => diffLines.filter((line) => line.type !== 'collapsed'), [diffLines])
+  const highlightedOldLines = useHighlightedCodeLines(oldContent ?? '', {
+    fileName: filePath,
+    stripTrailingNewline: false,
+  })
+  const highlightedNewLines = useHighlightedCodeLines(newContent, {
+    fileName: filePath,
+    stripTrailingNewline: false,
+  })
   const hasOldSide = !viewOnly && renderedLines.some((line) => line.oldLineNumber !== undefined)
   const shouldVirtualizeLines = renderedLines.length >= DIFF_VIRTUALIZATION_THRESHOLD
   const visibleStartIndex = shouldVirtualizeLines ? virtualRange.startIndex : 0
@@ -358,9 +387,17 @@ const DiffViewerComponent = ({
                 <div className="min-w-full w-fit">
                   {topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
                   {visibleLines.map((line, index) => {
+                    const highlightedTokens = getLineTokens(line, highlightedOldLines, highlightedNewLines, startLineNumber)
                     return (
-                      <div key={`content-${line.type}-${visibleStartIndex + index}`} className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}>
-                        {line.content.length > 0 ? line.content : ' '}
+                      <div
+                        key={`content-${line.type}-${visibleStartIndex + index}`}
+                        className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}
+                      >
+                        {highlightedTokens.length > 0 ? (
+                          <HighlightedCodeTokens tokens={highlightedTokens} />
+                        ) : (
+                          line.content.length > 0 ? line.content : ' '
+                        )}
                       </div>
                     )
                   })}

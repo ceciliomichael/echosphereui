@@ -138,28 +138,30 @@ function formatTerminalResultBody(semanticResult: Record<string, unknown>) {
   return message ?? 'Terminal command completed.'
 }
 
-function formatUpdatePlanResultBody(semanticResult: Record<string, unknown>) {
-  const planId = readString(semanticResult.planId) ?? 'default'
-  const steps = Array.isArray(semanticResult.steps)
-    ? semanticResult.steps.filter((step): step is Record<string, unknown> => typeof step === 'object' && step !== null)
-    : []
+function formatTodoWriteResultBody(semanticResult: Record<string, unknown>) {
+  const todoListId = readString(semanticResult.planId) ?? readString(semanticResult.sessionKey) ?? 'default'
+  const tasks = Array.isArray(semanticResult.tasks)
+    ? semanticResult.tasks.filter((task): task is Record<string, unknown> => typeof task === 'object' && task !== null)
+    : Array.isArray(semanticResult.steps)
+      ? semanticResult.steps.filter((step): step is Record<string, unknown> => typeof step === 'object' && step !== null)
+      : []
   const truncate = (value: string, maxLength = 80) => (value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`)
-  const lines = [planId]
+  const lines = [`Todo list ${todoListId}`]
 
-  if (steps.length === 0) {
-    lines.push('Steps: none')
+  if (tasks.length === 0) {
+    lines.push('Tasks: none')
   } else {
-    for (const step of steps) {
-      const stepId = readString(step.id) ?? '?'
-      const stepStatus = readString(step.status) ?? 'pending'
-      const stepTitle = truncate(readString(step.title) ?? 'Untitled step')
-      lines.push(`${stepId}. [${stepStatus}] ${stepTitle}`)
+    for (const task of tasks) {
+      const taskId = readString(task.id) ?? '?'
+      const taskStatus = readString(task.status) ?? 'pending'
+      const taskTitle = truncate(readString(task.content) ?? readString(task.title) ?? 'Untitled task')
+      lines.push(`${taskId}. [${taskStatus}] ${taskTitle}`)
     }
   }
 
-  const allStepsCompleted = readBoolean(semanticResult.allStepsCompleted)
-  if (allStepsCompleted) {
-    lines.push('All plan steps are completed.')
+  const allTasksCompleted = readBoolean(semanticResult.allStepsCompleted)
+  if (allTasksCompleted) {
+    lines.push('All todo items are completed.')
   }
 
   return lines.join('\n')
@@ -291,8 +293,8 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatTerminalResultBody(semanticResult)
   }
 
-  if (toolName === 'update_plan') {
-    return formatUpdatePlanResultBody(semanticResult)
+  if (toolName === 'todo_write') {
+    return formatTodoWriteResultBody(semanticResult)
   }
 
   if (toolName === 'ready_implement') {

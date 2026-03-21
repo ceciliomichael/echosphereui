@@ -53,18 +53,18 @@ test('getToolInvocationHeaderLabel truncates long command execution labels', () 
   assert.match(header, /\.\.\.$/u)
 })
 
-test('getToolInvocationHeaderLabel renders update plan labels without dot target', () => {
+test('getToolInvocationHeaderLabel renders todo write labels without dot target', () => {
   const completed = createInvocation({
     argumentsText: '{"steps":[]}',
     id: 'plan-1',
     startedAt: 1_700_000_000_000,
     state: 'completed',
-    toolName: 'update_plan',
+    toolName: 'todo_write',
     resultContent:
-      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-1","toolName":"update_plan","subject":{"kind":"path","path":"."}}\n</tool_result>',
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-1","toolName":"todo_write","subject":{"kind":"path","path":"."}}\n</tool_result>',
   })
 
-  assert.equal(getToolInvocationHeaderLabel(completed), 'Updated Plan')
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Updated Todo List')
 })
 
 test('getToolInvocationHeaderLabel renders grep labels with searched query', () => {

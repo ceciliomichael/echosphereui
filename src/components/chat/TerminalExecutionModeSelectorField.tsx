@@ -22,7 +22,7 @@ const TERMINAL_MODE_OPTIONS: readonly TerminalExecutionModeOption[] = [
   {
     description: 'Runs terminal commands directly on the host shell.',
     icon: Terminal,
-    label: 'Full',
+    label: 'Full Access',
     value: 'full',
   },
 ] as const
@@ -42,6 +42,7 @@ export function TerminalExecutionModeSelectorField({
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [highlightedValue, setHighlightedValue] = useState<AppTerminalExecutionMode>(value)
   const menuStyle = useFloatingMenuPosition({
     anchorRef: buttonRef,
     isOpen,
@@ -75,6 +76,14 @@ export function TerminalExecutionModeSelectorField({
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    setHighlightedValue(value)
+  }, [isOpen, value])
+
   return (
     <div ref={containerRef} className="relative w-fit max-w-full">
       <button
@@ -101,28 +110,34 @@ export function TerminalExecutionModeSelectorField({
               data-floating-menu-root="true"
               role="listbox"
               aria-label="Terminal execution mode"
-              className="fixed z-40 min-w-[14rem] overflow-hidden rounded-2xl border border-border bg-surface p-1 shadow-soft"
+              className="fixed z-40 min-w-[14rem] overflow-hidden rounded-2xl border border-border bg-surface shadow-soft"
               style={menuStyle}
             >
-              {TERMINAL_MODE_OPTIONS.map((option) => {
-                const Icon = option.icon
-                const isSelected = option.value === value
+              <div
+                role="listbox"
+                onMouseLeave={() => setHighlightedValue(value)}
+                className="space-y-0.5 p-1.5"
+              >
+                {TERMINAL_MODE_OPTIONS.map((option) => {
+                  const Icon = option.icon
+                  const isSelected = option.value === value
+                  const isHighlighted = option.value === highlightedValue
 
-                return (
-                  <div key={option.value} className="mb-1.5 last:mb-0">
-                    <Tooltip content={option.description} side="right" fullWidthTrigger>
+                  return (
+                    <Tooltip key={option.value} content={option.description} side="right" fullWidthTrigger>
                       <button
                         type="button"
                         role="option"
-                        aria-selected={isSelected}
+                        aria-selected={isHighlighted}
                         onMouseDown={(event) => event.preventDefault()}
+                        onMouseEnter={() => setHighlightedValue(option.value)}
                         onClick={() => {
                           onChange(option.value)
                           setIsOpen(false)
                         }}
                         className={[
-                          'flex min-h-10 w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
-                          isSelected
+                          'flex min-h-10 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] transition-[background-color,color,box-shadow] md:text-sm',
+                          isHighlighted
                             ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
                             : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
                         ].join(' ')}
@@ -134,9 +149,9 @@ export function TerminalExecutionModeSelectorField({
                         {isSelected ? <Check size={16} strokeWidth={2.2} className="shrink-0" /> : null}
                       </button>
                     </Tooltip>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>,
             document.body,
           )

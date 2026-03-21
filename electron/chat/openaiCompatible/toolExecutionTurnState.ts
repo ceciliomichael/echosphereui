@@ -47,7 +47,7 @@ export function recordSuccessfulToolExecution(
   _agentContextRootPath: string,
   turnState: ToolExecutionTurnState,
 ) {
-  if (toolCall.name !== 'update_plan') {
+  if (toolCall.name !== 'todo_write') {
     return
   }
 

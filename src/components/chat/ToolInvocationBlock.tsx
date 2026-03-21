@@ -148,7 +148,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     invocation.resultContent ??
     ''
   const readResultPresentation = invocation.toolName === 'read' ? parseReadToolResult(resultBody) : null
-  const updatePlanResultPresentation = invocation.toolName === 'update_plan' ? parseUpdatePlanResultBody(resultBody) : null
+  const updatePlanResultPresentation = invocation.toolName === 'todo_write' ? parseUpdatePlanResultBody(resultBody) : null
   const readResultDisplayPath =
     workspaceRootPath && readResultPresentation
       ? getRelativeDisplayPath(workspaceRootPath, readResultPresentation.filePath)

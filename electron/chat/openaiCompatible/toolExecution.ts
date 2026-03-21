@@ -138,7 +138,12 @@ function readTrimmedString(value: unknown) {
 }
 
 function normalizeUpdatePlanArguments(argumentsValue: Record<string, unknown>): NormalizedWorkflowPlanSnapshot | null {
-  const rawSteps = argumentsValue.steps
+  const rawSteps =
+    argumentsValue.tasks ??
+    argumentsValue.steps ??
+    argumentsValue.plan ??
+    argumentsValue.plan_steps ??
+    argumentsValue.items
   if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
     return null
   }
@@ -151,7 +156,7 @@ function normalizeUpdatePlanArguments(argumentsValue: Record<string, unknown>): 
 
     const stepRecord = rawStep as Record<string, unknown>
     const id = readTrimmedString(stepRecord.id)
-    const title = readTrimmedString(stepRecord.title)
+    const title = readTrimmedString(stepRecord.content) ?? readTrimmedString(stepRecord.title) ?? readTrimmedString(stepRecord.step)
     const statusValue = readTrimmedString(stepRecord.status)?.toLowerCase()
     if (!id || !title || !statusValue) {
       return null
@@ -217,7 +222,7 @@ function buildNoopUpdatePlanResult(snapshot: NormalizedWorkflowPlanSnapshot): No
     inProgressStepId: inProgressSteps[0]?.id ?? null,
     inProgressStepIds: inProgressSteps.map((step) => step.id),
     message:
-      'Plan unchanged. Continue executing the current in_progress steps and call update_plan again only after statuses change.',
+      'Todo list unchanged. Continue executing the current in_progress tasks and call todo_write again only after statuses change.',
     operation: 'noop',
     path: '.',
     pendingStepCount,
@@ -293,7 +298,7 @@ export async function executeToolCallWithPolicies(
     return
   }
 
-  if (toolCall.name === 'update_plan' && isUnchangedWorkflowPlanUpdate(ensuredTurnState, argumentsValue)) {
+  if (toolCall.name === 'todo_write' && isUnchangedWorkflowPlanUpdate(ensuredTurnState, argumentsValue)) {
     const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
     if (incomingPlan) {
       const completedAt = Date.now()

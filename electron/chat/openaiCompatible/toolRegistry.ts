@@ -7,12 +7,12 @@ import { grepTool } from './tools/grep/index'
 import { listTool } from './tools/list/index'
 import { readTool } from './tools/read/index'
 import { readyImplementTool } from './tools/ready-implement/index'
-import { updatePlanTool } from './tools/update-plan/index'
+import { todoWriteTool } from './tools/update-plan/index'
 import { writeTool } from './tools/write/index'
 import { writeStdinTool } from './tools/write-stdin/index'
 
 const agentToolRegistry = [
-  updatePlanTool,
+  todoWriteTool,
   listTool,
   readTool,
   globTool,
@@ -29,7 +29,7 @@ const planToolRegistry = [
   globTool,
   grepTool,
   askQuestionTool,
-  updatePlanTool,
+  todoWriteTool,
   readyImplementTool,
 ] as const
 

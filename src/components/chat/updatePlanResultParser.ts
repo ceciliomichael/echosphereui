@@ -20,7 +20,7 @@ export function parseUpdatePlanResultBody(body: string): ParsedUpdatePlanResult 
 
   const steps: ParsedPlanStep[] = []
   for (const line of lines.slice(1)) {
-    if (line.toLowerCase().startsWith('all plan steps')) {
+    if (/^all (plan steps|todo items|tasks)/iu.test(line)) {
       continue
     }
 

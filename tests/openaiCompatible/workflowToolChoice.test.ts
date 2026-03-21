@@ -7,11 +7,11 @@ import {
 } from '../../electron/chat/openaiCompatible/toolExecutionTurnState'
 import type { OpenAICompatibleToolCall } from '../../electron/chat/openaiCompatible/toolTypes'
 
-function createUpdatePlanToolCall(): OpenAICompatibleToolCall {
+function createTodoWriteToolCall(): OpenAICompatibleToolCall {
   return {
     argumentsText: '{}',
-    id: 'call-update-plan',
-    name: 'update_plan',
+    id: 'call-todo-write',
+    name: 'todo_write',
     startedAt: Date.now(),
   }
 }
@@ -24,7 +24,7 @@ test('resolveWorkflowTurnToolChoice defaults to auto before any plan is set', ()
 test('resolveWorkflowTurnToolChoice returns auto when a plan still has incomplete steps', () => {
   const turnState = createToolExecutionTurnState()
   recordSuccessfulToolExecution(
-    createUpdatePlanToolCall(),
+    createTodoWriteToolCall(),
     {},
     {
       planId: 'plan-main',
@@ -43,7 +43,7 @@ test('resolveWorkflowTurnToolChoice returns auto when a plan still has incomplet
 test('resolveWorkflowTurnToolChoice returns auto when plan is complete', () => {
   const turnState = createToolExecutionTurnState()
   recordSuccessfulToolExecution(
-    createUpdatePlanToolCall(),
+    createTodoWriteToolCall(),
     {},
     {
       planId: 'plan-main',
