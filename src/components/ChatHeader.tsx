@@ -14,7 +14,7 @@ export function ChatHeader({ title, isSidebarOpen, onRenameTitle, trailingConten
     <WorkspaceHeader
       title={<InlineEditableTitle value={title} onSave={onRenameTitle} />}
       isSidebarOpen={isSidebarOpen}
-      leadingPaddingClassName={isSidebarOpen ? '' : 'pl-[132px] md:pl-[136px]'}
+      leadingPaddingClassName={isSidebarOpen ? '' : 'pl-[136px] md:pl-[144px]'}
       trailingContent={trailingContent}
     />
   )

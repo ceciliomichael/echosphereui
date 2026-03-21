@@ -391,6 +391,34 @@
     background-color: var(--color-sidebar-muted);
   }
 
+  .workspace-tabs-scroll-viewport {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .workspace-tabs-scroll-viewport::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .workspace-editor-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .workspace-editor-scrollbar::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 0;
+  }
+
+  .workspace-editor-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-scrollbar-thumb);
+  }
+
+  .workspace-editor-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-scrollbar-thumb-hover);
+  }
+
   @media (min-width: 1024px) {
     .chat-shell {
       max-width: min(40vw, 760px);

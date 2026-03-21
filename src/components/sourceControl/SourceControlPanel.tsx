@@ -63,6 +63,7 @@ function SourceControlPanelComponent({
   const onWidthChangeRef = useRef(onWidthChange)
   const onWidthCommitRef = useRef(onWidthCommit)
   const [isResizing, setIsResizing] = useState(false)
+  const [renderedWidth, setRenderedWidth] = useState(width)
   const [isHistoryResizing, setIsHistoryResizing] = useState(false)
   const [historyHeight, setHistoryHeight] = useState<number | null>(null)
   const [commitMessage, setCommitMessage] = useState('')
@@ -91,7 +92,7 @@ function SourceControlPanelComponent({
 
   const normalizedWorkspacePath = workspacePath?.trim() ?? ''
   const hasWorkspacePath = normalizedWorkspacePath.length > 0
-  const visiblePanelWidth = isOpen ? width : 0
+  const visiblePanelWidth = isOpen ? renderedWidth : 0
   const isUnstagedLikeFileDiff = useCallback(
     (fileDiff: ConversationFileDiff) =>
       fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked),
@@ -150,6 +151,13 @@ function SourceControlPanelComponent({
   }, [width])
 
   useEffect(() => {
+    if (isResizing) {
+      return
+    }
+    setRenderedWidth(width)
+  }, [isResizing, width])
+
+  useEffect(() => {
     onWidthChangeRef.current = onWidthChange
   }, [onWidthChange])
 
@@ -158,14 +166,19 @@ function SourceControlPanelComponent({
   }, [onWidthCommit])
 
   useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
     function clampPanelWidth() {
       const parentWidth = panelRef.current?.parentElement?.clientWidth
       if (!parentWidth) {
         return
       }
 
-      const clampedWidth = Math.min(getMaxDiffPanelWidth(parentWidth), Math.max(MIN_DIFF_PANEL_WIDTH, width))
-      if (clampedWidth !== width) {
+      const clampedWidth = Math.min(getMaxDiffPanelWidth(parentWidth), Math.max(MIN_DIFF_PANEL_WIDTH, renderedWidth))
+      if (clampedWidth !== renderedWidth) {
+        setRenderedWidth(clampedWidth)
         onWidthChangeRef.current(clampedWidth)
       }
     }
@@ -173,7 +186,7 @@ function SourceControlPanelComponent({
     clampPanelWidth()
     window.addEventListener('resize', clampPanelWidth)
     return () => window.removeEventListener('resize', clampPanelWidth)
-  }, [width])
+  }, [isOpen, renderedWidth])
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -189,7 +202,7 @@ function SourceControlPanelComponent({
         Math.max(MIN_DIFF_PANEL_WIDTH, Math.round(nextWidth)),
       )
       widthRef.current = clampedWidth
-      onWidthChangeRef.current(clampedWidth)
+      setRenderedWidth(clampedWidth)
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -201,6 +214,7 @@ function SourceControlPanelComponent({
       setIsResizing(false)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
+      onWidthChangeRef.current(widthRef.current)
       onWidthCommitRef.current?.(widthRef.current)
     }
 
@@ -514,7 +528,7 @@ function SourceControlPanelComponent({
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     dragStateRef.current = {
       pointerId: event.pointerId,
-      startWidth: widthRef.current,
+      startWidth: renderedWidth,
       startX: event.clientX,
     }
 

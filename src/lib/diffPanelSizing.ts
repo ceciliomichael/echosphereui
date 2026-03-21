@@ -1,5 +1,5 @@
 export const DEFAULT_DIFF_PANEL_WIDTH = 448
-export const MIN_DIFF_PANEL_WIDTH = 320
+export const MIN_DIFF_PANEL_WIDTH = 100
 export const MAX_DIFF_PANEL_WIDTH = 760
 
 export function getMaxDiffPanelWidth(parentWidth: number) {

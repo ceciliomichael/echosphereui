@@ -341,6 +341,41 @@ export interface CreateWorkspaceCheckpointInput {
   workspaceRootPath: string
 }
 
+export interface WorkspaceExplorerListDirectoryInput {
+  relativePath?: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerEntry {
+  isDirectory: boolean
+  name: string
+  relativePath: string
+}
+
+export interface WorkspaceExplorerReadFileInput {
+  relativePath: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerReadFileResult {
+  content: string
+  isBinary: boolean
+  isTruncated: boolean
+  relativePath: string
+  sizeBytes: number
+}
+
+export interface WorkspaceExplorerWriteFileInput {
+  content: string
+  relativePath: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerWriteFileResult {
+  relativePath: string
+  sizeBytes: number
+}
+
 export interface CreateTerminalSessionInput {
   cols: number
   cwd?: string | null
@@ -660,6 +695,9 @@ export interface EchosphereChatApi {
 export interface EchosphereWorkspaceApi {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
+  listDirectory: (input: WorkspaceExplorerListDirectoryInput) => Promise<WorkspaceExplorerEntry[]>
+  readFile: (input: WorkspaceExplorerReadFileInput) => Promise<WorkspaceExplorerReadFileResult>
+  writeFile: (input: WorkspaceExplorerWriteFileInput) => Promise<WorkspaceExplorerWriteFileResult>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
 }
 

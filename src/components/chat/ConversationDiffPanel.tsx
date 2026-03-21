@@ -53,6 +53,7 @@ export function ConversationDiffPanel({
   const scopeButtonRef = useRef<HTMLButtonElement | null>(null)
   const scopeMenuRef = useRef<HTMLDivElement | null>(null)
   const [isResizing, setIsResizing] = useState(false)
+  const [renderedWidth, setRenderedWidth] = useState(width)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false)
   const [highlightedScope, setHighlightedScope] = useState<DiffPanelScope>('unstaged')
@@ -96,7 +97,7 @@ export function ConversationDiffPanel({
   )
   const stagedFileCount = useMemo(() => fileDiffs.filter((fileDiff) => fileDiff.isStaged).length, [fileDiffs])
   const selectedScopeCount = selectedScope === 'unstaged' ? unstagedFileCount : selectedScope === 'staged' ? stagedFileCount : null
-  const visiblePanelWidth = isOpen ? width : 0
+  const visiblePanelWidth = isOpen ? renderedWidth : 0
   const expandedFilePathSet = useMemo(() => new Set(expandedFilePaths), [expandedFilePaths])
 
   const scopeOptions = useMemo(
@@ -131,6 +132,13 @@ export function ConversationDiffPanel({
   }, [width])
 
   useEffect(() => {
+    if (isResizing) {
+      return
+    }
+    setRenderedWidth(width)
+  }, [isResizing, width])
+
+  useEffect(() => {
     onWidthChangeRef.current = onWidthChange
   }, [onWidthChange])
 
@@ -148,14 +156,19 @@ export function ConversationDiffPanel({
   }, [isOpen])
 
   useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
     function clampPanelWidth() {
       const parentWidth = panelRef.current?.parentElement?.clientWidth
       if (!parentWidth) {
         return
       }
 
-      const clampedWidth = Math.min(getMaxDiffPanelWidth(parentWidth), Math.max(MIN_DIFF_PANEL_WIDTH, width))
-      if (clampedWidth !== width) {
+      const clampedWidth = Math.min(getMaxDiffPanelWidth(parentWidth), Math.max(MIN_DIFF_PANEL_WIDTH, renderedWidth))
+      if (clampedWidth !== renderedWidth) {
+        setRenderedWidth(clampedWidth)
         onWidthChangeRef.current(clampedWidth)
       }
     }
@@ -163,7 +176,7 @@ export function ConversationDiffPanel({
     clampPanelWidth()
     window.addEventListener('resize', clampPanelWidth)
     return () => window.removeEventListener('resize', clampPanelWidth)
-  }, [width])
+  }, [isOpen, renderedWidth])
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -179,7 +192,7 @@ export function ConversationDiffPanel({
         Math.max(MIN_DIFF_PANEL_WIDTH, Math.round(nextWidth)),
       )
       widthRef.current = clampedWidth
-      onWidthChangeRef.current(clampedWidth)
+      setRenderedWidth(clampedWidth)
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -191,6 +204,7 @@ export function ConversationDiffPanel({
       setIsResizing(false)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
+      onWidthChangeRef.current(widthRef.current)
       onWidthCommitRef.current?.(widthRef.current)
     }
 
@@ -246,7 +260,7 @@ export function ConversationDiffPanel({
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     dragStateRef.current = {
       pointerId: event.pointerId,
-      startWidth: widthRef.current,
+      startWidth: renderedWidth,
       startX: event.clientX,
     }
 

@@ -133,6 +133,9 @@ const workspaceApi: EchosphereWorkspaceApi = {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => ipcRenderer.invoke('workspace:checkpoint:create', input),
   createRedoCheckpointFromSource: (sourceCheckpointId: string) =>
     ipcRenderer.invoke('workspace:checkpoint:createRedoFromSource', sourceCheckpointId),
+  listDirectory: (input) => ipcRenderer.invoke('workspace:explorer:listDirectory', input),
+  readFile: (input) => ipcRenderer.invoke('workspace:explorer:readFile', input),
+  writeFile: (input) => ipcRenderer.invoke('workspace:explorer:writeFile', input),
   restoreCheckpoint: (checkpointId: string) => ipcRenderer.invoke('workspace:checkpoint:restore', checkpointId),
 }
 

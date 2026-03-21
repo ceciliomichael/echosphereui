@@ -21,6 +21,9 @@ import type {
   CreateGitBranchInput,
   CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
+  WorkspaceExplorerListDirectoryInput,
+  WorkspaceExplorerReadFileInput,
+  WorkspaceExplorerWriteFileInput,
   EstimateContextUsageInput,
   GitCommitInput,
   GitHistoryCommitDetailsInput,
@@ -95,6 +98,7 @@ import {
   createWorkspaceRedoCheckpointFromSource,
   restoreWorkspaceCheckpoint,
 } from './workspace/checkpoints'
+import { listWorkspaceDirectory, readWorkspaceFile, writeWorkspaceFile } from './workspace/explorer'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -371,6 +375,15 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:checkpoint:createRedoFromSource', async (_event, sourceCheckpointId: string) =>
     createWorkspaceRedoCheckpointFromSource(sourceCheckpointId),
+  )
+  ipcMain.handle('workspace:explorer:listDirectory', async (_event, input: WorkspaceExplorerListDirectoryInput) =>
+    listWorkspaceDirectory(input),
+  )
+  ipcMain.handle('workspace:explorer:readFile', async (_event, input: WorkspaceExplorerReadFileInput) =>
+    readWorkspaceFile(input),
+  )
+  ipcMain.handle('workspace:explorer:writeFile', async (_event, input: WorkspaceExplorerWriteFileInput) =>
+    writeWorkspaceFile(input),
   )
 }
 

@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react'
-import { GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FolderTree, GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { ChatInput } from '../components/ChatInput'
@@ -16,6 +16,8 @@ import { SidebarPanel } from '../components/sidebar/SidebarPanel'
 import { SourceControlPanel } from '../components/sourceControl/SourceControlPanel'
 import { WorkspaceTerminalPanel } from '../components/chat/WorkspaceTerminalPanel'
 import { Tooltip } from '../components/Tooltip'
+import { WorkspaceExplorerPanel } from '../components/workspaceExplorer/WorkspaceExplorerPanel'
+import { WorkspaceFileTabsPanel } from '../components/workspaceExplorer/WorkspaceFileTabsPanel'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController, ChatRuntimeSelection } from '../hooks/useChatMessages'
 import { useChatContextUsage } from '../hooks/useChatContextUsage'
@@ -26,9 +28,13 @@ import {
   useChatInterfaceController,
   type ChatInterfaceRightPanelTab,
 } from '../hooks/useChatInterfaceController'
+import { getPathBasename } from '../lib/pathPresentation'
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from '../lib/terminalPanelSizing'
 import type { ResolvedTheme } from '../lib/theme'
 import type { AppSettings, ProvidersState, ToolInvocationTrace } from '../types/chat'
+import type { WorkspaceFileTab } from '../components/workspaceExplorer/types'
+import { DEFAULT_DIFF_PANEL_WIDTH } from '../lib/diffPanelSizing'
+import { DEFAULT_WORKSPACE_EXPLORER_WIDTH, clampWorkspaceExplorerWidth } from '../lib/workspaceExplorerSizing'
 
 export type RightPanelTab = ChatInterfaceRightPanelTab
 
@@ -61,7 +67,16 @@ interface ChatInterfaceProps {
 
 const DEFAULT_TERMINAL_WORKSPACE_KEY = '__global__'
 
-function toTerminalWorkspaceKey(workspacePath: string | null) {
+interface WorkspaceUiSession {
+  activeFilePath: string | null
+  isExplorerOpen: boolean
+  isRightPanelOpen: boolean
+  isTabsVisible: boolean
+  rightPanelTab: RightPanelTab
+  tabs: WorkspaceFileTab[]
+}
+
+function toWorkspaceScopedKey(workspacePath: string | null) {
   const normalizedPath = workspacePath?.trim() ?? ''
   if (normalizedPath.length === 0) {
     return DEFAULT_TERMINAL_WORKSPACE_KEY
@@ -178,7 +193,126 @@ export function ChatInterface({
     showReasoningEffortSelector,
   } = chatRuntimeConfig
   const activeWorkspacePath = activeConversationRootPath ?? selectedFolderPath
-  const activeTerminalWorkspaceKey = toTerminalWorkspaceKey(activeWorkspacePath)
+  const [isExplorerOpen, setIsExplorerOpen] = useState(false)
+  const [workspaceFileTabs, setWorkspaceFileTabs] = useState<WorkspaceFileTab[]>([])
+  const [activeWorkspaceFilePath, setActiveWorkspaceFilePath] = useState<string | null>(null)
+  const [isWorkspaceTabsPanelVisible, setIsWorkspaceTabsPanelVisible] = useState(false)
+  const [workspaceExplorerWidth, setWorkspaceExplorerWidth] = useState(DEFAULT_WORKSPACE_EXPLORER_WIDTH)
+  const [workspaceEditorWidth, setWorkspaceEditorWidth] = useState(diffPanelWidth)
+  const [sourceControlPanelWidth, setSourceControlPanelWidth] = useState(diffPanelWidth)
+  const [conversationDiffPanelWidth, setConversationDiffPanelWidth] = useState(diffPanelWidth)
+  const workspaceUiSessionsRef = useRef<Record<string, WorkspaceUiSession>>({})
+  const activeWorkspaceUiKey = toWorkspaceScopedKey(activeWorkspacePath)
+  const previousWorkspaceUiKeyRef = useRef(activeWorkspaceUiKey)
+  const activeWorkspacePathRef = useRef<string | null>(activeWorkspacePath)
+  const workspaceAutosaveTimeoutsRef = useRef<Map<string, number>>(new Map())
+  useEffect(() => {
+    activeWorkspacePathRef.current = activeWorkspacePath
+  }, [activeWorkspacePath])
+  useEffect(() => {
+    workspaceAutosaveTimeoutsRef.current.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId)
+    })
+    workspaceAutosaveTimeoutsRef.current.clear()
+  }, [activeWorkspaceUiKey])
+  useEffect(() => {
+    const previousWorkspaceUiKey = previousWorkspaceUiKeyRef.current
+    if (previousWorkspaceUiKey === activeWorkspaceUiKey) {
+      return
+    }
+
+    workspaceUiSessionsRef.current[previousWorkspaceUiKey] = {
+      activeFilePath: activeWorkspaceFilePath,
+      isExplorerOpen,
+      isRightPanelOpen,
+      isTabsVisible: isWorkspaceTabsPanelVisible,
+      rightPanelTab,
+      tabs: workspaceFileTabs,
+    }
+
+    const nextSession = workspaceUiSessionsRef.current[activeWorkspaceUiKey]
+    if (nextSession) {
+      setWorkspaceFileTabs(nextSession.tabs)
+      setActiveWorkspaceFilePath(nextSession.activeFilePath)
+      setIsWorkspaceTabsPanelVisible(nextSession.isTabsVisible)
+      setIsExplorerOpen(nextSession.isExplorerOpen)
+      onRightPanelTabChange(nextSession.rightPanelTab)
+      onRightPanelOpenChange(nextSession.isRightPanelOpen)
+    } else {
+      setWorkspaceFileTabs([])
+      setActiveWorkspaceFilePath(null)
+      setIsWorkspaceTabsPanelVisible(false)
+      setIsExplorerOpen(false)
+      onRightPanelTabChange('diff')
+      onRightPanelOpenChange(false)
+    }
+
+    previousWorkspaceUiKeyRef.current = activeWorkspaceUiKey
+  }, [
+    activeWorkspaceFilePath,
+    activeWorkspaceUiKey,
+    isExplorerOpen,
+    isRightPanelOpen,
+    isWorkspaceTabsPanelVisible,
+    onRightPanelOpenChange,
+    onRightPanelTabChange,
+    rightPanelTab,
+    workspaceFileTabs,
+  ])
+  useEffect(() => {
+    workspaceUiSessionsRef.current[activeWorkspaceUiKey] = {
+      activeFilePath: activeWorkspaceFilePath,
+      isExplorerOpen,
+      isRightPanelOpen,
+      isTabsVisible: isWorkspaceTabsPanelVisible,
+      rightPanelTab,
+      tabs: workspaceFileTabs,
+    }
+  }, [
+    activeWorkspaceFilePath,
+    activeWorkspaceUiKey,
+    isExplorerOpen,
+    isRightPanelOpen,
+    isWorkspaceTabsPanelVisible,
+    rightPanelTab,
+    workspaceFileTabs,
+  ])
+  useEffect(
+    () => () => {
+      workspaceAutosaveTimeoutsRef.current.forEach((timeoutId) => {
+        window.clearTimeout(timeoutId)
+      })
+      workspaceAutosaveTimeoutsRef.current.clear()
+    },
+    [],
+  )
+  useEffect(() => {
+    function handleWindowResize() {
+      setWorkspaceExplorerWidth((currentWidth) => clampWorkspaceExplorerWidth(currentWidth, window.innerWidth))
+    }
+
+    handleWindowResize()
+    window.addEventListener('resize', handleWindowResize)
+    return () => {
+      window.removeEventListener('resize', handleWindowResize)
+    }
+  }, [])
+  useEffect(() => {
+    setWorkspaceEditorWidth((currentWidth) => (currentWidth === DEFAULT_DIFF_PANEL_WIDTH ? diffPanelWidth : currentWidth))
+    setSourceControlPanelWidth((currentWidth) => (currentWidth === DEFAULT_DIFF_PANEL_WIDTH ? diffPanelWidth : currentWidth))
+    setConversationDiffPanelWidth(diffPanelWidth)
+  }, [diffPanelWidth])
+  useEffect(() => {
+    if (!isExplorerOpen && !isRightPanelOpen && isWorkspaceTabsPanelVisible) {
+      setIsWorkspaceTabsPanelVisible(false)
+    }
+  }, [isExplorerOpen, isRightPanelOpen, isWorkspaceTabsPanelVisible])
+  useEffect(() => {
+    if ((isExplorerOpen || isRightPanelOpen) && workspaceFileTabs.length > 0 && !isWorkspaceTabsPanelVisible) {
+      setIsWorkspaceTabsPanelVisible(true)
+    }
+  }, [isExplorerOpen, isRightPanelOpen, isWorkspaceTabsPanelVisible, workspaceFileTabs.length])
+  const activeTerminalWorkspaceKey = toWorkspaceScopedKey(activeWorkspacePath)
   const isTerminalOpen = settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
   const terminalPanelHeight = settings.terminalPanelHeightsByWorkspace[activeTerminalWorkspaceKey] ?? DEFAULT_TERMINAL_PANEL_HEIGHT
   const gitBranchState = useGitBranchState(activeWorkspacePath)
@@ -289,6 +423,240 @@ export function ChatInterface({
     settings,
   })
 
+  const handleOpenWorkspaceFile = useCallback(
+    (relativePath: string) => {
+      const workspaceRootPath = activeWorkspacePathRef.current
+      if (!workspaceRootPath) {
+        return
+      }
+
+      setIsSidebarOpen(false)
+      setIsExplorerOpen(true)
+      setIsWorkspaceTabsPanelVisible(true)
+      onRightPanelOpenChange(false)
+      setActiveWorkspaceFilePath(relativePath)
+      setWorkspaceFileTabs((currentTabs) => {
+        if (currentTabs.some((tab) => tab.relativePath === relativePath)) {
+          return currentTabs
+        }
+
+        return [
+          ...currentTabs,
+          {
+            content: '',
+            fileName: getPathBasename(relativePath),
+            isBinary: false,
+            isTruncated: false,
+            relativePath,
+            sizeBytes: 0,
+            status: 'loading',
+          },
+        ]
+      })
+
+      void window.echosphereWorkspace
+        .readFile({
+          relativePath,
+          workspaceRootPath,
+        })
+        .then((result) => {
+          if (activeWorkspacePathRef.current !== workspaceRootPath) {
+            return
+          }
+
+          setWorkspaceFileTabs((currentTabs) =>
+            currentTabs.map((tab) =>
+              tab.relativePath === relativePath
+                ? {
+                    content: result.content,
+                    fileName: getPathBasename(result.relativePath),
+                    isBinary: result.isBinary,
+                    isTruncated: result.isTruncated,
+                    relativePath: result.relativePath,
+                    sizeBytes: result.sizeBytes,
+                    status: 'ready',
+                  }
+                : tab,
+            ),
+          )
+        })
+        .catch((error) => {
+          if (activeWorkspacePathRef.current !== workspaceRootPath) {
+            return
+          }
+
+          setWorkspaceFileTabs((currentTabs) =>
+            currentTabs.map((tab) =>
+              tab.relativePath === relativePath
+                ? {
+                    ...tab,
+                    errorMessage: error instanceof Error ? error.message : 'Failed to open file.',
+                    status: 'error',
+                  }
+                : tab,
+            ),
+          )
+        })
+    },
+    [setIsSidebarOpen],
+  )
+
+  const handleCloseWorkspaceTab = useCallback((relativePath: string) => {
+    const pendingAutosaveTimeout = workspaceAutosaveTimeoutsRef.current.get(relativePath)
+    if (typeof pendingAutosaveTimeout === 'number') {
+      window.clearTimeout(pendingAutosaveTimeout)
+      workspaceAutosaveTimeoutsRef.current.delete(relativePath)
+    }
+
+    setWorkspaceFileTabs((currentTabs) => {
+      const closingIndex = currentTabs.findIndex((tab) => tab.relativePath === relativePath)
+      if (closingIndex === -1) {
+        return currentTabs
+      }
+
+      const nextTabs = currentTabs.filter((tab) => tab.relativePath !== relativePath)
+      if (nextTabs.length === 0) {
+        setIsWorkspaceTabsPanelVisible(false)
+      }
+      setActiveWorkspaceFilePath((currentActiveFilePath) => {
+        if (currentActiveFilePath !== relativePath) {
+          return currentActiveFilePath
+        }
+        const fallbackTab = nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null
+        return fallbackTab?.relativePath ?? null
+      })
+      return nextTabs
+    })
+  }, [])
+
+  const handleSelectWorkspaceTab = useCallback((relativePath: string) => {
+    setActiveWorkspaceFilePath(relativePath)
+  }, [])
+
+  const handleWorkspaceEditorWidthChange = useCallback((nextWidth: number) => {
+    setWorkspaceEditorWidth(nextWidth)
+  }, [])
+
+  const handleWorkspaceEditorWidthCommit = useCallback((nextWidth: number) => {
+    setWorkspaceEditorWidth(nextWidth)
+  }, [])
+
+  const handleWorkspaceExplorerWidthChange = useCallback((nextWidth: number) => {
+    void nextWidth
+  }, [])
+
+  const handleWorkspaceExplorerWidthCommit = useCallback((nextWidth: number) => {
+    setWorkspaceExplorerWidth(nextWidth)
+  }, [])
+
+  const handleConversationDiffPanelWidthChange = useCallback((nextWidth: number) => {
+    setConversationDiffPanelWidth(nextWidth)
+  }, [])
+
+  const handleConversationDiffPanelWidthCommit = useCallback((nextWidth: number) => {
+    setConversationDiffPanelWidth(nextWidth)
+    onDiffPanelWidthChange(nextWidth)
+    onDiffPanelWidthCommit(nextWidth)
+  }, [onDiffPanelWidthChange, onDiffPanelWidthCommit])
+
+  const handleSourceControlPanelWidthChange = useCallback((nextWidth: number) => {
+    setSourceControlPanelWidth(nextWidth)
+  }, [])
+
+  const handleSourceControlPanelWidthCommit = useCallback((nextWidth: number) => {
+    setSourceControlPanelWidth(nextWidth)
+  }, [])
+
+  const handleWorkspaceFileContentChange = useCallback((relativePath: string, content: string) => {
+    const workspaceRootPath = activeWorkspacePathRef.current
+    if (!workspaceRootPath) {
+      return
+    }
+
+    setWorkspaceFileTabs((currentTabs) =>
+      currentTabs.map((tab) =>
+        tab.relativePath === relativePath
+          ? {
+              ...tab,
+              content,
+              sizeBytes: new TextEncoder().encode(content).length,
+            }
+          : tab,
+      ),
+    )
+
+    const pendingAutosaveTimeout = workspaceAutosaveTimeoutsRef.current.get(relativePath)
+    if (typeof pendingAutosaveTimeout === 'number') {
+      window.clearTimeout(pendingAutosaveTimeout)
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void window.echosphereWorkspace
+        .writeFile({
+          content,
+          relativePath,
+          workspaceRootPath,
+        })
+        .then((result) => {
+          if (activeWorkspacePathRef.current !== workspaceRootPath) {
+            return
+          }
+
+          setWorkspaceFileTabs((currentTabs) =>
+            currentTabs.map((tab) =>
+              tab.relativePath === relativePath
+                ? {
+                    ...tab,
+                    sizeBytes: result.sizeBytes,
+                  }
+                : tab,
+            ),
+          )
+        })
+        .catch((error) => {
+          console.error(`Failed to autosave ${relativePath}`, error)
+        })
+        .finally(() => {
+          const activeTimeoutId = workspaceAutosaveTimeoutsRef.current.get(relativePath)
+          if (activeTimeoutId === timeoutId) {
+            workspaceAutosaveTimeoutsRef.current.delete(relativePath)
+          }
+        })
+    }, 220)
+
+    workspaceAutosaveTimeoutsRef.current.set(relativePath, timeoutId)
+  }, [])
+
+  const handleOpenSourceControlPanel = useCallback(() => {
+    setIsExplorerOpen(false)
+    if (workspaceFileTabs.length > 0) {
+      setIsWorkspaceTabsPanelVisible(true)
+    }
+    handleOpenRightPanelTab('source-control')
+  }, [handleOpenRightPanelTab, workspaceFileTabs.length])
+
+  const handleOpenDiffPanel = useCallback(() => {
+    setIsExplorerOpen(false)
+    if (workspaceFileTabs.length > 0) {
+      setIsWorkspaceTabsPanelVisible(true)
+    }
+    handleOpenRightPanelTab('diff')
+  }, [handleOpenRightPanelTab, workspaceFileTabs.length])
+
+  const handleToggleExplorerPanel = useCallback(() => {
+    setIsExplorerOpen((currentValue) => {
+      const nextValue = !currentValue
+      if (nextValue) {
+        if (workspaceFileTabs.length > 0) {
+          setIsWorkspaceTabsPanelVisible(true)
+        }
+        onRightPanelOpenChange(false)
+      }
+      return nextValue
+    })
+  }, [onRightPanelOpenChange, workspaceFileTabs.length])
+  const isWorkspaceTabsPanelOpen = isWorkspaceTabsPanelVisible && workspaceFileTabs.length > 0
+
   return (
     <AppWorkspaceShell
       isSidebarOpen={isSidebarOpen}
@@ -356,7 +724,7 @@ export function ChatInterface({
                 <button
                   type="button"
                   disabled={!hasRepository}
-                  onClick={() => handleOpenRightPanelTab('source-control')}
+                  onClick={handleOpenSourceControlPanel}
                   className={[
                     'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
                     isSourceControlPanelOpen ? 'text-foreground' : 'text-muted-foreground',
@@ -372,7 +740,7 @@ export function ChatInterface({
                 <button
                   type="button"
                   disabled={!hasRepository}
-                  onClick={() => handleOpenRightPanelTab('diff')}
+                  onClick={handleOpenDiffPanel}
                   className={[
                     'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
                     isDiffPanelOpen ? 'text-foreground' : 'text-muted-foreground',
@@ -386,6 +754,20 @@ export function ChatInterface({
                       <span className="text-red-600 dark:text-red-400">{`-${gitDiffSnapshot.totalRemovedLineCount}`}</span>
                     </>
                   ) : null}
+                </button>
+              </Tooltip>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <Tooltip content={isExplorerOpen ? 'Close explorer panel' : 'Open explorer panel'} side="bottom">
+                <button
+                  type="button"
+                  onClick={handleToggleExplorerPanel}
+                  className={[
+                    'inline-flex h-10 items-center gap-1.5 text-sm transition-colors',
+                    isExplorerOpen ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  <FolderTree size={16} className="shrink-0" />
+                  <span className="hidden md:inline">Explorer</span>
                 </button>
               </Tooltip>
             </div>
@@ -491,6 +873,26 @@ export function ChatInterface({
               </div>
             </div>
           </div>
+          <WorkspaceFileTabsPanel
+            activeTabPath={activeWorkspaceFilePath}
+            isOpen={isWorkspaceTabsPanelOpen}
+            onCloseTab={handleCloseWorkspaceTab}
+            onFileContentChange={handleWorkspaceFileContentChange}
+            onSelectTab={handleSelectWorkspaceTab}
+            onWidthChange={handleWorkspaceEditorWidthChange}
+            onWidthCommit={handleWorkspaceEditorWidthCommit}
+            tabs={workspaceFileTabs}
+            width={workspaceEditorWidth}
+          />
+          <WorkspaceExplorerPanel
+            activeFilePath={activeWorkspaceFilePath}
+            isOpen={isExplorerOpen}
+            onOpenFile={handleOpenWorkspaceFile}
+            onWidthChange={handleWorkspaceExplorerWidthChange}
+            onWidthCommit={handleWorkspaceExplorerWidthCommit}
+            width={workspaceExplorerWidth}
+            workspaceRootPath={activeWorkspacePath}
+          />
 
           <ConversationDiffPanel
             currentBranch={gitBranchState.branchState.currentBranch}
@@ -503,9 +905,9 @@ export function ChatInterface({
             onSelectedScopeChange={onDiffPanelSelectedScopeChange}
             onUnstageFile={handleUnstageDiffFile}
             pendingFileActionPath={pendingFileActionPath}
-            width={diffPanelWidth}
-            onWidthChange={onDiffPanelWidthChange}
-            onWidthCommit={onDiffPanelWidthCommit}
+            width={conversationDiffPanelWidth}
+            onWidthChange={handleConversationDiffPanelWidthChange}
+            onWidthCommit={handleConversationDiffPanelWidthCommit}
             selectedScope={diffPanelSelectedScope}
           />
 
@@ -520,11 +922,11 @@ export function ChatInterface({
             onStageFile={handleStageDiffFile}
             onUnstageFile={handleUnstageDiffFile}
             pendingFileActionPath={pendingFileActionPath}
-            onWidthCommit={onDiffPanelWidthCommit}
-            onWidthChange={onDiffPanelWidthChange}
+            onWidthCommit={handleSourceControlPanelWidthCommit}
+            onWidthChange={handleSourceControlPanelWidthChange}
             sectionOpen={settings.sourceControlSectionOpen}
             workspacePath={activeWorkspacePath}
-            width={diffPanelWidth}
+            width={sourceControlPanelWidth}
           />
         </div>
         <WorkspaceTerminalPanel

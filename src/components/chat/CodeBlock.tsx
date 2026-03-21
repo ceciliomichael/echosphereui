@@ -14,7 +14,12 @@ interface CodeBlockProps {
   isStreaming?: boolean
   maxBodyHeightClassName?: string
   showCopyButton?: boolean
+  showHeader?: boolean
+  fillHeight?: boolean
+  showLineNumberDivider?: boolean
   startLineNumber?: number
+  className?: string
+  bodyClassName?: string
 }
 
 function toLanguageLabel(language: string | undefined, resolvedLabel: string) {
@@ -31,14 +36,21 @@ function toLanguageLabel(language: string | undefined, resolvedLabel: string) {
 interface CodeRowsProps {
   lines: readonly HighlightedCodeLineData[]
   startLineNumber: number
+  fillHeight?: boolean
+  showLineNumberDivider?: boolean
 }
 
-const CodeRows = memo(function CodeRows({ lines, startLineNumber }: CodeRowsProps) {
+const CodeRows = memo(function CodeRows({
+  lines,
+  startLineNumber,
+  fillHeight = false,
+  showLineNumberDivider = true,
+}: CodeRowsProps) {
   const gutterWidthCh = Math.max(String(startLineNumber + lines.length - 1).length + 1, 3)
 
   return (
-    <div className="flex min-w-0 bg-surface">
-      <div className="shrink-0 border-r border-border bg-surface">
+    <div className={['flex min-w-0 bg-surface', fillHeight ? 'h-full' : ''].join(' ')}>
+      <div className={['shrink-0 bg-surface', showLineNumberDivider ? 'border-r border-border' : ''].join(' ')}>
         <pre className="m-0 py-2 text-[12px] leading-5 text-subtle-foreground">
           <code className="block">
             {lines.map((_, index) => {
@@ -79,7 +91,12 @@ export const CodeBlock = memo(function CodeBlock({
   language,
   maxBodyHeightClassName,
   showCopyButton = true,
+  showHeader = true,
+  fillHeight = false,
+  showLineNumberDivider = true,
   startLineNumber = 1,
+  className,
+  bodyClassName,
 }: CodeBlockProps) {
   const [isCopied, setIsCopied] = useState(false)
   const highlightedLines = useHighlightedCodeLines(code, { fileName, language, stripTrailingNewline: true })
@@ -109,45 +126,53 @@ export const CodeBlock = memo(function CodeBlock({
   }
 
   return (
-    <div className="my-2 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-      <div className="flex items-center gap-3 border-b border-border bg-surface px-3 py-3 text-[12px] text-muted-foreground">
-        <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
-          <span className="flex h-4 w-4 items-center justify-center">
-            <LanguageIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
-          </span>
-          <span className="min-w-0 truncate leading-[1] text-foreground" title={titleLabel}>
-            {titleLabel}
-          </span>
-        </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-3">
-          {headerRightLabel ? (
-            <span className="font-mono text-[11px] leading-none text-muted-foreground" title={headerRightLabel}>
-              {headerRightLabel}
+    <div className={['my-2 overflow-hidden rounded-xl border border-border bg-surface shadow-sm', className ?? ''].join(' ')}>
+      {showHeader ? (
+        <div className="flex items-center gap-3 border-b border-border bg-surface px-3 py-3 text-[12px] text-muted-foreground">
+          <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
+            <span className="flex h-4 w-4 items-center justify-center">
+              <LanguageIcon size={14} style={{ color: iconConfig.color }} aria-hidden="true" />
             </span>
-          ) : null}
-          {showCopyButton ? (
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
-              aria-label={isCopied ? 'Copied code' : 'Copy code'}
-              title={isCopied ? 'Copied' : 'Copy'}
-            >
-              {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </button>
-          ) : null}
-        </span>
-      </div>
+            <span className="min-w-0 truncate leading-[1] text-foreground" title={titleLabel}>
+              {titleLabel}
+            </span>
+          </span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-3">
+            {headerRightLabel ? (
+              <span className="font-mono text-[11px] leading-none text-muted-foreground" title={headerRightLabel}>
+                {headerRightLabel}
+              </span>
+            ) : null}
+            {showCopyButton ? (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-[color,transform] hover:scale-105 hover:text-foreground"
+                aria-label={isCopied ? 'Copied code' : 'Copy code'}
+                title={isCopied ? 'Copied' : 'Copy'}
+              >
+                {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
       <div
         className={[
           'overflow-x-auto',
           maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
+          bodyClassName ?? '',
         ]
           .filter((value) => value.length > 0)
           .join(' ')}
       >
-        <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
-          <CodeRows lines={highlightedLines} startLineNumber={startLineNumber} />
+        <div className={['min-w-0 bg-surface font-mono text-[12px] leading-5', fillHeight ? 'h-full' : ''].join(' ')}>
+          <CodeRows
+            lines={highlightedLines}
+            startLineNumber={startLineNumber}
+            fillHeight={fillHeight}
+            showLineNumberDivider={showLineNumberDivider}
+          />
         </div>
       </div>
     </div>

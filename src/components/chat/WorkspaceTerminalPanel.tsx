@@ -143,6 +143,8 @@ export function WorkspaceTerminalPanel({
   const sessionIdRef = useRef<number | null>(null)
   const workspacePathRef = useRef<string | null>(workspacePath)
   const resizeStateRef = useRef<{ pointerId: number; startHeight: number; startY: number } | null>(null)
+  const resizeAnimationFrameRef = useRef<number | null>(null)
+  const pendingResizeHeightRef = useRef<number | null>(null)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; sessionId: number } | null>(null)
   const isResizingRef = useRef(false)
   const [shellLabel, setShellLabel] = useState<string | null>(null)
@@ -211,6 +213,10 @@ export function WorkspaceTerminalPanel({
   }, [])
 
   const syncTerminalSize = useCallback((force = false) => {
+    if (!force && isResizingRef.current) {
+      return
+    }
+
     const terminal = terminalRef.current
     const fitAddon = fitAddonRef.current
     if (!terminal || !fitAddon) {
@@ -218,9 +224,6 @@ export function WorkspaceTerminalPanel({
     }
 
     fitAddon.fit()
-    if (!force && isResizingRef.current) {
-      return
-    }
 
     const dimensions = getSessionDimensions(terminal)
     sendTerminalSizeToSession(dimensions)
@@ -467,8 +470,12 @@ export function WorkspaceTerminalPanel({
       return
     }
 
+    if (isResizing) {
+      return
+    }
+
     syncTerminalSize()
-  }, [isOpen, panelHeight, syncTerminalSize])
+  }, [isOpen, isResizing, panelHeight, syncTerminalSize])
 
   useEffect(() => {
     if (!isOpen || isResizing) {
@@ -510,7 +517,20 @@ export function WorkspaceTerminalPanel({
 
       const maxHeightLimit = getMaxPanelHeight()
       const nextHeight = clampPanelHeight(resizeState.startHeight + (resizeState.startY - event.clientY), maxHeightLimit)
-      setPanelHeight(nextHeight)
+      pendingResizeHeightRef.current = nextHeight
+      if (resizeAnimationFrameRef.current !== null) {
+        return
+      }
+
+      resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        resizeAnimationFrameRef.current = null
+        const pendingHeight = pendingResizeHeightRef.current
+        if (pendingHeight === null) {
+          return
+        }
+
+        setPanelHeight(pendingHeight)
+      })
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -518,9 +538,20 @@ export function WorkspaceTerminalPanel({
         return
       }
 
+      let committedHeight = panelHeightRef.current
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      if (pendingResizeHeightRef.current !== null) {
+        committedHeight = pendingResizeHeightRef.current
+        setPanelHeight(committedHeight)
+      }
+      pendingResizeHeightRef.current = null
+
       resizeStateRef.current = null
       setIsResizing(false)
-      onHeightCommit(panelHeightRef.current)
+      onHeightCommit(committedHeight)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -530,6 +561,11 @@ export function WorkspaceTerminalPanel({
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      pendingResizeHeightRef.current = null
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
