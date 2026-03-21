@@ -206,6 +206,16 @@ export function ChatInterface({
   const previousWorkspaceUiKeyRef = useRef(activeWorkspaceUiKey)
   const activeWorkspacePathRef = useRef<string | null>(activeWorkspacePath)
   const workspaceAutosaveTimeoutsRef = useRef<Map<string, number>>(new Map())
+  const sidebarPanelRestoreRef = useRef<{
+    shouldRestoreExplorer: boolean
+    shouldRestoreRightPanel: boolean
+    shouldRestoreTabs: boolean
+  } | null>(null)
+
+  const clearSidebarPanelRestoreState = useCallback(() => {
+    sidebarPanelRestoreRef.current = null
+  }, [])
+
   useEffect(() => {
     activeWorkspacePathRef.current = activeWorkspacePath
   }, [activeWorkspacePath])
@@ -302,17 +312,9 @@ export function ChatInterface({
     setSourceControlPanelWidth((currentWidth) => (currentWidth === DEFAULT_DIFF_PANEL_WIDTH ? diffPanelWidth : currentWidth))
     setConversationDiffPanelWidth(diffPanelWidth)
   }, [diffPanelWidth])
-  useEffect(() => {
-    if (!isExplorerOpen && !isRightPanelOpen && isWorkspaceTabsPanelVisible) {
-      setIsWorkspaceTabsPanelVisible(false)
-    }
-  }, [isExplorerOpen, isRightPanelOpen, isWorkspaceTabsPanelVisible])
-  useEffect(() => {
-    if ((isExplorerOpen || isRightPanelOpen) && workspaceFileTabs.length > 0 && !isWorkspaceTabsPanelVisible) {
-      setIsWorkspaceTabsPanelVisible(true)
-    }
-  }, [isExplorerOpen, isRightPanelOpen, isWorkspaceTabsPanelVisible, workspaceFileTabs.length])
+
   const activeTerminalWorkspaceKey = toWorkspaceScopedKey(activeWorkspacePath)
+
   const isTerminalOpen = settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
   const terminalPanelHeight = settings.terminalPanelHeightsByWorkspace[activeTerminalWorkspaceKey] ?? DEFAULT_TERMINAL_PANEL_HEIGHT
   const gitBranchState = useGitBranchState(activeWorkspacePath)
@@ -398,6 +400,7 @@ export function ChatInterface({
     handleTerminalExecutionModeChange,
     handleTerminalPanelHeightCommit,
     handleUnstageDiffFile,
+    handleToggleSidebar,
     isCommitModalOpen,
     isDiffPanelOpen,
     isSidebarOpen,
@@ -418,6 +421,52 @@ export function ChatInterface({
     onDiffRefresh: refreshGitDiffSnapshot,
     onRightPanelOpenChange,
     onRightPanelTabChange,
+    onSidebarOpenChange: (nextSidebarOpen) => {
+      if (nextSidebarOpen) {
+        const shouldCloseTabs = isWorkspaceTabsPanelVisible && workspaceFileTabs.length > 0
+        const shouldCloseRightPanel = isRightPanelOpen
+        const shouldCloseExplorer = isExplorerOpen
+        const shouldClosePanels = shouldCloseTabs || shouldCloseRightPanel || shouldCloseExplorer
+
+        if (!shouldClosePanels) {
+          sidebarPanelRestoreRef.current = null
+          return
+        }
+
+        sidebarPanelRestoreRef.current = {
+          shouldRestoreExplorer: shouldCloseExplorer,
+          shouldRestoreRightPanel: shouldCloseRightPanel,
+          shouldRestoreTabs: shouldCloseTabs,
+        }
+
+        if (shouldCloseTabs) {
+          setIsWorkspaceTabsPanelVisible(false)
+        }
+        if (shouldCloseRightPanel) {
+          onRightPanelOpenChange(false)
+        }
+        if (shouldCloseExplorer) {
+          setIsExplorerOpen(false)
+        }
+        return
+      }
+
+      const restoreState = sidebarPanelRestoreRef.current
+      sidebarPanelRestoreRef.current = null
+      if (!restoreState) {
+        return
+      }
+
+      if (restoreState.shouldRestoreTabs && workspaceFileTabs.length > 0) {
+        setIsWorkspaceTabsPanelVisible(true)
+      }
+      if (restoreState.shouldRestoreRightPanel) {
+        onRightPanelOpenChange(true)
+      }
+      if (restoreState.shouldRestoreExplorer) {
+        setIsExplorerOpen(true)
+      }
+    },
     onUpdateSettings,
     rightPanelTab,
     settings,
@@ -629,33 +678,46 @@ export function ChatInterface({
 
   const handleOpenSourceControlPanel = useCallback(() => {
     setIsExplorerOpen(false)
-    if (workspaceFileTabs.length > 0) {
+    if (isSidebarOpen) {
+      setIsWorkspaceTabsPanelVisible(false)
+    } else if (workspaceFileTabs.length > 0) {
       setIsWorkspaceTabsPanelVisible(true)
     }
     handleOpenRightPanelTab('source-control')
-  }, [handleOpenRightPanelTab, workspaceFileTabs.length])
+  }, [handleOpenRightPanelTab, isSidebarOpen, workspaceFileTabs.length])
 
   const handleOpenDiffPanel = useCallback(() => {
     setIsExplorerOpen(false)
-    if (workspaceFileTabs.length > 0) {
+    if (isSidebarOpen) {
+      setIsWorkspaceTabsPanelVisible(false)
+    } else if (workspaceFileTabs.length > 0) {
       setIsWorkspaceTabsPanelVisible(true)
     }
     handleOpenRightPanelTab('diff')
-  }, [handleOpenRightPanelTab, workspaceFileTabs.length])
+  }, [handleOpenRightPanelTab, isSidebarOpen, workspaceFileTabs.length])
 
   const handleToggleExplorerPanel = useCallback(() => {
     setIsExplorerOpen((currentValue) => {
       const nextValue = !currentValue
       if (nextValue) {
-        if (workspaceFileTabs.length > 0) {
+        if (isSidebarOpen) {
+          clearSidebarPanelRestoreState()
+          setIsSidebarOpen(false)
+          if (workspaceFileTabs.length > 0) {
+            setIsWorkspaceTabsPanelVisible(true)
+          }
+        } else if (workspaceFileTabs.length > 0) {
           setIsWorkspaceTabsPanelVisible(true)
         }
+
         onRightPanelOpenChange(false)
       }
       return nextValue
     })
-  }, [onRightPanelOpenChange, workspaceFileTabs.length])
+  }, [clearSidebarPanelRestoreState, isSidebarOpen, onRightPanelOpenChange, setIsSidebarOpen, workspaceFileTabs.length])
+
   const isWorkspaceTabsPanelOpen = isWorkspaceTabsPanelVisible && workspaceFileTabs.length > 0
+
 
   return (
     <AppWorkspaceShell
@@ -664,7 +726,7 @@ export function ChatInterface({
       floatingControls={
         <WorkspaceFloatingControls
           isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen((currentValue) => !currentValue)}
+          onToggleSidebar={handleToggleSidebar}
           newThreadButton={{
             onClick: () => void createConversation(),
           }}

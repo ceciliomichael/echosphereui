@@ -47,6 +47,18 @@ export function UpdatePlanResult({ parsedResult }: UpdatePlanResultProps) {
     return renderPendingCircle()
   }
 
+  const renderStepTitle = (step: ParsedPlanStep) => {
+    if (step.status !== 'completed') {
+      return <span className="truncate">{step.title}</span>
+    }
+
+    return (
+      <span className="min-w-0 truncate line-through decoration-foreground/40 decoration-1">
+        {step.title}
+      </span>
+    )
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
       <div className="px-3 py-2 text-[12px] font-medium text-muted-foreground">{parsedResult.planLabel}</div>
@@ -61,7 +73,7 @@ export function UpdatePlanResult({ parsedResult }: UpdatePlanResultProps) {
               ].join(' ')}
             >
               <span className="shrink-0">{renderStepCircle(step, String(index + 1))}</span>
-              <span className="truncate">{step.status === 'completed' ? `- ${step.title}` : step.title}</span>
+              {renderStepTitle(step)}
             </li>
           ))}
         </ul>

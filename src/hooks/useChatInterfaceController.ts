@@ -35,6 +35,7 @@ interface UseChatInterfaceControllerInput {
   onDiffRefresh: (input?: { forceRefresh?: boolean; silent?: boolean }) => Promise<void>
   onRightPanelOpenChange: (nextValue: boolean) => void
   onRightPanelTabChange: (nextTab: ChatInterfaceRightPanelTab) => void
+  onSidebarOpenChange?: (nextValue: boolean) => void
   onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
   rightPanelTab: ChatInterfaceRightPanelTab
   settings: AppSettings
@@ -85,6 +86,14 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
     input.onDiffRefresh,
   ])
 
+  const handleToggleSidebar = useCallback(() => {
+    setIsSidebarOpen((currentValue) => {
+      const nextValue = !currentValue
+      input.onSidebarOpenChange?.(nextValue)
+      return nextValue
+    })
+  }, [input])
+
   useWorkspaceKeyboardShortcuts({
     enabled: input.isActiveScreen,
     onToggleDiffPanel: () => {
@@ -100,7 +109,7 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
       input.onRightPanelTabChange('diff')
       input.onRightPanelOpenChange(true)
     },
-    onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
+    onToggleSidebar: handleToggleSidebar,
     onCreateConversation: input.createConversation,
   })
 
@@ -281,5 +290,6 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
     pendingFileActionPath,
     setActiveWorkspaceTerminalOpen,
     setIsSidebarOpen,
+    handleToggleSidebar,
   }
 }
