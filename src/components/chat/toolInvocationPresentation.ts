@@ -120,7 +120,7 @@ function getBasename(absolutePath: string) {
   return pathSegments[pathSegments.length - 1] ?? absolutePath
 }
 
-const MAX_EXEC_COMMAND_LABEL_LENGTH = 64
+const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
 
 function truncateDisplayText(value: string, maxLength: number) {
   if (value.length <= maxLength) {
@@ -161,7 +161,7 @@ function readFirstText(value: unknown): string | null {
 function getSearchTarget(argumentsText: string): string | null {
   const parsedArguments = parseCompleteToolArguments(argumentsText)
   const searchText = readFirstText([parsedArguments?.pattern, parsedArguments?.query])
-  return searchText ? truncateDisplayText(searchText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+  return searchText ? truncateDisplayText(searchText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
 }
 
 function getToolVerb(invocation: ToolInvocationTrace) {
@@ -214,20 +214,20 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     return addedPathCount !== null && addedPathCount > 0 ? 'Created' : 'Edited'
   }
 
-  if (invocation.toolName === 'exec_command') {
+  if (invocation.toolName === 'run_terminal') {
     return invocation.state === 'running'
-      ? 'Executing'
+      ? 'Running'
       : invocation.state === 'completed'
-        ? 'Executed'
-        : 'Execution failed'
+        ? 'Ran'
+        : 'Run failed'
   }
 
-  if (invocation.toolName === 'write_stdin') {
+  if (invocation.toolName === 'get_terminal_output') {
     return invocation.state === 'running'
-      ? 'Interacting'
+      ? 'Polling'
       : invocation.state === 'completed'
-        ? 'Updated session'
-        : 'Session update failed'
+        ? 'Terminal output'
+        : 'Output fetch failed'
   }
 
   if (invocation.toolName === 'todo_write') {
@@ -276,9 +276,9 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     return null
   }
 
-  if (invocation.toolName === 'exec_command') {
+  if (invocation.toolName === 'run_terminal') {
     const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
-    return commandText ? truncateDisplayText(commandText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+    return commandText ? truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
   }
 
   if (invocation.toolName === 'glob' || invocation.toolName === 'grep') {
@@ -304,9 +304,9 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     return getBasename(normalizedStructuredPath)
   }
 
-  if (invocation.toolName === 'exec_command') {
+  if (invocation.toolName === 'run_terminal') {
     const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
-    return commandText ? truncateDisplayText(commandText, MAX_EXEC_COMMAND_LABEL_LENGTH) : null
+    return commandText ? truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
   }
 
   const absolutePath = getAbsolutePath(invocation)

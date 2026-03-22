@@ -23,7 +23,7 @@ function buildInstructionPrecedenceSection() {
   return [
     '<instruction_precedence>',
     '## Instruction Precedence',
-    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions from AGENTS.md and DESIGN.md. Preserve earlier instructions that do not conflict with newer higher-priority instructions.',
+    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions included in the prompt. Preserve earlier instructions that do not conflict with newer higher-priority instructions, and treat repository instructions already included in context as available context rather than something to rediscover.',
     '</instruction_precedence>',
   ].join('\n')
 }
@@ -31,8 +31,8 @@ function buildInstructionPrecedenceSection() {
 function buildAgentsScopeSection() {
   return [
     '<agents_scope>',
-    '## AGENTS Scope',
-    'AGENTS.md files apply to the directory that contains them and all descendant paths. When multiple AGENTS.md files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
+    '## Repository Instruction Scope',
+    'Repository instruction files apply to the directory that contains them and all descendant paths. When multiple repository instruction files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
     '</agents_scope>',
   ].join('\n')
 }
@@ -50,7 +50,7 @@ function buildTaskFlowSection() {
   return [
     '<workflow>',
     '## Workflow',
-    'Read the workspace context first. Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps. Stay within scope and avoid speculative refactors. Hand off clearly for implementation once the plan is actionable.',
+    'Read the workspace context first. Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps. If a tool result already gives a complete answer, reuse it instead of rereading the same file or range unless the file changed or the gap is still unresolved. Never compress or summarize large diffs, file reads, or other exact workspace state that the next step depends on. Only repetitive terminal polling and similarly low-value command noise may be compacted. If terminal output is a formatter or lint diff, treat it literally and do not infer a separate logic bug from formatting-only output. Stay within scope and avoid speculative refactors. Hand off clearly for implementation once the plan is actionable.',
     '</workflow>',
   ].join('\n')
 }

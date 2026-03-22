@@ -346,6 +346,14 @@ export interface WorkspaceExplorerListDirectoryInput {
   workspaceRootPath: string
 }
 
+export interface WorkspaceExplorerWatchChangesInput {
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerChangeEvent {
+  workspaceRootPath: string
+}
+
 export interface WorkspaceExplorerEntry {
   isDirectory: boolean
   name: string
@@ -743,10 +751,13 @@ export interface EchosphereWorkspaceApi {
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
   createEntry: (input: WorkspaceExplorerCreateEntryInput) => Promise<WorkspaceExplorerCreateEntryResult>
   deleteEntry: (input: WorkspaceExplorerDeleteEntryInput) => Promise<WorkspaceExplorerDeleteEntryResult>
+  onExplorerChange: (listener: (event: WorkspaceExplorerChangeEvent) => void) => () => void
   listDirectory: (input: WorkspaceExplorerListDirectoryInput) => Promise<WorkspaceExplorerEntry[]>
   readFile: (input: WorkspaceExplorerReadFileInput) => Promise<WorkspaceExplorerReadFileResult>
   renameEntry: (input: WorkspaceExplorerRenameEntryInput) => Promise<WorkspaceExplorerRenameEntryResult>
+  unwatchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) => Promise<void>
   transferEntry: (input: WorkspaceExplorerTransferEntryInput) => Promise<WorkspaceExplorerTransferEntryResult>
+  watchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) => Promise<void>
   writeFile: (input: WorkspaceExplorerWriteFileInput) => Promise<WorkspaceExplorerWriteFileResult>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
 }

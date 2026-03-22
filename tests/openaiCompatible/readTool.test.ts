@@ -56,7 +56,7 @@ test('read tool returns only focused file context fields', async () => {
   })
 })
 
-test('read tool supports explicit start_line and end_line range selection up to 500 lines', async () => {
+test('read tool supports start_line continuation with max_lines up to 500 lines', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'src', 'large.ts')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
@@ -66,7 +66,7 @@ test('read tool supports explicit start_line and end_line range selection up to 
     const result = await readTool.execute(
       {
         absolute_path: filePath,
-        end_line: 500,
+        max_lines: 500,
         start_line: 1,
       },
       buildExecutionContext(workspacePath),
@@ -87,30 +87,47 @@ test('read tool supports explicit start_line and end_line range selection up to 
   })
 })
 
-test('read tool clamps ranges larger than 500 lines', async () => {
+test('read tool rejects end_line compatibility input', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const filePath = path.join(workspacePath, 'src', 'large.ts')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     const fileContent = Array.from({ length: 600 }, (_, index) => `line-${index + 1}`).join('\n')
     await fs.writeFile(filePath, fileContent, 'utf8')
 
-    const result = await readTool.execute(
-      {
-        absolute_path: filePath,
-        end_line: 508,
-        start_line: 1,
-      },
-      buildExecutionContext(workspacePath),
+    await assert.rejects(
+      () =>
+        readTool.execute(
+          {
+            absolute_path: filePath,
+            end_line: 160,
+            start_line: 360,
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      /end_line is no longer supported/i,
     )
+  })
+})
 
-    assert.equal(result.startLine, 1)
-    assert.equal(result.endLine, 500)
-    assert.equal(result.lineCount, 500)
-    assert.equal(result.maxReadLineCount, 500)
-    assert.equal(result.totalLineCount, 600)
-    assert.equal(result.nextStartLine, 501)
-    assert.equal(result.nextEndLine, 600)
-    assert.equal(result.truncated, true)
+test('read tool rejects max_lines values larger than 500', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'large.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    const fileContent = Array.from({ length: 600 }, (_, index) => `line-${index + 1}`).join('\n')
+    await fs.writeFile(filePath, fileContent, 'utf8')
+
+    await assert.rejects(
+      () =>
+        readTool.execute(
+          {
+            absolute_path: filePath,
+            max_lines: 508,
+            start_line: 1,
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      /max_lines must be less than or equal to 500/i,
+    )
   })
 })
 

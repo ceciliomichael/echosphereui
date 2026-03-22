@@ -60,14 +60,14 @@ const sampleFileChangeToolCall: OpenAICompatibleToolCall = {
 const sampleExecToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"cmd":"npm test"}',
   id: 'tool-call-exec-123',
-  name: 'exec_command',
+  name: 'run_terminal',
   startedAt: 1_700_000_000_000,
 }
 
 const sampleWriteStdinToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"session_id":77,"chars":"\\n"}',
   id: 'tool-call-write-stdin-123',
-  name: 'write_stdin',
+  name: 'get_terminal_output',
   startedAt: 1_700_000_000_000,
 }
 
@@ -151,7 +151,7 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
       maxReadLineCount: 500,
       path: 'tailwind.config.js',
       startLine: 1,
-      totalLineCount: 42,
+      totalLineCount: 1,
     },
     sampleReadToolCall.startedAt,
     completedAt,
@@ -161,15 +161,17 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
 
   assert.match(
     artifacts.syntheticMessage.content,
-    /^Acknowledged file read result: Read tailwind\.config\.js lines 1-1 of 42\./iu,
+    /^Acknowledged file read result: Read tailwind\.config\.js lines 1-1 of 1 \(complete\)\./iu,
   )
-  assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1 of 42\)/u)
-  assert.match(parsedContent.body ?? '', /Line-indexed content \(line_number \| text\):/u)
+  assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1 of 1, complete\)/u)
   assert.match(parsedContent.body ?? '', /```js/u)
-  assert.match(parsedContent.body ?? '', /1 \| module\.exports = \{\}/u)
+  assert.match(parsedContent.body ?? '', /module\.exports = \{\}/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /line_number \| text/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /^\s*\d+\s*\|/m)
+  assert.equal(parsedContent.metadata?.semantics?.fully_read, true)
   assert.equal(parsedContent.metadata?.semantics?.start_line, 1)
   assert.equal(parsedContent.metadata?.semantics?.end_line, 1)
-  assert.equal(parsedContent.metadata?.semantics?.total_line_count, 42)
+  assert.equal(parsedContent.metadata?.semantics?.total_line_count, 1)
   assert.equal(parsedContent.metadata?.semantics?.max_read_line_count, 500)
 })
 
@@ -197,10 +199,12 @@ test('buildSuccessfulToolArtifacts keeps truncated read continuation data in str
   const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
   assert.match(
     parsedContent.metadata?.summary ?? '',
-    /Read tailwind\.config\.js lines 1-2 of 4 \(truncated, 2 lines remaining\)\./u,
+    /Read tailwind\.config\.js lines 1-2 of 4 \(partial, 2 lines remaining\)\./u,
   )
+  assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-2 of 4, partial, 2 lines remaining\)/u)
   assert.doesNotMatch(parsedContent.body ?? '', /Results truncated\./u)
   assert.doesNotMatch(parsedContent.body ?? '', /Next recommended read range/u)
+  assert.equal(parsedContent.metadata?.semantics?.fully_read, false)
   assert.equal(parsedContent.metadata?.semantics?.has_more_lines, true)
   assert.equal(parsedContent.metadata?.semantics?.remaining_line_count, 2)
   assert.equal(parsedContent.metadata?.semantics?.next_start_line, 3)
@@ -408,9 +412,11 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
     {
       content: 'export {}',
       endLine: 2,
+      hasMoreLines: false,
       lineCount: 2,
       path: 'src/index.ts',
       startLine: 1,
+      totalLineCount: 2,
     },
     sampleReadToolCall.startedAt,
     sampleReadToolCall.startedAt + 2,
@@ -422,13 +428,14 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
 
   assert.match(content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
   assert.match(content ?? '', /Reuse the latest inspection state below before repeating the same inspection tool call\./u)
+  assert.match(content ?? '', /A read marked fully read already covers the whole file unless the workspace changed\./u)
   assert.match(content ?? '', /For each mutated path, the latest successful mutation below is the current workspace state\./u)
   assert.match(content ?? '', /Acknowledged tool result summaries:/u)
   assert.match(content ?? '', /Latest acknowledged inspection state\./u)
   assert.match(content ?? '', /- \. was last listed with 1 visible entry\./u)
-  assert.match(content ?? '', /- src\/index\.ts was last read at lines 1-2\./u)
+  assert.match(content ?? '', /- src\/index\.ts was fully read at lines 1-2 of 2\./u)
   assert.match(content ?? '', /- list success: Listed \. with 1 visible entry\./u)
-  assert.match(content ?? '', /- read success: Read src\/index\.ts lines 1-2\./u)
+  assert.match(content ?? '', /- read success: Read src\/index\.ts lines 1-2 of 2 \(complete\)\./u)
   assert.match(content ?? '', /<tool_result>/u)
   assert.match(content ?? '', /"toolName": "list"/u)
   assert.match(content ?? '', /"toolName": "read"/u)
@@ -484,6 +491,36 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
   assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful edit changes\./u)
 })
 
+test('buildCodexGroupedToolResultContent preserves large edit bodies without clipping them', () => {
+  const largeNewContent = Array.from({ length: 240 }, (_, index) => `line-${index + 1} ${'x'.repeat(20)}`).join('\n')
+  const content = buildSuccessfulToolArtifacts(
+    sampleEditCreateToolCall,
+    {
+      addedPaths: ['src/app/page.tsx'],
+      changeCount: 1,
+      contentChanged: true,
+      deletedPaths: [],
+      endLineNumber: 240,
+      message: 'Created src/app/page.tsx successfully.',
+      modifiedPaths: [],
+      newContent: largeNewContent,
+      oldContent: null,
+      operation: 'edit',
+      path: 'src/app/page.tsx',
+      startLineNumber: 1,
+      targetKind: 'file',
+    },
+    sampleEditCreateToolCall.startedAt,
+    sampleEditCreateToolCall.startedAt + 10,
+  ).resultContent
+
+  const groupedContent = buildCodexGroupedToolResultContent([content])
+
+  assert.match(groupedContent ?? '', /line-1 x{20}/u)
+  assert.match(groupedContent ?? '', /line-240 x{20}/u)
+  assert.doesNotMatch(groupedContent ?? '', /\[tool replay context clipped to reduce context growth\]/u)
+})
+
 test('buildCodexGroupedToolResultContent compacts replay terminal bodies and keeps only latest terminal session output', () => {
   const repeatedOutput = 'line output\n'.repeat(400)
   const startedSessionContent = buildSuccessfulToolArtifacts(
@@ -491,8 +528,8 @@ test('buildCodexGroupedToolResultContent compacts replay terminal bodies and kee
     {
       executionMode: 'full',
       exitCode: null,
-      message: 'Started command in full mode with session 77.',
-      operation: 'exec_command',
+      message: 'Started terminal run in full mode with session 77.',
+      operation: 'run_terminal',
       originalTokenCount: 5_000,
       output: repeatedOutput,
       path: '.',
@@ -506,8 +543,8 @@ test('buildCodexGroupedToolResultContent compacts replay terminal bodies and kee
     sampleWriteStdinToolCall,
     {
       exitCode: 0,
-      message: 'Updated session 77. Process exited with code 0.',
-      operation: 'write_stdin',
+      message: 'Fetched terminal output for session 77. Process exited with code 0.',
+      operation: 'get_terminal_output',
       originalTokenCount: 3_000,
       output: repeatedOutput,
       path: '.',
@@ -521,8 +558,8 @@ test('buildCodexGroupedToolResultContent compacts replay terminal bodies and kee
 
   const groupedContent = buildCodexGroupedToolResultContent([startedSessionContent, latestSessionContent])
   assert.ok(groupedContent)
-  assert.match(groupedContent ?? '', /write_stdin success: Updated terminal session 77 \(exit code 0\)\./u)
+  assert.match(groupedContent ?? '', /get_terminal_output success: Fetched terminal output for session 77 \(exit code 0\)\./u)
   assert.match(groupedContent ?? '', /\[terminal replay context clipped to reduce context growth/u)
-  assert.equal((groupedContent ?? '').split('"toolName": "exec_command"').length - 1, 0)
-  assert.equal((groupedContent ?? '').split('"toolName": "write_stdin"').length - 1, 1)
+  assert.equal((groupedContent ?? '').split('"toolName": "run_terminal"').length - 1, 0)
+  assert.equal((groupedContent ?? '').split('"toolName": "get_terminal_output"').length - 1, 1)
 })

@@ -59,36 +59,21 @@ export const readTool: OpenAICompatibleToolDefinition = {
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
     const absolutePath = readRequiredString(argumentsValue, 'absolute_path')
-    const startLine = readOptionalPositiveInteger(argumentsValue, 'start_line', 1)
+    const requestedStartLine = readOptionalPositiveInteger(argumentsValue, 'start_line', 1)
+    if (argumentsValue.end_line !== undefined) {
+      throw new OpenAICompatibleToolError('end_line is no longer supported. Use start_line with max_lines instead.', {
+        fieldName: 'end_line',
+      })
+    }
+
     const maxLines = readOptionalBoundedPositiveInteger(
       argumentsValue,
       'max_lines',
       DEFAULT_READ_LINE_COUNT,
       MAX_READ_LINE_COUNT,
     )
-    const hasEndLine = argumentsValue.end_line !== undefined
-    const endLine = hasEndLine ? readOptionalPositiveInteger(argumentsValue, 'end_line', startLine) : undefined
-
-    if (endLine !== undefined && endLine < startLine) {
-      throw new OpenAICompatibleToolError('end_line must be greater than or equal to start_line.', {
-        endLine,
-        startLine,
-      })
-    }
-
-    const requestedLineCountFromRange = endLine === undefined ? undefined : endLine - startLine + 1
-    const boundedLineCountFromRange =
-      requestedLineCountFromRange === undefined
-        ? undefined
-        : Math.min(requestedLineCountFromRange, MAX_READ_LINE_COUNT)
-
-    const hasMaxLines = argumentsValue.max_lines !== undefined
-    const requestedLineCount =
-      boundedLineCountFromRange === undefined
-        ? maxLines
-        : hasMaxLines
-          ? Math.min(boundedLineCountFromRange, maxLines)
-          : boundedLineCountFromRange
+    const startLine = requestedStartLine
+    const requestedLineCount = maxLines
     const { normalizedTargetPath, relativePath } = resolveToolPath(context.agentContextRootPath, absolutePath)
     const fileStat = await fs.stat(normalizedTargetPath).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -172,21 +157,13 @@ export const readTool: OpenAICompatibleToolDefinition = {
             type: 'string',
           },
           max_lines: {
-            description:
-              'Optional line cap (1-500). If start_line/end_line is also provided, returned lines are limited by both constraints.',
+            description: 'Optional line cap (1-500) for the chunk returned by the read tool.',
             maximum: 500,
             minimum: 1,
             type: 'integer',
           },
-          end_line: {
-            description:
-              'Optional 1-based inclusive ending line. With start_line, the requested size is end_line - start_line + 1. If the requested range exceeds 500 lines, the tool automatically returns at most 500 lines.',
-            minimum: 1,
-            type: 'integer',
-          },
           start_line: {
-            description:
-              'Optional 1-based starting line (inclusive). Use with end_line for an explicit range; range size is inclusive.',
+            description: 'Optional 1-based starting line (inclusive) for the next chunk to read.',
             minimum: 1,
             type: 'integer',
           },

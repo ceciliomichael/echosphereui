@@ -137,7 +137,9 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   const diffCountSummary = renderDiffCountSummary(invocation)
   const shouldPreserveLineBreaks = invocation.toolName !== 'read'
   const terminalToolName =
-    invocation.toolName === 'exec_command' || invocation.toolName === 'write_stdin' ? invocation.toolName : null
+    invocation.toolName === 'run_terminal' || invocation.toolName === 'get_terminal_output'
+      ? invocation.toolName
+      : null
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
   const fileChangeResultPresentation =
     invocation.resultPresentation?.kind === 'file_change_diff' ? invocation.resultPresentation : null

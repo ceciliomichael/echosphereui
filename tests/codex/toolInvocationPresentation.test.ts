@@ -22,18 +22,18 @@ test('getToolInvocationHeaderLabel renders command execution labels', () => {
     id: 'cmd-1',
     startedAt: 1_700_000_000_000,
     state: 'running',
-    toolName: 'exec_command',
+    toolName: 'run_terminal',
   })
   const completed = createInvocation({
     argumentsText: '{"command":"npm test"}',
     id: 'cmd-1',
     startedAt: 1_700_000_000_000,
     state: 'completed',
-    toolName: 'exec_command',
+    toolName: 'run_terminal',
   })
 
-  assert.equal(getToolInvocationHeaderLabel(running), 'Executing npm test')
-  assert.equal(getToolInvocationHeaderLabel(completed), 'Executed npm test')
+  assert.equal(getToolInvocationHeaderLabel(running), 'Running npm test')
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Ran npm test')
 })
 
 test('getToolInvocationHeaderLabel truncates long command execution labels', () => {
@@ -43,13 +43,13 @@ test('getToolInvocationHeaderLabel truncates long command execution labels', () 
     id: 'cmd-long',
     startedAt: 1_700_000_000_000,
     state: 'running',
-    toolName: 'exec_command',
+    toolName: 'run_terminal',
   })
 
   const header = getToolInvocationHeaderLabel(invocation)
 
-  assert.ok(header.startsWith('Executing node ./scripts/some-really-long-command-name-with-many-argume'))
-  assert.ok(header.length < `Executing ${longCommand}`.length)
+  assert.ok(header.startsWith('Running node ./scripts/some-really-long-command-name-with-many-argume'))
+  assert.ok(header.length < `Running ${longCommand}`.length)
   assert.match(header, /\.\.\.$/u)
 })
 
@@ -87,10 +87,10 @@ test('getToolInvocationHeaderLabel does not render dot target for exec command w
     id: 'cmd-no-text',
     startedAt: 1_700_000_000_000,
     state: 'completed',
-    toolName: 'exec_command',
+    toolName: 'run_terminal',
     resultContent:
-      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-3","toolName":"exec_command","subject":{"kind":"directory","path":"."}}\n</tool_result>',
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-3","toolName":"run_terminal","subject":{"kind":"directory","path":"."}}\n</tool_result>',
   })
 
-  assert.equal(getToolInvocationHeaderLabel(completed), 'Executed')
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Ran')
 })

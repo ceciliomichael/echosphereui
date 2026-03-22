@@ -4,15 +4,26 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { estimateChatContextUsage } from '../../electron/chat/contextUsage'
+import {
+  getKnownOpenAICompatibleTransportMode,
+  resetKnownOpenAICompatibleTransportMode,
+  setKnownOpenAICompatibleTransportMode,
+} from '../../electron/chat/providers/openaiCompatibleTransportState'
 import { PROVIDER_SYSTEM_INSTRUCTIONS } from '../../electron/chat/providers/providerSystemInstructions'
 import type { Message } from '../../src/types/chat'
 
 const temporaryDirectories: string[] = []
+const initialOpenAICompatibleTransportMode = getKnownOpenAICompatibleTransportMode()
 
 after(async () => {
   await Promise.all(
     temporaryDirectories.map((directoryPath) => rm(directoryPath, { force: true, recursive: true })),
   )
+  if (initialOpenAICompatibleTransportMode === null) {
+    resetKnownOpenAICompatibleTransportMode()
+  } else {
+    setKnownOpenAICompatibleTransportMode(initialOpenAICompatibleTransportMode)
+  }
 })
 
 test('estimateChatContextUsage uses provider system instructions and excludes tool messages for openai', async () => {
@@ -151,4 +162,53 @@ test('estimateChatContextUsage treats runtime context update messages as history
   assert.ok(usage.systemPromptTokens > 0)
   assert.ok(usage.historyTokens > 0)
   assert.equal(usage.toolResultsTokens, 0)
+})
+
+test('estimateChatContextUsage does not count raw tool messages as separate tool-result context for openai-compatible Responses transport', async () => {
+  setKnownOpenAICompatibleTransportMode('responses')
+
+  const messages: Message[] = [
+    {
+      content: 'Inspect the workspace.',
+      id: 'user-1',
+      role: 'user',
+      timestamp: 1,
+    },
+    {
+      content: '',
+      id: 'assistant-1',
+      role: 'assistant',
+      timestamp: 2,
+      toolInvocations: [
+        {
+          argumentsText: '{"absolute_path":"C:/workspace"}',
+          completedAt: 3,
+          id: 'call-1',
+          resultContent: 'Listed C:/workspace.',
+          startedAt: 2,
+          state: 'completed',
+          toolName: 'list',
+        },
+      ],
+    },
+    {
+      content: 'Acknowledged tool result: Listed C:/workspace.',
+      id: 'tool-1',
+      role: 'tool',
+      timestamp: 3,
+      toolCallId: 'call-1',
+    },
+  ]
+
+  const usage = await estimateChatContextUsage({
+    agentContextRootPath: 'C:/workspace',
+    chatMode: 'agent',
+    messages,
+    providerId: 'openai-compatible',
+  })
+
+  assert.ok(usage.systemPromptTokens > 0)
+  assert.ok(usage.historyTokens > 0)
+  assert.equal(usage.toolResultsTokens, 0)
+  assert.equal(usage.totalTokens, usage.systemPromptTokens + usage.historyTokens)
 })

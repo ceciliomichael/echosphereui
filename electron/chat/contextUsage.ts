@@ -2,10 +2,12 @@ import type { ChatProviderId, ContextUsageEstimate, EstimateContextUsageInput, M
 import { buildSystemPrompt } from './prompts'
 import { buildAgentPrompt } from './prompts/agent/prompt'
 import { buildReplayableMessageHistory } from './openaiCompatible/messageHistory'
+import { buildSerializedAssistantTurnContent } from './openaiCompatible/assistantToolInvocationContext'
 import { getCodexToolDefinitions } from './providers/codexPayload'
 import { getUserMessageTextBlocks } from './providers/messageAttachments'
 import { PROVIDER_SYSTEM_INSTRUCTIONS } from './providers/providerSystemInstructions'
 import { getOpenAICompatibleToolDefinitions } from './openaiCompatible/toolRegistry'
+import { getPreferredOpenAICompatibleTransportMode } from './providers/openaiCompatibleTransportState'
 
 const CHARS_PER_TOKEN = 4
 const CONTEXT_USAGE_MAX_TOKENS = 200_000
@@ -25,7 +27,7 @@ function estimateTokensFromSegments(segments: readonly string[]) {
 
 function serializeMessageForEstimate(message: Message) {
   if (message.role === 'assistant') {
-    return message.content.trim()
+    return buildSerializedAssistantTurnContent(message) ?? ''
   }
 
   if (message.role !== 'user') {
@@ -47,7 +49,21 @@ function isRuntimeContextUpdateMessage(message: Message) {
   return content.includes('<context_update>') && content.includes('echosphere.runtime_context/v1')
 }
 
+function getResponsesStyleHistorySegments(messages: Message[]) {
+  return {
+    historySegments: messages
+      .filter((message) => message.role !== 'tool')
+      .map((message) => serializeMessageForEstimate(message))
+      .filter((segment) => segment.length > 0),
+    toolResultSegments: [] as string[],
+  }
+}
+
 function getProviderHistorySegments(messages: Message[], providerId: ChatProviderId) {
+  if (providerId === 'openai-compatible' && getPreferredOpenAICompatibleTransportMode() === 'responses') {
+    return getResponsesStyleHistorySegments(messages)
+  }
+
   if (providerId === 'codex' || providerId === 'openai-compatible' || providerId === 'mistral') {
     const replayableMessages = buildReplayableMessageHistory(messages)
     const historySegments: string[] = []
@@ -78,13 +94,7 @@ function getProviderHistorySegments(messages: Message[], providerId: ChatProvide
     }
   }
 
-  return {
-    historySegments: messages
-      .filter((message) => message.role !== 'tool')
-      .map((message) => serializeMessageForEstimate(message))
-      .filter((segment) => segment.length > 0),
-    toolResultSegments: [],
-  }
+  return getResponsesStyleHistorySegments(messages)
 }
 
 async function getSystemPromptSegments(input: EstimateContextUsageInput) {

@@ -147,7 +147,21 @@ export function WorkspaceExplorerPanel({
         }))
         setErrorMessage(null)
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to load workspace files.')
+        const errorText = error instanceof Error ? error.message : 'Failed to load workspace files.'
+        if (targetPath !== ROOT_DIRECTORY_KEY && errorText.startsWith('Directory does not exist:')) {
+          setDirectoryEntriesByPath((current) => {
+            const nextState = { ...current }
+            delete nextState[targetPath]
+            return nextState
+          })
+          setExpandedDirectories((current) => {
+            const nextState = new Set(current)
+            nextState.delete(targetPath)
+            return nextState
+          })
+          return
+        }
+        setErrorMessage(errorText)
       } finally {
         setLoadingDirectories((current) => {
           const nextState = new Set(current)
@@ -167,6 +181,11 @@ export function WorkspaceExplorerPanel({
     const directoriesToReload = [ROOT_DIRECTORY_KEY, ...expandedDirectories]
     void Promise.all(directoriesToReload.map((directoryPath) => loadDirectory(directoryPath)))
   }, [expandedDirectories, loadDirectory])
+  const reloadExplorerTreeRef = useRef(reloadExplorerTree)
+
+  useEffect(() => {
+    reloadExplorerTreeRef.current = reloadExplorerTree
+  }, [reloadExplorerTree])
 
   const runContextAction = useCallback(
     async (action: () => Promise<void>, shouldReload = true) => {
@@ -287,7 +306,32 @@ export function WorkspaceExplorerPanel({
     if (!isOpen || !workspaceRootPath) {
       return
     }
+
+    let isDisposed = false
+    const unsubscribeWorkspaceChanges = window.echosphereWorkspace.onExplorerChange((event) => {
+      if (isDisposed || event.workspaceRootPath !== workspaceRootPath) {
+        return
+      }
+      reloadExplorerTreeRef.current()
+    })
+
+    void window.echosphereWorkspace.watchExplorerChanges({
+      workspaceRootPath,
+    }).catch((error) => {
+      console.error('Failed to watch workspace explorer changes', error)
+    })
+
     void loadDirectory(ROOT_DIRECTORY_KEY)
+
+    return () => {
+      isDisposed = true
+      unsubscribeWorkspaceChanges()
+      void window.echosphereWorkspace.unwatchExplorerChanges({
+        workspaceRootPath,
+      }).catch((error) => {
+        console.error('Failed to unwatch workspace explorer changes', error)
+      })
+    }
   }, [isOpen, loadDirectory, workspaceRootPath])
 
   useEffect(() => {
@@ -704,15 +748,6 @@ export function WorkspaceExplorerPanel({
     >
       <div className="flex h-11 items-center justify-between pl-5 pr-3">
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle-foreground">Explorer</p>
-        <button
-          type="button"
-          onClick={reloadExplorerTree}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
-          aria-label="Refresh explorer"
-          disabled={!isWorkspaceConfigured}
-        >
-          <RefreshCw size={14} />
-        </button>
       </div>
       <div
         className={[

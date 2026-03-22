@@ -1,5 +1,10 @@
 import type { ChatMode, Message } from '../../../src/types/chat'
+import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
 import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
+import {
+  ensureToolOutputMessageEnvelope,
+  isReplayToolResultUserMessage,
+} from '../openaiCompatible/toolResultReplayEnvelope'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
 import type { ProviderStreamRequest } from '../providerTypes'
@@ -46,13 +51,14 @@ function hasText(value: unknown): value is string {
 
 export function toCodexInputMessage(message: Message): CodexInputMessage | null {
   if (message.role === 'assistant') {
-    if (!hasText(message.content)) {
+    const content = buildSerializedAssistantTurnContent(message)
+    if (!hasText(content)) {
       return null
     }
 
     return {
       role: 'assistant',
-      content: [{ text: message.content, type: 'output_text' }],
+      content: [{ text: content, type: 'output_text' }],
     }
   }
 
@@ -85,18 +91,18 @@ export function toCodexInputMessage(message: Message): CodexInputMessage | null 
 
 export function buildCodexInputMessages(messages: Message[]) {
   const inputMessages: CodexInputMessage[] = []
-  const pendingToolContents: string[] = []
+  const pendingToolContentsByTurn: string[] = []
 
   const flushPendingToolContents = () => {
-    const groupedContent = buildCodexGroupedToolResultContent(pendingToolContents)
-    pendingToolContents.length = 0
+    const groupedContent = buildCodexGroupedToolResultContent(pendingToolContentsByTurn)
+    pendingToolContentsByTurn.length = 0
 
     if (!groupedContent) {
       return
     }
 
     inputMessages.push({
-      content: [{ text: groupedContent, type: 'input_text' }],
+      content: [{ text: ensureToolOutputMessageEnvelope(groupedContent), type: 'input_text' }],
       role: 'user',
     })
   }
@@ -104,7 +110,19 @@ export function buildCodexInputMessages(messages: Message[]) {
   for (const message of messages) {
     if (message.role === 'tool') {
       if (hasText(message.content)) {
-        pendingToolContents.push(message.content)
+        pendingToolContentsByTurn.push(message.content)
+      }
+      continue
+    }
+
+    if (isReplayToolResultUserMessage(message)) {
+      flushPendingToolContents()
+      const toolResultInputMessage = toCodexInputMessage({
+        ...message,
+        content: ensureToolOutputMessageEnvelope(message.content),
+      })
+      if (toolResultInputMessage) {
+        inputMessages.push(toolResultInputMessage)
       }
       continue
     }

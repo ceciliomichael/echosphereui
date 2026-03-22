@@ -76,6 +76,17 @@ test('buildRipgrepArguments omits fixed-string and ignore-case when regex and ca
   assert.equal(argumentsList.includes('--ignore-case'), false)
 })
 
+test('buildRipgrepArguments keeps grep single-line by default', () => {
+  const argumentsList = buildRipgrepArguments({
+    caseSensitive: true,
+    isRegex: true,
+    pattern: 'writeFile.*\n.*readFile',
+    searchPath: '/tmp/workspace',
+  })
+
+  assert.equal(argumentsList.includes('--multiline'), false)
+})
+
 test('getRipgrepBinaryCandidatePaths returns deterministic bundled candidates', () => {
   const candidatePaths = getRipgrepBinaryCandidatePaths({
     appRootPath: '/application/root',
@@ -155,6 +166,30 @@ test('grep tool supports fixed-string and regex search modes', async () => {
 
     assert.equal(readMatches(fixedResult).length, 1)
     assert.equal(readMatches(regexResult).length, 2)
+  })
+})
+
+test('grep tool rejects multiline patterns with a clear tool error', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const sampleFilePath = path.join(workspacePath, 'sample.txt')
+    await fs.writeFile(sampleFilePath, ['writeFile', 'readFile'].join('\n'), 'utf8')
+
+    await assert.rejects(
+      grepTool.execute(
+        {
+          absolute_path: sampleFilePath,
+          case_sensitive: true,
+          is_regex: true,
+          pattern: 'writeFile.*\n.*readFile',
+        },
+        buildExecutionContext(workspacePath),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /single line/u)
+        return true
+      },
+    )
   })
 })
 

@@ -7,6 +7,7 @@ import type {
 } from 'openai/resources/responses/responses'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
+import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from './messageAttachments'
 import {
   buildOpenAIClient,
@@ -69,12 +70,13 @@ function toOpenAIInputMessage(message: Message): EasyInputMessage | null {
     }
   }
 
-  if (!hasText(message.content)) {
+  const content = buildSerializedAssistantTurnContent(message)
+  if (!hasText(content)) {
     return null
   }
 
   return {
-    content: message.content,
+    content,
     role: 'assistant',
     type: 'message',
   }

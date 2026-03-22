@@ -44,6 +44,7 @@ import type {
   ReplaceConversationMessagesInput,
   SaveApiKeyProviderInput,
   SubmitToolDecisionInput,
+  WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
 import {
@@ -102,6 +103,11 @@ import {
   createWorkspaceRedoCheckpointFromSource,
   restoreWorkspaceCheckpoint,
 } from './workspace/checkpoints'
+import {
+  disposeWorkspaceExplorerWatchers,
+  subscribeWorkspaceExplorerChanges,
+  unsubscribeWorkspaceExplorerChanges,
+} from './workspace/explorerWatch'
 import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
@@ -388,6 +394,12 @@ function registerHistoryHandlers() {
   ipcMain.handle('workspace:checkpoint:createRedoFromSource', async (_event, sourceCheckpointId: string) =>
     createWorkspaceRedoCheckpointFromSource(sourceCheckpointId),
   )
+  ipcMain.handle('workspace:explorer:watch', async (event, input: WorkspaceExplorerWatchChangesInput) =>
+    subscribeWorkspaceExplorerChanges(event.sender, input.workspaceRootPath),
+  )
+  ipcMain.handle('workspace:explorer:unwatch', async (event, input: WorkspaceExplorerWatchChangesInput) =>
+    unsubscribeWorkspaceExplorerChanges(event.sender.id, input.workspaceRootPath),
+  )
   ipcMain.handle('workspace:explorer:listDirectory', async (_event, input: WorkspaceExplorerListDirectoryInput) =>
     listWorkspaceDirectory(input),
   )
@@ -416,6 +428,7 @@ function registerHistoryHandlers() {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    disposeWorkspaceExplorerWatchers()
     app.quit()
     win = null
   }
@@ -428,6 +441,7 @@ app.on('before-quit', (event) => {
 
   event.preventDefault()
   isQuitFlushInProgress = true
+  disposeWorkspaceExplorerWatchers()
   void closeAllTerminalSessions().catch((error) => {
     console.error('Failed to close terminal sessions on quit', error)
   })

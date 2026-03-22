@@ -7,6 +7,7 @@ import { OpenAICompatibleToolError } from '../../toolTypes'
 import { getToolDescription } from '../descriptionCatalog'
 import { parseToolArguments, readRequiredText } from '../filesystemToolUtils'
 import { openTerminalSession, pollTerminalSession } from '../terminalSessionManager'
+import { RUN_TERMINAL_TOOL_NAME } from '../terminalToolNames'
 import {
   DEFAULT_EXEC_COMMAND_YIELD_TIME_MS,
   formatTerminalToolOutput,
@@ -26,7 +27,7 @@ interface SpawnSpec {
 
 let wslAvailabilityPromise: Promise<boolean> | null = null
 const STRIPPED_TERMINAL_ENV_KEYS = new Set(['NODE_ENV'])
-const TOOL_DESCRIPTION = getToolDescription('exec_command')
+const TOOL_DESCRIPTION = getToolDescription('run_terminal')
 
 function createTerminalEnvironment() {
   const environment = { ...process.env }
@@ -193,7 +194,7 @@ async function resolveSpawnSpec(input: {
 
 export const execCommandTool: OpenAICompatibleToolDefinition = {
   executionMode: 'exclusive',
-  name: 'exec_command',
+  name: RUN_TERMINAL_TOOL_NAME,
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
     const cmd = readRequiredText(argumentsValue, 'cmd').trim()
@@ -257,8 +258,8 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
     const formattedOutput = formatTerminalToolOutput(pollResult)
     const message =
       pollResult.processId === null
-        ? `Executed command in ${modeLabel} mode (exit code ${pollResult.exitCode ?? 1}).`
-        : `Started command in ${modeLabel} mode with session ${pollResult.processId}.`
+        ? `Executed terminal run in ${modeLabel} mode (exit code ${pollResult.exitCode ?? 1}).`
+        : `Started terminal run in ${modeLabel} mode with session ${pollResult.processId}.`
 
     return {
       chunkId: pollResult.chunkId,
@@ -267,7 +268,7 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
       exitCode: pollResult.exitCode,
       message,
       ok: true,
-      operation: 'exec_command',
+      operation: RUN_TERMINAL_TOOL_NAME,
       originalTokenCount: pollResult.originalTokenCount,
       output: formattedOutput,
       path: workdirDisplayPath,
@@ -280,7 +281,7 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description: TOOL_DESCRIPTION,
-      name: 'exec_command',
+      name: RUN_TERMINAL_TOOL_NAME,
       parameters: {
         additionalProperties: false,
         properties: {

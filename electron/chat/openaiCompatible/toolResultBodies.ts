@@ -44,18 +44,15 @@ function formatReadResultBody(semanticResult: Record<string, unknown>) {
   const startLine = readNumber(semanticResult.startLine) ?? 1
   const endLine = readNumber(semanticResult.endLine) ?? startLine
   const totalLineCount = readNumber(semanticResult.totalLineCount)
+  const hasMoreLines = readBoolean(semanticResult.hasMoreLines)
+  const remainingLineCount = readNumber(semanticResult.remainingLineCount)
+  const coverageLabel = hasMoreLines ? `partial${remainingLineCount !== null ? `, ${remainingLineCount} lines remaining` : ''}` : 'complete'
   const content = typeof semanticResult.content === 'string' ? semanticResult.content : ''
   const fenceLanguage = inferFenceLanguage(subjectPath)
-  const contentLines = content.length === 0 ? [] : content.split('\n')
-  const lineNumberWidth = contentLines.length > 0 ? String(startLine + contentLines.length - 1).length : String(startLine).length
-  const numberedContent = contentLines
-    .map((line, index) => `${String(startLine + index).padStart(lineNumberWidth, ' ')} | ${line}`)
-    .join('\n')
   const lines = [
-    `File ${subjectPath} (lines ${startLine}-${endLine}${totalLineCount === null ? '' : ` of ${totalLineCount}`})`,
-    'Line-indexed content (line_number | text):',
+    `File ${subjectPath} (lines ${startLine}-${endLine}${totalLineCount === null ? '' : ` of ${totalLineCount}`}, ${coverageLabel})`,
     `\`\`\`${fenceLanguage ?? ''}`,
-    numberedContent,
+    content,
     '```',
   ]
 
@@ -289,7 +286,7 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatFileChangeResultBody(semanticResult)
   }
 
-  if (toolName === 'exec_command' || toolName === 'write_stdin') {
+  if (toolName === 'run_terminal' || toolName === 'get_terminal_output') {
     return formatTerminalResultBody(semanticResult)
   }
 

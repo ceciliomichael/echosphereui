@@ -53,12 +53,11 @@ Usage guidelines:
 Usage guidelines:
 - Read only what is needed for the next decision or edit.
 - Avoid re-reading the same file range if no relevant change occurred since the previous read.
-- Prefer targeted ranges with \`start_line\` and \`end_line\`; avoid full-file reads when only a section is needed.
+- Treat \`totalLineCount\` and \`hasMoreLines\` as authoritative completion signals. If \`hasMoreLines\` is false, you already have the full file and should not read the same path again unless the file changed.
+- Prefer \`start_line\` with \`max_lines\` when continuing through a file.
 - Provide \`absolute_path\` as an absolute file path and keep every directory segment exactly as written.
 - If the file lives in \`src/app/components/component-name.tsx\`, pass that full path exactly; do not drop intermediate folders such as \`components\`.
-- Use \`start_line\` and \`end_line\` for explicit inclusive ranges.
-- Use \`max_lines\` to cap output when line ranges are broad.
-- If more lines exist, call again with \`nextStartLine\` or a higher \`start_line\`.
+- If more lines exist, continue from \`nextStartLine\` or a higher \`start_line\`.
 - Use \`grep\` to locate relevant sections first in large files.`,
   glob: `Find file paths by glob pattern inside the workspace using ripgrep.
 
@@ -80,6 +79,7 @@ Usage guidelines:
 - Provide \`absolute_path\` as an absolute file or directory search root.
 - Use an existing root from prior tool output (typically \`<cwd>\` or a previously listed subdirectory).
 - Provide \`pattern\` as a fixed string by default; set \`is_regex\` for regex mode.
+- Keep \`pattern\` to a single line. If you need surrounding context, use \`read\` instead of embedding line breaks in grep.
 - Use \`case_sensitive\` when exact casing matters.
 - Use \`max_results\` to constrain very broad searches.
 - Use returned file paths and line numbers with \`read\` for follow-up context.`,
@@ -105,7 +105,7 @@ Usage guidelines:
 - Existing files are overwritten in full.
 - Use \`write\` when you already know the complete final file content.
 - Use \`edit\` for targeted anchored replacements.`,
-  exec_command: `Run a shell command in a managed terminal session and return output.
+  run_terminal: `Run a shell command in a managed terminal session and return output.
 
 Usage guidelines:
 - Use terminal commands when they materially improve correctness (tests, type checks, build, diagnostics), not by default for every step.
@@ -114,15 +114,16 @@ Usage guidelines:
 - \`cmd\` is required and should be a complete shell command string.
 - Use \`workdir\` to change the execution directory (relative paths resolve from workspace root).
 - Use \`yield_time_ms\` to wait longer for output before returning.
-- If the process is still running, use \`write_stdin\` with the returned \`processId\` as \`session_id\`.
+- If the process is still running, use \`get_terminal_output\` with the returned \`processId\` as \`session_id\`.
+- If terminal output is a formatter or lint diagnostic, treat it literally. Do not invent a deeper bug from a formatting-only diff; fix the formatting or rerun the formatter with the correct scope.
 - Keep commands scoped to the workspace and prefer non-interactive commands.`,
-  write_stdin: `Write input to an existing terminal session and return the latest output.
+  get_terminal_output: `Read the latest output from an existing terminal session and optionally send input.
 
 Usage guidelines:
-- Use this only for an active session created by \`exec_command\`.
+- Use this only for an active session created by \`run_terminal\`.
 - Prefer polling with empty \`chars\` for long-running jobs instead of sending unnecessary input.
 - Stop polling once the command has exited.
-- Provide \`session_id\` from a prior \`exec_command\` response.
+- Provide \`session_id\` from a prior \`run_terminal\` response.
 - Provide \`chars\` to send bytes to stdin.
 - Send an empty \`chars\` string to poll output without new input.
 - Use \`yield_time_ms\` and \`max_output_tokens\` to control output size and wait time.
@@ -138,6 +139,8 @@ const GLOBAL_TOOL_CONTRACT = `Global tool contract:
 - Keep tool calls minimal but sufficient for correctness. If evidence is missing, call another tool instead of assuming.
 - No wasted calls: do not repeat the same tool call with materially identical arguments unless new state justifies re-running.
 - Before each call, ask: what new evidence or state transition will this call produce?
+- Never compress or summarize large diffs, file reads, or other exact workspace state that the next step depends on.
+- Only repetitive terminal polling and similarly low-value command noise should be compacted.
 - If a tool fails, surface the failure and recover with the next best concrete action.`
 
 export function getToolDescription(name: OpenAICompatibleToolDescriptionName) {

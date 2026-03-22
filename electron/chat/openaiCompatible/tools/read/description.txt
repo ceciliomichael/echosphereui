@@ -3,7 +3,7 @@ Read text file contents from an absolute path inside the workspace root.
 Usage guidelines:
 - Provide `absolute_path` as an absolute file path and keep every directory segment exactly as written.
 - If the file lives in `src/app/components/component-name.tsx`, pass that full path exactly; do not drop intermediate folders such as `components`.
-- Use `start_line` and `end_line` for explicit inclusive ranges.
-- Use `max_lines` to cap output when line ranges are broad.
-- If more lines exist, call again with `nextStartLine` or a higher `start_line`.
+- Treat `totalLineCount` and `hasMoreLines` in the result as authoritative.
+- If `hasMoreLines` is false, you already have the full file and should not read the same path again unless the file changed.
+- Prefer `start_line` with `max_lines` when continuing through a file.
 - Use `grep` to locate relevant sections first in large files.

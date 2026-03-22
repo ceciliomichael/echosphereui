@@ -32,6 +32,8 @@ import type {
   ResizeTerminalSessionInput,
   SubmitToolDecisionInput,
   StartChatStreamInput,
+  WorkspaceExplorerChangeEvent,
+  WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
 
@@ -135,10 +137,21 @@ const workspaceApi: EchosphereWorkspaceApi = {
     ipcRenderer.invoke('workspace:checkpoint:createRedoFromSource', sourceCheckpointId),
   createEntry: (input) => ipcRenderer.invoke('workspace:explorer:createEntry', input),
   deleteEntry: (input) => ipcRenderer.invoke('workspace:explorer:deleteEntry', input),
+  onExplorerChange: (listener: (event: WorkspaceExplorerChangeEvent) => void) => {
+    const wrappedListener = (_event: unknown, payload: WorkspaceExplorerChangeEvent) => listener(payload)
+    ipcRenderer.on('workspace:explorer:changed', wrappedListener)
+    return () => {
+      ipcRenderer.off('workspace:explorer:changed', wrappedListener)
+    }
+  },
   listDirectory: (input) => ipcRenderer.invoke('workspace:explorer:listDirectory', input),
   readFile: (input) => ipcRenderer.invoke('workspace:explorer:readFile', input),
   renameEntry: (input) => ipcRenderer.invoke('workspace:explorer:renameEntry', input),
+  unwatchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) =>
+    ipcRenderer.invoke('workspace:explorer:unwatch', input),
   transferEntry: (input) => ipcRenderer.invoke('workspace:explorer:transferEntry', input),
+  watchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) =>
+    ipcRenderer.invoke('workspace:explorer:watch', input),
   writeFile: (input) => ipcRenderer.invoke('workspace:explorer:writeFile', input),
   restoreCheckpoint: (checkpointId: string) => ipcRenderer.invoke('workspace:checkpoint:restore', checkpointId),
 }

@@ -10,7 +10,9 @@ import type { AppTerminalExecutionMode, ChatMode, ChatProviderId, Message, Reaso
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
 import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
+import { buildPromptCacheKey } from '../prompts/promptCache'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
+import { buildSerializedAssistantTurnContent } from './assistantToolInvocationContext'
 import {
   buildOpenAIClient,
   hasNonEmptyString,
@@ -85,12 +87,13 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
   }
 
   if (message.role === 'assistant') {
-    if (!hasText(message.content)) {
+    const content = buildSerializedAssistantTurnContent(message)
+    if (!hasText(content)) {
       return null
     }
 
     return {
-      content: message.content,
+      content,
       role: 'assistant',
     }
   }
@@ -104,28 +107,6 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
     role: 'tool',
     tool_call_id: message.toolCallId,
   }
-}
-
-async function buildOpenAICompatibleMessages(
-  request: StreamOpenAICompatibleResponseInput,
-): Promise<ChatCompletionMessageParam[]> {
-  const systemPrompt = await buildSystemPrompt({
-    agentContextRootPath: request.agentContextRootPath,
-    chatMode: request.chatMode,
-    providerId: request.providerId,
-    supportsNativeTools: true,
-    terminalExecutionMode: request.terminalExecutionMode,
-  })
-
-  return [
-    {
-      content: systemPrompt,
-      role: 'system',
-    },
-    ...request.messages
-      .map(toOpenAICompatibleMessage)
-      .filter((value): value is ChatCompletionMessageParam => value !== null),
-  ]
 }
 
 function extractOpenAICompatibleReasoningDelta(delta: unknown): string | null {
@@ -165,13 +146,40 @@ async function buildOpenAICompatibleCompletionRequest(
   request: StreamOpenAICompatibleResponseInput,
   includeReasoningEffort: boolean,
 ): Promise<ChatCompletionCreateParamsStreaming> {
+  const systemPrompt = await buildSystemPrompt({
+    agentContextRootPath: request.agentContextRootPath,
+    chatMode: request.chatMode,
+    providerId: request.providerId,
+    supportsNativeTools: true,
+    terminalExecutionMode: request.terminalExecutionMode,
+  })
+  const toolDefinitions = getOpenAICompatibleToolDefinitions(request.chatMode).map((toolDefinition) => toolDefinition.tool)
   const payload: ChatCompletionCreateParamsStreaming = {
-    messages: await buildOpenAICompatibleMessages(request),
+    messages: [
+      {
+        content: systemPrompt,
+        role: 'system',
+      },
+      ...request.messages
+        .map(toOpenAICompatibleMessage)
+        .filter((value): value is ChatCompletionMessageParam => value !== null),
+    ],
     model: request.modelId,
+    prompt_cache_key: buildPromptCacheKey({
+      chatMode: request.chatMode,
+      forceToolChoice: request.forceToolChoice,
+      kind: 'chat-completions',
+      modelId: request.modelId,
+      providerId: request.providerId,
+      systemPrompt,
+      terminalExecutionMode: request.terminalExecutionMode,
+      toolDefinitions,
+    }),
+    prompt_cache_retention: 'in-memory',
     parallel_tool_calls: true,
     store: false,
     stream: true,
-    tools: getOpenAICompatibleToolDefinitions(request.chatMode).map((toolDefinition) => toolDefinition.tool),
+    tools: toolDefinitions,
     ...(request.forceToolChoice ? { tool_choice: request.forceToolChoice } : {}),
   }
 

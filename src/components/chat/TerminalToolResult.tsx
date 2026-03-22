@@ -1,11 +1,19 @@
 interface TerminalToolResultProps {
   content: string
   isStreaming: boolean
-  toolName: 'exec_command' | 'write_stdin'
+  toolName: string
 }
 
 function getTerminalResultLabel(toolName: TerminalToolResultProps['toolName']) {
-  return toolName === 'exec_command' ? 'Command output' : 'Session output'
+  if (toolName === 'run_terminal') {
+    return 'Terminal output'
+  }
+
+  if (toolName === 'get_terminal_output') {
+    return 'Terminal session output'
+  }
+
+  return 'Terminal output'
 }
 
 export function TerminalToolResult({ content, isStreaming, toolName }: TerminalToolResultProps) {

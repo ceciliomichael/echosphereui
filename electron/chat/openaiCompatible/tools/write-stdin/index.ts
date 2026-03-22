@@ -3,6 +3,7 @@ import { OpenAICompatibleToolError } from '../../toolTypes'
 import { getToolDescription } from '../descriptionCatalog'
 import { parseToolArguments } from '../filesystemToolUtils'
 import { pollTerminalSession, writeTerminalSession } from '../terminalSessionManager'
+import { GET_TERMINAL_OUTPUT_TOOL_NAME, RUN_TERMINAL_TOOL_NAME } from '../terminalToolNames'
 import {
   DEFAULT_WRITE_STDIN_YIELD_TIME_MS,
   formatTerminalToolOutput,
@@ -10,7 +11,7 @@ import {
   readOptionalPositiveIntegerValue,
 } from '../terminalToolSupport'
 
-const TOOL_DESCRIPTION = getToolDescription('write_stdin')
+const TOOL_DESCRIPTION = getToolDescription('get_terminal_output')
 
 function readSessionId(argumentsValue: Record<string, unknown>) {
   const rawSessionId = argumentsValue.session_id
@@ -42,7 +43,7 @@ function readChars(argumentsValue: Record<string, unknown>) {
 
 export const writeStdinTool: OpenAICompatibleToolDefinition = {
   executionMode: 'exclusive',
-  name: 'write_stdin',
+  name: GET_TERMINAL_OUTPUT_TOOL_NAME,
   parseArguments: parseToolArguments,
   async execute(argumentsValue, context) {
     const sessionId = readSessionId(argumentsValue)
@@ -90,8 +91,8 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
     const formattedOutput = formatTerminalToolOutput(pollResult)
     const message =
       pollResult.processId === null
-        ? `Updated session \n${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.`
-        : `Updated session \n${sessionId}. Session is still running.`
+        ? `Fetched terminal output for session ${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.`
+        : `Fetched terminal output for session ${sessionId}. Session is still running.`
 
     return {
       chunkId: pollResult.chunkId,
@@ -99,7 +100,7 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
       exitCode: pollResult.exitCode,
       message,
       ok: true,
-      operation: 'write_stdin',
+      operation: GET_TERMINAL_OUTPUT_TOOL_NAME,
       originalTokenCount: pollResult.originalTokenCount,
       output: formattedOutput,
       path: '.',
@@ -112,7 +113,7 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
   tool: {
     function: {
       description: TOOL_DESCRIPTION,
-      name: 'write_stdin',
+      name: GET_TERMINAL_OUTPUT_TOOL_NAME,
       parameters: {
         additionalProperties: false,
         properties: {
@@ -126,7 +127,7 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
             type: 'integer',
           },
           session_id: {
-            description: 'Terminal session identifier returned by exec_command.',
+            description: `Terminal session identifier returned by ${RUN_TERMINAL_TOOL_NAME}.`,
             minimum: 1,
             type: 'integer',
           },

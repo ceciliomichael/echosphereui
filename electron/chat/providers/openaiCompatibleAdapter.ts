@@ -1,11 +1,9 @@
 import type { ChatProviderAdapter } from '../providerTypes'
 import { streamOpenAICompatibleResponseWithTools } from '../openaiCompatible/runtime'
-import { streamOpenAICompatibleResponsesTurn } from '../openaiCompatible/runtimeResponses'
-import { streamAgentLoopWithTools } from '../agentLoop/runtime'
+import { streamOpenAICompatibleResponsesWithTools } from '../openaiCompatible/runtimeResponses'
 import { buildOpenAIClient, loadOpenAIProviderConfig } from './openaiShared'
 import { shouldFallbackToChatCompletions } from './openaiCompatibleTransportFallback'
-
-type OpenAICompatibleTransportMode = 'chat-completions' | 'responses'
+import { setKnownOpenAICompatibleTransportMode, type OpenAICompatibleTransportMode } from './openaiCompatibleTransportState'
 
 const transportModeByBaseUrl = new Map<string, OpenAICompatibleTransportMode>()
 
@@ -23,6 +21,7 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
 
     try {
       if (cachedTransportMode === 'chat-completions') {
+        setKnownOpenAICompatibleTransportMode('chat-completions')
         await streamOpenAICompatibleResponseWithTools(
           client,
           {
@@ -39,7 +38,9 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
         return
       }
 
-      await streamAgentLoopWithTools(
+      setKnownOpenAICompatibleTransportMode('responses')
+      await streamOpenAICompatibleResponsesWithTools(
+        client,
         {
           agentContextRootPath: request.agentContextRootPath,
           chatMode: request.chatMode,
@@ -50,24 +51,9 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
           terminalExecutionMode: request.terminalExecutionMode,
         },
         context,
-        (turnRequest, turnContext, options) =>
-          streamOpenAICompatibleResponsesTurn(
-            client,
-            {
-              agentContextRootPath: turnRequest.agentContextRootPath,
-              chatMode: turnRequest.chatMode,
-              forceToolChoice: turnRequest.forceToolChoice,
-              messages: turnRequest.messages,
-              modelId: turnRequest.modelId,
-              providerId: request.providerId,
-              reasoningEffort: turnRequest.reasoningEffort,
-              terminalExecutionMode: request.terminalExecutionMode,
-            },
-            turnContext,
-            options,
-          ),
       )
       transportModeByBaseUrl.set(transportCacheKey, 'responses')
+      setKnownOpenAICompatibleTransportMode('responses')
     } catch (error) {
       if (context.signal.aborted) {
         return
@@ -75,6 +61,7 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
 
       if (cachedTransportMode !== 'chat-completions' && shouldFallbackToChatCompletions(error)) {
         transportModeByBaseUrl.set(transportCacheKey, 'chat-completions')
+        setKnownOpenAICompatibleTransportMode('chat-completions')
         await streamOpenAICompatibleResponseWithTools(
           client,
           {

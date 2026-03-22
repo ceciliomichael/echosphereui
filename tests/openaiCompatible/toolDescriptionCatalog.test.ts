@@ -22,6 +22,13 @@ test('todo_write tool description includes task tracking guidance', () => {
   assert.match(description, /Prefer one high-signal update after a meaningful chunk of work/u)
 })
 
+test('grep tool description includes multiline search guidance', () => {
+  const description = getToolDescription('grep')
+  assert.match(description, /Search file contents by pattern inside the workspace using ripgrep\./u)
+  assert.match(description, /Keep `pattern` to a single line/u)
+  assert.match(description, /use `read` instead of embedding line breaks in grep/u)
+})
+
 test('all tool descriptions include the global tool contract', () => {
   const description = getToolDescription('read')
   assert.match(description, /Global tool contract:/u)

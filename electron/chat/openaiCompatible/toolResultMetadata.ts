@@ -26,7 +26,6 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
   if (toolName === 'read') {
     return {
       absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
-      end_line: readNumber(argumentsValue.end_line) ?? undefined,
       max_lines: readNumber(argumentsValue.max_lines) ?? undefined,
       start_line: readNumber(argumentsValue.start_line) ?? undefined,
     }
@@ -72,7 +71,7 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
-  if (toolName === 'exec_command') {
+  if (toolName === 'run_terminal') {
     return {
       cmd: readString(argumentsValue.cmd) ?? undefined,
       max_output_tokens: readNumber(argumentsValue.max_output_tokens) ?? undefined,
@@ -83,7 +82,7 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
-  if (toolName === 'write_stdin') {
+  if (toolName === 'get_terminal_output') {
     const chars = readString(argumentsValue.chars)
     return {
       chars_length: chars?.length ?? undefined,
@@ -142,7 +141,10 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     const endLine = readNumber(semanticResult.endLine) ?? startLine
     const totalLineCount = readNumber(semanticResult.totalLineCount)
     const remainingLineCount = readNumber(semanticResult.remainingLineCount)
-    return `Read ${subjectPath} lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''}${truncated ? ` (truncated${remainingLineCount !== null ? `, ${remainingLineCount} lines remaining` : ''})` : ''}.`
+    const coverageSummary = readBoolean(semanticResult.hasMoreLines)
+      ? `partial${remainingLineCount !== null ? `, ${remainingLineCount} lines remaining` : ''}`
+      : 'complete'
+    return `Read ${subjectPath} lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''} (${coverageSummary}).`
   }
 
   if (toolName === 'glob') {
@@ -209,26 +211,26 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Updated ${totalChangedPaths} files.`
   }
 
-  if (toolName === 'exec_command') {
+  if (toolName === 'run_terminal') {
     const executionMode = readString(semanticResult.executionMode) ?? 'full'
     const sessionId = readNumber(semanticResult.processId)
     const exitCode = readNumber(semanticResult.exitCode)
     if (sessionId !== null) {
-      return `Started terminal command in ${executionMode} mode with session ${sessionId}.`
+      return `Started terminal run in ${executionMode} mode with session ${sessionId}.`
     }
 
-    return `Executed terminal command in ${executionMode} mode${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+    return `Executed terminal run in ${executionMode} mode${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
   }
 
-  if (toolName === 'write_stdin') {
+  if (toolName === 'get_terminal_output') {
     const sessionId = readNumber(semanticResult.sessionId)
     const nextProcessId = readNumber(semanticResult.processId)
     const exitCode = readNumber(semanticResult.exitCode)
     if (nextProcessId !== null) {
-      return `Updated terminal session ${sessionId ?? nextProcessId}; session is still running.`
+      return `Fetched terminal output for session ${sessionId ?? nextProcessId}; session is still running.`
     }
 
-    return `Updated terminal session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+    return `Fetched terminal output for session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
   }
 
   if (toolName === 'todo_write') {
@@ -299,7 +301,7 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
     return undefined
   }
 
-  if (toolName === 'write_stdin' && subjectPath === '.') {
+  if (toolName === 'get_terminal_output' && subjectPath === '.') {
     return undefined
   }
 
@@ -308,9 +310,9 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
       ? 'directory'
       : toolName === 'glob' || toolName === 'grep'
         ? 'path'
-        : toolName === 'exec_command'
+        : toolName === 'run_terminal'
           ? 'directory'
-          : toolName === 'write_stdin'
+          : toolName === 'get_terminal_output'
             ? 'terminal'
             : 'file'
   return {
@@ -336,6 +338,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
       ...sharedSemantics,
       end_line: readNumber(semanticResult.endLine) ?? undefined,
       has_more_lines: readBoolean(semanticResult.hasMoreLines),
+      fully_read: !readBoolean(semanticResult.hasMoreLines),
       language: inferFenceLanguage(readString(semanticResult.path) ?? ''),
       max_read_line_count: readNumber(semanticResult.maxReadLineCount) ?? undefined,
       next_end_line: readNumber(semanticResult.nextEndLine) ?? undefined,
@@ -445,7 +448,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     })
   }
 
-  if (toolName === 'exec_command') {
+  if (toolName === 'run_terminal') {
     const processId = readNumber(semanticResult.processId)
     return filterUndefinedEntries({
       ...sharedSemantics,
@@ -463,7 +466,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     })
   }
 
-  if (toolName === 'write_stdin') {
+  if (toolName === 'get_terminal_output') {
     const processId = readNumber(semanticResult.processId)
     return filterUndefinedEntries({
       ...sharedSemantics,

@@ -40,7 +40,7 @@ test('getCodexToolDefinitions returns flat function tools for native Responses p
   assert.equal('function' in listTool, false)
 })
 
-test('buildCodexInputMessages groups current-turn tool results into one user-style context item', () => {
+test('buildCodexInputMessages groups current-turn tool results into one standalone user tool-output item', () => {
   const messages: Message[] = [
     {
       content: 'Inspecting now.',
@@ -64,20 +64,94 @@ test('buildCodexInputMessages groups current-turn tool results into one user-sty
     },
   ]
 
-  assert.deepEqual(buildCodexInputMessages(messages), [
+  const inputMessages = buildCodexInputMessages(messages)
+
+  assert.equal(inputMessages.length, 2)
+  assert.deepEqual(inputMessages[0], {
+    content: [{ text: 'Inspecting now.', type: 'output_text' }],
+    role: 'assistant',
+  })
+  assert.equal(inputMessages[1]?.role, 'user')
+  assert.equal(inputMessages[1]?.content[0]?.type, 'input_text')
+  assert.match(inputMessages[1]?.content[0]?.text ?? '', /^\[SYSTEM TOOL OUTPUT\]/u)
+  assert.match(inputMessages[1]?.content[0]?.text ?? '', /<tool_results>/u)
+  assert.match(inputMessages[1]?.content[0]?.text ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
+  assert.match(inputMessages[1]?.content[0]?.text ?? '', /Directory \./u)
+  assert.match(inputMessages[1]?.content[0]?.text ?? '', /File src\/index\.ts \(lines 1-2\)/u)
+})
+
+test('buildCodexInputMessages includes assistant tool invocation context before tool results', () => {
+  const messages: Message[] = [
     {
-      content: [{ text: 'Inspecting now.', type: 'output_text' }],
+      content: 'I will inspect the workspace.',
+      id: 'assistant-message-1',
       role: 'assistant',
-    },
-    {
-      content: [
+      timestamp: 1_700_000_000_000,
+      toolInvocations: [
         {
-          text:
-            'Authoritative tool results from the immediately preceding tool calls. For each mutated path, the latest successful mutation below is the current workspace state. Reuse the latest inspection state below before repeating the same inspection tool call.\n\nDirectory .\n[F] package.json\n\nFile src/index.ts (lines 1-2)\n```\nexport {}\n```',
-          type: 'input_text',
+          argumentsText: '{"absolute_path":"C:/workspace"}',
+          completedAt: 1_700_000_000_010,
+          id: 'call-1',
+          resultContent: 'Listed C:/workspace.',
+          startedAt: 1_700_000_000_005,
+          state: 'completed',
+          toolName: 'list',
         },
       ],
-      role: 'user',
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{
+        text: [
+          'I will inspect the workspace.',
+          '',
+          'Assistant tool call context from the immediately preceding assistant turn.',
+          'Use this to preserve the exact tool requests that led to the results below.',
+          '- list({',
+          '  "absolute_path": "C:/workspace"',
+          '}) completed. Result: Listed C:/workspace.',
+        ].join('\n'),
+        type: 'output_text',
+      }],
+      role: 'assistant',
+    },
+  ])
+})
+
+test('buildCodexInputMessages preserves tool-only assistant turns by serializing tool invocation context', () => {
+  const messages: Message[] = [
+    {
+      content: '',
+      id: 'assistant-message-1',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+      toolInvocations: [
+        {
+          argumentsText: '{"absolute_path":"C:/workspace"}',
+          id: 'call-1',
+          startedAt: 1_700_000_000_005,
+          state: 'completed',
+          toolName: 'list',
+        },
+      ],
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{
+        text: [
+          'Assistant tool call context from the immediately preceding assistant turn.',
+          'Use this to preserve the exact tool requests that led to the results below.',
+          '- list({',
+          '  "absolute_path": "C:/workspace"',
+          '}) completed.',
+        ].join('\n'),
+        type: 'output_text',
+      }],
+      role: 'assistant',
     },
   ])
 })

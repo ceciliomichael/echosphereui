@@ -26,6 +26,15 @@ function readPattern(input: Record<string, unknown>) {
     })
   }
 
+  if (pattern.includes('\n') || pattern.includes('\r')) {
+    throw new OpenAICompatibleToolError(
+      'pattern must be a single line. Use separate grep calls or read the file range when you need multiline context.',
+      {
+        fieldName: 'pattern',
+      },
+    )
+  }
+
   return pattern
 }
 
@@ -123,7 +132,7 @@ export const grepTool: OpenAICompatibleToolDefinition = {
             type: 'integer',
           },
           pattern: {
-            description: 'Search pattern (fixed string by default, regex when is_regex is true).',
+            description: 'Search pattern (fixed string by default, regex when is_regex is true). Must be a single line.',
             type: 'string',
           },
         },

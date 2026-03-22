@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { getVirtualAgentContextDirectoryName } from './virtualAgentContext'
 
 const HISTORY_ROOT_SEGMENTS = ['.echosphere', 'history'] as const
 const AGENT_CONTEXTS_DIRECTORY_NAME = 'agent-contexts'
@@ -29,7 +30,7 @@ export function getAgentContextsDirectoryPath() {
 }
 
 export function getConversationAgentContextPath(conversationId: string) {
-  return path.join(getAgentContextsDirectoryPath(), conversationId)
+  return path.join(getAgentContextsDirectoryPath(), getVirtualAgentContextDirectoryName(conversationId))
 }
 
 export async function ensureHistoryDirectory() {

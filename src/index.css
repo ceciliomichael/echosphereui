@@ -43,6 +43,9 @@
   :root {
     font-family: var(--font-sans);
     color-scheme: light;
+    --workspace-editor-selection-background: rgb(0 120 215 / 0.26);
+    --workspace-editor-search-highlight-background: rgb(0 120 215 / 0.18);
+    --workspace-editor-search-highlight-active-background: rgb(0 120 215 / 0.28);
     --workspace-shell-surface: var(--color-sidebar);
     --titlebar-surface: var(--workspace-shell-surface);
     --workspace-panel-surface: var(--color-surface);
@@ -101,6 +104,9 @@
     --shadow-soft: 0 14px 34px oklch(0 0 0 / 0.32);
     --shadow-control-inset: inset 0 1px 2px oklch(0 0 0 / 0.34);
     color-scheme: dark;
+    --workspace-editor-selection-background: rgb(38 120 190 / 0.62);
+    --workspace-editor-search-highlight-background: rgb(38 120 190 / 0.28);
+    --workspace-editor-search-highlight-active-background: rgb(38 120 190 / 0.44);
     --titlebar-surface: #141415;
     --workspace-shell-surface: #141415;
     --workspace-panel-surface: #121213;
@@ -417,6 +423,14 @@
 
   .workspace-editor-scrollbar:hover::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-scrollbar-thumb-hover);
+  }
+
+  .workspace-editor-textarea::selection {
+    background-color: var(--workspace-editor-selection-background);
+  }
+
+  .workspace-editor-textarea::-moz-selection {
+    background-color: var(--workspace-editor-selection-background);
   }
 
   @media (min-width: 1024px) {

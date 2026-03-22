@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { ChatCompletionStreamRequestMessages, CompletionEvent, ContentChunk } from '@mistralai/mistralai/models/components'
 import type { Message } from '../../../src/types/chat'
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
+import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
 import type { ChatProviderAdapter, ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from './messageAttachments'
@@ -92,12 +93,13 @@ function toMistralMessage(message: Message): ChatCompletionStreamRequestMessages
   }
 
   if (message.role === 'assistant') {
-    if (!hasText(message.content)) {
+    const content = buildSerializedAssistantTurnContent(message)
+    if (!hasText(content)) {
       return null
     }
 
     return {
-      content: message.content,
+      content,
       role: 'assistant',
     }
   }

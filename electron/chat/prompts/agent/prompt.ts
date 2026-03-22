@@ -23,7 +23,7 @@ function buildInstructionPrecedenceSection() {
   return [
     '<instruction_precedence>',
     '## Instruction Precedence',
-    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions from AGENTS.md and DESIGN.md. Preserve earlier instructions that do not conflict with newer higher-priority instructions.',
+    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions included in the prompt. Preserve earlier instructions that do not conflict with newer higher-priority instructions, and treat repository instructions already included in context as available context rather than something to rediscover.',
     '</instruction_precedence>',
   ].join('\n')
 }
@@ -31,8 +31,8 @@ function buildInstructionPrecedenceSection() {
 function buildAgentsScopeSection() {
   return [
     '<agents_scope>',
-    '## AGENTS Scope',
-    'AGENTS.md files apply to the directory that contains them and all descendant paths. When multiple AGENTS.md files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
+    '## Repository Instruction Scope',
+    'Repository instruction files apply to the directory that contains them and all descendant paths. When multiple repository instruction files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
     '</agents_scope>',
   ].join('\n')
 }
@@ -41,7 +41,7 @@ function buildToolUsageSection() {
   return [
     '<toolusage>',
     '## Tool Usage',
-    'Use only tools available in this mode. Inspect the workspace before editing. Prefer list, glob, grep, and read for discovery before write, edit, or exec_command. When a tool requires a path, send a real absolute filesystem path rooted in the workspace. Do not emit pseudo tool calls in plain text.',
+    'Use only tools available in this mode. Inspect the workspace before editing. Prefer list, glob, grep, and read for discovery before write, edit, or run_terminal. When a tool requires a path, send a real absolute filesystem path rooted in the workspace. Do not emit pseudo tool calls in plain text.',
     '</toolusage>',
   ].join('\n')
 }
@@ -50,7 +50,7 @@ function buildTaskFlowSection() {
   return [
     '<workflow>',
     '## Workflow',
-    'Read the workspace context first. Classify the request, inspect relevant files, form a concrete short plan, implement incrementally, and verify with targeted checks. Keep progress updates concise and frequent. Ask questions only when a missing detail materially blocks correctness or scope.',
+    'Read the workspace context first. Classify the request, inspect relevant files, form a concrete short plan, implement incrementally, and verify with targeted checks. If a tool result already gives a complete answer, reuse it instead of rereading the same file or range unless the file changed or the gap is still unresolved. Do not re-read a file immediately after creating or writing it just to confirm the tool succeeded; trust the create/write tool result and move on unless there is a real correctness need to inspect the content. If terminal output is a formatter or lint diff, treat it literally and do not invent a separate logic bug from formatting-only output. Keep progress updates concise and frequent. Ask questions only when a missing detail materially blocks correctness or scope.',
     '</workflow>',
   ].join('\n')
 }

@@ -1,14 +1,14 @@
 import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../../src/lib/toolResultContent'
 
 const TERMINAL_REPLAY_MAX_BODY_CHARACTERS = 1_600
-const INSPECTION_REPLAY_MAX_BODY_CHARACTERS = 1_000
-const MUTATION_REPLAY_MAX_BODY_CHARACTERS = 1_200
+const INSPECTION_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
+const MUTATION_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
 const PLAN_REPLAY_MAX_BODY_CHARACTERS = 700
-const DEFAULT_REPLAY_MAX_BODY_CHARACTERS = 800
-const RAW_TOOL_CONTENT_MAX_CHARACTERS = 1_000
+const DEFAULT_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
+const RAW_TOOL_CONTENT_MAX_CHARACTERS = Number.MAX_SAFE_INTEGER
 
 function isTerminalToolName(toolName: string) {
-  return toolName === 'exec_command' || toolName === 'write_stdin'
+  return toolName === 'run_terminal' || toolName === 'get_terminal_output'
 }
 
 function buildTerminalSessionReplayKey(metadata: StructuredToolResultMetadata) {
@@ -47,7 +47,7 @@ function buildTerminalBodyReplaySnippet(body: string | null) {
 }
 
 function resolveReplayBodyCharacterLimit(toolName: string) {
-  if (toolName === 'exec_command' || toolName === 'write_stdin') {
+  if (toolName === 'run_terminal' || toolName === 'get_terminal_output') {
     return TERMINAL_REPLAY_MAX_BODY_CHARACTERS
   }
 
@@ -121,6 +121,13 @@ function buildReplayKeyForToolContent(metadata: StructuredToolResultMetadata) {
   }
 
   if (metadata.toolName === 'list' || metadata.toolName === 'read') {
+    if (metadata.toolName === 'read') {
+      const startLine = typeof semantics?.start_line === 'number' ? semantics.start_line : null
+      const endLine = typeof semantics?.end_line === 'number' ? semantics.end_line : null
+      const totalLineCount = typeof semantics?.total_line_count === 'number' ? semantics.total_line_count : null
+      return `${metadata.toolName}:${subjectPath}:${startLine ?? 'unknown'}:${endLine ?? 'unknown'}:${totalLineCount ?? 'unknown'}`
+    }
+
     return `${metadata.toolName}:${subjectPath}`
   }
 
@@ -194,8 +201,14 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       } else if (metadata.toolName === 'read') {
         const startLine = typeof semantics?.start_line === 'number' ? semantics.start_line : null
         const endLine = typeof semantics?.end_line === 'number' ? semantics.end_line : null
+        const totalLineCount = typeof semantics?.total_line_count === 'number' ? semantics.total_line_count : null
+        const remainingLineCount =
+          typeof semantics?.remaining_line_count === 'number' ? semantics.remaining_line_count : null
+        const fullyRead = semantics?.fully_read === true
         if (startLine !== null && endLine !== null) {
-          inspectionStateLine = `- ${subjectPath} was last read at lines ${startLine}-${endLine}.`
+          inspectionStateLine = fullyRead
+            ? `- ${subjectPath} was fully read at lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''}.`
+            : `- ${subjectPath} was last read at lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''}${remainingLineCount !== null ? ` (partial, ${remainingLineCount} lines remaining)` : ''}.`
         }
       } else if (metadata.toolName === 'glob') {
         const matchCount = typeof semantics?.match_count === 'number' ? semantics.match_count : null
@@ -268,7 +281,10 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       : null
   const inspectionStateSummary =
     latestInspectionStateByKey.size > 0
-      ? ['Latest acknowledged inspection state. Reuse these observations before repeating the same inspection call:', ...latestInspectionStateByKey.values()].join('\n')
+      ? [
+          'Latest acknowledged inspection state. Reuse these observations before repeating the same inspection call. A read marked fully read already covers the whole file unless the workspace changed.',
+          ...latestInspectionStateByKey.values(),
+        ].join('\n')
       : null
   const toolSummarySection =
     toolSummaryLines.length > 0 ? ['Acknowledged tool result summaries:', ...toolSummaryLines].join('\n') : null

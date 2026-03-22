@@ -29,12 +29,12 @@ function createListToolCall(id: string, workspacePath: string): OpenAICompatible
 function createReadToolCall(
   id: string,
   filePath: string,
-  options?: { endLine?: number; startLine?: number },
+  options?: { maxLines?: number; startLine?: number },
 ): OpenAICompatibleToolCall {
   return {
     argumentsText: JSON.stringify({
       absolute_path: filePath,
-      ...(options?.endLine === undefined ? {} : { end_line: options.endLine }),
+      ...(options?.maxLines === undefined ? {} : { max_lines: options.maxLines }),
       ...(options?.startLine === undefined ? {} : { start_line: options.startLine }),
     }),
     id,
@@ -258,7 +258,7 @@ test('executeToolCallWithPolicies allows post-edit reads when they request genui
     }
 
     await executeToolCallWithPolicies(
-      createReadToolCall('read-1', filePath, { endLine: 1, startLine: 1 }),
+      createReadToolCall('read-1', filePath, { maxLines: 1, startLine: 1 }),
       context,
       workspacePath,
       inMemoryMessages,
@@ -272,7 +272,7 @@ test('executeToolCallWithPolicies allows post-edit reads when they request genui
       turnState,
     )
     await executeToolCallWithPolicies(
-      createReadToolCall('read-2', filePath, { endLine: 3, startLine: 2 }),
+      createReadToolCall('read-2', filePath, { maxLines: 2, startLine: 2 }),
       context,
       workspacePath,
       inMemoryMessages,

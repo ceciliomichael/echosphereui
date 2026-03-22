@@ -42,7 +42,7 @@ function buildNodeEnvEchoCommand() {
   return `node -p "process.env.NODE_ENV ?? ''"`
 }
 
-test('exec_command returns terminal output for a short command', async () => {
+test('run_terminal returns terminal output for a short command', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const result = await execCommandTool.execute(
       {
@@ -52,14 +52,14 @@ test('exec_command returns terminal output for a short command', async () => {
     )
 
     assert.equal(result.ok, true)
-    assert.equal(result.operation, 'exec_command')
+    assert.equal(result.operation, 'run_terminal')
     assert.equal(typeof result.output, 'string')
     assert.match(result.output, /hello/u)
     assert.doesNotMatch(result.output, /Chunk ID:/u)
   })
 })
 
-test('write_stdin can continue polling an active exec_command session', async () => {
+test('get_terminal_output can continue polling an active run_terminal session', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const initialResult = await execCommandTool.execute(
       {
@@ -96,14 +96,14 @@ test('write_stdin can continue polling an active exec_command session', async ()
 
     const combinedOutput = outputChunks.join('\n')
     assert.equal(followUpResult.ok, true)
-    assert.equal(followUpResult.operation, 'write_stdin')
+    assert.equal(followUpResult.operation, 'get_terminal_output')
     assert.equal(followUpResult.processId, null)
     assert.equal(typeof combinedOutput, 'string')
     assert.doesNotMatch(combinedOutput, /Chunk ID:/u)
   })
 })
 
-test('write_stdin rejects unknown sessions', async () => {
+test('get_terminal_output rejects unknown sessions', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await assert.rejects(
       () =>
@@ -123,7 +123,7 @@ test('write_stdin rejects unknown sessions', async () => {
   })
 })
 
-test('exec_command does not inherit parent NODE_ENV by default', async () => {
+test('run_terminal does not inherit parent NODE_ENV by default', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const originalNodeEnv = process.env.NODE_ENV
     process.env.NODE_ENV = 'development'
@@ -148,7 +148,7 @@ test('exec_command does not inherit parent NODE_ENV by default', async () => {
   })
 })
 
-test('exec_command falls back when pwsh shell is requested on Windows', async () => {
+test('run_terminal falls back when pwsh shell is requested on Windows', async () => {
   if (process.platform !== 'win32') {
     return
   }

@@ -68,6 +68,23 @@ function buildInMemoryAssistantMessage(content: string): Message {
   }
 }
 
+function buildInMemoryAssistantMessageWithToolInvocations(content: string, toolCalls: OpenAICompatibleToolCall[]): Message {
+  return {
+    ...buildInMemoryAssistantMessage(content),
+    ...(toolCalls.length > 0
+      ? {
+          toolInvocations: toolCalls.map((toolCall) => ({
+            argumentsText: toolCall.argumentsText,
+            id: toolCall.id,
+            startedAt: toolCall.startedAt,
+            state: 'completed' as const,
+            toolName: toolCall.name,
+          })),
+        }
+      : {}),
+  }
+}
+
 function toRuntimeContextSnapshot(request: AgentLoopStreamRequest): RuntimeContextSnapshot {
   return {
     agentContextRootPath: request.agentContextRootPath,
@@ -121,6 +138,7 @@ export async function streamAgentLoopWithTools(
     previousRuntimeContextSnapshot = runtimeContextResult.snapshot
     const replayableMessagesForTurn = runtimeContextResult.messages
 
+    const toolCallsById = new Map<string, OpenAICompatibleToolCall>()
     const scheduledToolCallIds = new Set<string>()
     const turnResult = await streamTurn(
       {
@@ -134,20 +152,25 @@ export async function streamAgentLoopWithTools(
       context,
       {
         onToolCallReady(toolCall) {
+          toolCallsById.set(toolCall.id, toolCall)
           scheduledToolCallIds.add(toolCall.id)
           void toolExecutionScheduler.schedule(toolCall)
         },
       },
     )
 
-    const hasDetectedToolCallsThisTurn = turnResult.toolCalls.length > 0 || scheduledToolCallIds.size > 0
+    for (const toolCall of turnResult.toolCalls) {
+      toolCallsById.set(toolCall.id, toolCall)
+    }
 
+    const toolCallsForTurn = Array.from(toolCallsById.values())
+    const hasDetectedToolCallsThisTurn = toolCallsForTurn.length > 0
     if (!hasDetectedToolCallsThisTurn) {
       return buildStreamResult()
     }
 
-    if (hasText(turnResult.assistantContent)) {
-      inMemoryMessages.push(buildInMemoryAssistantMessage(turnResult.assistantContent))
+    if (hasText(turnResult.assistantContent) || toolCallsForTurn.length > 0) {
+      inMemoryMessages.push(buildInMemoryAssistantMessageWithToolInvocations(turnResult.assistantContent, toolCallsForTurn))
     }
 
     for (const toolCall of turnResult.toolCalls) {

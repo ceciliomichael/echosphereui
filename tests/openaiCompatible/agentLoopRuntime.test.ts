@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { streamAgentLoopWithTools } from '../../electron/chat/agentLoop/runtime'
 import type { ProviderStreamContext, StreamDeltaEvent } from '../../electron/chat/providerTypes'
+import { TOOL_RESULT_TO_USER_BRIDGE_TEXT } from '../../electron/chat/openaiCompatible/toolResultReplayEnvelope'
 import type { Message } from '../../src/types/chat'
 
 function createProviderContext() {
@@ -244,7 +245,65 @@ test('agent loop stops when a turn has neither assistant output nor tool invocat
   assert.equal(firstTurnUserTexts.some((content) => content.includes('Please address this message and continue with your tasks.')), false)
 })
 
-test('agent loop allows repeated identical tool calls until the model changes course', async () => {
+test('agent loop keeps tool-result replay context as a standalone turn before the next user turn', async () => {
+  const { context } = createProviderContext()
+  const firstTurnMessages: Message[] = []
+
+  await streamAgentLoopWithTools(
+    {
+      agentContextRootPath: 'C:/workspace',
+      chatMode: 'agent',
+      messages: [
+        {
+          content: 'I will inspect files.',
+          id: 'assistant-1',
+          role: 'assistant',
+          timestamp: 1,
+        },
+        {
+          content: 'List result for src/lib\n- file.ts',
+          id: 'tool-1',
+          role: 'tool',
+          timestamp: 2,
+          toolCallId: 'call-1',
+        },
+        {
+          content: 'Continue from that result.',
+          id: 'user-1',
+          role: 'user',
+          timestamp: 3,
+        },
+      ],
+      modelId: 'test-model',
+      providerId: 'google',
+      reasoningEffort: 'medium',
+      terminalExecutionMode: 'full',
+    },
+    context,
+    async (request) => {
+      if (firstTurnMessages.length === 0) {
+        firstTurnMessages.push(...request.messages)
+      }
+
+      return {
+        assistantContent: 'Done.',
+        toolCalls: [],
+      }
+    },
+  )
+
+  assert.equal(firstTurnMessages.some((message) => message.role === 'tool'), false)
+  const userMessages = firstTurnMessages.filter((message) => message.role === 'user')
+  const nonRuntimeUserMessages = userMessages.filter((message) => !message.content.includes('<context_update>'))
+  assert.equal(nonRuntimeUserMessages.length, 2)
+  assert.match(nonRuntimeUserMessages[0]?.content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
+  assert.equal(nonRuntimeUserMessages[1]?.content, 'Continue from that result.')
+
+  const bridgeMessage = firstTurnMessages.find((message) => message.role === 'assistant' && message.content === TOOL_RESULT_TO_USER_BRIDGE_TEXT)
+  assert.ok(bridgeMessage)
+})
+
+test('agent loop continues through repeated identical tool calls', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
 
@@ -291,6 +350,66 @@ test('agent loop allows repeated identical tool calls until the model changes co
     const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
     assert.equal(completedEvents.length, 3)
     assert.equal(failedEvents.length, 0)
+  })
+})
+
+test('agent loop preserves assistant tool invocations between turns even when the tool turn has no prose', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    await fs.writeFile(path.join(workspacePath, 'package.json'), '{}', 'utf8')
+
+    const { context } = createProviderContext()
+    const turnMessages: Message[][] = []
+    let turnCount = 0
+
+    await streamAgentLoopWithTools(
+      {
+        agentContextRootPath: workspacePath,
+        chatMode: 'agent',
+        messages: [],
+        modelId: 'test-model',
+        providerId: 'codex',
+        reasoningEffort: 'medium',
+        terminalExecutionMode: 'full',
+      },
+      context,
+      async (request) => {
+        turnCount += 1
+        turnMessages.push(request.messages)
+
+        if (turnCount === 1) {
+          return {
+            assistantContent: '',
+            toolCalls: [
+              {
+                argumentsText: JSON.stringify({ absolute_path: workspacePath }),
+                id: 'list-1',
+                name: 'list',
+                startedAt: Date.now(),
+              },
+            ],
+          }
+        }
+
+        return {
+          assistantContent: 'Done.',
+          toolCalls: [],
+        }
+      },
+    )
+
+    assert.equal(turnCount, 2)
+    const secondTurnAssistantMessages = (turnMessages[1] ?? []).filter((message) => message.role === 'assistant')
+    const toolInvocationAssistantMessage = secondTurnAssistantMessages.find(
+      (message) => (message.toolInvocations?.length ?? 0) > 0,
+    )
+    assert.ok(toolInvocationAssistantMessage)
+    assert.equal(toolInvocationAssistantMessage?.content, '')
+    assert.equal(toolInvocationAssistantMessage?.toolInvocations?.length, 1)
+    assert.equal(toolInvocationAssistantMessage?.toolInvocations?.[0]?.toolName, 'list')
+    assert.equal(
+      toolInvocationAssistantMessage?.toolInvocations?.[0]?.argumentsText,
+      JSON.stringify({ absolute_path: workspacePath }),
+    )
   })
 })
 
