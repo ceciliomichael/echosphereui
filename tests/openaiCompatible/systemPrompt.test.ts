@@ -41,8 +41,8 @@ test('buildSystemPrompt keeps built-in policy and preserves AGENTS design guidel
 
   assert.match(prompt, /<identity>/u)
   assert.match(prompt, /Act as a senior production-grade software engineering agent|You are Echo, a senior production-grade software engineering agent/u)
-  assert.match(prompt, /<user_instructions>/u)
-  assert.match(prompt, /## AGENTS\.md/u)
+  assert.match(prompt, /# AGENTS\.md instructions for /u)
+  assert.match(prompt, /<INSTRUCTIONS>/u)
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)
   assert.match(prompt, /<preferred_design_guidelines>/u)
   assert.match(prompt, /Frontend styling rules that should not be promoted here\./u)
@@ -103,7 +103,8 @@ test('buildSystemPrompt includes project AGENTS.md content in plan mode', async 
 
   assert.match(prompt, /Project instructions for plan mode\./u)
   assert.match(prompt, /Follow the project instructions in every prompt\./u)
-  assert.match(prompt, /## AGENTS\.md/u)
+  assert.match(prompt, /# AGENTS\.md instructions for /u)
+  assert.match(prompt, /<INSTRUCTIONS>/u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
 })
 
@@ -131,7 +132,7 @@ test('buildSystemPrompt includes DESIGN.md content as preferred design guideline
   assert.match(prompt, /## DESIGN\.md/u)
   assert.match(prompt, /Design guidance for the workspace\./u)
   assert.match(prompt, /Use calm neutrals, clear hierarchy, and descriptive labels\./u)
-  assert.equal(prompt.includes('<user_instructions>'), false)
+  assert.equal(prompt.includes('# AGENTS.md instructions for '), false)
 })
 
 test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async () => {
@@ -145,8 +146,8 @@ test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async
     terminalExecutionMode: 'full',
   })
 
-  assert.equal(prompt.includes('<user_instructions>'), false)
-  assert.equal(prompt.includes('</user_instructions>'), false)
+  assert.equal(prompt.includes('# AGENTS.md instructions for '), false)
+  assert.equal(prompt.includes('<INSTRUCTIONS>'), false)
 })
 
 test('buildSystemPrompt includes a gitignore-filtered workspace folder tree', async () => {

@@ -376,6 +376,52 @@ export interface WorkspaceExplorerWriteFileResult {
   sizeBytes: number
 }
 
+export interface WorkspaceExplorerCreateEntryInput {
+  isDirectory: boolean
+  relativePath: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerCreateEntryResult {
+  isDirectory: boolean
+  relativePath: string
+}
+
+export interface WorkspaceExplorerRenameEntryInput {
+  nextRelativePath: string
+  relativePath: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerRenameEntryResult {
+  nextRelativePath: string
+  relativePath: string
+}
+
+export interface WorkspaceExplorerDeleteEntryInput {
+  relativePath: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerDeleteEntryResult {
+  relativePath: string
+}
+
+export type WorkspaceExplorerTransferMode = 'copy' | 'move'
+
+export interface WorkspaceExplorerTransferEntryInput {
+  mode: WorkspaceExplorerTransferMode
+  relativePath: string
+  targetDirectoryRelativePath?: string
+  workspaceRootPath: string
+}
+
+export interface WorkspaceExplorerTransferEntryResult {
+  mode: WorkspaceExplorerTransferMode
+  relativePath: string
+  targetRelativePath: string
+}
+
 export interface CreateTerminalSessionInput {
   cols: number
   cwd?: string | null
@@ -695,8 +741,12 @@ export interface EchosphereChatApi {
 export interface EchosphereWorkspaceApi {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
+  createEntry: (input: WorkspaceExplorerCreateEntryInput) => Promise<WorkspaceExplorerCreateEntryResult>
+  deleteEntry: (input: WorkspaceExplorerDeleteEntryInput) => Promise<WorkspaceExplorerDeleteEntryResult>
   listDirectory: (input: WorkspaceExplorerListDirectoryInput) => Promise<WorkspaceExplorerEntry[]>
   readFile: (input: WorkspaceExplorerReadFileInput) => Promise<WorkspaceExplorerReadFileResult>
+  renameEntry: (input: WorkspaceExplorerRenameEntryInput) => Promise<WorkspaceExplorerRenameEntryResult>
+  transferEntry: (input: WorkspaceExplorerTransferEntryInput) => Promise<WorkspaceExplorerTransferEntryResult>
   writeFile: (input: WorkspaceExplorerWriteFileInput) => Promise<WorkspaceExplorerWriteFileResult>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
 }

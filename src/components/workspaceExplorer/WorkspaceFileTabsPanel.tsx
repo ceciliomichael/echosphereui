@@ -292,6 +292,13 @@ export function WorkspaceFileTabsPanel({
                 <button
                   type="button"
                   onClick={() => onSelectTab(tab.relativePath)}
+                  onMouseDown={(event) => {
+                    if (event.button !== 1) {
+                      return
+                    }
+                    event.preventDefault()
+                    onCloseTab(tab.relativePath)
+                  }}
                   className={[
                     'inline-flex h-full max-w-[248px] items-center gap-2 px-3 pr-9 text-sm transition-colors',
                     isActive

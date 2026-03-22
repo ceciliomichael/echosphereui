@@ -1,10 +1,18 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type {
+  WorkspaceExplorerCreateEntryInput,
+  WorkspaceExplorerCreateEntryResult,
+  WorkspaceExplorerDeleteEntryInput,
+  WorkspaceExplorerDeleteEntryResult,
   WorkspaceExplorerEntry,
   WorkspaceExplorerListDirectoryInput,
   WorkspaceExplorerReadFileInput,
   WorkspaceExplorerReadFileResult,
+  WorkspaceExplorerRenameEntryInput,
+  WorkspaceExplorerRenameEntryResult,
+  WorkspaceExplorerTransferEntryInput,
+  WorkspaceExplorerTransferEntryResult,
   WorkspaceExplorerWriteFileInput,
   WorkspaceExplorerWriteFileResult,
 } from '../../src/types/chat'
@@ -75,6 +83,62 @@ function hasBinaryContent(buffer: Buffer) {
     }
   }
   return false
+}
+
+async function statIfExists(targetPath: string) {
+  return fs.stat(targetPath).catch((error: unknown) => {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      return null
+    }
+    throw error
+  })
+}
+
+function isNestedWithinDirectory(parentAbsolutePath: string, targetAbsolutePath: string) {
+  const relativePath = path.relative(parentAbsolutePath, targetAbsolutePath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+function withNameSuffix(entryName: string, suffix: string, isDirectory: boolean) {
+  if (isDirectory) {
+    return `${entryName}${suffix}`
+  }
+
+  const parsedPath = path.parse(entryName)
+  return `${parsedPath.name}${suffix}${parsedPath.ext}`
+}
+
+async function resolveTransferDestinationPath(
+  destinationDirectoryAbsolutePath: string,
+  destinationDirectoryRelativePath: string,
+  sourceEntryName: string,
+  isDirectory: boolean,
+  mode: 'copy' | 'move',
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    let candidateName = sourceEntryName
+    if (attempt > 0) {
+      candidateName =
+        mode === 'copy'
+          ? withNameSuffix(sourceEntryName, attempt === 1 ? ' copy' : ` copy ${attempt}`, isDirectory)
+          : withNameSuffix(sourceEntryName, ` ${attempt + 1}`, isDirectory)
+    }
+
+    const candidateAbsolutePath = path.join(destinationDirectoryAbsolutePath, candidateName)
+    const candidateRelativePath =
+      destinationDirectoryRelativePath === DEFAULT_RELATIVE_PATH
+        ? candidateName
+        : path.join(destinationDirectoryRelativePath, candidateName)
+
+    const existingStats = await statIfExists(candidateAbsolutePath)
+    if (!existingStats) {
+      return {
+        absolutePath: candidateAbsolutePath,
+        relativePath: candidateRelativePath,
+      }
+    }
+  }
 }
 
 export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirectoryInput) {
@@ -185,5 +249,193 @@ export async function writeWorkspaceFile(input: WorkspaceExplorerWriteFileInput)
   return {
     relativePath: target.relativePath,
     sizeBytes: writtenStats.size,
+  }
+}
+
+export async function createWorkspaceEntry(
+  input: WorkspaceExplorerCreateEntryInput,
+): Promise<WorkspaceExplorerCreateEntryResult> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  if (target.relativePath === DEFAULT_RELATIVE_PATH) {
+    throw new Error('Cannot create workspace root.')
+  }
+
+  const existingStats = await fs.stat(target.absolutePath).catch((error: unknown) => {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      return null
+    }
+    throw error
+  })
+  if (existingStats) {
+    throw new Error(`Entry already exists: ${target.relativePath}`)
+  }
+
+  await fs.mkdir(path.dirname(target.absolutePath), { recursive: true })
+  if (input.isDirectory) {
+    await fs.mkdir(target.absolutePath)
+  } else {
+    await fs.writeFile(target.absolutePath, '', { encoding: 'utf8', flag: 'wx' })
+  }
+
+  return {
+    isDirectory: input.isDirectory,
+    relativePath: target.relativePath,
+  }
+}
+
+export async function renameWorkspaceEntry(
+  input: WorkspaceExplorerRenameEntryInput,
+): Promise<WorkspaceExplorerRenameEntryResult> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+  const sourceTarget = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  const destinationTarget = getSafeTargetPath(workspaceRootPath, input.nextRelativePath)
+  if (sourceTarget.relativePath === DEFAULT_RELATIVE_PATH || destinationTarget.relativePath === DEFAULT_RELATIVE_PATH) {
+    throw new Error('Cannot rename workspace root.')
+  }
+  if (sourceTarget.relativePath === destinationTarget.relativePath) {
+    return {
+      nextRelativePath: destinationTarget.relativePath,
+      relativePath: sourceTarget.relativePath,
+    }
+  }
+
+  const sourceStats = await fs.stat(sourceTarget.absolutePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Entry does not exist: ${sourceTarget.relativePath}`)
+    }
+    throw error
+  })
+  if (!sourceStats.isDirectory() && !sourceStats.isFile()) {
+    throw new Error(`Unsupported entry type: ${sourceTarget.relativePath}`)
+  }
+
+  const destinationStats = await fs.stat(destinationTarget.absolutePath).catch((error: unknown) => {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      return null
+    }
+    throw error
+  })
+  if (destinationStats) {
+    throw new Error(`Entry already exists: ${destinationTarget.relativePath}`)
+  }
+
+  await fs.mkdir(path.dirname(destinationTarget.absolutePath), { recursive: true })
+  await fs.rename(sourceTarget.absolutePath, destinationTarget.absolutePath)
+
+  return {
+    nextRelativePath: destinationTarget.relativePath,
+    relativePath: sourceTarget.relativePath,
+  }
+}
+
+export async function deleteWorkspaceEntry(
+  input: WorkspaceExplorerDeleteEntryInput,
+): Promise<WorkspaceExplorerDeleteEntryResult> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  if (target.relativePath === DEFAULT_RELATIVE_PATH) {
+    throw new Error('Cannot delete workspace root.')
+  }
+
+  const targetStats = await fs.stat(target.absolutePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Entry does not exist: ${target.relativePath}`)
+    }
+    throw error
+  })
+  if (!targetStats.isDirectory() && !targetStats.isFile()) {
+    throw new Error(`Unsupported entry type: ${target.relativePath}`)
+  }
+
+  await fs.rm(target.absolutePath, { force: false, recursive: true })
+  return {
+    relativePath: target.relativePath,
+  }
+}
+
+export async function transferWorkspaceEntry(
+  input: WorkspaceExplorerTransferEntryInput,
+): Promise<WorkspaceExplorerTransferEntryResult> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+  const sourceTarget = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  const destinationDirectoryTarget = getSafeTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
+
+  if (sourceTarget.relativePath === DEFAULT_RELATIVE_PATH) {
+    throw new Error('Cannot transfer workspace root.')
+  }
+
+  const sourceStats = await fs.stat(sourceTarget.absolutePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Entry does not exist: ${sourceTarget.relativePath}`)
+    }
+    throw error
+  })
+  if (!sourceStats.isDirectory() && !sourceStats.isFile()) {
+    throw new Error(`Unsupported entry type: ${sourceTarget.relativePath}`)
+  }
+
+  const destinationDirectoryStats = await fs.stat(destinationDirectoryTarget.absolutePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Directory does not exist: ${destinationDirectoryTarget.relativePath}`)
+    }
+    throw error
+  })
+  if (!destinationDirectoryStats.isDirectory()) {
+    throw new Error(`Expected a directory: ${destinationDirectoryTarget.relativePath}`)
+  }
+
+  if (
+    sourceStats.isDirectory() &&
+    isNestedWithinDirectory(sourceTarget.absolutePath, destinationDirectoryTarget.absolutePath)
+  ) {
+    throw new Error('Cannot place a folder inside itself.')
+  }
+
+  const sourceParentRelativePath = getSafeTargetPath(workspaceRootPath, path.dirname(sourceTarget.relativePath)).relativePath
+  const sourceEntryName = path.basename(sourceTarget.relativePath)
+  if (
+    input.mode === 'move' &&
+    destinationDirectoryTarget.relativePath === sourceParentRelativePath
+  ) {
+    return {
+      mode: input.mode,
+      relativePath: sourceTarget.relativePath,
+      targetRelativePath: sourceTarget.relativePath,
+    }
+  }
+
+  const destinationTarget = await resolveTransferDestinationPath(
+    destinationDirectoryTarget.absolutePath,
+    destinationDirectoryTarget.relativePath,
+    sourceEntryName,
+    sourceStats.isDirectory(),
+    input.mode,
+  )
+
+  if (input.mode === 'copy') {
+    if (sourceStats.isDirectory()) {
+      await fs.cp(sourceTarget.absolutePath, destinationTarget.absolutePath, {
+        errorOnExist: true,
+        force: false,
+        recursive: true,
+      })
+    } else {
+      await fs.copyFile(sourceTarget.absolutePath, destinationTarget.absolutePath)
+    }
+  } else {
+    await fs.rename(sourceTarget.absolutePath, destinationTarget.absolutePath)
+  }
+
+  return {
+    mode: input.mode,
+    relativePath: sourceTarget.relativePath,
+    targetRelativePath: destinationTarget.relativePath,
   }
 }

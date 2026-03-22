@@ -76,6 +76,11 @@ interface WorkspaceUiSession {
   tabs: WorkspaceFileTab[]
 }
 
+interface WorkspaceClipboardEntry {
+  mode: 'copy' | 'cut'
+  relativePath: string
+}
+
 function toWorkspaceScopedKey(workspacePath: string | null) {
   const normalizedPath = workspacePath?.trim() ?? ''
   if (normalizedPath.length === 0) {
@@ -206,6 +211,7 @@ export function ChatInterface({
   const previousWorkspaceUiKeyRef = useRef(activeWorkspaceUiKey)
   const activeWorkspacePathRef = useRef<string | null>(activeWorkspacePath)
   const workspaceAutosaveTimeoutsRef = useRef<Map<string, number>>(new Map())
+  const [workspaceClipboard, setWorkspaceClipboard] = useState<WorkspaceClipboardEntry | null>(null)
   const sidebarPanelRestoreRef = useRef<{
     shouldRestoreExplorer: boolean
     shouldRestoreRightPanel: boolean
@@ -224,6 +230,9 @@ export function ChatInterface({
       window.clearTimeout(timeoutId)
     })
     workspaceAutosaveTimeoutsRef.current.clear()
+  }, [activeWorkspaceUiKey])
+  useEffect(() => {
+    setWorkspaceClipboard(null)
   }, [activeWorkspaceUiKey])
   useEffect(() => {
     const previousWorkspaceUiKey = previousWorkspaceUiKeyRef.current
@@ -471,6 +480,171 @@ export function ChatInterface({
     rightPanelTab,
     settings,
   })
+
+  const normalizeWorkspaceRelativePath = useCallback((relativePath: string) => relativePath.replace(/\\/g, '/'), [])
+
+  const isWorkspacePathWithinTarget = useCallback(
+    (entryPath: string, targetPath: string) => {
+      const normalizedEntryPath = normalizeWorkspaceRelativePath(entryPath)
+      const normalizedTargetPath = normalizeWorkspaceRelativePath(targetPath)
+      return (
+        normalizedEntryPath === normalizedTargetPath || normalizedEntryPath.startsWith(`${normalizedTargetPath}/`)
+      )
+    },
+    [normalizeWorkspaceRelativePath],
+  )
+
+  const closeWorkspaceTabsByPathPrefix = useCallback(
+    (targetPath: string) => {
+      const normalizedTargetPath = normalizeWorkspaceRelativePath(targetPath)
+      workspaceAutosaveTimeoutsRef.current.forEach((timeoutId, relativePath) => {
+        if (!isWorkspacePathWithinTarget(relativePath, normalizedTargetPath)) {
+          return
+        }
+        window.clearTimeout(timeoutId)
+        workspaceAutosaveTimeoutsRef.current.delete(relativePath)
+      })
+
+      setWorkspaceFileTabs((currentTabs) => {
+        const nextTabs = currentTabs.filter(
+          (tab) => !isWorkspacePathWithinTarget(tab.relativePath, normalizedTargetPath),
+        )
+        if (nextTabs.length === 0) {
+          setIsWorkspaceTabsPanelVisible(false)
+        }
+        return nextTabs
+      })
+
+      setActiveWorkspaceFilePath((currentActivePath) => {
+        if (!currentActivePath || !isWorkspacePathWithinTarget(currentActivePath, normalizedTargetPath)) {
+          return currentActivePath
+        }
+        return null
+      })
+    },
+    [isWorkspacePathWithinTarget, normalizeWorkspaceRelativePath],
+  )
+
+  const clearWorkspaceClipboardByPathPrefix = useCallback(
+    (targetPath: string) => {
+      setWorkspaceClipboard((currentClipboard) => {
+        if (!currentClipboard || !isWorkspacePathWithinTarget(currentClipboard.relativePath, targetPath)) {
+          return currentClipboard
+        }
+        return null
+      })
+    },
+    [isWorkspacePathWithinTarget],
+  )
+
+  const handleCreateWorkspaceEntry = useCallback(async (relativePath: string, isDirectory: boolean) => {
+    const workspaceRootPath = activeWorkspacePathRef.current
+    if (!workspaceRootPath) {
+      throw new Error('Select a workspace folder first.')
+    }
+
+    await window.echosphereWorkspace.createEntry({
+      isDirectory,
+      relativePath,
+      workspaceRootPath,
+    })
+  }, [])
+
+  const handleRenameWorkspaceEntry = useCallback(
+    async (relativePath: string, nextRelativePath: string) => {
+      const workspaceRootPath = activeWorkspacePathRef.current
+      if (!workspaceRootPath) {
+        throw new Error('Select a workspace folder first.')
+      }
+
+      await window.echosphereWorkspace.renameEntry({
+        nextRelativePath,
+        relativePath,
+        workspaceRootPath,
+      })
+      clearWorkspaceClipboardByPathPrefix(relativePath)
+      closeWorkspaceTabsByPathPrefix(relativePath)
+    },
+    [clearWorkspaceClipboardByPathPrefix, closeWorkspaceTabsByPathPrefix],
+  )
+
+  const handleDeleteWorkspaceEntry = useCallback(
+    async (relativePath: string) => {
+      const workspaceRootPath = activeWorkspacePathRef.current
+      if (!workspaceRootPath) {
+        throw new Error('Select a workspace folder first.')
+      }
+
+      await window.echosphereWorkspace.deleteEntry({
+        relativePath,
+        workspaceRootPath,
+      })
+      clearWorkspaceClipboardByPathPrefix(relativePath)
+      closeWorkspaceTabsByPathPrefix(relativePath)
+    },
+    [clearWorkspaceClipboardByPathPrefix, closeWorkspaceTabsByPathPrefix],
+  )
+
+  const handleCopyWorkspaceEntry = useCallback(async (relativePath: string) => {
+    setWorkspaceClipboard({
+      mode: 'copy',
+      relativePath,
+    })
+  }, [])
+
+  const handleCutWorkspaceEntry = useCallback(async (relativePath: string) => {
+    setWorkspaceClipboard({
+      mode: 'cut',
+      relativePath,
+    })
+  }, [])
+
+  const handlePasteWorkspaceEntry = useCallback(
+    async (targetDirectoryRelativePath: string) => {
+      const workspaceRootPath = activeWorkspacePathRef.current
+      if (!workspaceRootPath) {
+        throw new Error('Select a workspace folder first.')
+      }
+      if (!workspaceClipboard) {
+        throw new Error('Nothing to paste.')
+      }
+
+      const result = await window.echosphereWorkspace.transferEntry({
+        mode: workspaceClipboard.mode === 'cut' ? 'move' : 'copy',
+        relativePath: workspaceClipboard.relativePath,
+        targetDirectoryRelativePath,
+        workspaceRootPath,
+      })
+
+      if (result.mode === 'move' && result.targetRelativePath !== result.relativePath) {
+        clearWorkspaceClipboardByPathPrefix(result.relativePath)
+        closeWorkspaceTabsByPathPrefix(result.relativePath)
+      }
+    },
+    [clearWorkspaceClipboardByPathPrefix, closeWorkspaceTabsByPathPrefix, workspaceClipboard],
+  )
+
+  const handleMoveWorkspaceEntry = useCallback(
+    async (relativePath: string, targetDirectoryRelativePath: string) => {
+      const workspaceRootPath = activeWorkspacePathRef.current
+      if (!workspaceRootPath) {
+        throw new Error('Select a workspace folder first.')
+      }
+
+      const result = await window.echosphereWorkspace.transferEntry({
+        mode: 'move',
+        relativePath,
+        targetDirectoryRelativePath,
+        workspaceRootPath,
+      })
+
+      if (result.targetRelativePath !== result.relativePath) {
+        clearWorkspaceClipboardByPathPrefix(result.relativePath)
+        closeWorkspaceTabsByPathPrefix(result.relativePath)
+      }
+    },
+    [clearWorkspaceClipboardByPathPrefix, closeWorkspaceTabsByPathPrefix],
+  )
 
   const handleOpenWorkspaceFile = useCallback(
     (relativePath: string) => {
@@ -948,8 +1122,16 @@ export function ChatInterface({
           />
           <WorkspaceExplorerPanel
             activeFilePath={activeWorkspaceFilePath}
+            clipboardEntry={workspaceClipboard}
             isOpen={isExplorerOpen}
+            onCopyEntry={handleCopyWorkspaceEntry}
+            onCreateEntry={handleCreateWorkspaceEntry}
+            onCutEntry={handleCutWorkspaceEntry}
+            onDeleteEntry={handleDeleteWorkspaceEntry}
+            onMoveEntry={handleMoveWorkspaceEntry}
             onOpenFile={handleOpenWorkspaceFile}
+            onPasteEntry={handlePasteWorkspaceEntry}
+            onRenameEntry={handleRenameWorkspaceEntry}
             onWidthChange={handleWorkspaceExplorerWidthChange}
             onWidthCommit={handleWorkspaceExplorerWidthCommit}
             width={workspaceExplorerWidth}

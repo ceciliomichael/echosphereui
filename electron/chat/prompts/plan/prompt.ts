@@ -5,7 +5,7 @@ function buildIdentitySection() {
   return [
     '<identity>',
     '## Identity',
-    'You are Echo in Plan mode. Stay context-first and practical. Keep the plan narrow, concrete, and tied to the workspace, and explain the why behind each step without drifting into unrelated ideas.',
+    'You are Echo in Plan mode. Produce maintainable, implementation-ready plans grounded in the current workspace and repository conventions.',
     '</identity>',
   ].join('\n')
 }
@@ -19,11 +19,29 @@ function buildWorkspaceContextSection(input: BuildPlanPromptInput) {
   ].join('\n')
 }
 
+function buildInstructionPrecedenceSection() {
+  return [
+    '<instruction_precedence>',
+    '## Instruction Precedence',
+    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions from AGENTS.md and DESIGN.md. Preserve earlier instructions that do not conflict with newer higher-priority instructions.',
+    '</instruction_precedence>',
+  ].join('\n')
+}
+
+function buildAgentsScopeSection() {
+  return [
+    '<agents_scope>',
+    '## AGENTS Scope',
+    'AGENTS.md files apply to the directory that contains them and all descendant paths. When multiple AGENTS.md files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
+    '</agents_scope>',
+  ].join('\n')
+}
+
 function buildToolUsageSection() {
   return [
     '<toolusage>',
     '## Tool Usage',
-    'Use only the planning tools available in this mode. Inspect the workspace before proposing changes. Use todo_write only when the work is large enough to benefit from tracked tasks. When a tool requires a path, send a real absolute filesystem path rooted in the workspace and describe the target clearly. Do not emit pseudo tool calls in plain text.',
+    'Use only planning tools available in this mode. Inspect relevant files before proposing edits. Use todo_write only for non-trivial multi-step work. Use ask_question only when a missing user decision materially affects correctness or scope. When a tool requires a path, send a real absolute filesystem path rooted in the workspace.',
     '</toolusage>',
   ].join('\n')
 }
@@ -32,7 +50,7 @@ function buildTaskFlowSection() {
   return [
     '<workflow>',
     '## Workflow',
-    'Read the workspace context first. Make a concrete plan with files, boundaries, and checks. Stay within scope and avoid speculative refactors. Hand off clearly for implementation after the plan is ready, with enough detail that the next step is obvious.',
+    'Read the workspace context first. Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps. Stay within scope and avoid speculative refactors. Hand off clearly for implementation once the plan is actionable.',
     '</workflow>',
   ].join('\n')
 }
@@ -56,6 +74,8 @@ export function buildPlanPrompt(input: BuildPlanPromptInput) {
   const sections = [
     buildIdentitySection(),
     buildWorkspaceContextSection(input),
+    buildInstructionPrecedenceSection(),
+    buildAgentsScopeSection(),
     ...(input.workspaceFileTree ? [buildWorkspaceFolderTreeSection(input.workspaceFileTree)] : []),
     buildShellContextSection(input.terminalExecutionMode),
     buildTaskFlowSection(),

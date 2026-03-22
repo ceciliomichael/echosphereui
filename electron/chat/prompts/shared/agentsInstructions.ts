@@ -8,11 +8,12 @@ interface BuildSharedAgentsInstructionsInput {
 const PROJECT_DOC_SEPARATOR = '\n\n--- project-doc ---\n\n'
 const PROJECT_DOC_MAX_BYTES = 64 * 1024
 const PROJECT_ROOT_MARKERS = ['.git']
+const AGENTS_INSTRUCTIONS_PREFIX = '# AGENTS.md instructions for '
 const PROJECT_DOC_SPECS = [
   {
     filename: 'AGENTS.md',
     sourceLabel: 'AGENTS.md',
-    sectionTag: 'user_instructions',
+    sectionTag: null,
   },
   {
     filename: 'DESIGN.md',
@@ -173,6 +174,16 @@ async function buildProjectDocSection(agentContextRootPath: string, spec: Projec
   const content = await readProjectDocContent(agentContextRootPath, spec.filename)
   if (!content) {
     return null
+  }
+
+  if (spec.sectionTag === null) {
+    return [
+      `${AGENTS_INSTRUCTIONS_PREFIX}${agentContextRootPath}`,
+      '',
+      '<INSTRUCTIONS>',
+      content,
+      '</INSTRUCTIONS>',
+    ].join('\n')
   }
 
   return [

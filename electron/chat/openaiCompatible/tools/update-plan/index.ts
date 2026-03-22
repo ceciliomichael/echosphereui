@@ -252,7 +252,7 @@ export const todoWriteTool: OpenAICompatibleToolDefinition = {
             type: 'string',
           },
           tasks: {
-            description: 'Ordered todo items. Use in_progress for active work; multiple tasks may be in_progress at once.',
+            description: 'Ordered todo items. Prefer exactly one in_progress task in normal flow.',
             items: {
               additionalProperties: false,
               properties: {
@@ -274,7 +274,7 @@ export const todoWriteTool: OpenAICompatibleToolDefinition = {
             type: 'array',
           },
           steps: {
-            description: 'Legacy alias for tasks. Use in_progress for active work; multiple tasks may be in_progress at once.',
+            description: 'Legacy alias for tasks. Prefer exactly one in_progress task in normal flow.',
             items: {
               additionalProperties: false,
               properties: {

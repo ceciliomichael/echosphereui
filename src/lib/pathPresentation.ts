@@ -12,6 +12,15 @@ export function getPathBasename(input: string) {
   return pathSegments[pathSegments.length - 1] ?? input
 }
 
+export function getPathDirname(input: string) {
+  const normalizedPath = normalizePathSeparators(input).replace(/^\.\/+/u, '')
+  const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0)
+  if (pathSegments.length <= 1) {
+    return '.'
+  }
+  return pathSegments.slice(0, -1).join('/')
+}
+
 export function getRelativeDisplayPath(rootPath: string, targetPath: string) {
   const normalizedRootPath = trimTrailingSlash(normalizePathSeparators(rootPath).trim())
   const normalizedTargetPath = trimTrailingSlash(normalizePathSeparators(targetPath).trim())

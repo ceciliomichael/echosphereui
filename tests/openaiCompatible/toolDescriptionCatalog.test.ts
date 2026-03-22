@@ -16,5 +16,15 @@ test('todo_write tool description includes task tracking guidance', () => {
   assert.match(description, /Call this only when explicit task tracking helps on genuinely larger, branching, or uncertain work\./u)
   assert.match(description, /Skip it for small or linear tasks\./u)
   assert.match(description, /Optional `sessionKey`: short session key for the current todo list/u)
-  assert.match(description, /multiple tasks are allowed/u)
+  assert.match(description, /keep exactly one `in_progress` task in normal flow/u)
+  assert.match(description, /Anchor updates to real progress/u)
+  assert.match(description, /Do not call `todo_write` every turn\./u)
+  assert.match(description, /Prefer one high-signal update after a meaningful chunk of work/u)
+})
+
+test('all tool descriptions include the global tool contract', () => {
+  const description = getToolDescription('read')
+  assert.match(description, /Global tool contract:/u)
+  assert.match(description, /Treat tool outputs as source of truth\./u)
+  assert.match(description, /Prefer inspect-first flow/u)
 })

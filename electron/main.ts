@@ -21,8 +21,12 @@ import type {
   CreateGitBranchInput,
   CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
+  WorkspaceExplorerCreateEntryInput,
+  WorkspaceExplorerDeleteEntryInput,
   WorkspaceExplorerListDirectoryInput,
   WorkspaceExplorerReadFileInput,
+  WorkspaceExplorerRenameEntryInput,
+  WorkspaceExplorerTransferEntryInput,
   WorkspaceExplorerWriteFileInput,
   EstimateContextUsageInput,
   GitCommitInput,
@@ -98,7 +102,15 @@ import {
   createWorkspaceRedoCheckpointFromSource,
   restoreWorkspaceCheckpoint,
 } from './workspace/checkpoints'
-import { listWorkspaceDirectory, readWorkspaceFile, writeWorkspaceFile } from './workspace/explorer'
+import {
+  createWorkspaceEntry,
+  deleteWorkspaceEntry,
+  listWorkspaceDirectory,
+  readWorkspaceFile,
+  renameWorkspaceEntry,
+  transferWorkspaceEntry,
+  writeWorkspaceFile,
+} from './workspace/explorer'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -384,6 +396,18 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:explorer:writeFile', async (_event, input: WorkspaceExplorerWriteFileInput) =>
     writeWorkspaceFile(input),
+  )
+  ipcMain.handle('workspace:explorer:createEntry', async (_event, input: WorkspaceExplorerCreateEntryInput) =>
+    createWorkspaceEntry(input),
+  )
+  ipcMain.handle('workspace:explorer:renameEntry', async (_event, input: WorkspaceExplorerRenameEntryInput) =>
+    renameWorkspaceEntry(input),
+  )
+  ipcMain.handle('workspace:explorer:deleteEntry', async (_event, input: WorkspaceExplorerDeleteEntryInput) =>
+    deleteWorkspaceEntry(input),
+  )
+  ipcMain.handle('workspace:explorer:transferEntry', async (_event, input: WorkspaceExplorerTransferEntryInput) =>
+    transferWorkspaceEntry(input),
   )
 }
 
