@@ -34,7 +34,7 @@ import type { ResolvedTheme } from '../lib/theme'
 import type { AppSettings, ProvidersState, ToolInvocationTrace } from '../types/chat'
 import type { WorkspaceFileTab } from '../components/workspaceExplorer/types'
 import { DEFAULT_DIFF_PANEL_WIDTH } from '../lib/diffPanelSizing'
-import { DEFAULT_WORKSPACE_EXPLORER_WIDTH, clampWorkspaceExplorerWidth } from '../lib/workspaceExplorerSizing'
+import { clampWorkspaceExplorerWidth } from '../lib/workspaceExplorerSizing'
 
 export type RightPanelTab = ChatInterfaceRightPanelTab
 
@@ -202,8 +202,8 @@ export function ChatInterface({
   const [workspaceFileTabs, setWorkspaceFileTabs] = useState<WorkspaceFileTab[]>([])
   const [activeWorkspaceFilePath, setActiveWorkspaceFilePath] = useState<string | null>(null)
   const [isWorkspaceTabsPanelVisible, setIsWorkspaceTabsPanelVisible] = useState(false)
-  const [workspaceExplorerWidth, setWorkspaceExplorerWidth] = useState(DEFAULT_WORKSPACE_EXPLORER_WIDTH)
-  const [workspaceEditorWidth, setWorkspaceEditorWidth] = useState(diffPanelWidth)
+  const [workspaceExplorerWidth, setWorkspaceExplorerWidth] = useState(settings.workspaceExplorerWidth)
+  const [workspaceEditorWidth, setWorkspaceEditorWidth] = useState(settings.workspaceEditorWidth)
   const [sourceControlPanelWidth, setSourceControlPanelWidth] = useState(diffPanelWidth)
   const [conversationDiffPanelWidth, setConversationDiffPanelWidth] = useState(diffPanelWidth)
   const workspaceUiSessionsRef = useRef<Record<string, WorkspaceUiSession>>({})
@@ -234,6 +234,12 @@ export function ChatInterface({
   useEffect(() => {
     setWorkspaceClipboard(null)
   }, [activeWorkspaceUiKey])
+  useEffect(() => {
+    setWorkspaceExplorerWidth(settings.workspaceExplorerWidth)
+  }, [settings.workspaceExplorerWidth])
+  useEffect(() => {
+    setWorkspaceEditorWidth(settings.workspaceEditorWidth)
+  }, [settings.workspaceEditorWidth])
   useEffect(() => {
     const previousWorkspaceUiKey = previousWorkspaceUiKeyRef.current
     if (previousWorkspaceUiKey === activeWorkspaceUiKey) {
@@ -721,7 +727,7 @@ export function ChatInterface({
           )
         })
     },
-    [setIsSidebarOpen],
+    [onRightPanelOpenChange, setIsSidebarOpen],
   )
 
   const handleCloseWorkspaceTab = useCallback((relativePath: string) => {
@@ -760,17 +766,29 @@ export function ChatInterface({
     setWorkspaceEditorWidth(nextWidth)
   }, [])
 
-  const handleWorkspaceEditorWidthCommit = useCallback((nextWidth: number) => {
-    setWorkspaceEditorWidth(nextWidth)
-  }, [])
+  const handleWorkspaceEditorWidthCommit = useCallback(
+    (nextWidth: number) => {
+      setWorkspaceEditorWidth(nextWidth)
+      if (nextWidth !== settings.workspaceEditorWidth) {
+        void onUpdateSettings({ workspaceEditorWidth: nextWidth })
+      }
+    },
+    [onUpdateSettings, settings.workspaceEditorWidth],
+  )
 
   const handleWorkspaceExplorerWidthChange = useCallback((nextWidth: number) => {
-    void nextWidth
-  }, [])
-
-  const handleWorkspaceExplorerWidthCommit = useCallback((nextWidth: number) => {
     setWorkspaceExplorerWidth(nextWidth)
   }, [])
+
+  const handleWorkspaceExplorerWidthCommit = useCallback(
+    (nextWidth: number) => {
+      setWorkspaceExplorerWidth(nextWidth)
+      if (nextWidth !== settings.workspaceExplorerWidth) {
+        void onUpdateSettings({ workspaceExplorerWidth: nextWidth })
+      }
+    },
+    [onUpdateSettings, settings.workspaceExplorerWidth],
+  )
 
   const handleConversationDiffPanelWidthChange = useCallback((nextWidth: number) => {
     setConversationDiffPanelWidth(nextWidth)
@@ -1117,6 +1135,7 @@ export function ChatInterface({
             onSelectTab={handleSelectWorkspaceTab}
             onWidthChange={handleWorkspaceEditorWidthChange}
             onWidthCommit={handleWorkspaceEditorWidthCommit}
+            wordWrapEnabled={settings.workspaceFileEditorWordWrap}
             tabs={workspaceFileTabs}
             width={workspaceEditorWidth}
           />

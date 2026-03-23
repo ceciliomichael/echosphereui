@@ -1,4 +1,4 @@
-export const DEFAULT_WORKSPACE_EXPLORER_WIDTH = 300
+export const DEFAULT_WORKSPACE_EXPLORER_WIDTH = 360
 export const MIN_WORKSPACE_EXPLORER_WIDTH = 100
 export const MAX_WORKSPACE_EXPLORER_WIDTH = 520
 
@@ -12,4 +12,8 @@ export function clampWorkspaceExplorerWidth(explorerWidth: number, viewportWidth
     Math.max(Math.round(explorerWidth), MIN_WORKSPACE_EXPLORER_WIDTH),
     getMaxWorkspaceExplorerWidth(viewportWidth),
   )
+}
+
+export function clampStoredWorkspaceExplorerWidth(explorerWidth: number) {
+  return Math.max(MIN_WORKSPACE_EXPLORER_WIDTH, Math.round(explorerWidth))
 }

@@ -17,6 +17,7 @@ import type { HighlightedToken } from '../../lib/codeHighlighting'
 interface WorkspaceFileEditorProps {
   fileName: string
   value: string
+  wordWrapEnabled: boolean
   onChange: (nextValue: string) => void
 }
 
@@ -57,6 +58,22 @@ function countLines(value: string) {
   }
 
   return totalLines
+}
+
+function normalizeEditorLineText(value: string) {
+  return value.replace(/\r\n?/g, '\n')
+}
+
+function measureEditorLineWrapCount(
+  context: CanvasRenderingContext2D,
+  text: string,
+  availableWidthPx: number,
+) {
+  if (text.length === 0 || availableWidthPx <= 0) {
+    return 1
+  }
+
+  return Math.max(1, Math.ceil(context.measureText(text).width / availableWidthPx))
 }
 
 function getTokenClassName(fontStyle: number | undefined) {
@@ -291,7 +308,13 @@ function renderHighlightedTokens(tokens: readonly HighlightedToken[], matches: r
   return renderedSegments
 }
 
-export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName, value, onChange }: WorkspaceFileEditorProps) {
+export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({
+  fileName,
+  value,
+  wordWrapEnabled,
+  onChange,
+}: WorkspaceFileEditorProps) {
+  const editorViewportRef = useRef<HTMLDivElement | null>(null)
   const lineNumbersRef = useRef<HTMLDivElement | null>(null)
   const highlightedLayerRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -311,7 +334,7 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
     endIndex: Math.min(totalLineCount, EDITOR_VIRTUALIZATION_THRESHOLD),
     startIndex: 0,
   }))
-  const shouldVirtualize = totalLineCount >= EDITOR_VIRTUALIZATION_THRESHOLD
+  const shouldVirtualize = !wordWrapEnabled && totalLineCount >= EDITOR_VIRTUALIZATION_THRESHOLD
   const gutterWidthCh = Math.max(4, String(totalLineCount).length + 1)
   const visibleStartIndex = shouldVirtualize ? virtualRange.startIndex : 0
   const visibleEndIndex = shouldVirtualize ? Math.min(totalLineCount, virtualRange.endIndex) : totalLineCount
@@ -364,6 +387,13 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
     [searchMatchesByLine, visibleEndIndex, visibleStartIndex],
   )
   const totalSearchMatchCount = searchMatches.length
+  const highlightedCodeClassName = wordWrapEnabled ? 'block min-w-full w-full bg-transparent' : 'block w-fit min-w-full bg-transparent'
+  const highlightedLineClassName = wordWrapEnabled ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre'
+  const textAreaClassName = [
+    'workspace-editor-scrollbar workspace-editor-textarea absolute inset-0 h-full min-h-0 w-full resize-none border-0 bg-transparent px-3 py-1.5 font-mono text-[12px] leading-5 outline-none',
+    wordWrapEnabled ? 'overflow-y-auto overflow-x-hidden' : 'overflow-auto',
+  ].join(' ')
+  const [wrappedLineCounts, setWrappedLineCounts] = useState<number[]>(() => highlightedLines.map(() => 1))
 
   const handleScroll = useCallback(() => {
     const textAreaElement = textAreaRef.current
@@ -375,7 +405,11 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
     }
     if (highlightedLayerRef.current) {
       highlightedLayerRef.current.scrollTop = textAreaElement.scrollTop
-      highlightedLayerRef.current.scrollLeft = textAreaElement.scrollLeft
+      if (!wordWrapEnabled) {
+        highlightedLayerRef.current.scrollLeft = textAreaElement.scrollLeft
+      } else {
+        highlightedLayerRef.current.scrollLeft = 0
+      }
     }
 
     if (!shouldVirtualize) {
@@ -397,7 +431,71 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
         startIndex: visibleStart,
       }
     })
-  }, [shouldVirtualize, totalLineCount])
+  }, [shouldVirtualize, totalLineCount, wordWrapEnabled])
+
+  useEffect(() => {
+    if (!wordWrapEnabled) {
+      setWrappedLineCounts(highlightedLines.map(() => 1))
+      return
+    }
+
+    const viewportElement = editorViewportRef.current
+    const textAreaElement = textAreaRef.current
+    if (!viewportElement || !textAreaElement) {
+      return
+    }
+
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return
+    }
+
+    let isDisposed = false
+
+    const updateWrappedLineCounts = () => {
+      if (isDisposed) {
+        return
+      }
+
+      const availableWidth = Math.max(0, viewportElement.clientWidth - 24)
+      const computedStyle = window.getComputedStyle(textAreaElement)
+      context.font = `${computedStyle.fontStyle} ${computedStyle.fontVariant} ${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`
+
+      const nextCounts = highlightedLines.map((line) =>
+        measureEditorLineWrapCount(context, normalizeEditorLineText(line.text), availableWidth),
+      )
+
+      setWrappedLineCounts((currentCounts) => {
+        if (
+          currentCounts.length === nextCounts.length &&
+          currentCounts.every((count, index) => count === nextCounts[index])
+        ) {
+          return currentCounts
+        }
+
+        return nextCounts
+      })
+    }
+
+    updateWrappedLineCounts()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateWrappedLineCounts()
+    })
+    resizeObserver.observe(viewportElement)
+
+    if (document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        updateWrappedLineCounts()
+      })
+    }
+
+    return () => {
+      isDisposed = true
+      resizeObserver.disconnect()
+    }
+  }, [highlightedLines, wordWrapEnabled])
 
   function closeSearchPanel() {
     setIsSearchOpen(false)
@@ -633,6 +731,35 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
     }
   }, [activeSearchMatchIndex, handleScroll, isSearchOpen, lineStartOffsets, searchMatches])
 
+  useEffect(() => {
+    if (!wordWrapEnabled) {
+      return
+    }
+
+    const textAreaElement = textAreaRef.current
+    if (textAreaElement) {
+      textAreaElement.scrollLeft = 0
+    }
+
+    if (highlightedLayerRef.current) {
+      highlightedLayerRef.current.scrollLeft = 0
+    }
+  }, [wordWrapEnabled])
+
+  const lineNumberRows = useMemo(
+    () =>
+      visibleLineNumbers.map((lineNumber, index) => {
+        const sourceLineIndex = visibleStartIndex + index
+        const wrappedLineCount = wrappedLineCounts[sourceLineIndex] ?? 1
+
+        return {
+          lineNumber,
+          minHeight: wrappedLineCount * EDITOR_LINE_HEIGHT_PX,
+        }
+      }),
+    [visibleLineNumbers, visibleStartIndex, wrappedLineCounts],
+  )
+
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 bg-surface">
       <div className="flex min-h-0 flex-1 min-w-0">
@@ -644,16 +771,20 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
           <pre className="m-0 py-1.5 text-[12px] leading-5 text-subtle-foreground">
             <code className="block">
               {topSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${topSpacerHeight}px` }} /> : null}
-              {visibleLineNumbers.map((lineNumber) => (
-                <div key={`line-number-${lineNumber}`} className="select-none px-2 text-right">
-                  {lineNumber}
+              {lineNumberRows.map((row) => (
+                <div
+                  key={`line-number-${row.lineNumber}`}
+                  className="select-none px-2 text-right leading-5"
+                  style={{ minHeight: `${row.minHeight}px` }}
+                >
+                  {row.lineNumber}
                 </div>
               ))}
               {bottomSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${bottomSpacerHeight}px` }} /> : null}
             </code>
           </pre>
         </div>
-        <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-surface">
+        <div ref={editorViewportRef} className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-surface">
           {isSearchOpen ? (
             <div className="absolute right-4 top-3 z-20 w-[min(31rem,calc(100%-2rem))] overflow-hidden rounded-lg border border-[#2e2e2e] bg-[#1e1e1e] text-[#cccccc] shadow-sm">
               <div className="flex items-stretch">
@@ -827,12 +958,12 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
             aria-hidden="true"
           >
             <pre className="m-0 min-w-full bg-transparent">
-              <code className="block w-fit min-w-full bg-transparent">
+              <code className={highlightedCodeClassName}>
                 {topSpacerHeight > 0 ? <div aria-hidden="true" style={{ height: `${topSpacerHeight}px` }} /> : null}
                 {visibleHighlightedLines.map((line, index) => (
                   <div
                     key={`editor-highlighted-${visibleStartIndex + index}-${line.text.slice(0, 16)}`}
-                    className="whitespace-pre"
+                    className={highlightedLineClassName}
                   >
                     {renderHighlightedTokens(line.tokens, visibleSearchMatches[index] ?? [])}
                   </div>
@@ -848,10 +979,10 @@ export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({ fileName,
             onScroll={handleScroll}
             onKeyDown={handleKeyDown}
             spellCheck={false}
-            wrap="off"
+            wrap={wordWrapEnabled ? 'soft' : 'off'}
             aria-label={`Editing ${fileName}`}
             style={{ caretColor: 'var(--color-foreground)', color: 'transparent' }}
-            className="workspace-editor-scrollbar workspace-editor-textarea absolute inset-0 h-full min-h-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-1.5 font-mono text-[12px] leading-5 outline-none"
+            className={textAreaClassName}
           />
         </div>
       </div>

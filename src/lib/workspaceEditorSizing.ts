@@ -17,3 +17,7 @@ export function clampWorkspaceEditorWidth(editorWidth: number, parentWidth: numb
     getMaxWorkspaceEditorWidth(parentWidth),
   )
 }
+
+export function clampStoredWorkspaceEditorWidth(editorWidth: number) {
+  return Math.max(MIN_WORKSPACE_EDITOR_WIDTH, Math.round(editorWidth))
+}

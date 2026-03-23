@@ -24,6 +24,7 @@ interface GeneralSettingsPanelProps {
     appearance: AppAppearance
     language: AppLanguage
     sendMessageOnEnter: boolean
+    workspaceFileEditorWordWrap: boolean
   }
 }
 
@@ -78,6 +79,21 @@ export function GeneralSettingsPanel({
             />
           </div>
         </SettingsRow>
+
+        <div className="border-t border-border">
+          <SettingsRow
+            title="Workspace editor word wrap"
+            description="Wrap long lines in the workspace file editor."
+          >
+            <SegmentedField
+              ariaLabel="Workspace editor word wrap"
+              value={settings.workspaceFileEditorWordWrap ? 'on' : 'off'}
+              options={BOOLEAN_SEGMENT_OPTIONS}
+              disabled={isLoading || saveState === 'saving'}
+              onChange={(nextValue) => onUpdateSettings({ workspaceFileEditorWordWrap: nextValue === 'on' })}
+            />
+          </SettingsRow>
+        </div>
 
         <div className="border-t border-border">
           <SettingsRow

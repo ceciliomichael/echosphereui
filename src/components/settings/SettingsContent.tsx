@@ -15,6 +15,7 @@ interface GeneralSettingsViewModel {
     appearance: AppAppearance
     language: AppLanguage
     sendMessageOnEnter: boolean
+    workspaceFileEditorWordWrap: boolean
   }
 }
 

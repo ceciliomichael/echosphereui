@@ -13,6 +13,7 @@ interface WorkspaceFileTabsPanelProps {
   onFileContentChange: (relativePath: string, content: string) => void
   onWidthChange: (nextWidth: number) => void
   onWidthCommit: (nextWidth: number) => void
+  wordWrapEnabled: boolean
   tabs: readonly WorkspaceFileTab[]
   width: number
 }
@@ -25,16 +26,12 @@ export function WorkspaceFileTabsPanel({
   onFileContentChange,
   onWidthChange,
   onWidthCommit,
+  wordWrapEnabled,
   tabs,
   width,
 }: WorkspaceFileTabsPanelProps) {
-  if (!isOpen || tabs.length === 0) {
-    return null
-  }
-
-  const activeTab = tabs.find((tab) => tab.relativePath === activeTabPath) ?? tabs[0]
   const hasTabs = tabs.length > 0
-  const breadcrumbSegments = activeTab.relativePath.split(/[\\/]+/).filter((segment) => segment.length > 0)
+  const activeTab = tabs.find((tab) => tab.relativePath === activeTabPath) ?? null
   const panelRef = useRef<HTMLElement | null>(null)
   const tabsViewportRef = useRef<HTMLDivElement | null>(null)
   const resizeDragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
@@ -235,6 +232,12 @@ export function WorkspaceFileTabsPanel({
     }
   }, [tabsScrollMetrics.canScroll, tabsScrollMetrics.thumbWidth])
 
+  if (!isOpen || !hasTabs || !activeTab) {
+    return null
+  }
+
+  const breadcrumbSegments = activeTab.relativePath.split(/[\\/]+/).filter((segment) => segment.length > 0)
+
   function handleThumbPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
     const pointerId = event.pointerId
     dragStateRef.current = {
@@ -370,6 +373,7 @@ export function WorkspaceFileTabsPanel({
           <WorkspaceFileEditor
             fileName={activeTab.fileName}
             value={activeTab.content}
+            wordWrapEnabled={wordWrapEnabled}
             onChange={(nextValue) => onFileContentChange(activeTab.relativePath, nextValue)}
           />
         )}

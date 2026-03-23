@@ -7,6 +7,8 @@ import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
+import { clampStoredWorkspaceEditorWidth } from '../../src/lib/workspaceEditorSizing'
+import { clampStoredWorkspaceExplorerWidth } from '../../src/lib/workspaceExplorerSizing'
 import type { SourceControlSectionId } from '../../src/types/chat'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
@@ -190,7 +192,20 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.diffPanelWidth === 'number' && Number.isFinite(input.diffPanelWidth)
       ? clampStoredDiffPanelWidth(input.diffPanelWidth)
       : DEFAULT_APP_SETTINGS.diffPanelWidth
+  const workspaceEditorWidth =
+    typeof input?.workspaceEditorWidth === 'number' && Number.isFinite(input.workspaceEditorWidth)
+      ? clampStoredWorkspaceEditorWidth(input.workspaceEditorWidth)
+      : DEFAULT_APP_SETTINGS.workspaceEditorWidth
+  const workspaceExplorerWidth =
+    typeof input?.workspaceExplorerWidth === 'number' && Number.isFinite(input.workspaceExplorerWidth)
+      ? clampStoredWorkspaceExplorerWidth(input.workspaceExplorerWidth)
+      : DEFAULT_APP_SETTINGS.workspaceExplorerWidth
+  const workspaceFileEditorWordWrap =
+    typeof input?.workspaceFileEditorWordWrap === 'boolean'
+      ? input.workspaceFileEditorWordWrap
+      : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap
   const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
+
   const lastActiveConversationId =
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
       ? input.lastActiveConversationId.trim()
@@ -221,7 +236,11 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     revertEditSessionsByConversation,
     sendMessageOnEnter,
     sidebarWidth,
+    workspaceEditorWidth,
+    workspaceExplorerWidth,
+    workspaceFileEditorWordWrap,
     sourceControlSectionOrder,
+
     sourceControlSectionOpen,
     sourceControlSectionSizes,
     terminalOpenByWorkspace,

@@ -3,6 +3,8 @@ import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
+import { clampStoredWorkspaceEditorWidth } from '../../src/lib/workspaceEditorSizing'
+import { clampStoredWorkspaceExplorerWidth } from '../../src/lib/workspaceExplorerSizing'
 import type { AppSettings } from '../../src/types/chat'
 import type { SourceControlSectionId } from '../../src/types/chat'
 
@@ -181,7 +183,20 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.sidebarWidth === 'number' && Number.isFinite(candidate.sidebarWidth)
         ? Math.max(DEFAULT_APP_SETTINGS.sidebarWidth, candidate.sidebarWidth)
         : DEFAULT_APP_SETTINGS.sidebarWidth,
+    workspaceEditorWidth:
+      typeof candidate?.workspaceEditorWidth === 'number' && Number.isFinite(candidate.workspaceEditorWidth)
+        ? clampStoredWorkspaceEditorWidth(candidate.workspaceEditorWidth)
+        : DEFAULT_APP_SETTINGS.workspaceEditorWidth,
+    workspaceExplorerWidth:
+      typeof candidate?.workspaceExplorerWidth === 'number' && Number.isFinite(candidate.workspaceExplorerWidth)
+        ? clampStoredWorkspaceExplorerWidth(candidate.workspaceExplorerWidth)
+        : DEFAULT_APP_SETTINGS.workspaceExplorerWidth,
+    workspaceFileEditorWordWrap:
+      typeof candidate?.workspaceFileEditorWordWrap === 'boolean'
+        ? candidate.workspaceFileEditorWordWrap
+        : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap,
     sourceControlSectionOrder: sanitizeSourceControlSectionOrder(candidate?.sourceControlSectionOrder),
+
     sourceControlSectionOpen: sanitizeSourceControlSectionOpen(candidate?.sourceControlSectionOpen),
     sourceControlSectionSizes: sanitizeSourceControlSectionSizes(candidate?.sourceControlSectionSizes),
     terminalOpenByWorkspace: sanitizeTerminalOpenByWorkspace(candidate?.terminalOpenByWorkspace),

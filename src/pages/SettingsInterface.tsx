@@ -90,6 +90,7 @@ export function SettingsInterface({
               appearance: settings.appearance,
               language: settings.language,
               sendMessageOnEnter: settings.sendMessageOnEnter,
+              workspaceFileEditorWordWrap: settings.workspaceFileEditorWordWrap,
             },
           }}
           modelsSettings={{

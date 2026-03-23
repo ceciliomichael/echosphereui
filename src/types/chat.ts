@@ -206,6 +206,9 @@ export interface AppSettings {
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   sendMessageOnEnter: boolean
   sidebarWidth: number
+  workspaceEditorWidth: number
+  workspaceExplorerWidth: number
+  workspaceFileEditorWordWrap: boolean
   sourceControlSectionOrder: SourceControlSectionId[]
   sourceControlSectionOpen: Record<SourceControlSectionOpenId, boolean>
   sourceControlSectionSizes: Record<SourceControlSectionId, number>
