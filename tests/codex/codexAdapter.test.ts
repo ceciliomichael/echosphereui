@@ -111,7 +111,7 @@ test('buildCodexInputMessages includes assistant tool invocation context before 
           'Use this to preserve the exact tool requests that led to the results below.',
           '- list({',
           '  "absolute_path": "C:/workspace"',
-          '}) completed. Result: Listed C:/workspace.',
+          '}) completed.',
         ].join('\n'),
         type: 'output_text',
       }],

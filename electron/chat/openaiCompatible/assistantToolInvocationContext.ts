@@ -27,8 +27,7 @@ export function buildAssistantToolInvocationContext(message: Pick<Message, 'role
     .map((invocation) => {
       const argumentsText = formatArgumentsText(invocation.argumentsText)
       const stateLabel = describeToolInvocationState(invocation.state)
-      const resultText = hasText(invocation.resultContent) ? ` Result: ${invocation.resultContent.trim()}` : ''
-      return `- ${invocation.toolName}(${argumentsText}) ${stateLabel}.${resultText}`
+      return `- ${invocation.toolName}(${argumentsText}) ${stateLabel}.`
     })
 
   if (lines.length === 0) {

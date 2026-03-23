@@ -1,10 +1,7 @@
 import type { ChatMode, Message } from '../../../src/types/chat'
 import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
 import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
-import {
-  ensureToolOutputMessageEnvelope,
-  isReplayToolResultUserMessage,
-} from '../openaiCompatible/toolResultReplayEnvelope'
+import { ensureToolOutputMessageEnvelope } from '../openaiCompatible/toolResultReplayEnvelope'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
 import type { ProviderStreamRequest } from '../providerTypes'
@@ -111,18 +108,6 @@ export function buildCodexInputMessages(messages: Message[]) {
     if (message.role === 'tool') {
       if (hasText(message.content)) {
         pendingToolContentsByTurn.push(message.content)
-      }
-      continue
-    }
-
-    if (isReplayToolResultUserMessage(message)) {
-      flushPendingToolContents()
-      const toolResultInputMessage = toCodexInputMessage({
-        ...message,
-        content: ensureToolOutputMessageEnvelope(message.content),
-      })
-      if (toolResultInputMessage) {
-        inputMessages.push(toolResultInputMessage)
       }
       continue
     }

@@ -200,12 +200,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.workspaceExplorerWidth === 'number' && Number.isFinite(input.workspaceExplorerWidth)
       ? clampStoredWorkspaceExplorerWidth(input.workspaceExplorerWidth)
       : DEFAULT_APP_SETTINGS.workspaceExplorerWidth
-  const workspaceFileEditorWordWrap =
-    typeof input?.workspaceFileEditorWordWrap === 'boolean'
-      ? input.workspaceFileEditorWordWrap
-      : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap
   const language = isAppLanguage(input?.language) ? input.language : DEFAULT_APP_SETTINGS.language
-
   const lastActiveConversationId =
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
       ? input.lastActiveConversationId.trim()
@@ -217,6 +212,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.sendMessageOnEnter === 'boolean'
       ? input.sendMessageOnEnter
       : DEFAULT_APP_SETTINGS.sendMessageOnEnter
+  const workspaceFileEditorWordWrap =
+    typeof input?.workspaceFileEditorWordWrap === 'boolean'
+      ? input.workspaceFileEditorWordWrap
+      : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap
   const sourceControlSectionOrder = sanitizeSourceControlSectionOrder(input?.sourceControlSectionOrder)
   const sourceControlSectionOpen = sanitizeSourceControlSectionOpen(input?.sourceControlSectionOpen)
   const sourceControlSectionSizes = sanitizeSourceControlSectionSizes(input?.sourceControlSectionSizes)
@@ -235,12 +234,12 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     lastActiveConversationId,
     revertEditSessionsByConversation,
     sendMessageOnEnter,
+    workspaceFileEditorWordWrap,
     sidebarWidth,
+
     workspaceEditorWidth,
     workspaceExplorerWidth,
-    workspaceFileEditorWordWrap,
     sourceControlSectionOrder,
-
     sourceControlSectionOpen,
     sourceControlSectionSizes,
     terminalOpenByWorkspace,

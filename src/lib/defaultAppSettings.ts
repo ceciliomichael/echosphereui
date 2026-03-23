@@ -14,10 +14,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   lastActiveConversationId: null,
   revertEditSessionsByConversation: {},
   sendMessageOnEnter: true,
+  workspaceFileEditorWordWrap: true,
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+
   workspaceEditorWidth: DEFAULT_WORKSPACE_EDITOR_WIDTH,
   workspaceExplorerWidth: DEFAULT_WORKSPACE_EXPLORER_WIDTH,
-  workspaceFileEditorWordWrap: true,
   sourceControlSectionOrder: ['commit', 'changes', 'history'],
   sourceControlSectionOpen: {
     changes: true,

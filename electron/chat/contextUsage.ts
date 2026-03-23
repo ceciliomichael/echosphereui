@@ -30,6 +30,10 @@ function serializeMessageForEstimate(message: Message) {
     return buildSerializedAssistantTurnContent(message) ?? ''
   }
 
+  if (message.role === 'tool') {
+    return message.content.trim()
+  }
+
   if (message.role !== 'user') {
     return ''
   }
@@ -41,7 +45,7 @@ function serializeMessageForEstimate(message: Message) {
 }
 
 function isRuntimeContextUpdateMessage(message: Message) {
-  if (message.role !== 'user' || message.userMessageKind !== 'tool_result') {
+  if (message.role !== 'user') {
     return false
   }
 
@@ -70,6 +74,14 @@ function getProviderHistorySegments(messages: Message[], providerId: ChatProvide
     const toolResultSegments: string[] = []
 
     for (const message of replayableMessages) {
+      if (message.role === 'tool') {
+        const toolMessageSegment = serializeMessageForEstimate(message)
+        if (toolMessageSegment.length > 0) {
+          toolResultSegments.push(toolMessageSegment)
+        }
+        continue
+      }
+
       const serializedMessage = serializeMessageForEstimate(message)
       if (serializedMessage.length === 0) {
         continue
@@ -77,11 +89,6 @@ function getProviderHistorySegments(messages: Message[], providerId: ChatProvide
 
       if (isRuntimeContextUpdateMessage(message)) {
         historySegments.push(serializedMessage)
-        continue
-      }
-
-      if (message.userMessageKind === 'tool_result') {
-        toolResultSegments.push(serializedMessage)
         continue
       }
 

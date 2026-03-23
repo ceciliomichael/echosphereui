@@ -5,7 +5,6 @@ import path from 'node:path'
 import test from 'node:test'
 import { streamAgentLoopWithTools } from '../../electron/chat/agentLoop/runtime'
 import type { ProviderStreamContext, StreamDeltaEvent } from '../../electron/chat/providerTypes'
-import { TOOL_RESULT_TO_USER_BRIDGE_TEXT } from '../../electron/chat/openaiCompatible/toolResultReplayEnvelope'
 import type { Message } from '../../src/types/chat'
 
 function createProviderContext() {
@@ -245,7 +244,7 @@ test('agent loop stops when a turn has neither assistant output nor tool invocat
   assert.equal(firstTurnUserTexts.some((content) => content.includes('Please address this message and continue with your tasks.')), false)
 })
 
-test('agent loop keeps tool-result replay context as a standalone turn before the next user turn', async () => {
+test('agent loop preserves tool-role messages in turn history before the next user turn', async () => {
   const { context } = createProviderContext()
   const firstTurnMessages: Message[] = []
 
@@ -292,15 +291,12 @@ test('agent loop keeps tool-result replay context as a standalone turn before th
     },
   )
 
-  assert.equal(firstTurnMessages.some((message) => message.role === 'tool'), false)
+  assert.equal(firstTurnMessages.some((message) => message.role === 'tool'), true)
+  const toolMessages = firstTurnMessages.filter((message) => message.role === 'tool')
+  assert.equal(toolMessages.length, 1)
+  assert.equal(toolMessages[0]?.content, 'List result for src/lib\n- file.ts')
   const userMessages = firstTurnMessages.filter((message) => message.role === 'user')
-  const nonRuntimeUserMessages = userMessages.filter((message) => !message.content.includes('<context_update>'))
-  assert.equal(nonRuntimeUserMessages.length, 2)
-  assert.match(nonRuntimeUserMessages[0]?.content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
-  assert.equal(nonRuntimeUserMessages[1]?.content, 'Continue from that result.')
-
-  const bridgeMessage = firstTurnMessages.find((message) => message.role === 'assistant' && message.content === TOOL_RESULT_TO_USER_BRIDGE_TEXT)
-  assert.ok(bridgeMessage)
+  assert.equal(userMessages.some((message) => message.content === 'Continue from that result.'), true)
 })
 
 test('agent loop continues through repeated identical tool calls', async () => {

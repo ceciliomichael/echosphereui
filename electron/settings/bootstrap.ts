@@ -179,7 +179,12 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.sendMessageOnEnter === 'boolean'
         ? candidate.sendMessageOnEnter
         : DEFAULT_APP_SETTINGS.sendMessageOnEnter,
+    workspaceFileEditorWordWrap:
+      typeof candidate?.workspaceFileEditorWordWrap === 'boolean'
+        ? candidate.workspaceFileEditorWordWrap
+        : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap,
     sidebarWidth:
+
       typeof candidate?.sidebarWidth === 'number' && Number.isFinite(candidate.sidebarWidth)
         ? Math.max(DEFAULT_APP_SETTINGS.sidebarWidth, candidate.sidebarWidth)
         : DEFAULT_APP_SETTINGS.sidebarWidth,
@@ -191,12 +196,7 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.workspaceExplorerWidth === 'number' && Number.isFinite(candidate.workspaceExplorerWidth)
         ? clampStoredWorkspaceExplorerWidth(candidate.workspaceExplorerWidth)
         : DEFAULT_APP_SETTINGS.workspaceExplorerWidth,
-    workspaceFileEditorWordWrap:
-      typeof candidate?.workspaceFileEditorWordWrap === 'boolean'
-        ? candidate.workspaceFileEditorWordWrap
-        : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap,
     sourceControlSectionOrder: sanitizeSourceControlSectionOrder(candidate?.sourceControlSectionOrder),
-
     sourceControlSectionOpen: sanitizeSourceControlSectionOpen(candidate?.sourceControlSectionOpen),
     sourceControlSectionSizes: sanitizeSourceControlSectionSizes(candidate?.sourceControlSectionSizes),
     terminalOpenByWorkspace: sanitizeTerminalOpenByWorkspace(candidate?.terminalOpenByWorkspace),

@@ -63,7 +63,7 @@ test('estimateChatContextUsage uses provider system instructions and excludes to
   assert.equal(usage.maxTokens, 200_000)
 })
 
-test('estimateChatContextUsage counts replayed tool-result context for codex', async () => {
+test('estimateChatContextUsage counts tool-role context for codex', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'echosphere-context-usage-'))
   temporaryDirectories.push(rootPath)
   await writeFile(path.join(rootPath, 'AGENTS.md'), 'Project instructions for tests.', 'utf8')
