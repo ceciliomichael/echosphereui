@@ -432,7 +432,13 @@ export function WorkspaceExplorerPanel({
     try {
       await onCreateEntry(nextRelativePath, draft.isDirectory)
       setErrorMessage(null)
-      await loadDirectory(draft.parentPath)
+      if (draft.isDirectory) {
+        setExpandedDirectories((current) => new Set(current).add(nextRelativePath))
+      }
+      await Promise.all([
+        loadDirectory(draft.parentPath),
+        draft.isDirectory ? loadDirectory(nextRelativePath) : Promise.resolve(),
+      ])
       setCreationDraft(null)
       setCreationName('')
       if (!draft.isDirectory) {

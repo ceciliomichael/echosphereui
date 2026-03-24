@@ -134,7 +134,7 @@ export type OpenAICompatibleToolDescriptionName = keyof typeof TOOL_DESCRIPTIONS
 
 const GLOBAL_TOOL_CONTRACT = `Global tool contract:
 - Treat tool outputs as source of truth. Do not fabricate command results, file contents, or execution outcomes.
-- Prefer inspect-first flow: discover with list/glob/grep, read exact context, then mutate with edit/write.
+- Prefer inspect-first flow: discover with list/glob/grep, read exact context, then proceed with needed changes.
 - Use absolute paths exactly as provided by prior tool results whenever possible; avoid guessing shortened paths.
 - Keep tool calls minimal but sufficient for correctness. If evidence is missing, call another tool instead of assuming.
 - No wasted calls: do not repeat the same tool call with materially identical arguments unless new state justifies re-running.
