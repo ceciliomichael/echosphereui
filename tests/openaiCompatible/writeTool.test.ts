@@ -42,7 +42,33 @@ test('write tool creates a new file when missing', async () => {
     assert.deepEqual(result.addedPaths, ['src/new-file.ts'])
     assert.deepEqual(result.modifiedPaths, [])
     assert.equal(result.path, 'src/new-file.ts')
-    assert.equal(await fs.readFile(targetFilePath, 'utf8'), 'export const value = 1\n')
+    assert.equal(await fs.readFile(targetFilePath, 'utf8'), 'export const value = 1;\n')
+  })
+})
+
+test('write tool formats multiline source files before writing them', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetFilePath = path.join(workspacePath, 'src', 'app', 'page.tsx')
+
+    const result = await writeTool.execute(
+      {
+        absolute_path: targetFilePath,
+        content:
+          'import { ArrowRight, BarChart3, CheckCircle2, ShieldCheck } from "lucide-react";\n\nconst metrics = [{ value: "48%", label: "faster team handoffs" }, { value: "12h", label: "saved every week" }, { value: "99.9%", label: "task visibility" }];\n\nexport default function Page(){return <main><section><h1>Welcome to EchoSphere</h1><p>Build faster with the workspace formatter.</p></section></main>}\n',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    const writtenContent = await fs.readFile(targetFilePath, 'utf8')
+    assert.equal(result.operation, 'write')
+    assert.equal(result.contentChanged, true)
+    assert.match(writtenContent, /const metrics = \[/u)
+    assert.match(writtenContent, /\n  \{ value: "48%", label: "faster team handoffs" \},/u)
+    assert.match(writtenContent, /export default function Page\(\) \{/u)
+    assert.match(writtenContent, /return \(/u)
+    assert.match(writtenContent, /<section>/u)
+    assert.match(writtenContent, /<p>Build faster with the workspace formatter\.<\/p>/u)
+    assert.match(writtenContent, /\n\}\n?$/u)
   })
 })
 
@@ -64,8 +90,8 @@ test('write tool overwrites existing files and exposes prior content', async () 
     assert.deepEqual(result.addedPaths, [])
     assert.deepEqual(result.modifiedPaths, ['src/existing-file.ts'])
     assert.equal(result.oldContent, 'export const value = 1\n')
-    assert.equal(result.newContent, 'export const value = 2\n')
-    assert.equal(await fs.readFile(targetFilePath, 'utf8'), 'export const value = 2\n')
+    assert.equal(result.newContent, 'export const value = 2;\n')
+    assert.equal(await fs.readFile(targetFilePath, 'utf8'), 'export const value = 2;\n')
   })
 })
 

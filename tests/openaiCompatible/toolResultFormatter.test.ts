@@ -50,6 +50,13 @@ const sampleEditCreateToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
+const sampleWriteCreateToolCall: OpenAICompatibleToolCall = {
+  argumentsText: '{"absolute_path":"C:\\\\repo\\\\src\\\\app\\\\page.tsx","content":"export default function Page() {\\n  return null\\n}\\n"}',
+  id: 'tool-call-write-create-123',
+  name: 'write',
+  startedAt: 1_700_000_000_000,
+}
+
 const sampleFileChangeToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"changes":[{"path":"src/components/ProvidersSettingsPanel.tsx","kind":"update"},{"path":"src/components/SettingsSidebar.tsx","kind":"add"}]}',
   id: 'tool-call-file-change-123',
@@ -350,6 +357,40 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for edi
     removedLineCount: 0,
     startLineNumber: 1,
   })
+})
+
+test('buildSuccessfulToolArtifacts preserves multiline create-file bodies for write results', () => {
+  const completedAt = 1_700_000_000_181
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleWriteCreateToolCall,
+    {
+      addedPaths: ['src/app/page.tsx'],
+      contentChanged: true,
+      deletedPaths: [],
+      message: 'Created src/app/page.tsx successfully.',
+      modifiedPaths: [],
+      newContent: 'export default function Page() {\n  return null\n}\n',
+      oldContent: null,
+      operation: 'write',
+      path: 'src/app/page.tsx',
+      targetKind: 'file',
+    },
+    sampleWriteCreateToolCall.startedAt,
+    completedAt,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+
+  assert.match(parsedContent.body ?? '', /Current content of src\/app\/page\.tsx:/u)
+  assert.match(parsedContent.body ?? '', /```tsx/u)
+  assert.match(parsedContent.body ?? '', /export default function Page\(\) \{/u)
+  assert.match(parsedContent.body ?? '', /  return null/u)
+  assert.match(parsedContent.body ?? '', /\n```$/u)
+  assert.equal(artifacts.resultPresentation?.kind, 'file_diff')
+  if (artifacts.resultPresentation?.kind === 'file_diff') {
+    assert.equal(artifacts.resultPresentation.fileName, 'src/app/page.tsx')
+    assert.equal(artifacts.resultPresentation.newContent, 'export default function Page() {\n  return null\n}\n')
+  }
 })
 
 test('buildSuccessfulToolArtifacts exposes multi-file diff presentation for file_change results', () => {

@@ -42,7 +42,35 @@ test('edit tool can create a new file via replace mode with empty old_string', a
     assert.equal(result.operation, 'edit')
     assert.deepEqual(result.addedPaths, ['src/new-file.ts'])
     assert.deepEqual(result.modifiedPaths, [])
-    assert.equal(await fs.readFile(filePath, 'utf8'), 'export const value = 1\n')
+    assert.equal(await fs.readFile(filePath, 'utf8'), 'export const value = 1;\n')
+  })
+})
+
+test('edit tool formats multiline source files after create-mode edits', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'app', 'page.tsx')
+
+    const result = await editTool.execute(
+      {
+        absolute_path: filePath,
+        old_string: '',
+        new_string:
+          'import { ArrowRight, BarChart3, CheckCircle2, ShieldCheck } from "lucide-react";\n\nconst metrics = [{ value: "48%", label: "faster team handoffs" }, { value: "12h", label: "saved every week" }, { value: "99.9%", label: "task visibility" }];\n\nexport default function Page(){return <main><section><h1>Welcome to EchoSphere</h1><p>Build faster with the workspace formatter.</p></section></main>}\n',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    const writtenContent = await fs.readFile(filePath, 'utf8')
+
+    assert.equal(result.ok, true)
+    assert.equal(result.operation, 'edit')
+    assert.deepEqual(result.addedPaths, ['src/app/page.tsx'])
+    assert.match(writtenContent, /const metrics = \[/u)
+    assert.match(writtenContent, /\n  \{ value: "48%", label: "faster team handoffs" \},/u)
+    assert.match(writtenContent, /export default function Page\(\) \{/u)
+    assert.match(writtenContent, /return \(/u)
+    assert.match(writtenContent, /<section>/u)
+    assert.match(writtenContent, /<p>Build faster with the workspace formatter\.<\/p>/u)
   })
 })
 
@@ -188,7 +216,7 @@ test('edit tool supports replace_all for repeated occurrences', async () => {
       buildExecutionContext(workspacePath),
     )
 
-    assert.equal(await fs.readFile(filePath, 'utf8'), 'bar\nbar\n')
+    assert.equal(await fs.readFile(filePath, 'utf8'), 'bar;\nbar;\n')
   })
 })
 
@@ -207,6 +235,6 @@ test('edit tool matches old_string copied from numbered read output', async () =
       buildExecutionContext(workspacePath),
     )
 
-    assert.equal(await fs.readFile(filePath, 'utf8'), 'import x from "x"\nexport default y')
+    assert.equal(await fs.readFile(filePath, 'utf8'), 'import x from "x";\nexport default y;\n')
   })
 })

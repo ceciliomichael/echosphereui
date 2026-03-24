@@ -4,6 +4,7 @@ import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
 import { OpenAICompatibleToolError } from '../../toolTypes'
 import { parseToolArguments, readRequiredString, readRequiredText, resolveToolPath, toDisplayPath } from '../filesystemToolUtils'
 import { getToolDescription } from '../descriptionCatalog'
+import { formatWorkspaceFileContent } from '../workspaceFileFormatter'
 import { captureWorkspaceCheckpointFileState } from '../../../../workspace/checkpoints'
 
 const TOOL_DESCRIPTION = getToolDescription('write')
@@ -47,11 +48,17 @@ export const writeTool: OpenAICompatibleToolDefinition = {
       await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
     }
 
+    const formattedContent = await formatWorkspaceFileContent(
+      normalizedTargetPath,
+      content,
+      existing.previousContent === null ? undefined : existing.previousContent.includes('\r\n') ? '\r\n' : '\n',
+    )
+
     await fs.mkdir(path.dirname(normalizedTargetPath), { recursive: true })
-    await fs.writeFile(normalizedTargetPath, content, 'utf8')
+    await fs.writeFile(normalizedTargetPath, formattedContent, 'utf8')
 
     const displayPath = toDisplayPath(relativePath)
-    const contentChanged = existing.previousContent !== content
+    const contentChanged = existing.previousContent !== formattedContent
 
     return {
       addedPaths: existing.exists ? [] : [displayPath],
@@ -62,7 +69,7 @@ export const writeTool: OpenAICompatibleToolDefinition = {
         ? `Wrote ${displayPath} successfully.`
         : `Created ${displayPath} successfully.`,
       modifiedPaths: existing.exists ? [displayPath] : [],
-      newContent: content,
+      newContent: formattedContent,
       oldContent: existing.previousContent,
       ok: true,
       operation: 'write',

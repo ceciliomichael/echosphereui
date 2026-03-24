@@ -79,6 +79,30 @@ function joinTextParts(parts: readonly string[]) {
   return nonEmptyParts.join('\n\n')
 }
 
+const TOOL_CALL_SCAFFOLD_LINE_PATTERN = /^(?:assistant|tool)\s+to=/i
+const TOOL_CALL_JSON_LINE_PATTERN = /^json\b.*\{/i
+
+function stripAssistantToolCallScaffolding(input: string) {
+  const lines = input.split(/\r?\n/)
+  let hasChanges = false
+  const filteredLines: string[] = []
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (
+      trimmedLine.length > 0 &&
+      (TOOL_CALL_SCAFFOLD_LINE_PATTERN.test(trimmedLine) || TOOL_CALL_JSON_LINE_PATTERN.test(trimmedLine))
+    ) {
+      hasChanges = true
+      continue
+    }
+
+    filteredLines.push(line)
+  }
+
+  return hasChanges ? filteredLines.join('\n') : input
+}
+
 export function normalizeAssistantMessageContent(message: Pick<Message, 'content' | 'reasoningContent'>): AssistantMessageContentParts {
   const splitContent = splitThinkingContent(message.content)
   const normalizedReasoningContent = joinTextParts([
@@ -86,8 +110,8 @@ export function normalizeAssistantMessageContent(message: Pick<Message, 'content
     splitContent.reasoningContent,
   ])
   const shouldTrimEdgeBlankLines = splitContent.hasThinkingTags || hasThinkingMarkup(message.reasoningContent ?? '')
-  const normalizedContent = normalizeMarkdownText(splitContent.content)
-  const normalizedReasoning = normalizeMarkdownText(normalizedReasoningContent)
+  const normalizedContent = normalizeMarkdownText(stripAssistantToolCallScaffolding(splitContent.content))
+  const normalizedReasoning = normalizeMarkdownText(stripAssistantToolCallScaffolding(normalizedReasoningContent))
 
   return {
     content: shouldTrimEdgeBlankLines ? trimEdgeBlankLines(normalizedContent) : normalizedContent,

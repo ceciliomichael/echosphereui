@@ -1,4 +1,5 @@
 import { getChatAttachmentSummary } from './chatAttachments'
+import { normalizeAssistantMessageContent } from './chatMessageContent'
 import type { Message, UserMessageKind } from '../types/chat'
 
 function getResolvedUserMessageKind(message: Message): UserMessageKind {
@@ -24,9 +25,11 @@ export function getConversationPreviewContent(messages: Message[]) {
       continue
     }
 
-    const trimmedContent = message.content.trim()
+    const previewContent =
+      message.role === 'assistant' ? normalizeAssistantMessageContent(message).content : message.content
+    const trimmedContent = previewContent.trim()
     if (trimmedContent.length > 0) {
-      return message.content
+      return previewContent
     }
 
     const attachmentSummary = getChatAttachmentSummary(message.attachments ?? [])

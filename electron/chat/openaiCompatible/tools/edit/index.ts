@@ -11,6 +11,7 @@ import {
   toDisplayPath,
 } from '../filesystemToolUtils'
 import { getToolDescription } from '../descriptionCatalog'
+import { formatWorkspaceFileContent } from '../workspaceFileFormatter'
 import { captureWorkspaceCheckpointFileState } from '../../../../workspace/checkpoints'
 
 const TOOL_DESCRIPTION = getToolDescription('edit')
@@ -593,15 +594,21 @@ export const editTool: OpenAICompatibleToolDefinition = {
       trackedCheckpointPaths.add(normalizedTargetPath)
     }
 
+    const formattedNextContent = await formatWorkspaceFileContent(
+      normalizedTargetPath,
+      nextContent,
+      existingFile.content.includes('\r\n') ? '\r\n' : '\n',
+    )
+
     await fs.mkdir(path.dirname(normalizedTargetPath), { recursive: true })
-    await fs.writeFile(normalizedTargetPath, nextContent, 'utf8')
+    await fs.writeFile(normalizedTargetPath, formattedNextContent, 'utf8')
 
     const displayPath = toDisplayPath(relativePath)
     const addedPathList = existingFile.exists ? [] : [displayPath]
     const modifiedPathList = existingFile.exists ? [displayPath] : []
     const deletedPathList: string[] = []
     const changedPathList = Array.from(new Set([...addedPathList, ...modifiedPathList]))
-    const contentChanged = existingFile.content !== nextContent
+    const contentChanged = existingFile.content !== formattedNextContent
     const singleChangedPath = changedPathList.length === 1 ? changedPathList[0] : null
 
     const message =
@@ -621,7 +628,7 @@ export const editTool: OpenAICompatibleToolDefinition = {
       modifiedPaths: modifiedPathList,
       ...(singleChangedPath
         ? {
-            newContent: nextContent,
+            newContent: formattedNextContent,
             oldContent: existingFile.exists ? existingFile.content : null,
           }
         : {}),
