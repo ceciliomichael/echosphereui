@@ -45,10 +45,9 @@ test('buildSystemPrompt keeps built-in policy and preserves AGENTS design guidel
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)
   assert.match(prompt, /<preferred_design_guidelines>/u)
   assert.match(prompt, /Frontend styling rules that should not be promoted here\./u)
+  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
   assert.equal(prompt.includes('<preferred_styling_everytime>'), false)
-  assert.equal(prompt.includes('AGENTS.md'), true)
-  assert.equal(prompt.includes('DESIGN.md'), false)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
   assert.match(prompt, /Terminal execution mode is `full`/u)
 })
@@ -105,7 +104,7 @@ test('buildSystemPrompt includes project AGENTS.md content in plan mode', async 
   assert.match(prompt, /Project instructions for plan mode\./u)
   assert.match(prompt, /Follow the project instructions in every prompt\./u)
   assert.match(prompt, /<repository_instructions>/u)
-  assert.equal(prompt.includes('AGENTS.md'), true)
+  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
 })
 
@@ -132,7 +131,7 @@ test('buildSystemPrompt includes DESIGN.md content as preferred design guideline
   assert.match(prompt, /<preferred_design_guidelines>/u)
   assert.match(prompt, /Design guidance for the workspace\./u)
   assert.match(prompt, /Use calm neutrals, clear hierarchy, and descriptive labels\./u)
-  assert.equal(prompt.includes('DESIGN.md'), true)
+  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
 })
 
 test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async () => {
@@ -146,7 +145,6 @@ test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async
     terminalExecutionMode: 'full',
   })
 
-  assert.equal(prompt.includes('AGENTS.md'), false)
   assert.equal(prompt.includes('<repository_instructions>'), false)
 })
 
@@ -198,12 +196,14 @@ test('buildSystemPrompt filters nested .gitignore entries from the workspace fol
     terminalExecutionMode: 'full',
   })
 
-  const treeBlockMatch = prompt.match(/## Workspace Folder Tree \(gitignore-filtered\)\n```text\n([\s\S]*?)\n```/u)
+  const treeBlockMatch = prompt.match(/## Workspace Folder Tree \(gitignore-filtered\)\n```(?:text)?\n([\s\S]*?)\n```/u)
   assert.ok(treeBlockMatch, 'workspace tree block must be present')
   const treeBlock = treeBlockMatch[1]
 
   assert.match(treeBlock, /backend\/\n  ├─ src\//u)
   assert.match(treeBlock, /frontend\/\n  ├─ src\//u)
+  assert.equal(treeBlock.includes('AGENTS.md'), false)
+  assert.equal(treeBlock.includes('DESIGN.md'), false)
   assert.equal(treeBlock.includes('root-ignored.txt'), false)
   assert.equal(treeBlock.includes('ignored.ts'), false)
 })

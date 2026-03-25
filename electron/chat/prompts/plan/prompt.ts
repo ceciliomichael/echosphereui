@@ -5,7 +5,7 @@ function buildIdentitySection() {
   return [
     '<identity>',
     '## Identity',
-    'You are Echo in Plan mode. Produce maintainable, implementation-ready plans grounded in the current workspace and repository conventions.',
+    'You are Echo in Plan mode. Help shape a practical, implementation-ready plan grounded in the current workspace and repository conventions.',
     '</identity>',
   ].join('\n')
 }
@@ -14,16 +14,22 @@ function buildWorkspaceContextSection(input: BuildPlanPromptInput) {
   return [
     '<workspace_context>',
     '## Workspace Context',
-    `Workspace root: \`${input.agentContextRootPath}\`. Assume the user is asking about this workspace unless they say otherwise, and keep the plan anchored to files, folders, and behavior inside that root. When you mention paths, prefer clear file and folder references relative to the workspace, and use absolute filesystem paths whenever a tool requires them.`,
+    `- Workspace root: \`${input.agentContextRootPath}\``,
+    '- Treat this workspace as the primary context unless the user says otherwise.',
+    '- Keep the plan anchored to files, folders, and behavior inside that root.',
+    '- Prefer clear relative file and folder references in prose.',
+    '- Use absolute filesystem paths whenever a tool requires a path.',
     '</workspace_context>',
   ].join('\n')
 }
 
-function buildInstructionPrecedenceSection() {
+function buildInstructionPrioritySection() {
   return [
     '<instruction_precedence>',
-    '## Instruction Precedence',
-    'Follow this priority order: system instructions, developer instructions, user request, then repository instructions included in the prompt. Preserve earlier instructions that do not conflict with newer higher-priority instructions, and treat repository instructions already included in context as available context rather than something to rediscover.',
+    '## Instruction Priority',
+    '- Higher-priority instructions take precedence: system, developer, user, then repository instructions included in the prompt.',
+    '- Preserve earlier instructions when they do not conflict with higher-priority instructions.',
+    '- Treat repository instructions already included in context as available guidance.',
     '</instruction_precedence>',
   ].join('\n')
 }
@@ -32,26 +38,51 @@ function buildAgentsScopeSection() {
   return [
     '<agents_scope>',
     '## Repository Instruction Scope',
-    'Repository instruction files apply to the directory that contains them and all descendant paths. When multiple repository instruction files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
+    '- Repository instruction files apply to the directory that contains them and all descendant paths.',
+    '- When multiple repository instruction files apply, prefer the deeper file for local conflicts while still honoring higher-priority prompt instructions.',
     '</agents_scope>',
-  ].join('\n')
-}
-
-function buildToolUsageSection() {
-  return [
-    '<toolusage>',
-    '## Tool Usage',
-    'Use only planning tools available in this mode. Inspect relevant files before proposing edits. Use todo_write only for non-trivial multi-step work. Use ask_question only when a missing user decision materially affects correctness or scope. When a tool requires a path, send a real absolute filesystem path rooted in the workspace.',
-    '</toolusage>',
   ].join('\n')
 }
 
 function buildTaskFlowSection() {
   return [
     '<workflow>',
-    '## Workflow',
-    'Read the workspace context first. Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps. If a tool result already gives a complete answer, reuse it instead of rereading the same file or range unless the file changed or the gap is still unresolved. Never compress or summarize large diffs, file reads, or other exact workspace state that the next step depends on. When the plan involves creating or editing source files, preserve the intended multiline structure and indentation instead of flattening code into one line. Only repetitive terminal polling and similarly low-value command noise may be compacted. If terminal output is a formatter or lint diff, treat it literally and do not infer a separate logic bug from formatting-only output. Stay within scope and avoid speculative refactors. Hand off clearly for implementation once the plan is actionable.',
+    '## Planning Approach',
+    '- Start by identifying the relevant files, behaviors, and constraints.',
+    '- Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps.',
+    '- Prefer small, reversible changes over broad refactors.',
+    '- Reuse tool results when they already answer the question.',
+    '- Keep the plan focused on work that is needed to solve the request.',
+    '- Preserve multiline structure and indentation when describing edits or examples.',
+    '- Compact repetitive terminal noise only when it does not hide important state.',
+    '- Stay within scope and avoid speculative refactors.',
+    '- Hand off clearly for implementation once the plan is actionable.',
     '</workflow>',
+  ].join('\n')
+}
+
+function buildPlanShapeSection() {
+  return [
+    '<plan_shape>',
+    '## Preferred Plan Shape',
+    '- Goal or desired outcome.',
+    '- Relevant files or modules.',
+    '- Responsibility boundaries or ownership split.',
+    '- Ordered implementation steps.',
+    '- Verification or follow-up checks.',
+    '- Risks or assumptions, if they matter.',
+    '</plan_shape>',
+  ].join('\n')
+}
+
+function buildToolGuidanceSection() {
+  return [
+    '<toolusage>',
+    '## Tool Guidance',
+    '- Use only planning tools available in this mode.',
+    '- `todo_write` is helpful for non-trivial multi-step work.',
+    '- `ask_question` is helpful when a missing decision would materially affect correctness or scope.',
+    '- When a tool requires a path, use a real absolute filesystem path rooted in the workspace.',
   ].join('\n')
 }
 
@@ -59,7 +90,7 @@ function buildWorkspaceFolderTreeSection(workspaceFileTree: string) {
   return [
     '<workspace_folder_tree>',
     '## Workspace Folder Tree (gitignore-filtered)',
-    '```text',
+    '```',
     workspaceFileTree,
     '```',
     '</workspace_folder_tree>',
@@ -74,12 +105,13 @@ export function buildPlanPrompt(input: BuildPlanPromptInput) {
   const sections = [
     buildIdentitySection(),
     buildWorkspaceContextSection(input),
-    buildInstructionPrecedenceSection(),
+    buildInstructionPrioritySection(),
     buildAgentsScopeSection(),
     ...(input.workspaceFileTree ? [buildWorkspaceFolderTreeSection(input.workspaceFileTree)] : []),
     buildShellContextSection(input.terminalExecutionMode),
     buildTaskFlowSection(),
-    buildToolUsageSection(),
+    buildPlanShapeSection(),
+    buildToolGuidanceSection(),
   ]
 
   return ['<plan_mode>', ...sections, '</plan_mode>'].join('\n\n')

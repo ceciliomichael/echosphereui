@@ -7,6 +7,7 @@ const MAX_TREE_LINES = 120
 const MAX_DIRECTORIES_PER_LEVEL = 40
 const MAX_FILES_PER_LEVEL = 60
 const FOLDER_BRANCH_MARKER = '├─'
+const INSTRUCTION_DOC_NAMES = new Set(['AGENTS.md', 'DESIGN.md'])
 
 interface TreeBuildState {
   lines: string[]
@@ -54,6 +55,10 @@ async function readVisibleEntries(
     }
 
     const absolutePath = path.join(directoryPath, entry.name)
+    if (INSTRUCTION_DOC_NAMES.has(entry.name)) {
+      continue
+    }
+
     if (shouldAlwaysShowEntry(entry.name) || !isGitignored(absolutePath, isDirectory, matchers)) {
       visibleEntries.push({
         absolutePath,
