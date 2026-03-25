@@ -11,7 +11,7 @@ import { UpdatePlanResult } from './UpdatePlanResult'
 import { parseUpdatePlanResultBody } from './updatePlanResultParser'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
-import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
+import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
   invocation: ToolInvocationTrace
@@ -34,18 +34,44 @@ function formatReadLineRangeLabel(startLineNumber: number, endLineNumber: number
   return `${startLineNumber}-${endLineNumber}`
 }
 
-function parseReadToolResult(resultContent: string): ReadToolResultViewModel | null {
-  const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)(?: of \d+)?\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
+function readLineRangeFromMetadata(metadata: StructuredToolResultMetadata | null): {
+  endLineNumber: number
+  startLineNumber: number
+} | null {
+  const semantics = metadata?.semantics
+  if (!semantics) {
+    return null
+  }
+
+  const startLine = semantics.start_line
+  const endLine = semantics.end_line
+  if (typeof startLine !== 'number' || !Number.isInteger(startLine)) {
+    return null
+  }
+  if (typeof endLine !== 'number' || !Number.isInteger(endLine)) {
+    return null
+  }
+
+  return {
+    endLineNumber: endLine,
+    startLineNumber: startLine,
+  }
+}
+
+function parseReadToolResult(resultContent: string, metadata: StructuredToolResultMetadata | null): ReadToolResultViewModel | null {
+  const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)(?: of \d+)?(?:, [^)]+)?\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
+  const metadataLineRange = readLineRangeFromMetadata(metadata)
+
   if (!match) {
     return null
   }
 
   return {
     code: match[5],
-    endLineNumber: Number.parseInt(match[3], 10),
+    endLineNumber: metadataLineRange?.endLineNumber ?? Number.parseInt(match[3], 10),
     filePath: match[1],
     language: match[4].trim().length > 0 ? match[4].trim() : undefined,
-    startLineNumber: Number.parseInt(match[2], 10),
+    startLineNumber: metadataLineRange?.startLineNumber ?? Number.parseInt(match[2], 10),
   }
 }
 
@@ -149,7 +175,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     parsedStructuredResult?.metadata?.summary ??
     invocation.resultContent ??
     ''
-  const readResultPresentation = invocation.toolName === 'read' ? parseReadToolResult(resultBody) : null
+  const readResultPresentation =
+    invocation.toolName === 'read' ? parseReadToolResult(resultBody, parsedStructuredResult?.metadata ?? null) : null
   const updatePlanResultPresentation = invocation.toolName === 'todo_write' ? parseUpdatePlanResultBody(resultBody) : null
   const readResultDisplayPath =
     workspaceRootPath && readResultPresentation
