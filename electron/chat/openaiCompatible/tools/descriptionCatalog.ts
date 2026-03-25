@@ -1,5 +1,5 @@
 const TOOL_DESCRIPTIONS = {
-  todo_write: 'Track task progress with a concise list.',
+  todo_write: 'Track task progress with a concise list. Let us say that you are still on task 1 and you did not really move forward from it yet then do not use the tool yet, use it when you really do need to update the state of it.',
   ready_implement: 'Ask for user approval before implementation begins.',
   ask_question: 'Ask the user a focused planning question with answer options.',
   list: 'List files and directories in the workspace.',
@@ -17,8 +17,7 @@ export type OpenAICompatibleToolDescriptionName = keyof typeof TOOL_DESCRIPTIONS
 const GLOBAL_TOOL_CONTRACT = `Global tool contract:
 - Treat tool outputs as source of truth. Do not fabricate command results, file contents, or execution outcomes.
 - Make sure that tool usage is purposeful and necessary; avoid redundant or speculative calls.
-- When a tool requires a path, send a real absolute filesystem path rooted in the workspace. Do not emit pseudo tool calls in plain text.
-- Always use the tools available to you to your fullest advantage. Use them wisely, strategically until you finish the task at hand.`
+- When a tool requires a path, send a real absolute filesystem path rooted in the workspace. Do not emit pseudo tool calls in plain text.`
 
 export function getToolDescription(name: OpenAICompatibleToolDescriptionName) {
   return `${GLOBAL_TOOL_CONTRACT}\n\n${TOOL_DESCRIPTIONS[name]}`

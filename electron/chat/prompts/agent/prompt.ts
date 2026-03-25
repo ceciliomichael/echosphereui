@@ -52,6 +52,7 @@ function buildPreferredWorkPatternSection() {
     '<work_pattern>',
     '## Preferred Work Pattern',
     '- Begin by classifying the request and reading the relevant files.',
+    '- Do not over explore and just really be quick and precise with the task',
     '- Form a short, concrete plan before editing.',
     '- Implement in small, verifiable steps.',
     '- Reuse tool results instead of rereading the same content unless there is a real reason to check again.',
