@@ -4,6 +4,7 @@ import { streamOpenAICompatibleResponsesWithTools } from '../openaiCompatible/ru
 import { buildOpenAIClient, loadOpenAIProviderConfig } from './openaiShared'
 import { shouldFallbackToChatCompletions } from './openaiCompatibleTransportFallback'
 import { setKnownOpenAICompatibleTransportMode, type OpenAICompatibleTransportMode } from './openaiCompatibleTransportState'
+import { shouldUseCodexNativeRuntime } from './providerModelRouting'
 
 const transportModeByBaseUrl = new Map<string, OpenAICompatibleTransportMode>()
 
@@ -18,6 +19,30 @@ export const openaiCompatibleChatProviderAdapter: ChatProviderAdapter = {
     const client = buildOpenAIClient(providerConfig)
     const transportCacheKey = normalizeTransportCacheKey(providerConfig.baseURL)
     const cachedTransportMode = transportModeByBaseUrl.get(transportCacheKey)
+    const shouldForceResponsesTransport = shouldUseCodexNativeRuntime({
+      baseUrl: providerConfig.baseURL,
+      modelId: request.modelId,
+      providerId: request.providerId,
+    })
+
+    if (shouldForceResponsesTransport) {
+      setKnownOpenAICompatibleTransportMode('responses')
+      await streamOpenAICompatibleResponsesWithTools(
+        client,
+        {
+          agentContextRootPath: request.agentContextRootPath,
+          chatMode: request.chatMode,
+          messages: request.messages,
+          modelId: request.modelId,
+          providerId: request.providerId,
+          reasoningEffort: request.reasoningEffort,
+          terminalExecutionMode: request.terminalExecutionMode,
+        },
+        context,
+      )
+      transportModeByBaseUrl.set(transportCacheKey, 'responses')
+      return
+    }
 
     try {
       if (cachedTransportMode === 'chat-completions') {

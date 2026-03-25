@@ -18,19 +18,6 @@ interface CreateCodexStreamAccumulatorOptions {
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
 }
 
-function toCodexToolChunkPreview(value: unknown, limit = 800) {
-  try {
-    const serialized = JSON.stringify(value)
-    if (serialized.length <= limit) {
-      return serialized
-    }
-
-    return `${serialized.slice(0, limit)}…`
-  } catch {
-    return '[unserializable]'
-  }
-}
-
 function emitReasoningDelta(
   emitDelta: (event: ParsedCodexStreamEvent) => void,
   delta: string,
@@ -127,10 +114,6 @@ export function createCodexStreamAccumulator(
       }
 
       if (eventType === 'response.output_item.added' || eventType === 'response.output_item.done') {
-        console.log('[tool-chunk:codex:output-item]', {
-          eventType,
-          payloadPreview: toCodexToolChunkPreview(parsedPayload),
-        })
         const handledToolCall = toolCalls.handleOutputItem(parsedPayload)
         if (handledToolCall) {
           if (eventType === 'response.output_item.done') {
@@ -147,24 +130,11 @@ export function createCodexStreamAccumulator(
       }
 
       if (eventType === 'response.function_call_arguments.delta') {
-        console.log('[tool-chunk:codex:arguments-delta]', {
-          callId: parsedPayload.call_id ?? null,
-          deltaPreview: toCodexToolChunkPreview(parsedPayload.delta),
-          eventType,
-          itemId: parsedPayload.item_id ?? null,
-          payloadPreview: toCodexToolChunkPreview(parsedPayload),
-        })
         toolCalls.handleArgumentsDelta(parsedPayload)
         return
       }
 
       if (eventType === 'response.function_call_arguments.done') {
-        console.log('[tool-chunk:codex:arguments-done]', {
-          callId: parsedPayload.call_id ?? null,
-          eventType,
-          itemId: parsedPayload.item_id ?? null,
-          payloadPreview: toCodexToolChunkPreview(parsedPayload),
-        })
         toolCalls.finalizeArguments(parsedPayload)
         return
       }

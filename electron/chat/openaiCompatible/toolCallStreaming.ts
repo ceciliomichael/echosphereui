@@ -49,16 +49,6 @@ interface NormalizedToolCallDelta {
   name?: string
 }
 
-const TOOL_DEBUG_PREVIEW_LIMIT = 240
-
-function toToolDebugPreview(argumentsText: string) {
-  if (argumentsText.length <= TOOL_DEBUG_PREVIEW_LIMIT) {
-    return argumentsText
-  }
-
-  return `${argumentsText.slice(0, TOOL_DEBUG_PREVIEW_LIMIT)}…`
-}
-
 function readRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) {
     return null
@@ -231,15 +221,6 @@ export function collectToolCalls(
 ) {
   for (const choice of chunk.choices) {
     for (const toolCallDelta of toNormalizedToolCallDeltas(choice)) {
-      console.log('[tool-chunk:openai-compatible:normalized-delta]', {
-        argumentsDeltaLength: toolCallDelta.argumentsText?.length ?? 0,
-        argumentsDeltaPreview: toToolDebugPreview(toolCallDelta.argumentsText ?? ''),
-        chunkId: chunk.id,
-        index: toolCallDelta.index,
-        invocationId: toolCallDelta.id ?? null,
-        toolName: toolCallDelta.name ?? null,
-      })
-
       const currentToolCall = toolCallsByIndex.get(toolCallDelta.index) ?? {
         argumentsText: '',
         id: toolCallDelta.id ?? randomUUID(),
@@ -262,12 +243,6 @@ export function collectToolCalls(
 
       if (currentToolCall.startedAt === null && currentToolCall.name.trim().length > 0) {
         currentToolCall.startedAt = Date.now()
-        console.log('[tool-lifecycle:started]', {
-          argumentsLength: currentToolCall.argumentsText.length,
-          argumentsPreview: toToolDebugPreview(currentToolCall.argumentsText),
-          invocationId: currentToolCall.id,
-          toolName: currentToolCall.name,
-        })
         const startedEvent = {
           argumentsText: currentToolCall.argumentsText,
           invocationId: currentToolCall.id,
@@ -280,12 +255,6 @@ export function collectToolCalls(
         currentToolCall.startedAt !== null &&
         currentToolCall.argumentsText !== previousArgumentsText
       ) {
-        console.log('[tool-lifecycle:delta]', {
-          argumentsLength: currentToolCall.argumentsText.length,
-          argumentsPreview: toToolDebugPreview(currentToolCall.argumentsText),
-          invocationId: currentToolCall.id,
-          toolName: currentToolCall.name,
-        })
         const deltaEvent = {
           argumentsText: currentToolCall.argumentsText,
           invocationId: currentToolCall.id,
@@ -304,12 +273,6 @@ export function collectToolCalls(
 export function toToolCallList(toolCallsByIndex: Map<number, ToolCallAccumulator>) {
   return Array.from(toolCallsByIndex.entries())
     .sort((left, right) => left[0] - right[0])
-    .map(([, toolCall]) => {
-      const normalizedToolCall = toToolCall(toolCall)
-      if (!normalizedToolCall) {
-        throw new Error('OpenAI-compatible provider returned a tool call without a name.')
-      }
-
-      return normalizedToolCall
-    })
+    .map(([, toolCall]) => toToolCall(toolCall))
+    .filter((toolCall): toolCall is OpenAICompatibleToolCall => toolCall !== null)
 }

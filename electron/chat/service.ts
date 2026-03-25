@@ -51,31 +51,6 @@ function emitStreamEvent(webContents: WebContents, event: ChatStreamEvent) {
     return
   }
 
-  if (
-    event.type === 'tool_invocation_started' ||
-    event.type === 'tool_invocation_delta' ||
-    event.type === 'tool_invocation_completed' ||
-    event.type === 'tool_invocation_failed' ||
-    event.type === 'aborted' ||
-    event.type === 'error' ||
-    event.type === 'completed'
-  ) {
-    console.log('[stream-event]', {
-      eventType: event.type,
-      streamId: event.streamId,
-      ...('invocationId' in event ? { invocationId: event.invocationId } : {}),
-      ...('toolName' in event ? { toolName: event.toolName } : {}),
-      ...('argumentsText' in event
-        ? {
-            argumentsLength: event.argumentsText.length,
-            argumentsPreview:
-              event.argumentsText.length > 240 ? `${event.argumentsText.slice(0, 240)}…` : event.argumentsText,
-          }
-        : {}),
-      ...('errorMessage' in event ? { errorMessage: event.errorMessage } : {}),
-    })
-  }
-
   webContents.send(STREAM_EVENT_CHANNEL, event)
 }
 

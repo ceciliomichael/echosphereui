@@ -22,16 +22,6 @@ interface CreateCodexToolCallAccumulatorOptions {
   onToolCallReady?: (toolCall: OpenAICompatibleToolCall) => void
 }
 
-const TOOL_DEBUG_PREVIEW_LIMIT = 240
-
-function toToolDebugPreview(argumentsText: string) {
-  if (argumentsText.length <= TOOL_DEBUG_PREVIEW_LIMIT) {
-    return argumentsText
-  }
-
-  return `${argumentsText.slice(0, TOOL_DEBUG_PREVIEW_LIMIT)}…`
-}
-
 function readCodexToolOutputIndex(payload: CodexStreamEventPayload, item: Record<string, unknown> | null) {
   return readNonNegativeInteger(payload.output_index) ?? readNonNegativeInteger(item?.output_index)
 }
@@ -54,12 +44,6 @@ function emitToolAccumulatorLifecycleEvent(
 ) {
   if (accumulator.startedAt === null && accumulator.name.trim().length > 0) {
     accumulator.startedAt = Date.now()
-    console.log('[tool-lifecycle:started]', {
-      argumentsLength: accumulator.argumentsText.length,
-      argumentsPreview: toToolDebugPreview(accumulator.argumentsText),
-      invocationId: accumulator.id,
-      toolName: accumulator.name,
-    })
     emitDelta({
       argumentsText: accumulator.argumentsText,
       invocationId: accumulator.id,
@@ -71,12 +55,6 @@ function emitToolAccumulatorLifecycleEvent(
   }
 
   if (accumulator.startedAt !== null && accumulator.argumentsText !== previousArgumentsText) {
-    console.log('[tool-lifecycle:delta]', {
-      argumentsLength: accumulator.argumentsText.length,
-      argumentsPreview: toToolDebugPreview(accumulator.argumentsText),
-      invocationId: accumulator.id,
-      toolName: accumulator.name,
-    })
     emitDelta({
       argumentsText: accumulator.argumentsText,
       invocationId: accumulator.id,
@@ -86,9 +64,9 @@ function emitToolAccumulatorLifecycleEvent(
   }
 }
 
-function toToolCall(toolCall: CodexToolCallAccumulator): OpenAICompatibleToolCall {
+function toToolCall(toolCall: CodexToolCallAccumulator): OpenAICompatibleToolCall | null {
   if (!toolCall.name.trim()) {
-    throw new Error('Codex returned a tool call without a name.')
+    return null
   }
 
   return {
@@ -143,8 +121,13 @@ export function createCodexToolCallAccumulator(options: CreateCodexToolCallAccum
       return
     }
 
+    const toolCall = toToolCall(toolAccumulator)
+    if (!toolCall) {
+      return
+    }
+
     completedToolCallOutputIndexes.add(outputIndex)
-    options.onToolCallReady(toToolCall(toolAccumulator))
+    options.onToolCallReady(toolCall)
   }
 
   const upsertAccumulator = (
@@ -285,6 +268,7 @@ export function createCodexToolCallAccumulator(options: CreateCodexToolCallAccum
       return Array.from(toolCallsByOutputIndex.entries())
         .sort((left, right) => left[0] - right[0])
         .map(([, toolCall]) => toToolCall(toolCall))
+        .filter((toolCall): toolCall is OpenAICompatibleToolCall => toolCall !== null)
     },
   }
 }

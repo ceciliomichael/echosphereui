@@ -148,3 +148,38 @@ test('handleContentDelta completes reasoning when a think block closes in conten
   assert.equal(typeof completedMessage?.reasoningCompletedAt, 'number')
   assert.equal(completedMessage?.content, '<think>Plan carefully</think>')
 })
+
+test('handleReasoningDelta creates a new assistant draft after visible content already streamed', () => {
+  const harness = createDraftManagerHarness()
+
+  harness.manager.appendPlaceholderDraft()
+  harness.manager.handleContentDelta('Primary answer content.')
+  harness.manager.handleReasoningDelta('Late reasoning after answer.')
+
+  const assistantMessages = harness
+    .getLatestConversationMessages()
+    .filter((message): message is Message => message.role === 'assistant')
+
+  assert.equal(assistantMessages.length, 2)
+  assert.equal(assistantMessages[0]?.content, 'Primary answer content.')
+  assert.equal(assistantMessages[0]?.reasoningContent, '')
+  assert.equal(assistantMessages[1]?.content, '')
+  assert.equal(assistantMessages[1]?.reasoningContent, 'Late reasoning after answer.')
+})
+
+test('streaming deltas deduplicate duplicate chunks for reasoning and content', () => {
+  const harness = createDraftManagerHarness()
+
+  harness.manager.appendPlaceholderDraft()
+  harness.manager.handleReasoningDelta('I will inspect the file.')
+  harness.manager.handleReasoningDelta('I will inspect the file.')
+  harness.manager.handleContentDelta('Result summary.')
+  harness.manager.handleContentDelta('Result summary.')
+
+  const assistantMessage = harness
+    .getLatestConversationMessages()
+    .find((message): message is Message => message.role === 'assistant')
+
+  assert.equal(assistantMessage?.reasoningContent, 'I will inspect the file.')
+  assert.equal(assistantMessage?.content, 'Result summary.')
+})

@@ -31,7 +31,7 @@ test('normalizeAssistantMessageContent ignores empty think wrappers', () => {
   )
 })
 
-test('normalizeAssistantMessageContent strips assistant tool-call scaffolding from visible content', () => {
+test('normalizeAssistantMessageContent preserves natural content text without scaffold stripping', () => {
   const parsed = normalizeAssistantMessageContent({
     content: [
       'I will inspect the workspace.',
@@ -41,6 +41,9 @@ test('normalizeAssistantMessageContent strips assistant tool-call scaffolding fr
     reasoningContent: '',
   })
 
-  assert.equal(parsed.content, 'I will inspect the workspace.\nThen I will report back.')
+  assert.equal(
+    parsed.content,
+    'I will inspect the workspace.\nAssistant to=run_terminal.run_terminal json {"cmd":"npm run lint","login":true}\nThen I will report back.',
+  )
   assert.equal(parsed.reasoningContent, '')
 })

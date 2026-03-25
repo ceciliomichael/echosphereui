@@ -101,6 +101,36 @@ function finalizeIncompleteToolInvocations(
   }
 }
 
+function mergeStreamingDelta(existingValue: string, nextDelta: string) {
+  if (nextDelta.length === 0) {
+    return existingValue
+  }
+
+  if (existingValue.length === 0) {
+    return nextDelta
+  }
+
+  if (existingValue.endsWith(nextDelta)) {
+    return existingValue
+  }
+
+  if (nextDelta.startsWith(existingValue)) {
+    return nextDelta
+  }
+
+  const maxOverlap = Math.min(existingValue.length, nextDelta.length)
+  let overlapLength = 0
+
+  for (let index = maxOverlap; index > 0; index -= 1) {
+    if (existingValue.slice(-index) === nextDelta.slice(0, index)) {
+      overlapLength = index
+      break
+    }
+  }
+
+  return existingValue + nextDelta.slice(overlapLength)
+}
+
 export function createChatAssistantDraftManager(input: CreateChatAssistantDraftManagerInput) {
   const insertedMessageIds: string[] = []
   const streamedMessageOrder: StreamedMessageOrderEntry[] = []
@@ -275,6 +305,22 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     return appendAssistantDraft(kind)
   }
 
+  const ensureReasoningDraft = () => {
+    const draftAssistantId = ensureAssistantDraft('content')
+    const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
+    const normalizedContent = normalizeAssistantMessageContent(draftAssistantMessage)
+    const hasVisibleContent = normalizedContent.content.trim().length > 0
+    const hasToolInvocations = (draftAssistantMessage.toolInvocations?.length ?? 0) > 0
+    const reasoningAlreadyCompleted = draftAssistantMessage.reasoningCompletedAt !== undefined
+
+    if (!hasVisibleContent && !hasToolInvocations && !reasoningAlreadyCompleted) {
+      return draftAssistantId
+    }
+
+    completeReasoningDraft()
+    return appendAssistantDraft('content')
+  }
+
   const promoteWaitingIndicatorToSplash = (draftAssistantId: string) => {
     const currentValue = waitingIndicatorVariantByDraftId.get(draftAssistantId)
     if (currentValue === 'splash') {
@@ -316,7 +362,8 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     handleContentDelta(delta: string) {
       const draftAssistantId = ensureAssistantDraft('content')
       const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
-      const nextContent = draftAssistantMessage.content + delta
+      const nextContent = mergeStreamingDelta(draftAssistantMessage.content, delta)
+      const appendedCharCount = Math.max(0, nextContent.length - draftAssistantMessage.content.length)
       const nextContentParts = splitThinkingContent(nextContent)
       const hasCompletedThinkBlock = nextContentParts.reasoningContent.trim().length > 0 && nextContent.includes('</think>')
 
@@ -329,27 +376,33 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       updateDraftAssistantMessage(draftAssistantId, (message) => ({
         ...message,
         content: nextContent,
-      }), undefined, { deltaCharCount: delta.length })
+      }), undefined, { deltaCharCount: appendedCharCount })
 
       if (hasCompletedThinkBlock) {
         completeReasoningDraft()
       }
     },
     handleReasoningDelta(delta: string) {
-      const draftAssistantId = ensureAssistantDraft('content')
+      const draftAssistantId = ensureReasoningDraft()
       let shouldCompleteReasoning = false
+      let appendedCharCount = 0
       reasoningDraftAssistantId = draftAssistantId
       promoteWaitingIndicatorToSplash(draftAssistantId)
       input.markTextStreamingPulse(input.conversationId)
       updateDraftAssistantMessage(draftAssistantId, (message) => {
-        const nextReasoningContent = (message.reasoningContent ?? '') + delta
+        const currentReasoningContent = message.reasoningContent ?? ''
+        const nextReasoningContent = mergeStreamingDelta(message.reasoningContent ?? '', delta)
+        appendedCharCount = Math.max(0, nextReasoningContent.length - currentReasoningContent.length)
         shouldCompleteReasoning = splitThinkingContent(nextReasoningContent).hasThinkingTags && nextReasoningContent.includes('</think>')
+        if (nextReasoningContent === currentReasoningContent) {
+          return message
+        }
 
         return {
           ...message,
           reasoningContent: nextReasoningContent,
         }
-      }, undefined, { deltaCharCount: delta.length })
+      }, undefined, { deltaCharCount: appendedCharCount })
 
       if (shouldCompleteReasoning) {
         completeReasoningDraft()

@@ -111,31 +111,6 @@ export async function streamAssistantResponse(
     const queuedEvents: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0][] = []
 
     const handleStreamEvent = (event: Parameters<Parameters<typeof window.echosphereChat.onStreamEvent>[0]>[0]) => {
-      if (
-        event.type === 'tool_invocation_started' ||
-        event.type === 'tool_invocation_delta' ||
-        event.type === 'tool_invocation_completed' ||
-        event.type === 'tool_invocation_failed' ||
-        event.type === 'aborted' ||
-        event.type === 'completed' ||
-        event.type === 'error'
-      ) {
-        console.log('[renderer-stream-event]', {
-          eventType: event.type,
-          streamId: event.streamId,
-          ...('invocationId' in event ? { invocationId: event.invocationId } : {}),
-          ...('toolName' in event ? { toolName: event.toolName } : {}),
-          ...('argumentsText' in event
-            ? {
-                argumentsLength: event.argumentsText.length,
-                argumentsPreview:
-                  event.argumentsText.length > 240 ? `${event.argumentsText.slice(0, 240)}…` : event.argumentsText,
-              }
-            : {}),
-          ...('errorMessage' in event ? { errorMessage: event.errorMessage } : {}),
-        })
-      }
-
       if (event.type === 'content_delta') {
         input.onContentDelta(event.delta)
         return

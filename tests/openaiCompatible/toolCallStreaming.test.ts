@@ -365,3 +365,15 @@ test('collectToolCalls stringifies object-form function arguments in non-standar
   assert.equal(toolCall?.name, 'read')
   assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\main.tsx"}')
 })
+
+test('toToolCallList ignores malformed tool entries that never receive a name', () => {
+  const toolCallsByIndex = new Map<number, ToolCallAccumulator>([
+    [0, { argumentsText: '{"absolute_path":"C:\\\\repo\\\\a.ts"}', id: 'call-no-name', name: '', startedAt: Date.now() }],
+    [1, { argumentsText: '{"absolute_path":"C:\\\\repo\\\\b.ts"}', id: 'call-valid', name: 'read', startedAt: Date.now() }],
+  ])
+
+  const toolCalls = toToolCallList(toolCallsByIndex)
+  assert.equal(toolCalls.length, 1)
+  assert.equal(toolCalls[0]?.id, 'call-valid')
+  assert.equal(toolCalls[0]?.name, 'read')
+})

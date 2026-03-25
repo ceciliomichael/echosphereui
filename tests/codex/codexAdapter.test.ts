@@ -80,7 +80,7 @@ test('buildCodexInputMessages groups current-turn tool results into one standalo
   assert.match(inputMessages[1]?.content[0]?.text ?? '', /File src\/index\.ts \(lines 1-2\)/u)
 })
 
-test('buildCodexInputMessages includes assistant tool invocation context before tool results', () => {
+test('buildCodexInputMessages keeps assistant content and groups tool results without serializing tool invocation context', () => {
   const messages: Message[] = [
     {
       content: 'I will inspect the workspace.',
@@ -104,15 +104,7 @@ test('buildCodexInputMessages includes assistant tool invocation context before 
   assert.deepEqual(buildCodexInputMessages(messages), [
     {
       content: [{
-        text: [
-          'I will inspect the workspace.',
-          '',
-          'Assistant tool call context from the immediately preceding assistant turn.',
-          'Use this to preserve the exact tool requests that led to the results below.',
-          '- list({',
-          '  "absolute_path": "C:/workspace"',
-          '}) completed.',
-        ].join('\n'),
+        text: 'I will inspect the workspace.',
         type: 'output_text',
       }],
       role: 'assistant',
@@ -120,7 +112,7 @@ test('buildCodexInputMessages includes assistant tool invocation context before 
   ])
 })
 
-test('buildCodexInputMessages preserves tool-only assistant turns by serializing tool invocation context', () => {
+test('buildCodexInputMessages omits tool-only assistant turns that have no assistant text content', () => {
   const messages: Message[] = [
     {
       content: '',
@@ -139,21 +131,7 @@ test('buildCodexInputMessages preserves tool-only assistant turns by serializing
     },
   ]
 
-  assert.deepEqual(buildCodexInputMessages(messages), [
-    {
-      content: [{
-        text: [
-          'Assistant tool call context from the immediately preceding assistant turn.',
-          'Use this to preserve the exact tool requests that led to the results below.',
-          '- list({',
-          '  "absolute_path": "C:/workspace"',
-          '}) completed.',
-        ].join('\n'),
-        type: 'output_text',
-      }],
-      role: 'assistant',
-    },
-  ])
+  assert.deepEqual(buildCodexInputMessages(messages), [])
 })
 
 test('buildCodexPayload keeps parallel tool call batching enabled', async () => {
@@ -289,4 +267,20 @@ test('parseSseResponseStream keeps invocation id stable when codex emits a diffe
   assert.equal(deltaEvents.at(-1)?.invocationId, 'call_1')
   assert.equal(result.toolCalls[0]?.id, 'call_1')
   assert.equal(result.toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\src"}')
+})
+
+test('parseSseResponseStream ignores malformed function_call entries without a name', async () => {
+  const streamEvents = [
+    'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_item_1","type":"function_call","call_id":"call_1","arguments":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\src\\"}"}}\n\n',
+    'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_item_1","call_id":"call_1","arguments":"{\\"absolute_path\\":\\"C:\\\\\\\\repo\\\\\\\\src\\"}"}\n\n',
+    'data: [DONE]\n\n',
+  ]
+
+  const result = await parseSseResponseStream(
+    createSseResponse(streamEvents),
+    () => {},
+    new AbortController().signal,
+  )
+
+  assert.deepEqual(result.toolCalls, [])
 })
