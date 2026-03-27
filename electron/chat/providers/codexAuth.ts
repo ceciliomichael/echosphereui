@@ -89,7 +89,7 @@ async function refreshCodexAuthData(currentAuthData: StoredCodexAuthData): Promi
       : currentAuthData.expires_at
 
   const nextAuthData: StoredCodexAuthData = {
-    auth_mode: 'oauth',
+    auth_mode: 'chatgpt',
     expires_at: expiresAt,
     last_refresh: new Date(now).toISOString(),
     tokens: {

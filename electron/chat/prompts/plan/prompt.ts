@@ -80,8 +80,9 @@ function buildToolGuidanceSection() {
     '<toolusage>',
     '## Tool Guidance',
     '- Use only planning tools available in this mode.',
-    '- `todo_write` is helpful for non-trivial multi-step work.',
     '- `ask_question` is helpful when a missing decision would materially affect correctness or scope.',
+    '- Use `list`, `read`, `glob`, and `grep` to inspect the workspace before proposing edits.',
+    '- Use `ready_implement` when the plan is ready for approval.',
     '- When a tool requires a path, use a real absolute filesystem path rooted in the workspace.',
   ].join('\n')
 }

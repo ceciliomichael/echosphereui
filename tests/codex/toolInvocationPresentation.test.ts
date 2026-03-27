@@ -53,20 +53,6 @@ test('getToolInvocationHeaderLabel truncates long command execution labels', () 
   assert.match(header, /\.\.\.$/u)
 })
 
-test('getToolInvocationHeaderLabel renders todo write labels without dot target', () => {
-  const completed = createInvocation({
-    argumentsText: '{"steps":[]}',
-    id: 'plan-1',
-    startedAt: 1_700_000_000_000,
-    state: 'completed',
-    toolName: 'todo_write',
-    resultContent:
-      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"ok","toolCallId":"call-1","toolName":"todo_write","subject":{"kind":"path","path":"."}}\n</tool_result>',
-  })
-
-  assert.equal(getToolInvocationHeaderLabel(completed), 'Updated Todo List')
-})
-
 test('getToolInvocationHeaderLabel renders grep labels with searched query', () => {
   const completed = createInvocation({
     argumentsText: JSON.stringify({ absolute_path: 'C:/repo', pattern: 'Updating Plan' }),
@@ -79,6 +65,20 @@ test('getToolInvocationHeaderLabel renders grep labels with searched query', () 
   })
 
   assert.equal(getToolInvocationHeaderLabel(completed), 'Searched Updating Plan')
+})
+
+test('getToolInvocationHeaderLabel renders apply_patch labels', () => {
+  const completed = createInvocation({
+    argumentsText: JSON.stringify({ patch: '*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old\n+new\n*** End Patch' }),
+    id: 'patch-1',
+    resultContent:
+      '<tool_result>\n{"schema":"echosphere.tool_result/v1","status":"success","summary":"Updated src/app.ts.","toolCallId":"call-4","toolName":"apply_patch","subject":{"kind":"file","path":"src/app.ts"}}\n</tool_result>',
+    startedAt: 1_700_000_000_000,
+    state: 'completed',
+    toolName: 'apply_patch',
+  })
+
+  assert.equal(getToolInvocationHeaderLabel(completed), 'Edited app.ts')
 })
 
 test('getToolInvocationHeaderLabel does not render dot target for exec command without command text', () => {

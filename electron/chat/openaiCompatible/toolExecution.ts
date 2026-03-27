@@ -5,7 +5,6 @@ import { buildFailedToolArtifacts, buildSuccessfulToolArtifacts } from './toolRe
 import {
   createToolExecutionTurnState,
   hydrateToolExecutionTurnStateFromMessages,
-  recordSuccessfulToolExecution,
   type ToolExecutionTurnState,
 } from './toolExecutionTurnState'
 import {
@@ -15,7 +14,6 @@ import {
 } from './toolTypes'
 
 export { createToolExecutionTurnState } from './toolExecutionTurnState'
-export { resolveWorkflowTurnToolChoice } from './toolExecutionTurnState'
 export type { ToolExecutionTurnState } from './toolExecutionTurnState'
 
 interface ToolExecutionSchedulerInput {
@@ -100,139 +98,6 @@ function readNextChatMode(semanticResult: Record<string, unknown>): ChatMode | n
   return null
 }
 
-interface NormalizedWorkflowStepSnapshot {
-  id: string
-  status: 'completed' | 'in_progress' | 'pending'
-  title: string
-}
-
-interface NormalizedWorkflowPlanSnapshot {
-  planId: string
-  steps: NormalizedWorkflowStepSnapshot[]
-}
-
-type NoopUpdatePlanResult = Record<string, unknown> & {
-  allStepsCompleted: boolean
-  completedStepCount: number
-  hasIncompleteSteps: boolean
-  inProgressStepCount: number
-  inProgressStepId: string | null
-  inProgressStepIds: string[]
-  message: string
-  operation: 'noop'
-  path: '.'
-  pendingStepCount: number
-  planId: string
-  steps: NormalizedWorkflowStepSnapshot[]
-  targetKind: 'plan'
-  totalStepCount: number
-}
-
-function readTrimmedString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const normalized = value.trim()
-  return normalized.length > 0 ? normalized : null
-}
-
-function normalizeUpdatePlanArguments(argumentsValue: Record<string, unknown>): NormalizedWorkflowPlanSnapshot | null {
-  const rawSteps =
-    argumentsValue.tasks ??
-    argumentsValue.steps ??
-    argumentsValue.plan ??
-    argumentsValue.plan_steps ??
-    argumentsValue.items
-  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
-    return null
-  }
-
-  const steps: NormalizedWorkflowStepSnapshot[] = []
-  for (const rawStep of rawSteps) {
-    if (typeof rawStep !== 'object' || rawStep === null || Array.isArray(rawStep)) {
-      return null
-    }
-
-    const stepRecord = rawStep as Record<string, unknown>
-    const id = readTrimmedString(stepRecord.id)
-    const title = readTrimmedString(stepRecord.content) ?? readTrimmedString(stepRecord.title) ?? readTrimmedString(stepRecord.step)
-    const statusValue = readTrimmedString(stepRecord.status)?.toLowerCase()
-    if (!id || !title || !statusValue) {
-      return null
-    }
-
-    if (statusValue !== 'pending' && statusValue !== 'in_progress' && statusValue !== 'completed') {
-      return null
-    }
-
-    steps.push({
-      id,
-      status: statusValue,
-      title,
-    })
-  }
-
-  return {
-    planId: readTrimmedString(argumentsValue.plan) ?? 'default',
-    steps,
-  }
-}
-
-function isUnchangedWorkflowPlanUpdate(
-  turnState: ToolExecutionTurnState,
-  argumentsValue: Record<string, unknown>,
-) {
-  const existingPlan = turnState.workflowPlan
-  if (!existingPlan || existingPlan.allStepsCompleted) {
-    return false
-  }
-
-  const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
-  if (!incomingPlan) {
-    return false
-  }
-
-  if (incomingPlan.planId !== existingPlan.planId || incomingPlan.steps.length !== existingPlan.steps.length) {
-    return false
-  }
-
-  return incomingPlan.steps.every((incomingStep, index) => {
-    const existingStep = existingPlan.steps[index]
-    return (
-      existingStep !== undefined &&
-      incomingStep.id === existingStep.id &&
-      incomingStep.status === existingStep.status &&
-      incomingStep.title === existingStep.title
-    )
-  })
-}
-
-function buildNoopUpdatePlanResult(snapshot: NormalizedWorkflowPlanSnapshot): NoopUpdatePlanResult {
-  const completedStepCount = snapshot.steps.filter((step) => step.status === 'completed').length
-  const inProgressSteps = snapshot.steps.filter((step) => step.status === 'in_progress')
-  const pendingStepCount = snapshot.steps.filter((step) => step.status === 'pending').length
-  const allStepsCompleted = completedStepCount === snapshot.steps.length
-
-  return {
-    allStepsCompleted,
-    completedStepCount,
-    hasIncompleteSteps: !allStepsCompleted,
-    inProgressStepCount: inProgressSteps.length,
-    inProgressStepId: inProgressSteps[0]?.id ?? null,
-    inProgressStepIds: inProgressSteps.map((step) => step.id),
-    message:
-      'Todo list unchanged. Continue executing the current in_progress tasks and call todo_write again only after statuses change.',
-    operation: 'noop',
-    path: '.',
-    pendingStepCount,
-    planId: snapshot.planId,
-    steps: snapshot.steps.map((step) => ({ ...step })),
-    targetKind: 'plan',
-    totalStepCount: snapshot.steps.length,
-  }
-}
-
 export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall, chatMode: ChatMode) {
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
   if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
@@ -258,18 +123,13 @@ export async function executeToolCallWithPolicies(
   agentContextRootPath: string,
   chatModeOrInMemoryMessages: ChatMode | Message[],
   inMemoryMessagesOrTurnState: Message[] | ToolExecutionTurnState,
-  maybeTurnState?: ToolExecutionTurnState,
+  _maybeTurnState?: ToolExecutionTurnState,
   onChatModeChange?: (nextMode: ChatMode) => void,
 ) {
   const chatMode = typeof chatModeOrInMemoryMessages === 'string' ? chatModeOrInMemoryMessages : 'agent'
   const inMemoryMessages = Array.isArray(chatModeOrInMemoryMessages)
     ? chatModeOrInMemoryMessages
     : (inMemoryMessagesOrTurnState as Message[])
-  const turnState = Array.isArray(chatModeOrInMemoryMessages)
-    ? (inMemoryMessagesOrTurnState as ToolExecutionTurnState)
-    : maybeTurnState
-
-  const ensuredTurnState = turnState ?? createToolExecutionTurnState()
 
   const startedAt = toolCall.startedAt
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
@@ -298,30 +158,6 @@ export async function executeToolCallWithPolicies(
     return
   }
 
-  if (toolCall.name === 'todo_write' && isUnchangedWorkflowPlanUpdate(ensuredTurnState, argumentsValue)) {
-    const incomingPlan = normalizeUpdatePlanArguments(argumentsValue)
-    if (incomingPlan) {
-      const completedAt = Date.now()
-      const noopResult = buildNoopUpdatePlanResult(incomingPlan)
-      const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, noopResult, startedAt, completedAt)
-      recordSuccessfulToolExecution(toolCall, argumentsValue, noopResult, agentContextRootPath, ensuredTurnState)
-
-      context.emitDelta({
-        argumentsText: successfulArtifacts.toolInvocation.argumentsText,
-        completedAt,
-        invocationId: toolCall.id,
-        resultContent: successfulArtifacts.resultContent,
-        resultPresentation: successfulArtifacts.resultPresentation,
-        syntheticMessage: successfulArtifacts.syntheticMessage,
-        toolName: toolCall.name,
-        type: 'tool_invocation_completed',
-      } satisfies Extract<StreamDeltaEvent, { type: 'tool_invocation_completed' }>)
-
-      inMemoryMessages.push(successfulArtifacts.syntheticMessage)
-      return
-    }
-  }
-
   try {
     const semanticResult = await toolDefinition.execute(argumentsValue, {
       agentContextRootPath,
@@ -347,7 +183,6 @@ export async function executeToolCallWithPolicies(
     }
     const completedAt = Date.now()
     const successfulArtifacts = buildSuccessfulToolArtifacts(toolCall, semanticResult, startedAt, completedAt)
-    recordSuccessfulToolExecution(toolCall, argumentsValue, semanticResult, agentContextRootPath, ensuredTurnState)
 
     context.emitDelta({
       argumentsText: successfulArtifacts.toolInvocation.argumentsText,

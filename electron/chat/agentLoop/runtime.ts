@@ -5,7 +5,6 @@ import { buildReplayableMessageHistory } from '../openaiCompatible/messageHistor
 import {
   createHydratedToolExecutionTurnState,
   createToolExecutionScheduler,
-  resolveWorkflowTurnToolChoice,
 } from '../openaiCompatible/toolExecution'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import {
@@ -127,8 +126,6 @@ export async function streamAgentLoopWithTools(
   const currentRuntimeContextSnapshot = toRuntimeContextSnapshot(request)
 
   while (!context.signal.aborted) {
-    const resolvedToolChoiceForTurn = resolveWorkflowTurnToolChoice(turnState)
-    const forcedToolChoiceForTurn = resolvedToolChoiceForTurn === 'auto' ? undefined : resolvedToolChoiceForTurn
     const replayableMessages = buildReplayableMessageHistory(inMemoryMessages)
     const runtimeContextResult = appendRuntimeContextMessageIfChanged(
       replayableMessages,
@@ -144,7 +141,6 @@ export async function streamAgentLoopWithTools(
       {
         agentContextRootPath: request.agentContextRootPath,
         chatMode: currentChatMode,
-        forceToolChoice: forcedToolChoiceForTurn,
         messages: replayableMessagesForTurn,
         modelId: request.modelId,
         reasoningEffort: request.reasoningEffort,

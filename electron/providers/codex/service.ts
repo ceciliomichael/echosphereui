@@ -115,7 +115,7 @@ export async function connectCodexProviderWithOAuth(openExternal: (url: string) 
   const authResult = await runCodexOAuthFlow(openExternal)
 
   const nextAuthData: StoredCodexAuthData = {
-    auth_mode: 'oauth',
+    auth_mode: 'chatgpt',
     expires_at: authResult.expiresAt ?? undefined,
     last_refresh: authResult.lastRefreshAt,
     tokens: {

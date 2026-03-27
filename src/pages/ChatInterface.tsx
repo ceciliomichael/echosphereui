@@ -351,7 +351,7 @@ export function ChatInterface({
           value: 'agent',
         },
         {
-          description: 'Echo explores and plans with list/read/glob/grep + ask_question + todo_write + ready_implement',
+          description: 'Echo explores and plans with list/read/glob/grep + ask_question + ready_implement',
           label: 'Plan',
           value: 'plan',
         },

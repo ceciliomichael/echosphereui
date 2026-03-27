@@ -3,10 +3,11 @@ import test from 'node:test'
 import { getToolDescription } from '../../electron/chat/openaiCompatible/tools/descriptionCatalog'
 
 test('tool descriptions include the shared contract and the tool purpose', () => {
-  const description = getToolDescription('write')
+  const description = getToolDescription('apply_patch')
   assert.match(description, /Global tool contract:/u)
   assert.match(description, /Treat tool outputs as source of truth\./u)
-  assert.match(description, /Write or overwrite a file in the workspace\./u)
+  assert.match(description, /Apply a structured patch to the workspace using the \*\*\* Begin Patch \/ \*\*\* End Patch format\./u)
+  assert.match(description, /File paths may be relative to the workspace root or absolute paths inside the workspace\./u)
 })
 
 test('tool descriptions stay short for the per-tool portion', () => {

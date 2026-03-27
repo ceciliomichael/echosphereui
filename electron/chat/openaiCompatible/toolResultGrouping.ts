@@ -3,7 +3,6 @@ import { parseStructuredToolResultContent, type StructuredToolResultMetadata } f
 const TERMINAL_REPLAY_MAX_BODY_CHARACTERS = 1_600
 const INSPECTION_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
 const MUTATION_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
-const PLAN_REPLAY_MAX_BODY_CHARACTERS = 700
 const DEFAULT_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
 const RAW_TOOL_CONTENT_MAX_CHARACTERS = Number.MAX_SAFE_INTEGER
 
@@ -55,12 +54,8 @@ function resolveReplayBodyCharacterLimit(toolName: string) {
     return INSPECTION_REPLAY_MAX_BODY_CHARACTERS
   }
 
-  if (toolName === 'write' || toolName === 'edit' || toolName === 'file_change') {
+  if (toolName === 'write' || toolName === 'edit' || toolName === 'apply_patch' || toolName === 'file_change') {
     return MUTATION_REPLAY_MAX_BODY_CHARACTERS
-  }
-
-  if (toolName === 'todo_write') {
-    return PLAN_REPLAY_MAX_BODY_CHARACTERS
   }
 
   return DEFAULT_REPLAY_MAX_BODY_CHARACTERS
@@ -135,13 +130,19 @@ function buildReplayKeyForToolContent(metadata: StructuredToolResultMetadata) {
     return `mutation:${subjectPath}`
   }
 
-  if (metadata.toolName === 'file_change') {
-    return `file_change:${subjectPath}`
+  if (metadata.toolName === 'apply_patch') {
+    const changedPaths = Array.isArray(semantics?.changed_paths)
+      ? semantics.changed_paths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    if (changedPaths.length > 0) {
+      return `apply_patch:${changedPaths.slice().sort().join('|')}`
+    }
+
+    return `apply_patch:${subjectPath}`
   }
 
-  if (metadata.toolName === 'todo_write') {
-    const planId = typeof semantics?.plan_id === 'string' ? semantics.plan_id : 'default'
-    return `todo_write:${planId}`
+  if (metadata.toolName === 'file_change') {
+    return `file_change:${subjectPath}`
   }
 
   return `${metadata.toolName}:${metadata.toolCallId}`
@@ -231,31 +232,40 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       latestInspectionStateByKey.set(inspectionStateKey, inspectionStateLine)
     }
 
-    if (metadata.toolName !== 'write' && metadata.toolName !== 'edit') {
+    if (metadata.toolName !== 'write' && metadata.toolName !== 'edit' && metadata.toolName !== 'apply_patch') {
       continue
     }
 
-    const subjectPath = metadata.subject?.path
-    if (typeof subjectPath !== 'string' || subjectPath.trim().length === 0) {
-      continue
-    }
-
-    const normalizedPath = subjectPath.trim()
     const semantics = metadata.semantics
+    const changedPaths =
+      metadata.toolName === 'apply_patch' && Array.isArray(semantics?.changed_paths)
+        ? semantics.changed_paths.filter((value): value is string => typeof value === 'string' && value.length > 0)
+        : []
+
+    const mutationPaths =
+      changedPaths.length > 0
+        ? changedPaths
+        : (() => {
+            const subjectPath = metadata.subject?.path
+            return typeof subjectPath === 'string' && subjectPath.trim().length > 0 ? [subjectPath.trim()] : []
+          })()
+
     const operation =
       semantics && typeof semantics.operation === 'string' && semantics.operation.trim().length > 0
         ? semantics.operation.trim()
         : null
 
-    if (latestMutationStateByPath.has(normalizedPath)) {
-      latestMutationStateByPath.delete(normalizedPath)
-    }
+    for (const normalizedPath of mutationPaths) {
+      if (latestMutationStateByPath.has(normalizedPath)) {
+        latestMutationStateByPath.delete(normalizedPath)
+      }
 
-    latestMutationStateByPath.set(normalizedPath, {
-      operation,
-      path: normalizedPath,
-      toolName: metadata.toolName,
-    })
+      latestMutationStateByPath.set(normalizedPath, {
+        operation,
+        path: normalizedPath,
+        toolName: metadata.toolName,
+      })
+    }
   }
 
   const latestMutationStateLines = Array.from(latestMutationStateByPath.values()).map((entry) => {
@@ -269,6 +279,10 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
       }
 
       return `- ${entry.path} now reflects the latest successful edit changes.`
+    }
+
+    if (entry.toolName === 'apply_patch') {
+      return `- ${entry.path} now reflects the latest successful patch changes.`
     }
 
     const operationSuffix = entry.operation ? ` (${entry.operation})` : ''

@@ -305,6 +305,40 @@ test('buildSuccessfulToolArtifacts keeps edit acknowledgements as text while exp
   })
 })
 
+test('buildSuccessfulToolArtifacts marks noop edit results as unchanged and omits diff presentation', () => {
+  const completedAt = 1_700_000_000_176
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleEditToolCall,
+    {
+      addedPaths: [],
+      changeCount: 0,
+      contentChanged: false,
+      deletedPaths: [],
+      endLineNumber: undefined,
+      message: 'Edit completed with no content change for package.json.',
+      modifiedPaths: [],
+      operation: 'noop',
+      path: 'package.json',
+      startLineNumber: undefined,
+      targetKind: 'file',
+    },
+    sampleEditToolCall.startedAt,
+    completedAt,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+
+  assert.match(
+    artifacts.syntheticMessage.content,
+    /^Acknowledged workspace state: package\.json already matched the requested edit outcome and remains unchanged\./iu,
+  )
+  assert.match(parsedContent.metadata?.summary ?? '', /Edit completed with no content change for package\.json\./u)
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'noop')
+  assert.equal(parsedContent.metadata?.semantics?.content_changed, false)
+  assert.equal(parsedContent.metadata?.semantics?.mutation_applied, false)
+  assert.equal(artifacts.resultPresentation, undefined)
+})
+
 test('buildSuccessfulToolArtifacts exposes create-file diff presentation for edit results', () => {
   const completedAt = 1_700_000_000_180
   const artifacts = buildSuccessfulToolArtifacts(

@@ -201,6 +201,16 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     return 'Created'
   }
 
+  if (invocation.toolName === 'apply_patch') {
+    if (invocation.state === 'running') {
+      return 'Patching'
+    }
+    if (invocation.state === 'failed') {
+      return 'Patch failed'
+    }
+    return 'Edited'
+  }
+
   if (invocation.toolName === 'edit') {
     if (invocation.state === 'running') {
       return 'Editing'
@@ -228,14 +238,6 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : invocation.state === 'completed'
         ? 'Terminal output'
         : 'Output fetch failed'
-  }
-
-  if (invocation.toolName === 'todo_write') {
-    return invocation.state === 'running'
-      ? 'Updating Todo List'
-      : invocation.state === 'completed'
-        ? 'Updated Todo List'
-        : 'Todo List failed'
   }
 
   if (invocation.toolName === 'ready_implement') {
@@ -272,10 +274,6 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
   const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
 
-  if (invocation.toolName === 'todo_write') {
-    return null
-  }
-
   if (invocation.toolName === 'run_terminal') {
     const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
     return commandText ? truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
@@ -292,7 +290,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if (invocation.toolName === 'edit' && normalizedStructuredPath === '.') {
+    if ((invocation.toolName === 'edit' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }

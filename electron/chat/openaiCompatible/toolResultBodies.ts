@@ -93,6 +93,10 @@ function formatGrepResultBody(semanticResult: Record<string, unknown>) {
 }
 
 function formatMutationResultBody(semanticResult: Record<string, unknown>) {
+  if (Array.isArray(semanticResult.changes)) {
+    return formatFileChangeResultBody(semanticResult)
+  }
+
   const message = readString(semanticResult.message) ?? 'Tool completed successfully.'
   const path = readString(semanticResult.path)
   const newContent = typeof semanticResult.newContent === 'string' ? semanticResult.newContent : null
@@ -133,35 +137,6 @@ function formatTerminalResultBody(semanticResult: Record<string, unknown>) {
 
   const message = readString(semanticResult.message)
   return message ?? 'Terminal command completed.'
-}
-
-function formatTodoWriteResultBody(semanticResult: Record<string, unknown>) {
-  const todoListId = readString(semanticResult.planId) ?? readString(semanticResult.sessionKey) ?? 'default'
-  const tasks = Array.isArray(semanticResult.tasks)
-    ? semanticResult.tasks.filter((task): task is Record<string, unknown> => typeof task === 'object' && task !== null)
-    : Array.isArray(semanticResult.steps)
-      ? semanticResult.steps.filter((step): step is Record<string, unknown> => typeof step === 'object' && step !== null)
-      : []
-  const truncate = (value: string, maxLength = 80) => (value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`)
-  const lines = [`Todo list ${todoListId}`]
-
-  if (tasks.length === 0) {
-    lines.push('Tasks: none')
-  } else {
-    for (const task of tasks) {
-      const taskId = readString(task.id) ?? '?'
-      const taskStatus = readString(task.status) ?? 'pending'
-      const taskTitle = truncate(readString(task.content) ?? readString(task.title) ?? 'Untitled task')
-      lines.push(`${taskId}. [${taskStatus}] ${taskTitle}`)
-    }
-  }
-
-  const allTasksCompleted = readBoolean(semanticResult.allStepsCompleted)
-  if (allTasksCompleted) {
-    lines.push('All todo items are completed.')
-  }
-
-  return lines.join('\n')
 }
 
 function formatFileChangeResultBody(semanticResult: Record<string, unknown>) {
@@ -278,7 +253,7 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
     return formatGrepResultBody(semanticResult)
   }
 
-  if (toolName === 'write' || toolName === 'edit') {
+  if (toolName === 'write' || toolName === 'edit' || toolName === 'apply_patch') {
     return formatMutationResultBody(semanticResult)
   }
 
@@ -288,10 +263,6 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
 
   if (toolName === 'run_terminal' || toolName === 'get_terminal_output') {
     return formatTerminalResultBody(semanticResult)
-  }
-
-  if (toolName === 'todo_write') {
-    return formatTodoWriteResultBody(semanticResult)
   }
 
   if (toolName === 'ready_implement') {
@@ -323,13 +294,13 @@ export function buildResultPresentation(
   toolName: string,
   semanticResult: Record<string, unknown>,
 ): ToolInvocationResultPresentation | undefined {
-  if (toolName !== 'write' && toolName !== 'edit') {
+  if (toolName !== 'write' && toolName !== 'edit' && toolName !== 'apply_patch') {
     if (toolName !== 'file_change') {
       return undefined
     }
   }
 
-  if (toolName === 'file_change') {
+  if (toolName === 'file_change' || toolName === 'apply_patch') {
     const changes = Array.isArray(semanticResult.changes)
       ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
       : []

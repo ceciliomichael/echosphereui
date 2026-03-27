@@ -85,7 +85,7 @@ export async function refreshCodexOAuthTokens(currentAuthData: StoredCodexAuthDa
       : currentAuthData.expires_at
 
   return {
-    auth_mode: 'oauth',
+    auth_mode: 'chatgpt',
     expires_at: expiresAt,
     last_refresh: new Date(now).toISOString(),
     tokens: {

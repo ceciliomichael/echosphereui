@@ -5,8 +5,12 @@
   "private": true,
   "version": "0.1.18",
   "type": "module",
+  "bin": {
+    "apply_patch": "./scripts/apply-patch.mjs"
+  },
   "scripts": {
     "dev": "vite",
+    "apply_patch": "node ./scripts/apply-patch.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build",
     "icons:generate": "node ./scripts/generate-electron-icons.mjs",
@@ -20,7 +24,7 @@
     "dist:mac:publish": "npm run build && npm run icons:generate && electron-builder --mac dmg --publish always",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts tests/codex/*.test.ts"
+    "test:tools": "node --import tsx --test tests/openaiCompatible/*.test.ts tests/codex/*.test.ts tests/scripts/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

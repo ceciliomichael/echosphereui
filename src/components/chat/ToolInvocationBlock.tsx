@@ -7,8 +7,6 @@ import { FileChangeDiffResult } from './FileChangeDiffResult'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
-import { UpdatePlanResult } from './UpdatePlanResult'
-import { parseUpdatePlanResultBody } from './updatePlanResultParser'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../lib/toolResultContent'
@@ -78,11 +76,25 @@ function parseReadToolResult(resultContent: string, metadata: StructuredToolResu
 const MIN_RUNNING_LABEL_DURATION_MS = 200
 
 function renderDiffCountSummary(invocation: ToolInvocationTrace) {
-  if (invocation.state !== 'completed' || invocation.resultPresentation?.kind !== 'file_diff') {
+  if (invocation.state !== 'completed') {
     return null
   }
 
-  const { addedLineCount = 0, removedLineCount = 0 } = invocation.resultPresentation
+  const resultPresentation = invocation.resultPresentation
+  let addedLineCount = 0
+  let removedLineCount = 0
+
+  if (resultPresentation?.kind === 'file_diff') {
+    addedLineCount = resultPresentation.addedLineCount ?? 0
+    removedLineCount = resultPresentation.removedLineCount ?? 0
+  } else if (resultPresentation?.kind === 'file_change_diff') {
+    for (const change of resultPresentation.changes) {
+      addedLineCount += change.addedLineCount ?? 0
+      removedLineCount += change.removedLineCount ?? 0
+    }
+  } else {
+    return null
+  }
 
   if (addedLineCount > 0 && removedLineCount > 0) {
     return (
@@ -177,7 +189,6 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     ''
   const readResultPresentation =
     invocation.toolName === 'read' ? parseReadToolResult(resultBody, parsedStructuredResult?.metadata ?? null) : null
-  const updatePlanResultPresentation = invocation.toolName === 'todo_write' ? parseUpdatePlanResultBody(resultBody) : null
   const readResultDisplayPath =
     workspaceRootPath && readResultPresentation
       ? getRelativeDisplayPath(workspaceRootPath, readResultPresentation.filePath)
@@ -244,8 +255,6 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
                 showCopyButton={false}
               />
             </div>
-          ) : updatePlanResultPresentation ? (
-            <UpdatePlanResult parsedResult={updatePlanResultPresentation} />
           ) : terminalToolName ? (
             <TerminalToolResult
               content={resultBody}

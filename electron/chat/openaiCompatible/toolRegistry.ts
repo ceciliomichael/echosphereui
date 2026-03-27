@@ -1,5 +1,5 @@
 import type { ChatMode } from '../../../src/types/chat'
-import { editTool } from './tools/edit/index'
+import { applyPatchTool } from './tools/apply-patch/index'
 import { askQuestionTool } from './tools/ask-question/index'
 import { execCommandTool } from './tools/exec-command/index'
 import { globTool } from './tools/glob/index'
@@ -7,18 +7,16 @@ import { grepTool } from './tools/grep/index'
 import { listTool } from './tools/list/index'
 import { readTool } from './tools/read/index'
 import { readyImplementTool } from './tools/ready-implement/index'
-import { todoWriteTool } from './tools/update-plan/index'
 import { writeTool } from './tools/write/index'
 import { writeStdinTool } from './tools/write-stdin/index'
 
 const agentToolRegistry = [
-  todoWriteTool,
   listTool,
   readTool,
   globTool,
   grepTool,
+  applyPatchTool,
   writeTool,
-  editTool,
   execCommandTool,
   writeStdinTool,
 ] as const
@@ -29,7 +27,6 @@ const planToolRegistry = [
   globTool,
   grepTool,
   askQuestionTool,
-  todoWriteTool,
   readyImplementTool,
 ] as const
 

@@ -119,6 +119,51 @@ test('edit tool performs anchored string replacement on existing files', async (
   })
 })
 
+test('edit tool matches old_string when tabs and spaces differ in the copied text', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'whitespace.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, 'foo\tbar\n', 'utf8')
+
+    const result = await editTool.execute(
+      {
+        absolute_path: filePath,
+        new_string: 'baz',
+        old_string: 'foo bar',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.ok, true)
+    assert.equal(result.operation, 'edit')
+    assert.equal(await fs.readFile(filePath, 'utf8'), 'baz\n')
+  })
+})
+
+test('edit tool treats identical old_string and new_string as a no-op when the file already matches', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'noop.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['foo', 'bar', 'foo'].join('\n'), 'utf8')
+
+    const result = await editTool.execute(
+      {
+        absolute_path: filePath,
+        new_string: 'foo',
+        old_string: 'foo',
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.ok, true)
+    assert.equal(result.operation, 'noop')
+    assert.equal(result.contentChanged, false)
+    assert.deepEqual(result.addedPaths, [])
+    assert.deepEqual(result.modifiedPaths, [])
+    assert.equal(await fs.readFile(filePath, 'utf8'), ['foo', 'bar', 'foo'].join('\n'))
+  })
+})
+
 test('edit tool rejects multi-edit operations in a single call', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const onePath = path.join(workspacePath, 'src', 'one.ts')

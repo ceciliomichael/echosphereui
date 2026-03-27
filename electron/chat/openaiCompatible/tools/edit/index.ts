@@ -427,10 +427,7 @@ const multiOccurrenceReplacer: Replacer = function* (content, find) {
 }
 
 function replaceWithAnchors(content: string, oldString: string, newString: string, replaceAll: boolean) {
-  if (oldString === newString) {
-    throw new OpenAICompatibleToolError('No changes to apply: old_string and new_string are identical.')
-  }
-
+  const isNoOpReplacement = oldString === newString
   let anyMatch = false
   const replacers: Replacer[] = [
     simpleReplacer,
@@ -452,6 +449,10 @@ function replaceWithAnchors(content: string, oldString: string, newString: strin
       }
 
       anyMatch = true
+      if (isNoOpReplacement) {
+        return content
+      }
+
       if (replaceAll) {
         return content.split(candidateSearchText).join(newString)
       }
@@ -466,6 +467,12 @@ function replaceWithAnchors(content: string, oldString: string, newString: strin
   }
 
   if (!anyMatch) {
+    if (isNoOpReplacement) {
+      throw new OpenAICompatibleToolError(
+        'No changes to apply: old_string and new_string are identical, but that text was not found in the file.',
+      )
+    }
+
     throw new OpenAICompatibleToolError(
       'Could not find old_string in file content. Provide more exact context or include surrounding lines.',
     )
@@ -599,6 +606,25 @@ export const editTool: OpenAICompatibleToolDefinition = {
       nextContent,
       existingFile.content.includes('\r\n') ? '\r\n' : '\n',
     )
+    const contentChanged = existingFile.content !== formattedNextContent
+    if (existingFile.exists && !contentChanged) {
+      const displayPath = toDisplayPath(relativePath)
+
+      return {
+        addedPaths: [],
+        changeCount: 0,
+        contentChanged: false,
+        deletedPaths: [],
+        endLineNumber: undefined,
+        message: `Edit completed with no content change for ${displayPath}.`,
+        modifiedPaths: [],
+        ok: true,
+        operation: 'noop',
+        path: displayPath,
+        startLineNumber: undefined,
+        targetKind: 'file',
+      }
+    }
 
     await fs.mkdir(path.dirname(normalizedTargetPath), { recursive: true })
     await fs.writeFile(normalizedTargetPath, formattedNextContent, 'utf8')
@@ -608,7 +634,6 @@ export const editTool: OpenAICompatibleToolDefinition = {
     const modifiedPathList = existingFile.exists ? [displayPath] : []
     const deletedPathList: string[] = []
     const changedPathList = Array.from(new Set([...addedPathList, ...modifiedPathList]))
-    const contentChanged = existingFile.content !== formattedNextContent
     const singleChangedPath = changedPathList.length === 1 ? changedPathList[0] : null
 
     const message =
@@ -646,10 +671,23 @@ export const editTool: OpenAICompatibleToolDefinition = {
       parameters: {
         additionalProperties: false,
         properties: {
-          absolute_path: { type: 'string' },
-          old_string: { type: 'string' },
-          replace_all: { type: 'boolean' },
-          new_string: { type: 'string' },
+          absolute_path: {
+            description: 'Absolute file path to edit. Keep every path segment exactly as written.',
+            type: 'string',
+          },
+          old_string: {
+            description:
+              'Exact text to replace from the latest read of the file. Include enough surrounding lines to make the target unique.',
+            type: 'string',
+          },
+          replace_all: {
+            description: 'Set true only when every match of old_string should be replaced.',
+            type: 'boolean',
+          },
+          new_string: {
+            description: 'Replacement text that will become the file content at the matched location.',
+            type: 'string',
+          },
         },
         required: ['absolute_path', 'old_string', 'new_string'],
         type: 'object',

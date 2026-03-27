@@ -43,34 +43,6 @@ function createReadToolCall(
   }
 }
 
-function createEditToolCall(id: string, filePath: string, oldContent: string, newContent: string): OpenAICompatibleToolCall {
-  return {
-    argumentsText: JSON.stringify({
-      absolute_path: filePath,
-      new_string: newContent,
-      old_string: oldContent,
-    }),
-    id,
-    name: 'edit',
-    startedAt: 1_700_000_000_000,
-  }
-}
-
-function createTodoWriteToolCall(
-  id: string,
-  payload: {
-    plan?: string
-    tasks: Array<{ content: string; id: string; status: 'completed' | 'in_progress' | 'pending' }>
-  },
-): OpenAICompatibleToolCall {
-  return {
-    argumentsText: JSON.stringify(payload),
-    id,
-    name: 'todo_write',
-    startedAt: 1_700_000_000_000,
-  }
-}
-
 async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Promise<T>) {
   const directoryPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-tool-policy-test-'))
 
@@ -207,133 +179,6 @@ test('createHydratedToolExecutionTurnState allows rereads from historical read t
   })
 })
 
-test('executeToolCallWithPolicies allows post-edit rereads of the same already-known file range', async () => {
-  await withTemporaryDirectory(async (workspacePath) => {
-    const filePath = path.join(workspacePath, 'notes.txt')
-    await fs.writeFile(filePath, 'hello\nworld\nagain', 'utf8')
-
-    const emittedEvents: StreamDeltaEvent[] = []
-    const inMemoryMessages: Message[] = []
-    const turnState = createToolExecutionTurnState()
-    const context = {
-      emitDelta(event: StreamDeltaEvent) {
-        emittedEvents.push(event)
-      },
-      signal: new AbortController().signal,
-      workspaceCheckpointId: null,
-    }
-
-    await executeToolCallWithPolicies(createReadToolCall('read-1', filePath), context, workspacePath, inMemoryMessages, turnState)
-    await executeToolCallWithPolicies(
-      createEditToolCall('edit-1', filePath, 'hello', 'updated'),
-      context,
-      workspacePath,
-      inMemoryMessages,
-      turnState,
-    )
-    await executeToolCallWithPolicies(createReadToolCall('read-2', filePath), context, workspacePath, inMemoryMessages, turnState)
-
-    assert.equal(inMemoryMessages.length, 3)
-    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
-    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 3)
-    assert.equal(failedEvents.length, 0)
-  })
-})
-
-test('executeToolCallWithPolicies allows post-edit reads when they request genuinely new file content', async () => {
-  await withTemporaryDirectory(async (workspacePath) => {
-    const filePath = path.join(workspacePath, 'notes.txt')
-    await fs.writeFile(filePath, 'hello\nworld\nagain', 'utf8')
-
-    const emittedEvents: StreamDeltaEvent[] = []
-    const inMemoryMessages: Message[] = []
-    const turnState = createToolExecutionTurnState()
-    const context = {
-      emitDelta(event: StreamDeltaEvent) {
-        emittedEvents.push(event)
-      },
-      signal: new AbortController().signal,
-      workspaceCheckpointId: null,
-    }
-
-    await executeToolCallWithPolicies(
-      createReadToolCall('read-1', filePath, { maxLines: 1, startLine: 1 }),
-      context,
-      workspacePath,
-      inMemoryMessages,
-      turnState,
-    )
-    await executeToolCallWithPolicies(
-      createEditToolCall('edit-1', filePath, 'hello', 'updated'),
-      context,
-      workspacePath,
-      inMemoryMessages,
-      turnState,
-    )
-    await executeToolCallWithPolicies(
-      createReadToolCall('read-2', filePath, { maxLines: 2, startLine: 2 }),
-      context,
-      workspacePath,
-      inMemoryMessages,
-      turnState,
-    )
-
-    const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
-    const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-    assert.equal(completedEvents.length, 3)
-    assert.equal(failedEvents.length, 0)
-  })
-})
-
-test('executeToolCallWithPolicies treats repeated unchanged todo_write calls as noop success', async () => {
-  const emittedEvents: StreamDeltaEvent[] = []
-  const inMemoryMessages: Message[] = []
-  const turnState = createToolExecutionTurnState()
-  const context = {
-    emitDelta(event: StreamDeltaEvent) {
-      emittedEvents.push(event)
-    },
-    signal: new AbortController().signal,
-    workspaceCheckpointId: null,
-  }
-
-  await executeToolCallWithPolicies(
-    createTodoWriteToolCall('plan-1', {
-      plan: 'default',
-      tasks: [
-        { content: 'Inspect files', id: '1', status: 'in_progress' },
-        { content: 'Apply edits', id: '2', status: 'pending' },
-      ],
-    }),
-    context,
-    'C:\\workspace',
-    inMemoryMessages,
-    turnState,
-  )
-
-  await executeToolCallWithPolicies(
-    createTodoWriteToolCall('plan-2', {
-      plan: 'default',
-      tasks: [
-        { content: 'Inspect files', id: '1', status: 'in_progress' },
-        { content: 'Apply edits', id: '2', status: 'pending' },
-      ],
-    }),
-    context,
-    'C:\\workspace',
-    inMemoryMessages,
-    turnState,
-  )
-
-  const completedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_completed')
-  const failedEvents = emittedEvents.filter((event) => event.type === 'tool_invocation_failed')
-  assert.equal(completedEvents.length, 2)
-  assert.equal(failedEvents.length, 0)
-  const secondResult = completedEvents[1]?.resultContent ?? ''
-  assert.match(secondResult, /Todo list .* unchanged/u)
-})
-
 test('createToolExecutionScheduler runs parallel tool calls without serial buffering', async () => {
   const emittedEvents: StreamDeltaEvent[] = []
   const inMemoryMessages: Message[] = []
@@ -396,19 +241,19 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
     {
       async executeToolCall(toolCall) {
         executionLog.push(`start:${toolCall.id}`)
-        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'edit-hero' ? 50 : 10))
+        await new Promise((resolve) => setTimeout(resolve, toolCall.id === 'patch-hero' ? 50 : 10))
         executionLog.push(`end:${toolCall.id}`)
         completedToolCalls.push(toolCall.id)
       },
       resolveExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
-        return toolName === 'edit' ? 'path-exclusive' : 'parallel'
+        return toolName === 'apply_patch' ? 'path-exclusive' : 'parallel'
       },
       resolveExecutionResourceKey(toolCall) {
-        if (toolCall.id === 'edit-hero') {
+        if (toolCall.id === 'patch-hero') {
           return 'src/components/Hero.tsx'
         }
 
-        if (toolCall.id === 'edit-footer') {
+        if (toolCall.id === 'patch-footer') {
           return 'src/components/Footer.tsx'
         }
 
@@ -418,21 +263,21 @@ test('createToolExecutionScheduler allows path-exclusive tool calls on different
   )
 
   scheduler.schedule({
-    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', old_string: '', new_string: 'hero' }),
-    id: 'edit-hero',
-    name: 'edit',
+    argumentsText: JSON.stringify({ patch: '*** Begin Patch\n*** Update File: src/components/Hero.tsx\n@@\n-old\n+hero\n*** End Patch\n' }),
+    id: 'patch-hero',
+    name: 'apply_patch',
     startedAt: 1_700_000_000_000,
   })
   scheduler.schedule({
-    argumentsText: JSON.stringify({ absolute_path: 'C:\\workspace\\src\\components\\Footer.tsx', old_string: '', new_string: 'footer' }),
-    id: 'edit-footer',
-    name: 'edit',
+    argumentsText: JSON.stringify({ patch: '*** Begin Patch\n*** Update File: src/components/Footer.tsx\n@@\n-old\n+footer\n*** End Patch\n' }),
+    id: 'patch-footer',
+    name: 'apply_patch',
     startedAt: 1_700_000_000_000,
   })
   await scheduler.drain()
 
-  assert.deepEqual(executionLog.slice(0, 2), ['start:edit-hero', 'start:edit-footer'])
-  assert.deepEqual(completedToolCalls, ['edit-footer', 'edit-hero'])
+  assert.deepEqual(executionLog.slice(0, 2), ['start:patch-hero', 'start:patch-footer'])
+  assert.deepEqual(completedToolCalls, ['patch-footer', 'patch-hero'])
 })
 
 test('createToolExecutionScheduler still serializes path-exclusive tool calls for the same file', async () => {
@@ -456,7 +301,7 @@ test('createToolExecutionScheduler still serializes path-exclusive tool calls fo
         executionLog.push(`end:${toolCall.id}`)
       },
       resolveExecutionMode(toolName: string): OpenAICompatibleToolExecutionMode {
-        return toolName === 'edit' ? 'path-exclusive' : 'parallel'
+        return toolName === 'apply_patch' ? 'path-exclusive' : 'parallel'
       },
       resolveExecutionResourceKey() {
         return 'src/components/Hero.tsx'
@@ -465,24 +310,24 @@ test('createToolExecutionScheduler still serializes path-exclusive tool calls fo
   )
 
   scheduler.schedule({
-    argumentsText: JSON.stringify({ edits: [{ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero 1' }] }),
-    id: 'edit-hero-1',
-    name: 'edit',
+    argumentsText: JSON.stringify({ patch: '*** Begin Patch\n*** Update File: src/components/Hero.tsx\n@@\n-old\n+hero 1\n*** End Patch\n' }),
+    id: 'patch-hero-1',
+    name: 'apply_patch',
     startedAt: 1_700_000_000_000,
   })
   scheduler.schedule({
-    argumentsText: JSON.stringify({ edits: [{ absolute_path: 'C:\\workspace\\src\\components\\Hero.tsx', content: 'hero 2' }] }),
-    id: 'edit-hero-2',
-    name: 'edit',
+    argumentsText: JSON.stringify({ patch: '*** Begin Patch\n*** Update File: src/components/Hero.tsx\n@@\n-old\n+hero 2\n*** End Patch\n' }),
+    id: 'patch-hero-2',
+    name: 'apply_patch',
     startedAt: 1_700_000_000_000,
   })
   await scheduler.drain()
 
   assert.deepEqual(executionLog, [
-    'start:edit-hero-1',
-    'end:edit-hero-1',
-    'start:edit-hero-2',
-    'end:edit-hero-2',
+    'start:patch-hero-1',
+    'end:patch-hero-1',
+    'start:patch-hero-2',
+    'end:patch-hero-2',
   ])
 })
 

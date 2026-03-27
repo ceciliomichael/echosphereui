@@ -64,6 +64,13 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
+  if (toolName === 'apply_patch') {
+    const patch = readString(argumentsValue.patch) ?? readString(argumentsValue.input)
+    return {
+      patch_length: patch?.length ?? undefined,
+    }
+  }
+
   if (toolName === 'file_change') {
     const changes = Array.isArray(argumentsValue.changes) ? argumentsValue.changes : []
     return {
@@ -89,19 +96,6 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
       max_output_tokens: readNumber(argumentsValue.max_output_tokens) ?? undefined,
       session_id: readNumber(argumentsValue.session_id) ?? undefined,
       yield_time_ms: readNumber(argumentsValue.yield_time_ms) ?? undefined,
-    }
-  }
-
-  if (toolName === 'todo_write') {
-    const sessionKey = readString(argumentsValue.sessionKey) ?? readString(argumentsValue.plan)
-    const taskCount = Array.isArray(argumentsValue.tasks)
-      ? argumentsValue.tasks.length
-      : Array.isArray(argumentsValue.steps)
-        ? argumentsValue.steps.length
-        : undefined
-    return {
-      session_key: sessionKey ?? undefined,
-      task_count: taskCount,
     }
   }
 
@@ -211,6 +205,31 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Updated ${totalChangedPaths} files.`
   }
 
+  if (toolName === 'apply_patch') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+
+    if (changes.length === 0) {
+      return readString(semanticResult.message) ?? 'Patch applied.'
+    }
+
+    const totalChangedPaths =
+      (readNumber(semanticResult.added_path_count) ?? 0) +
+      (readNumber(semanticResult.modified_path_count) ?? 0) +
+      (readNumber(semanticResult.deleted_path_count) ?? 0)
+
+    if (totalChangedPaths === 1) {
+      const firstChange = changes[0] as Record<string, unknown>
+      const firstPath = readString(firstChange.fileName) ?? readString(firstChange.path) ?? 'unknown'
+      const firstKind = readString(firstChange.kind)
+      const verb = firstKind === 'add' ? 'Created' : firstKind === 'delete' ? 'Deleted' : 'Updated'
+      return `${verb} ${firstPath}.`
+    }
+
+    return `Applied patch to ${totalChangedPaths} files.`
+  }
+
   if (toolName === 'run_terminal') {
     const executionMode = readString(semanticResult.executionMode) ?? 'full'
     const sessionId = readNumber(semanticResult.processId)
@@ -231,20 +250,6 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     }
 
     return `Fetched terminal output for session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
-  }
-
-  if (toolName === 'todo_write') {
-    const planId = readString(semanticResult.planId) ?? readString(semanticResult.sessionKey) ?? 'default'
-    const completedStepCount = readNumber(semanticResult.completedStepCount) ?? 0
-    const totalStepCount = readNumber(semanticResult.totalStepCount) ?? completedStepCount
-    const allStepsCompleted = readBoolean(semanticResult.allStepsCompleted)
-    const operation = readString(semanticResult.operation)
-    if (operation === 'noop') {
-      return `Todo list ${planId} unchanged (${completedStepCount}/${totalStepCount} tasks completed).`
-    }
-    return allStepsCompleted
-      ? `Todo list ${planId} is complete (${completedStepCount}/${totalStepCount} tasks).`
-      : `Todo list ${planId} updated (${completedStepCount}/${totalStepCount} tasks completed).`
   }
 
   if (toolName === 'ready_implement') {
@@ -292,8 +297,23 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
     }
   }
 
-  if (toolName === 'todo_write') {
-    return undefined
+  if (toolName === 'apply_patch') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+    if (changes.length !== 1) {
+      return undefined
+    }
+
+    const firstPath = readString(changes[0]?.fileName) ?? readString(changes[0]?.path)
+    if (!firstPath) {
+      return undefined
+    }
+
+    return {
+      kind: 'file',
+      path: firstPath,
+    }
   }
 
   const subjectPath = readString(semanticResult.path)
@@ -443,6 +463,38 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
       mutation_applied: totalChangedPaths > 0,
       modified_path_count: modifiedPaths.length,
       operation: 'file_change',
+      target_exists_after_call: totalChangedPaths > 0,
+      workspace_effect: totalChangedPaths > 0 ? 'files_edited' : 'file_already_matched',
+    })
+  }
+
+  if (toolName === 'apply_patch') {
+    const changes = Array.isArray(semanticResult.changes)
+      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
+      : []
+    const addedPaths = changes
+      .filter((change) => readString(change.kind) === 'add')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const modifiedPaths = changes
+      .filter((change) => readString(change.kind) === 'update')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const deletedPaths = changes
+      .filter((change) => readString(change.kind) === 'delete')
+      .map((change) => readString(change.fileName))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    const changedPaths = [...addedPaths, ...modifiedPaths, ...deletedPaths]
+    const totalChangedPaths = changedPaths.length
+    return filterUndefinedEntries({
+      ...sharedSemantics,
+      added_path_count: addedPaths.length,
+      changed_paths: changedPaths,
+      content_changed: totalChangedPaths > 0,
+      deleted_path_count: deletedPaths.length,
+      mutation_applied: totalChangedPaths > 0,
+      modified_path_count: modifiedPaths.length,
+      operation: 'apply_patch',
       target_exists_after_call: totalChangedPaths > 0,
       workspace_effect: totalChangedPaths > 0 ? 'files_edited' : 'file_already_matched',
     })

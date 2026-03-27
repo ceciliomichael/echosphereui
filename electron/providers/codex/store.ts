@@ -11,7 +11,7 @@ interface CodexAuthTokens {
   refresh_token: string
 }
 
-export type CodexAuthMode = 'chatgpt' | 'oauth'
+export type CodexAuthMode = 'chatgpt'
 
 export interface StoredCodexAuthData {
   auth_mode: CodexAuthMode
@@ -54,10 +54,8 @@ export function parseStoredCodexAuthData(input: unknown): StoredCodexAuthData | 
 
   const lastRefresh = hasText(input.last_refresh) ? input.last_refresh : new Date().toISOString()
   const expiresAt = hasText(input.expires_at) ? input.expires_at : undefined
-  const authMode: CodexAuthMode = input.auth_mode === 'oauth' || input.auth_mode === 'chatgpt' ? input.auth_mode : 'chatgpt'
-
   return {
-    auth_mode: authMode,
+    auth_mode: 'chatgpt',
     expires_at: expiresAt,
     last_refresh: lastRefresh,
     tokens: {
