@@ -97,7 +97,6 @@ export function ConversationDiffPanel({
   )
   const stagedFileCount = useMemo(() => fileDiffs.filter((fileDiff) => fileDiff.isStaged).length, [fileDiffs])
   const selectedScopeCount = selectedScope === 'unstaged' ? unstagedFileCount : selectedScope === 'staged' ? stagedFileCount : null
-  const visiblePanelWidth = isOpen ? renderedWidth : 0
   const expandedFilePathSet = useMemo(() => new Set(expandedFilePaths), [expandedFilePaths])
 
   const scopeOptions = useMemo(
@@ -380,11 +379,8 @@ export function ConversationDiffPanel({
         isFullscreen
           ? 'absolute inset-0 z-30 flex h-full min-w-0 overflow-hidden'
           : 'relative hidden h-full shrink-0 overflow-hidden md:flex',
-        isFullscreen || isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
-        isFullscreen || isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
       ].join(' ')}
-      style={isFullscreen ? undefined : { width: `${visiblePanelWidth}px` }}
-      aria-hidden={!isFullscreen && !isOpen}
+      style={isFullscreen ? undefined : { width: `${renderedWidth}px` }}
     >
       {!isFullscreen && isOpen ? (
         <div

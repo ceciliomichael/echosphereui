@@ -92,7 +92,6 @@ function SourceControlPanelComponent({
 
   const normalizedWorkspacePath = workspacePath?.trim() ?? ''
   const hasWorkspacePath = normalizedWorkspacePath.length > 0
-  const visiblePanelWidth = isOpen ? renderedWidth : 0
   const isUnstagedLikeFileDiff = useCallback(
     (fileDiff: ConversationFileDiff) =>
       fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked),
@@ -612,11 +611,8 @@ function SourceControlPanelComponent({
       ref={panelRef}
       className={[
         'relative hidden h-full shrink-0 overflow-hidden md:flex',
-        isResizing ? '' : 'transition-[width,opacity] duration-300 ease-out',
-        isOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
       ].join(' ')}
-      style={{ width: `${visiblePanelWidth}px` }}
-      aria-hidden={!isOpen}
+      style={{ width: `${renderedWidth}px` }}
     >
       {isOpen ? (
         <div

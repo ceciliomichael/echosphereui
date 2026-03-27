@@ -365,70 +365,78 @@ export function ChatInterfaceContent({
               </div>
             </div>
           </div>
-          <WorkspaceFileTabsPanel
-            activeTabPath={workspaceState.activeWorkspaceFilePath}
-            isOpen={workspaceState.isWorkspaceTabsPanelOpen}
-            onCloseTab={workspaceState.handleCloseWorkspaceTab}
-            onFileContentChange={workspaceState.handleWorkspaceFileContentChange}
-            onSelectTab={workspaceState.handleSelectWorkspaceTab}
-            onWidthChange={workspaceState.handleWorkspaceEditorWidthChange}
-            onWidthCommit={workspaceState.handleWorkspaceEditorWidthCommit}
-            wordWrapEnabled={settings.workspaceFileEditorWordWrap}
-            tabs={workspaceState.workspaceFileTabs}
-            width={workspaceState.workspaceEditorWidth}
-          />
-          <WorkspaceExplorerPanel
-            activeFilePath={workspaceState.activeWorkspaceFilePath}
-            clipboardEntry={workspaceState.workspaceClipboard}
-            isOpen={workspaceState.isExplorerOpen}
-            onCopyEntry={workspaceState.handleCopyWorkspaceEntry}
-            onCreateEntry={workspaceState.handleCreateWorkspaceEntry}
-            onCutEntry={workspaceState.handleCutWorkspaceEntry}
-            onDeleteEntry={workspaceState.handleDeleteWorkspaceEntry}
-            onMoveEntry={workspaceState.handleMoveWorkspaceEntry}
-            onOpenFile={workspaceState.handleOpenWorkspaceFile}
-            onPasteEntry={workspaceState.handlePasteWorkspaceEntry}
-            onRenameEntry={workspaceState.handleRenameWorkspaceEntry}
-            onWidthChange={workspaceState.handleWorkspaceExplorerWidthChange}
-            onWidthCommit={workspaceState.handleWorkspaceExplorerWidthCommit}
-            width={workspaceState.workspaceExplorerWidth}
-            workspaceRootPath={workspaceState.activeWorkspacePath}
-          />
+          {workspaceState.isWorkspaceTabsPanelOpen ? (
+            <WorkspaceFileTabsPanel
+              activeTabPath={workspaceState.activeWorkspaceFilePath}
+              isOpen={workspaceState.isWorkspaceTabsPanelOpen}
+              onCloseTab={workspaceState.handleCloseWorkspaceTab}
+              onFileContentChange={workspaceState.handleWorkspaceFileContentChange}
+              onSelectTab={workspaceState.handleSelectWorkspaceTab}
+              onWidthChange={workspaceState.handleWorkspaceEditorWidthChange}
+              onWidthCommit={workspaceState.handleWorkspaceEditorWidthCommit}
+              wordWrapEnabled={settings.workspaceFileEditorWordWrap}
+              tabs={workspaceState.workspaceFileTabs}
+              width={workspaceState.workspaceEditorWidth}
+            />
+          ) : null}
+          {workspaceState.isExplorerOpen ? (
+            <WorkspaceExplorerPanel
+              activeFilePath={workspaceState.activeWorkspaceFilePath}
+              clipboardEntry={workspaceState.workspaceClipboard}
+              isOpen={workspaceState.isExplorerOpen}
+              onCopyEntry={workspaceState.handleCopyWorkspaceEntry}
+              onCreateEntry={workspaceState.handleCreateWorkspaceEntry}
+              onCutEntry={workspaceState.handleCutWorkspaceEntry}
+              onDeleteEntry={workspaceState.handleDeleteWorkspaceEntry}
+              onMoveEntry={workspaceState.handleMoveWorkspaceEntry}
+              onOpenFile={workspaceState.handleOpenWorkspaceFile}
+              onPasteEntry={workspaceState.handlePasteWorkspaceEntry}
+              onRenameEntry={workspaceState.handleRenameWorkspaceEntry}
+              onWidthChange={workspaceState.handleWorkspaceExplorerWidthChange}
+              onWidthCommit={workspaceState.handleWorkspaceExplorerWidthCommit}
+              width={workspaceState.workspaceExplorerWidth}
+              workspaceRootPath={workspaceState.activeWorkspacePath}
+            />
+          ) : null}
 
-          <ConversationDiffPanel
-            currentBranch={gitBranchState.branchState.currentBranch}
-            expandedFilePaths={diffPanelExpandedFilePaths}
-            fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}
-            isOpen={interfaceController.isDiffPanelOpen}
-            onDiscardFile={interfaceController.handleDiscardDiffFile}
-            onExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
-            onStageFile={interfaceController.handleStageDiffFile}
-            onSelectedScopeChange={onDiffPanelSelectedScopeChange}
-            onUnstageFile={interfaceController.handleUnstageDiffFile}
-            pendingFileActionPath={interfaceController.pendingFileActionPath}
-            width={workspaceState.conversationDiffPanelWidth}
-            onWidthChange={workspaceState.handleConversationDiffPanelWidthChange}
-            onWidthCommit={workspaceState.handleConversationDiffPanelWidthCommit}
-            selectedScope={diffPanelSelectedScope}
-          />
+          {interfaceController.isDiffPanelOpen ? (
+            <ConversationDiffPanel
+              currentBranch={gitBranchState.branchState.currentBranch}
+              expandedFilePaths={diffPanelExpandedFilePaths}
+              fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}
+              isOpen={interfaceController.isDiffPanelOpen}
+              onDiscardFile={interfaceController.handleDiscardDiffFile}
+              onExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
+              onStageFile={interfaceController.handleStageDiffFile}
+              onSelectedScopeChange={onDiffPanelSelectedScopeChange}
+              onUnstageFile={interfaceController.handleUnstageDiffFile}
+              pendingFileActionPath={interfaceController.pendingFileActionPath}
+              width={workspaceState.conversationDiffPanelWidth}
+              onWidthChange={workspaceState.handleConversationDiffPanelWidthChange}
+              onWidthCommit={workspaceState.handleConversationDiffPanelWidthCommit}
+              selectedScope={diffPanelSelectedScope}
+            />
+          ) : null}
 
-          <SourceControlPanel
-            fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}
-            isOpen={interfaceController.isSourceControlPanelOpen}
-            onDiscardFile={interfaceController.handleDiscardDiffFile}
-            onOpenCommitModal={interfaceController.handleOpenCommitModal}
-            onQuickCommit={interfaceController.handleQuickCommit}
-            onRefreshAll={interfaceController.handleRefreshGitUi}
-            onSectionOpenChange={interfaceController.handleSourceControlSectionOpenChange}
-            onStageFile={interfaceController.handleStageDiffFile}
-            onUnstageFile={interfaceController.handleUnstageDiffFile}
-            pendingFileActionPath={interfaceController.pendingFileActionPath}
-            onWidthCommit={workspaceState.handleSourceControlPanelWidthCommit}
-            onWidthChange={workspaceState.handleSourceControlPanelWidthChange}
-            sectionOpen={settings.sourceControlSectionOpen}
-            workspacePath={workspaceState.activeWorkspacePath}
-            width={workspaceState.sourceControlPanelWidth}
-          />
+          {interfaceController.isSourceControlPanelOpen ? (
+            <SourceControlPanel
+              fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}
+              isOpen={interfaceController.isSourceControlPanelOpen}
+              onDiscardFile={interfaceController.handleDiscardDiffFile}
+              onOpenCommitModal={interfaceController.handleOpenCommitModal}
+              onQuickCommit={interfaceController.handleQuickCommit}
+              onRefreshAll={interfaceController.handleRefreshGitUi}
+              onSectionOpenChange={interfaceController.handleSourceControlSectionOpenChange}
+              onStageFile={interfaceController.handleStageDiffFile}
+              onUnstageFile={interfaceController.handleUnstageDiffFile}
+              pendingFileActionPath={interfaceController.pendingFileActionPath}
+              onWidthCommit={workspaceState.handleSourceControlPanelWidthCommit}
+              onWidthChange={workspaceState.handleSourceControlPanelWidthChange}
+              sectionOpen={settings.sourceControlSectionOpen}
+              workspacePath={workspaceState.activeWorkspacePath}
+              width={workspaceState.sourceControlPanelWidth}
+            />
+          ) : null}
         </div>
         <WorkspaceTerminalPanel
           isOpen={workspaceState.isTerminalOpen}

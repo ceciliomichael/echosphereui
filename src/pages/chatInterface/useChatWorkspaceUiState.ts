@@ -298,6 +298,13 @@ export function useChatWorkspaceUiState({
   const isTerminalOpen = settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
   const terminalPanelHeight =
     settings.terminalPanelHeightsByWorkspace[activeTerminalWorkspaceKey] ?? DEFAULT_TERMINAL_PANEL_HEIGHT
+  const activeWorkspacePanelWidth = isExplorerOpen
+    ? workspaceExplorerWidth
+    : isRightPanelOpen
+      ? rightPanelTab === 'diff'
+        ? conversationDiffPanelWidth
+        : sourceControlPanelWidth
+      : null
 
   const closeWorkspaceTabsByPathPrefix = useCallback(
     (targetPath: string) => {
@@ -455,6 +462,9 @@ export function useChatWorkspaceUiState({
         return
       }
 
+      if (activeWorkspacePanelWidth !== null) {
+        setWorkspaceExplorerWidth(activeWorkspacePanelWidth)
+      }
       setIsSidebarOpen(false)
       setIsExplorerOpen(true)
       setIsWorkspaceTabsPanelVisible(true)
@@ -523,7 +533,7 @@ export function useChatWorkspaceUiState({
           )
         })
     },
-    [onRightPanelOpenChange, setIsSidebarOpen],
+    [activeWorkspacePanelWidth, onRightPanelOpenChange, setIsSidebarOpen],
   )
 
   const handleCloseWorkspaceTab = useCallback((relativePath: string) => {
@@ -603,9 +613,12 @@ export function useChatWorkspaceUiState({
     setSourceControlPanelWidth(nextWidth)
   }, [])
 
-  const handleSourceControlPanelWidthCommit = useCallback((nextWidth: number) => {
-    setSourceControlPanelWidth(nextWidth)
-  }, [])
+  const handleSourceControlPanelWidthCommit = useCallback(
+    (nextWidth: number) => {
+      setSourceControlPanelWidth(nextWidth)
+    },
+    [],
+  )
 
   const handleWorkspaceFileContentChange = useCallback((relativePath: string, content: string) => {
     const workspaceRootPath = activeWorkspacePathRef.current
@@ -674,6 +687,9 @@ export function useChatWorkspaceUiState({
     } else if (workspaceFileTabs.length > 0) {
       setIsWorkspaceTabsPanelVisible(true)
     }
+    if (activeWorkspacePanelWidth !== null) {
+      setSourceControlPanelWidth(activeWorkspacePanelWidth)
+    }
     if (isRightPanelOpen && rightPanelTab === 'source-control') {
       onRightPanelOpenChange(false)
       return
@@ -682,11 +698,13 @@ export function useChatWorkspaceUiState({
     onRightPanelTabChange('source-control')
     onRightPanelOpenChange(true)
   }, [
+    activeWorkspacePanelWidth,
     isRightPanelOpen,
     isSidebarOpen,
     onRightPanelOpenChange,
     onRightPanelTabChange,
     rightPanelTab,
+    setSourceControlPanelWidth,
     workspaceFileTabs.length,
   ])
 
@@ -697,6 +715,9 @@ export function useChatWorkspaceUiState({
     } else if (workspaceFileTabs.length > 0) {
       setIsWorkspaceTabsPanelVisible(true)
     }
+    if (activeWorkspacePanelWidth !== null) {
+      setConversationDiffPanelWidth(activeWorkspacePanelWidth)
+    }
     if (isRightPanelOpen && rightPanelTab === 'diff') {
       onRightPanelOpenChange(false)
       return
@@ -704,12 +725,24 @@ export function useChatWorkspaceUiState({
 
     onRightPanelTabChange('diff')
     onRightPanelOpenChange(true)
-  }, [isRightPanelOpen, isSidebarOpen, onRightPanelOpenChange, onRightPanelTabChange, rightPanelTab, workspaceFileTabs.length])
+  }, [
+    activeWorkspacePanelWidth,
+    isRightPanelOpen,
+    isSidebarOpen,
+    onRightPanelOpenChange,
+    onRightPanelTabChange,
+    rightPanelTab,
+    setConversationDiffPanelWidth,
+    workspaceFileTabs.length,
+  ])
 
   const handleToggleExplorerPanel = useCallback(() => {
     setIsExplorerOpen((currentValue) => {
       const nextValue = !currentValue
       if (nextValue) {
+        if (activeWorkspacePanelWidth !== null) {
+          setWorkspaceExplorerWidth(activeWorkspacePanelWidth)
+        }
         if (isSidebarOpen) {
           sidebarPanelRestoreRef.current = null
           setIsSidebarOpen(false)
@@ -724,12 +757,7 @@ export function useChatWorkspaceUiState({
       }
       return nextValue
     })
-  }, [
-    isSidebarOpen,
-    onRightPanelOpenChange,
-    setIsSidebarOpen,
-    workspaceFileTabs.length,
-  ])
+  }, [activeWorkspacePanelWidth, isSidebarOpen, onRightPanelOpenChange, setIsSidebarOpen, workspaceFileTabs.length])
 
   const isWorkspaceTabsPanelOpen = isWorkspaceTabsPanelVisible && workspaceFileTabs.length > 0
 
