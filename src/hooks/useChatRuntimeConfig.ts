@@ -256,3 +256,5 @@ export function useChatRuntimeConfig({
     showReasoningEffortSelector: availableReasoningEfforts.length > 0,
   }
 }
+
+export type ChatRuntimeConfigState = ReturnType<typeof useChatRuntimeConfig>

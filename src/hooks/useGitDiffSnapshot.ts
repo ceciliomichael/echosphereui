@@ -128,3 +128,5 @@ export function useGitDiffSnapshot({ hasRepository, workspacePath }: UseGitDiffS
     snapshot,
   }
 }
+
+export type GitDiffSnapshotController = ReturnType<typeof useGitDiffSnapshot>

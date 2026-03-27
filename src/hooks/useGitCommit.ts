@@ -141,3 +141,5 @@ export function useGitCommit({
     status,
   }
 }
+
+export type GitCommitController = ReturnType<typeof useGitCommit>

@@ -43,89 +43,101 @@ interface UseChatInterfaceControllerInput {
 }
 
 export function useChatInterfaceController(input: UseChatInterfaceControllerInput) {
+  const {
+    activeTerminalWorkspaceKey,
+    activeWorkspacePath,
+    createConversation,
+    gitBranchState,
+    gitCommitState,
+    hasRepository,
+    isActiveScreen,
+    isRightPanelOpen,
+    messagesLength,
+    onDiffRefresh,
+    onRightPanelOpenChange,
+    onRightPanelTabChange,
+    onSidebarOpenChange,
+    onUpdateSettings,
+    rightPanelTab,
+    settings,
+  } = input
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false)
   const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
   const [pendingFileActionPath, setPendingFileActionPath] = useState<string | null>(null)
   const previousWorkspacePathRef = useRef<string | null>(null)
 
-  const isDiffPanelOpen = input.isRightPanelOpen && input.rightPanelTab === 'diff'
-  const isSourceControlPanelOpen = input.isRightPanelOpen && input.rightPanelTab === 'source-control'
+  const isDiffPanelOpen = isRightPanelOpen && rightPanelTab === 'diff'
+  const isSourceControlPanelOpen = isRightPanelOpen && rightPanelTab === 'source-control'
 
   useEffect(() => {
-    if (!input.hasRepository && input.isRightPanelOpen) {
-      input.onRightPanelOpenChange(false)
+    if (!hasRepository && isRightPanelOpen) {
+      onRightPanelOpenChange(false)
     }
-  }, [input.hasRepository, input.isRightPanelOpen, input.onRightPanelOpenChange])
+  }, [hasRepository, isRightPanelOpen, onRightPanelOpenChange])
 
   useEffect(() => {
-    if (!input.hasRepository) {
+    if (!hasRepository) {
       setPendingFileActionPath(null)
     }
-  }, [input.hasRepository])
+  }, [hasRepository])
 
   useEffect(() => {
-    if (!input.hasRepository) {
+    if (!hasRepository) {
       return
     }
 
-    const normalizedWorkspacePath = input.activeWorkspacePath?.trim() ?? ''
+    const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
     const workspacePathKey = normalizedWorkspacePath.length > 0 ? normalizedWorkspacePath : null
     const workspaceChanged = previousWorkspacePathRef.current !== workspacePathKey
     previousWorkspacePathRef.current = workspacePathKey
 
-    void input.onDiffRefresh({
+    void onDiffRefresh({
       forceRefresh: !workspaceChanged,
       silent: true,
     })
-  }, [
-    input.activeWorkspacePath,
-    input.gitBranchState.branchState.currentBranch,
-    input.hasRepository,
-    input.messagesLength,
-    input.onDiffRefresh,
-  ])
+  }, [activeWorkspacePath, gitBranchState.branchState.currentBranch, hasRepository, messagesLength, onDiffRefresh])
 
   const handleToggleSidebar = useCallback(() => {
     setIsSidebarOpen((currentValue) => {
       const nextValue = !currentValue
-      input.onSidebarOpenChange?.(nextValue)
+      onSidebarOpenChange?.(nextValue)
       return nextValue
     })
-  }, [input])
+  }, [onSidebarOpenChange])
 
   useWorkspaceKeyboardShortcuts({
-    enabled: input.isActiveScreen,
+    enabled: isActiveScreen,
     onToggleDiffPanel: () => {
-      if (!input.hasRepository) {
+      if (!hasRepository) {
         return
       }
 
       if (isDiffPanelOpen) {
-        input.onRightPanelOpenChange(false)
+        onRightPanelOpenChange(false)
         return
       }
 
-      input.onRightPanelTabChange('diff')
-      input.onRightPanelOpenChange(true)
+      onRightPanelTabChange('diff')
+      onRightPanelOpenChange(true)
     },
     onToggleSidebar: handleToggleSidebar,
-    onCreateConversation: input.createConversation,
+    onCreateConversation: createConversation,
   })
 
   const handleOpenCommitModal = useCallback(() => {
-    if (!input.hasRepository) {
+    if (!hasRepository) {
       return
     }
 
-    if (input.isRightPanelOpen && input.rightPanelTab === 'source-control') {
-      input.onRightPanelOpenChange(false)
+    if (isRightPanelOpen && rightPanelTab === 'source-control') {
+      onRightPanelOpenChange(false)
     }
 
-    input.gitCommitState.resetResult()
-    void input.gitCommitState.refreshStatus()
+    gitCommitState.resetResult()
+    void gitCommitState.refreshStatus()
     setIsCommitModalOpen(true)
-  }, [input])
+  }, [gitCommitState, hasRepository, isRightPanelOpen, onRightPanelOpenChange, rightPanelTab])
 
   const handleCloseCommitModal = useCallback(() => {
     setIsCommitModalOpen(false)
@@ -142,23 +154,23 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
       message: string
       preferredBranchName?: string
     }) => {
-      const commitResult = await input.gitCommitState.commit(commitInput)
+      const commitResult = await gitCommitState.commit(commitInput)
       setIsCommitModalOpen(false)
       setCommitSuccessDialog({
         action: commitInput.action,
         result: commitResult,
       })
 
-      void input.onDiffRefresh({ forceRefresh: true })
-      void input.gitBranchState.refresh()
+      void onDiffRefresh({ forceRefresh: true })
+      void gitBranchState.refresh()
     },
-    [input],
+    [gitBranchState, gitCommitState, onDiffRefresh],
   )
 
   const handleGitFileAction = useCallback(
     async (filePath: string, action: 'stage' | 'unstage' | 'discard') => {
-      const normalizedWorkspacePath = input.activeWorkspacePath?.trim() ?? ''
-      if (!input.hasRepository || normalizedWorkspacePath.length === 0) {
+      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+      if (!hasRepository || normalizedWorkspacePath.length === 0) {
         return
       }
 
@@ -171,101 +183,101 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
         } else {
           await window.echosphereGit.discardFileChanges({ filePath, workspacePath: normalizedWorkspacePath })
         }
-        await input.onDiffRefresh({ forceRefresh: true, silent: true })
+        await onDiffRefresh({ forceRefresh: true, silent: true })
       } catch (error) {
         console.error(`Failed to ${action} file from git panel`, error)
       } finally {
         setPendingFileActionPath(null)
       }
     },
-    [input],
+    [activeWorkspacePath, hasRepository, onDiffRefresh],
   )
 
   const handleOpenRightPanelTab = useCallback(
     (tab: ChatInterfaceRightPanelTab) => {
-      if (!input.hasRepository) {
+      if (!hasRepository) {
         return
       }
 
-      if (input.isRightPanelOpen && input.rightPanelTab === tab) {
-        input.onRightPanelOpenChange(false)
+      if (isRightPanelOpen && rightPanelTab === tab) {
+        onRightPanelOpenChange(false)
         return
       }
 
-      input.onRightPanelTabChange(tab)
-      input.onRightPanelOpenChange(true)
+      onRightPanelTabChange(tab)
+      onRightPanelOpenChange(true)
     },
-    [input],
+    [hasRepository, isRightPanelOpen, onRightPanelOpenChange, onRightPanelTabChange, rightPanelTab],
   )
 
   const handleRefreshGitUi = useCallback(async () => {
-    await Promise.all([input.onDiffRefresh({ forceRefresh: true, silent: true }), input.gitBranchState.refresh()])
-  }, [input])
+    await Promise.all([onDiffRefresh({ forceRefresh: true, silent: true }), gitBranchState.refresh()])
+  }, [gitBranchState, onDiffRefresh])
 
   const handleQuickCommit = useCallback(
     async (commitInput: { includeUnstaged: boolean; message: string }) => {
-      await input.gitCommitState.commit({
+      await gitCommitState.commit({
         action: 'commit',
         includeUnstaged: commitInput.includeUnstaged,
         message: commitInput.message,
       })
 
-      await Promise.all([input.onDiffRefresh({ forceRefresh: true }), input.gitBranchState.refresh(), input.gitCommitState.refreshStatus()])
+      await Promise.all([onDiffRefresh({ forceRefresh: true }), gitBranchState.refresh(), gitCommitState.refreshStatus()])
     },
-    [input],
+    [gitBranchState, gitCommitState, onDiffRefresh],
   )
 
   const handleSourceControlSectionOpenChange = useCallback(
     (sourceControlSectionOpen: AppSettings['sourceControlSectionOpen']) => {
-      void input.onUpdateSettings({ sourceControlSectionOpen })
+      void onUpdateSettings({ sourceControlSectionOpen })
     },
-    [input],
+    [onUpdateSettings],
   )
 
   const handleTerminalExecutionModeChange = useCallback(
     (terminalExecutionMode: AppSettings['terminalExecutionMode']) => {
-      if (terminalExecutionMode === input.settings.terminalExecutionMode) {
+      if (terminalExecutionMode === settings.terminalExecutionMode) {
         return
       }
 
-      void input.onUpdateSettings({ terminalExecutionMode })
+      void onUpdateSettings({ terminalExecutionMode })
     },
-    [input],
+    [onUpdateSettings, settings.terminalExecutionMode],
   )
 
   const setActiveWorkspaceTerminalOpen = useCallback(
     (nextOpen: boolean) => {
-      const currentOpenByWorkspace = input.settings.terminalOpenByWorkspace
-      const currentOpen = currentOpenByWorkspace[input.activeTerminalWorkspaceKey] ?? false
+      const currentOpenByWorkspace = settings.terminalOpenByWorkspace
+      const currentOpen = currentOpenByWorkspace[activeTerminalWorkspaceKey] ?? false
       if (currentOpen === nextOpen) {
         return
       }
 
-      void input.onUpdateSettings({
+      void onUpdateSettings({
         terminalOpenByWorkspace: {
           ...currentOpenByWorkspace,
-          [input.activeTerminalWorkspaceKey]: nextOpen,
+          [activeTerminalWorkspaceKey]: nextOpen,
         },
       })
     },
-    [input],
+    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalOpenByWorkspace],
   )
 
   const handleTerminalPanelHeightCommit = useCallback(
     (nextHeight: number) => {
-      const currentHeightsByWorkspace = input.settings.terminalPanelHeightsByWorkspace
-      if (currentHeightsByWorkspace[input.activeTerminalWorkspaceKey] === nextHeight) {
+      const currentHeightsByWorkspace = settings.terminalPanelHeightsByWorkspace
+      if (currentHeightsByWorkspace[activeTerminalWorkspaceKey] === nextHeight) {
         return
       }
 
-      void input.onUpdateSettings({
+      void onUpdateSettings({
         terminalPanelHeightsByWorkspace: {
           ...currentHeightsByWorkspace,
-          [input.activeTerminalWorkspaceKey]: nextHeight,
+          [activeTerminalWorkspaceKey]: nextHeight,
         },
       })
     },
-    [input],
+    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalPanelHeightsByWorkspace],
   )
 
   return {
@@ -293,3 +305,5 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
     handleToggleSidebar,
   }
 }
+
+export type ChatInterfaceControllerState = ReturnType<typeof useChatInterfaceController>

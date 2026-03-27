@@ -158,3 +158,5 @@ export function useGitBranchState(workspacePath: string | null | undefined): Use
     isSwitching,
   }
 }
+
+export type GitBranchStateController = ReturnType<typeof useGitBranchState>
