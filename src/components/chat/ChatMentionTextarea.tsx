@@ -47,7 +47,6 @@ export function ChatMentionTextarea({
       ({
         ...style,
         caretColor: 'var(--color-foreground)',
-        color: 'transparent',
       }) as CSSProperties,
     [style],
   )

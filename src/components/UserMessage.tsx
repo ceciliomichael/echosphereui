@@ -1,6 +1,6 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { Undo2 } from 'lucide-react'
-import { chatMessageSurfaceClassName } from '../lib/chatStyles'
+import { chatConversationSurfacePaddingClassName, chatMessageSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
 import { ChatMentionText } from './chat/ChatMentionText'
 
@@ -13,7 +13,7 @@ interface UserMessageProps {
 export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
   const surfaceClassName = [
     chatMessageSurfaceClassName,
-    'group inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 px-4 py-2.5 text-[15px] leading-6 text-foreground align-top',
+    `group inline-flex w-fit min-w-0 max-w-full items-start gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
     onEdit ? 'cursor-pointer' : '',
   ].join(' ')
 
@@ -43,7 +43,7 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
       aria-label={onEdit ? 'Edit message' : undefined}
     >
       <div className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-        {content.trim().length > 0 ? <ChatMentionText text={content} /> : null}
+        {content.trim().length > 0 ? <ChatMentionText text={content} variant="rendered" /> : null}
       </div>
 
       {onRevert ? (

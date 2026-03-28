@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent } from 'react'
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
-import { chatInputSurfaceClassName } from '../lib/chatStyles'
+import { chatConversationSurfacePaddingClassName, chatInputSurfaceClassName } from '../lib/chatStyles'
 import { ChatMentionMenu } from './chat/ChatMentionMenu'
 import { ChatMentionTextarea } from './chat/ChatMentionTextarea'
 import { useChatFileMentionMenu } from '../hooks/useChatFileMentionMenu'
@@ -312,7 +312,7 @@ export function ChatInput({
 
   return (
     <div ref={containerRef} className="w-full">
-      <div className={`${chatInputSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-3'}`}>
+      <div className={`${chatInputSurfaceClassName} ${isInline ? chatConversationSurfacePaddingClassName : 'p-3'}`}>
         {isEditing && !isInline ? (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-action/25 bg-action/10 px-3 py-2 text-xs text-foreground">
             <span>Editing message</span>
