@@ -8,7 +8,9 @@ export function normalizeEntryPath(relativePath: string) {
 }
 
 export function toDirectoryKey(relativePath: string | undefined) {
-  const normalized = (relativePath ?? ROOT_DIRECTORY_KEY).trim()
+  const normalized = normalizeEntryPath((relativePath ?? ROOT_DIRECTORY_KEY).trim())
+    .replace(/^\.\/+/u, '')
+    .replace(/\/+$/u, '')
   return normalized.length === 0 ? ROOT_DIRECTORY_KEY : normalized
 }
 
