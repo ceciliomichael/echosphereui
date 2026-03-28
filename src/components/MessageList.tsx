@@ -40,7 +40,7 @@ interface MessageListProps {
   onRevertUserMessage?: (messageId: string) => void;
   onModelChange?: (modelId: string) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
-  onSendEditedMessage: () => void;
+  onSendEditedMessage: (value: string) => void;
   selectedChatMode?: ChatMode;
   modelOptions?: readonly ModelSelectorOption[];
   modelOptionsLoading?: boolean;
@@ -80,7 +80,7 @@ interface MessageRowProps {
   onRevertUserMessage?: (messageId: string) => void;
   onModelChange?: (modelId: string) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
-  onSendEditedMessage: () => void;
+  onSendEditedMessage: (value: string) => void;
   selectedChatMode?: ChatMode;
   modelOptions?: readonly ModelSelectorOption[];
   modelOptionsLoading?: boolean;
@@ -171,6 +171,7 @@ const MessageRow = memo(
                 reasoningEffortOptions={reasoningEffortOptions}
                 selectedModelId={selectedModelId}
                 showReasoningEffortSelector={showReasoningEffortSelector}
+                workspaceRootPath={workspaceRootPath}
               />
             </div>
           ) : (

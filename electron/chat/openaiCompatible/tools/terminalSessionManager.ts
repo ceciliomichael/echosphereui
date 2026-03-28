@@ -98,18 +98,6 @@ function appendSessionOutput(session: TerminalSession, chunk: string) {
   notifySessionWaiters(session)
 }
 
-function finalizeSessionIfDrained(sessionId: number, session: TerminalSession) {
-  if (session.exitedAt === null) {
-    return
-  }
-
-  if (hasUnreadOutput(session)) {
-    return
-  }
-
-  activeSessions.delete(sessionId)
-}
-
 function pruneExpiredSessions() {
   const now = Date.now()
   for (const [sessionId, session] of activeSessions.entries()) {
@@ -243,6 +231,7 @@ function buildSessionPollResult(
 }
 
 export async function pollTerminalSession(input: PollTerminalSessionInput): Promise<TerminalSessionPollResult> {
+  pruneExpiredSessions()
   const session = activeSessions.get(input.sessionId)
   if (!session) {
     throw new Error(`Unknown terminal session id: ${input.sessionId}`)
@@ -250,15 +239,14 @@ export async function pollTerminalSession(input: PollTerminalSessionInput): Prom
 
   await waitForSessionActivity(session, input.signal, input.yieldTimeMs)
   const { output, originalTokenCount } = readSessionOutput(session, input.maxOutputTokens)
-  const result = buildSessionPollResult(input.sessionId, session, output, originalTokenCount)
-  finalizeSessionIfDrained(input.sessionId, session)
-  return result
+  return buildSessionPollResult(input.sessionId, session, output, originalTokenCount)
 }
 
 export async function writeTerminalSession(
   sessionId: number,
   input: { chars: string; signal: AbortSignal },
 ) {
+  pruneExpiredSessions()
   const session = activeSessions.get(sessionId)
   if (!session) {
     throw new Error(`Unknown terminal session id: ${sessionId}`)
