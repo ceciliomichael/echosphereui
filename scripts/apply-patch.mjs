@@ -93,6 +93,93 @@ function normalizeWhitespace(text) {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+function normalizeUnicode(text) {
+  return text
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ')
+}
+
+function normalizeComparableLine(line, mode) {
+  const strippedLine = stripCommonLineNumberPrefix(line)
+
+  if (mode === 'exact') {
+    return strippedLine
+  }
+
+  if (mode === 'rstrip') {
+    return strippedLine.trimEnd()
+  }
+
+  if (mode === 'trim') {
+    return strippedLine.trim()
+  }
+
+  return normalizeUnicode(strippedLine.trim())
+}
+
+function linesMatchByMode(actualLine, expectedLine, mode) {
+  return normalizeComparableLine(actualLine, mode) === normalizeComparableLine(expectedLine, mode)
+}
+
+function tryMatch(lines, needleLines, startIndex, endIndex, mode, eof) {
+  const searchableEndIndex = Math.min(endIndex, lines.length)
+  if (needleLines.length === 0) {
+    return -1
+  }
+
+  if (eof) {
+    const fromEnd = searchableEndIndex - needleLines.length
+    if (fromEnd >= startIndex) {
+      let matches = true
+      for (let offset = 0; offset < needleLines.length; offset += 1) {
+        if (!linesMatchByMode(lines[fromEnd + offset], needleLines[offset], mode)) {
+          matches = false
+          break
+        }
+      }
+
+      if (matches) {
+        return fromEnd
+      }
+    }
+  }
+
+  for (let index = startIndex; index <= searchableEndIndex - needleLines.length; index += 1) {
+    let matches = true
+    for (let offset = 0; offset < needleLines.length; offset += 1) {
+      if (!linesMatchByMode(lines[index + offset], needleLines[offset], mode)) {
+        matches = false
+        break
+      }
+    }
+
+    if (matches) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function seekSequence(lines, needleLines, startIndex, endIndex, eof = false) {
+  if (needleLines.length === 0) {
+    return -1
+  }
+
+  const modes = ['exact', 'rstrip', 'trim', 'normalized']
+  for (const mode of modes) {
+    const found = tryMatch(lines, needleLines, startIndex, endIndex, mode, eof)
+    if (found !== -1) {
+      return found
+    }
+  }
+
+  return -1
+}
+
 function formatLinePreview(lines, centerIndex, radius) {
   if (lines.length === 0) {
     return 'No file content available.'
@@ -214,40 +301,11 @@ function parsePatch(patchText) {
     }
 
     if (trimmed.startsWith(ADD_FILE_MARKER)) {
-      const rawPath = trimmed.slice(ADD_FILE_MARKER.length)
-      const filePath = ensureWorkspacePath(rawPath, 'Add File', process.cwd())
-      index += 1
-      const contents = []
-
-      while (index < lines.length - 1) {
-        const bodyLine = lines[index]
-        const bodyTrimmed = bodyLine.trim()
-        if (isTopLevelMarkerLine(bodyLine) || isPatchBoundary(bodyLine) || bodyTrimmed === EOF_MARKER) {
-          break
-        }
-
-        if (!bodyLine.startsWith('+')) {
-          fail(`Add File lines must start with '+'. Got: ${bodyLine}`)
-        }
-
-        contents.push(bodyLine.slice(1))
-        index += 1
-      }
-
-      if (contents.length === 0) {
-        fail(`Add File for ${filePath} must include at least one '+...' line.`)
-      }
-
-      operations.push({ kind: 'add', path: filePath, contents: contents.join('\n') })
-      continue
+      fail('apply_patch only supports editing existing files. Use the edit or write tool for file creation.')
     }
 
     if (trimmed.startsWith(DELETE_FILE_MARKER)) {
-      const rawPath = trimmed.slice(DELETE_FILE_MARKER.length)
-      const filePath = ensureWorkspacePath(rawPath, 'Delete File', process.cwd())
-      operations.push({ kind: 'delete', path: filePath })
-      index += 1
-      continue
+      fail('apply_patch only supports editing existing files. Use the edit or write tool for file deletion.')
     }
 
     if (trimmed.startsWith(UPDATE_FILE_MARKER)) {
@@ -259,8 +317,7 @@ function parsePatch(patchText) {
       if (index < lines.length - 1) {
         const maybeMove = lines[index].trim()
         if (maybeMove.startsWith(MOVE_TO_MARKER)) {
-          movePath = ensureWorkspacePath(maybeMove.slice(MOVE_TO_MARKER.length), 'Move to', process.cwd())
-          index += 1
+          fail('apply_patch only supports editing existing files. Move the file with a separate filesystem operation.')
         }
       }
 
@@ -374,93 +431,118 @@ function hunkToReplacement(hunk) {
   return { oldLines, newLines, endOfFile: hunk.endOfFile }
 }
 
-function findUniqueBlock(haystackLines, needleLines, startIndex = 0, filePath = '.', resolvedPath = null) {
+function findUniqueBlock(haystackLines, needleLines, startIndex = 0, endIndex = haystackLines.length, filePath = '.', resolvedPath = null, eof = false) {
   if (needleLines.length === 0) {
     fail('Cannot search for an empty block.')
   }
 
-  const matches = []
-  for (let index = startIndex; index <= haystackLines.length - needleLines.length; index += 1) {
-    let matched = true
-    for (let offset = 0; offset < needleLines.length; offset += 1) {
-      if (!compareLines(haystackLines[index + offset], needleLines[offset])) {
-        matched = false
-        break
-      }
-    }
-
-    if (matched) {
-      matches.push(index)
-      if (matches.length > 1) {
-        break
-      }
-    }
-  }
-
-  if (matches.length === 0) {
-    return null
-  }
-
-  if (matches.length > 1) {
-    fail('Found multiple matches for update hunk context. Add more surrounding lines.', {
-      ...collectBlockSearchDiagnostics(haystackLines, needleLines, startIndex, haystackLines.length),
-      filePath,
-      ...(resolvedPath === null ? {} : { resolvedPath }),
-    })
-  }
-
-  return matches[0]
+  const matchIndex = seekSequence(haystackLines, needleLines, startIndex, endIndex, eof)
+  return matchIndex === -1 ? null : matchIndex
 }
 
-async function applyAddFile(operation, cwd) {
-  const targetPath = path.resolve(cwd, operation.path)
-  await fs.mkdir(path.dirname(targetPath), { recursive: true })
-  const lineEnding = '\n'
-  const content = joinContent(splitContent(operation.contents), lineEnding)
-  await fs.writeFile(targetPath, content, 'utf8')
-  return targetPath
-}
+async function readExistingContent(filePath) {
+  try {
+    const stats = await fs.stat(filePath)
+    if (!stats.isFile()) {
+      fail(`Path is not a file: ${filePath}`)
+    }
 
-async function applyDeleteFile(operation, cwd) {
-  const targetPath = path.resolve(cwd, operation.path)
-  const stats = await fs.stat(targetPath).catch((error) => {
+    return {
+      exists: true,
+      content: await fs.readFile(filePath, 'utf8'),
+    }
+  } catch (error) {
     if (error?.code === 'ENOENT') {
-      fail(`Cannot delete missing file: ${operation.path}`)
+      return {
+        exists: false,
+        content: '',
+      }
     }
+
     throw error
-  })
-
-  if (!stats.isFile()) {
-    fail(`Cannot delete non-file path: ${operation.path}`)
   }
-
-  await fs.unlink(targetPath)
-  return targetPath
 }
 
-async function applyUpdateFile(operation, cwd) {
+async function readVirtualContent(filePath, cwd, virtualContents) {
+  if (virtualContents.has(filePath)) {
+    const content = virtualContents.get(filePath)
+    return content === null ? { content: null, exists: false } : { content, exists: true }
+  }
+
+  const existing = await readExistingContent(path.resolve(cwd, filePath))
+  const content = existing.exists ? existing.content : null
+  virtualContents.set(filePath, content)
+  return { content, exists: existing.exists }
+}
+
+async function applyAddFile(operation, cwd, virtualContents) {
+  const targetPath = path.resolve(cwd, operation.path)
+  const existing = await readVirtualContent(operation.path, cwd, virtualContents)
+
+  virtualContents.set(operation.path, operation.contents)
+
+  return {
+    change: {
+      fileName: operation.path,
+      kind: existing.exists ? 'update' : 'add',
+      newContent: operation.contents,
+      oldContent: existing.content,
+    },
+    commit: async () => {
+      await fs.mkdir(path.dirname(targetPath), { recursive: true })
+      const content = joinContent(splitContent(operation.contents), '\n')
+      await fs.writeFile(targetPath, content, 'utf8')
+    },
+  }
+}
+
+async function applyDeleteFile(operation, cwd, virtualContents) {
+  const targetPath = path.resolve(cwd, operation.path)
+  const existing = await readVirtualContent(operation.path, cwd, virtualContents)
+
+  if (!existing.exists) {
+    fail(`Cannot delete missing file: ${operation.path}`)
+  }
+
+  virtualContents.set(operation.path, null)
+  return {
+    change: {
+      fileName: operation.path,
+      kind: 'delete',
+      newContent: null,
+      oldContent: existing.content,
+    },
+    commit: async () => {
+      await fs.unlink(targetPath)
+    },
+  }
+}
+
+async function applyUpdateFile(operation, cwd, virtualContents) {
   const sourcePath = path.resolve(cwd, operation.path)
-  const sourceStats = await fs.stat(sourcePath).catch((error) => {
-    if (error?.code === 'ENOENT') {
-      fail(`Cannot update missing file: ${operation.path}`)
-    }
-    throw error
-  })
+  const existing = await readVirtualContent(operation.path, cwd, virtualContents)
 
-  if (!sourceStats.isFile()) {
-    fail(`Cannot update non-file path: ${operation.path}`)
+  if (!existing.exists || existing.content === null) {
+    fail(`Cannot update missing file: ${operation.path}`)
   }
 
-  const originalContent = await fs.readFile(sourcePath, 'utf8')
-  const lineEnding = readLineEnding(originalContent)
-  let contentLines = splitContent(originalContent.replace(/\r\n/g, '\n'))
+  const lineEnding = readLineEnding(existing.content)
+  let contentLines = splitContent(existing.content.replace(/\r\n/g, '\n'))
   let searchStart = 0
   let mustRemoveTrailingNewline = false
 
   for (const hunk of operation.hunks) {
     const logicalLength = effectiveLineCount(contentLines)
-    const { oldLines, newLines, endOfFile } = hunkToReplacement(hunk)
-    const matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, operation.path, sourcePath)
+    let { oldLines, newLines, endOfFile } = hunkToReplacement(hunk)
+    let matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, logicalLength, operation.path, sourcePath, endOfFile)
+
+    if (matchIndex === null && oldLines.length > 0 && oldLines.at(-1) === '') {
+      oldLines = oldLines.slice(0, -1)
+      if (newLines.length > 0 && newLines.at(-1) === '') {
+        newLines = newLines.slice(0, -1)
+      }
+      matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, logicalLength, operation.path, sourcePath, endOfFile)
+    }
 
     if (matchIndex === null) {
       fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`, {
@@ -487,35 +569,58 @@ async function applyUpdateFile(operation, cwd) {
   }
 
   const destinationPath = operation.movePath ? path.resolve(cwd, operation.movePath) : sourcePath
-  if (operation.movePath) {
-    await fs.mkdir(path.dirname(destinationPath), { recursive: true })
-    await fs.writeFile(destinationPath, nextContent, 'utf8')
-    if (destinationPath !== sourcePath) {
-      await fs.unlink(sourcePath)
-    }
-  } else {
-    await fs.writeFile(sourcePath, nextContent, 'utf8')
-  }
+  virtualContents.set(operation.path, null)
+  virtualContents.set(operation.movePath ?? operation.path, nextContent)
 
-  return destinationPath
+  return {
+    change: {
+      fileName: operation.movePath ?? operation.path,
+      kind: 'update',
+      newContent: nextContent,
+      oldContent: existing.content,
+      sourcePath: operation.movePath ? operation.path : null,
+    },
+    commit: async () => {
+      if (destinationPath !== sourcePath) {
+        await fs.mkdir(path.dirname(destinationPath), { recursive: true })
+        await fs.writeFile(destinationPath, nextContent, 'utf8')
+        await fs.unlink(sourcePath)
+        return
+      }
+
+      await fs.writeFile(sourcePath, nextContent, 'utf8')
+    },
+  }
 }
 
 export async function applyPatchText(patchText, cwd = process.cwd()) {
   const operations = parsePatch(patchText)
   const changedPaths = []
+  const plannedOperations = []
+  const virtualContents = new Map()
 
   for (const operation of operations) {
     if (operation.kind === 'add') {
-      changedPaths.push(await applyAddFile(operation, cwd))
+      const planned = await applyAddFile(operation, cwd, virtualContents)
+      plannedOperations.push(planned)
+      changedPaths.push(planned.change.fileName)
       continue
     }
 
     if (operation.kind === 'delete') {
-      changedPaths.push(await applyDeleteFile(operation, cwd))
+      const planned = await applyDeleteFile(operation, cwd, virtualContents)
+      plannedOperations.push(planned)
+      changedPaths.push(planned.change.fileName)
       continue
     }
 
-    changedPaths.push(await applyUpdateFile(operation, cwd))
+    const planned = await applyUpdateFile(operation, cwd, virtualContents)
+    plannedOperations.push(planned)
+    changedPaths.push(planned.change.fileName)
+  }
+
+  for (const planned of plannedOperations) {
+    await planned.commit()
   }
 
   return changedPaths

@@ -25,28 +25,22 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('apply_patch tool can add, update, and delete files in one call', async () => {
+test('apply_patch tool can update files in one call', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const updatePath = path.join(workspacePath, 'src', 'update.txt')
-    const deletePath = path.join(workspacePath, 'src', 'delete.txt')
     await fs.mkdir(path.dirname(updatePath), { recursive: true })
     await fs.writeFile(updatePath, 'first\nold\nlast\n', 'utf8')
-    await fs.writeFile(deletePath, 'remove me\n', 'utf8')
 
     const result = await applyPatchTool.execute(
       {
         patch: [
           '*** Begin Patch',
-          '*** Add File: src/new.txt',
-          '+hello',
-          '+world',
           '*** Update File: src/update.txt',
           '@@',
           ' first',
           '-old',
           '+new',
           ' last',
-          '*** Delete File: src/delete.txt',
           '*** End Patch',
         ].join('\n'),
       },
@@ -55,12 +49,8 @@ test('apply_patch tool can add, update, and delete files in one call', async () 
 
     assert.equal(result.ok, true)
     assert.equal(result.operation, 'apply_patch')
-    assert.deepEqual(result.addedPaths, ['src/new.txt'])
     assert.deepEqual(result.modifiedPaths, ['src/update.txt'])
-    assert.deepEqual(result.deletedPaths, ['src/delete.txt'])
-    assert.equal(await fs.readFile(path.join(workspacePath, 'src', 'new.txt'), 'utf8'), 'hello\nworld')
     assert.equal(await fs.readFile(updatePath, 'utf8'), 'first\nnew\nlast\n')
-    await assert.rejects(fs.stat(deletePath))
   })
 })
 
@@ -120,23 +110,94 @@ test('apply_patch tool matches hunk context when indentation differs', async () 
   })
 })
 
-test('apply_patch tool supports file moves during update', async () => {
+test('apply_patch tool rejects add, delete, and move directives', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const sourcePath = path.join(workspacePath, 'src', 'old-name.txt')
     await fs.mkdir(path.dirname(sourcePath), { recursive: true })
     await fs.writeFile(sourcePath, 'before\nold\nafter\n', 'utf8')
 
+    await assert.rejects(
+      () =>
+        applyPatchTool.execute(
+          {
+            patch: [
+              '*** Begin Patch',
+              '*** Add File: src/new.txt',
+              '+hello',
+              '*** End Patch',
+            ].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /only supports editing existing files/u)
+        return true
+      },
+    )
+
+    await assert.rejects(
+      () =>
+        applyPatchTool.execute(
+          {
+            patch: [
+              '*** Begin Patch',
+              '*** Delete File: src/old-name.txt',
+              '*** End Patch',
+            ].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /only supports editing existing files/u)
+        return true
+      },
+    )
+
+    await assert.rejects(
+      () =>
+        applyPatchTool.execute(
+          {
+            patch: [
+              '*** Begin Patch',
+              '*** Update File: src/old-name.txt',
+              '*** Move to: src/new-name.txt',
+              '@@',
+              ' before',
+              '-old',
+              '+new',
+              ' after',
+              '*** End Patch',
+            ].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /only supports editing existing files/u)
+        return true
+      },
+    )
+  })
+})
+
+test('apply_patch tool matches the end of file first when anchored at EOF', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'footer.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\nalpha\nbeta\n', 'utf8')
+
     const result = await applyPatchTool.execute(
       {
         patch: [
           '*** Begin Patch',
-          '*** Update File: src/old-name.txt',
-          '*** Move to: src/new-name.txt',
+          '*** Update File: src/footer.txt',
           '@@',
-          ' before',
-          '-old',
-          '+new',
-          ' after',
+          ' alpha',
+          '-beta',
+          '+gamma',
+          '*** End of File',
           '*** End Patch',
         ].join('\n'),
       },
@@ -144,10 +205,7 @@ test('apply_patch tool supports file moves during update', async () => {
     )
 
     assert.equal(result.ok, true)
-    assert.equal(result.operation, 'apply_patch')
-    assert.deepEqual(result.modifiedPaths, ['src/new-name.txt'])
-    await assert.rejects(fs.stat(sourcePath))
-    assert.equal(await fs.readFile(path.join(workspacePath, 'src', 'new-name.txt'), 'utf8'), 'before\nnew\nafter\n')
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\nbeta\nalpha\ngamma')
   })
 })
 
@@ -203,5 +261,43 @@ test('apply_patch tool surfaces context diagnostics when a hunk cannot be matche
         return true
       },
     )
+  })
+})
+
+test('apply_patch tool does not write partial changes when a later hunk fails', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const keepPath = path.join(workspacePath, 'src', 'keep.txt')
+    await fs.mkdir(path.dirname(keepPath), { recursive: true })
+    await fs.writeFile(keepPath, 'original\n', 'utf8')
+
+    await assert.rejects(
+      () =>
+        applyPatchTool.execute(
+          {
+            patch: [
+              '*** Begin Patch',
+              '*** Update File: src/keep.txt',
+              '@@',
+              ' original',
+              '-original',
+              '+changed',
+              '*** Update File: src/missing.txt',
+              '@@',
+              ' missing',
+              '-value',
+              '+new',
+              '*** End Patch',
+            ].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /Cannot update missing file/u)
+        return true
+      },
+    )
+
+    assert.equal(await fs.readFile(keepPath, 'utf8'), 'original\n')
   })
 })

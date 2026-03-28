@@ -135,7 +135,7 @@ export const applyPatchTool: OpenAICompatibleToolDefinition = {
         properties: {
           patch: {
             description:
-              'A patch string using the *** Begin Patch / *** End Patch format. File paths may be relative to the workspace root or absolute paths inside the workspace. Include exact current file context and enough surrounding lines to anchor each change.',
+              'A patch string using the *** Begin Patch / *** End Patch format that updates existing files only. File paths may be relative to the workspace root or absolute paths inside the workspace. Copy the exact current file text, include 3 to 8 unique surrounding lines, and avoid generic anchors like "import {" or "function".',
             type: 'string',
           },
         },

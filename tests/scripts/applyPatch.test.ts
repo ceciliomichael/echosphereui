@@ -15,21 +15,11 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
   }
 }
 
-test('apply_patch can add, update, and delete files', async () => {
+test('apply_patch can update existing files', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
-    const addPatch = [
-      '*** Begin Patch',
-      '*** Add File: src/new-file.txt',
-      '+hello',
-      '+world',
-      '*** End Patch',
-    ].join('\n')
-
     const updateTarget = path.join(workspacePath, 'src', 'update.txt')
-    const deleteTarget = path.join(workspacePath, 'src', 'delete.txt')
     await fs.mkdir(path.dirname(updateTarget), { recursive: true })
     await fs.writeFile(updateTarget, 'first\nold\nlast\n', 'utf8')
-    await fs.writeFile(deleteTarget, 'remove me\n', 'utf8')
 
     const updatePatch = [
       '*** Begin Patch',
@@ -39,61 +29,105 @@ test('apply_patch can add, update, and delete files', async () => {
       '-old',
       '+new',
       ' last',
-      '*** Delete File: src/delete.txt',
       '*** End Patch',
     ].join('\n')
 
-    await applyPatchText(addPatch, workspacePath)
     await applyPatchText(updatePatch, workspacePath)
 
-    assert.equal(await fs.readFile(path.join(workspacePath, 'src', 'new-file.txt'), 'utf8'), 'hello\nworld')
     assert.equal(await fs.readFile(updateTarget, 'utf8'), 'first\nnew\nlast\n')
-    await assert.rejects(fs.stat(deleteTarget))
   })
 })
 
-test('apply_patch can move a file during update', async () => {
+test('apply_patch rejects add, delete, and move directives', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
     const sourcePath = path.join(workspacePath, 'src', 'old-name.txt')
     await fs.mkdir(path.dirname(sourcePath), { recursive: true })
     await fs.writeFile(sourcePath, 'before\nold\nafter\n', 'utf8')
 
+    const cases = [
+      {
+        patch: [
+          '*** Begin Patch',
+          '*** Add File: src/new.txt',
+          '+hello',
+          '*** End Patch',
+        ].join('\n'),
+      },
+      {
+        patch: [
+          '*** Begin Patch',
+          '*** Delete File: src/old-name.txt',
+          '*** End Patch',
+        ].join('\n'),
+      },
+      {
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: src/old-name.txt',
+          '*** Move to: src/new-name.txt',
+          '@@',
+          ' before',
+          '-old',
+          '+new',
+          ' after',
+          '*** End Patch',
+        ].join('\n'),
+      },
+    ]
+
+    for (const { patch } of cases) {
+      await assert.rejects(() => applyPatchText(patch, workspacePath), /only supports editing existing files/u)
+    }
+  })
+})
+
+test('apply_patch matches the end of file first when anchored at EOF', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'footer.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\nalpha\nbeta\n', 'utf8')
+
     const patch = [
       '*** Begin Patch',
-      '*** Update File: src/old-name.txt',
-      '*** Move to: src/new-name.txt',
+      '*** Update File: src/footer.txt',
       '@@',
-      ' before',
-      '-old',
-      '+new',
-      ' after',
+      ' alpha',
+      '-beta',
+      '+gamma',
+      '*** End of File',
       '*** End Patch',
     ].join('\n')
 
     await applyPatchText(patch, workspacePath)
 
-    await assert.rejects(fs.stat(sourcePath))
-    assert.equal(await fs.readFile(path.join(workspacePath, 'src', 'new-name.txt'), 'utf8'), 'before\nnew\nafter\n')
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\nbeta\nalpha\ngamma')
   })
 })
 
-test('apply_patch rejects ambiguous update hunks without enough context', async () => {
+test('apply_patch does not write partial changes when a later hunk fails', async () => {
   await withTemporaryDirectory(async (workspacePath) => {
-    const targetPath = path.join(workspacePath, 'src', 'ambiguous.txt')
-    await fs.mkdir(path.dirname(targetPath), { recursive: true })
-    await fs.writeFile(targetPath, 'foo\nbar\nfoo\nbar\n', 'utf8')
+    const keepPath = path.join(workspacePath, 'src', 'keep.txt')
+    await fs.mkdir(path.dirname(keepPath), { recursive: true })
+    await fs.writeFile(keepPath, 'original\n', 'utf8')
 
     const patch = [
       '*** Begin Patch',
-      '*** Update File: src/ambiguous.txt',
+      '*** Update File: src/keep.txt',
       '@@',
-      ' foo',
-      '-bar',
-      '+baz',
+      ' original',
+      '-original',
+      '+changed',
+      '*** Update File: src/missing.txt',
+      '@@',
+      ' missing',
+      '-value',
+      '+new',
       '*** End Patch',
     ].join('\n')
 
-    await assert.rejects(() => applyPatchText(patch, workspacePath), /multiple matches/u)
+    await assert.rejects(() => applyPatchText(patch, workspacePath), /Cannot update missing file/u)
+
+    assert.equal(await fs.readFile(keepPath, 'utf8'), 'original\n')
   })
 })
 

@@ -203,7 +203,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 
   if (invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
-      return 'Patching'
+      return 'Editing'
     }
     if (invocation.state === 'failed') {
       return 'Patch failed'
