@@ -2,7 +2,7 @@ import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
 import { OpenAICompatibleToolError } from '../../toolTypes'
 import { parseToolArguments } from '../filesystemToolUtils'
 import { getToolDescription } from '../descriptionCatalog'
-import { applyPatchText, type ApplyPatchChange } from './patchEngine'
+import { applyPatchText, PatchApplicationError, type ApplyPatchChange } from './patchEngine'
 
 const TOOL_DESCRIPTION = getToolDescription('apply_patch')
 
@@ -73,6 +73,25 @@ function summarizeChanges(changes: ApplyPatchChange[]) {
   }
 }
 
+function toPatchToolError(error: unknown) {
+  if (error instanceof PatchApplicationError) {
+    return new OpenAICompatibleToolError(error.message, error.details)
+  }
+
+  if (error instanceof Error) {
+    const details =
+      typeof (error as { details?: unknown }).details === 'object' &&
+      (error as { details?: unknown }).details !== null &&
+      !Array.isArray((error as { details?: unknown }).details)
+        ? ((error as { details?: Record<string, unknown> }).details ?? undefined)
+        : undefined
+
+    return new OpenAICompatibleToolError(error.message, details)
+  }
+
+  return new OpenAICompatibleToolError('Patch application failed.')
+}
+
 export const applyPatchTool: OpenAICompatibleToolDefinition = {
   executionMode: 'exclusive',
   name: 'apply_patch',
@@ -82,7 +101,14 @@ export const applyPatchTool: OpenAICompatibleToolDefinition = {
   },
   async execute(argumentsValue, context): Promise<ApplyPatchOperationResult> {
     const { patch } = normalizeArguments(argumentsValue)
-    const result = await applyPatchText(patch, context.agentContextRootPath)
+    let result: Awaited<ReturnType<typeof applyPatchText>>
+
+    try {
+      result = await applyPatchText(patch, context.agentContextRootPath)
+    } catch (error) {
+      throw toPatchToolError(error)
+    }
+
     const { addedPaths, deletedPaths, message, modifiedPaths, path, targetKind } = summarizeChanges(result.changes)
     const contentChanged = result.changes.length > 0
 

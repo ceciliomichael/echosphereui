@@ -97,3 +97,35 @@ test('apply_patch rejects ambiguous update hunks without enough context', async 
   })
 })
 
+test('apply_patch exposes diagnostics when a hunk cannot be matched', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'notes.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\ngamma\n', 'utf8')
+
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/notes.txt',
+      '@@',
+      ' alpha',
+      '-delta',
+      '+epsilon',
+      '*** End Patch',
+    ].join('\n')
+
+    await assert.rejects(
+      () => applyPatchText(patch, workspacePath),
+      (error: unknown) => {
+        assert.ok(error instanceof Error)
+        assert.match(error.message, /Could not find the hunk context/u)
+        assert.ok((error as { details?: Record<string, unknown> }).details)
+        const details = (error as { details?: Record<string, unknown> }).details
+        assert.equal(details?.filePath, 'src/notes.txt')
+        assert.equal(details?.firstContextLineMatchCount, 1)
+        assert.match(String(details?.firstContextLineMatchLines ?? ''), /1/u)
+        assert.match(String(details?.searchWindowPreview ?? ''), /alpha/u)
+        return true
+      },
+    )
+  })
+})

@@ -35,6 +35,16 @@ interface ParsedUpdateOperation {
 
 type ParsedPatchOperation = ParsedAddOperation | ParsedDeleteOperation | ParsedUpdateOperation
 
+export class PatchApplicationError extends Error {
+  details?: Record<string, unknown>
+
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message)
+    this.name = 'PatchApplicationError'
+    this.details = details
+  }
+}
+
 export interface ApplyPatchChange {
   fileName: string
   kind: 'add' | 'delete' | 'update'
@@ -47,8 +57,25 @@ export interface ApplyPatchResult {
   changes: ApplyPatchChange[]
 }
 
-function fail(message: string): never {
-  throw new Error(message)
+interface BlockSearchDiagnostics {
+  bestPartialMatchLine: number | null
+  bestPartialMatchPreview: string
+  bestPartialMatchPrefixLength: number
+  exactMatchCount: number
+  exactMatchLines: string
+  fileLineCount: number
+  firstContextLine: string
+  firstContextLineMatchCount: number
+  firstContextLineMatchLines: string
+  hunkContext: string
+  hunkLineCount: number
+  searchEndLine: number
+  searchStartLine: number
+  searchWindowPreview: string
+}
+
+function fail(message: string, details?: Record<string, unknown>): never {
+  throw new PatchApplicationError(message, details)
 }
 
 function normalizePatchText(text: string) {
@@ -115,6 +142,20 @@ function normalizeWhitespace(text: string) {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+function formatLinePreview(lines: string[], centerIndex: number, radius: number) {
+  if (lines.length === 0) {
+    return 'No file content available.'
+  }
+
+  const startIndex = Math.max(0, centerIndex - radius)
+  const endIndex = Math.min(lines.length, centerIndex + radius + 1)
+
+  return lines
+    .slice(startIndex, endIndex)
+    .map((line, offset) => `${startIndex + offset + 1}: ${line}`)
+    .join('\n')
+}
+
 function compareLines(actualLine: string, expectedLine: string) {
   if (actualLine === expectedLine) {
     return true
@@ -135,6 +176,69 @@ function compareLines(actualLine: string, expectedLine: string) {
   }
 
   return normalizeWhitespace(strippedActualLine) === normalizeWhitespace(strippedExpectedLine)
+}
+
+function collectBlockSearchDiagnostics(
+  lines: string[],
+  needleLines: string[],
+  startIndex: number,
+  endIndex: number,
+): BlockSearchDiagnostics {
+  const exactMatchLines: number[] = []
+  const firstContextLineMatchLines: number[] = []
+  let bestPartialMatchLine: number | null = null
+  let bestPartialMatchPrefixLength = 0
+
+  for (let index = startIndex; index <= endIndex - needleLines.length; index += 1) {
+    let matchedPrefixLength = 0
+
+    for (let offset = 0; offset < needleLines.length; offset += 1) {
+      if (!compareLines(lines[index + offset], needleLines[offset])) {
+        break
+      }
+
+      matchedPrefixLength += 1
+    }
+
+    if (matchedPrefixLength > 0) {
+      firstContextLineMatchLines.push(index)
+    }
+
+    if (matchedPrefixLength > bestPartialMatchPrefixLength) {
+      bestPartialMatchPrefixLength = matchedPrefixLength
+      bestPartialMatchLine = index
+    }
+
+    if (matchedPrefixLength === needleLines.length) {
+      exactMatchLines.push(index)
+      if (exactMatchLines.length > 1) {
+        break
+      }
+    }
+  }
+
+  const previewLine = bestPartialMatchLine ?? startIndex
+  const previewRadius = Math.max(2, needleLines.length + 1)
+
+  return {
+    bestPartialMatchLine: bestPartialMatchLine === null ? null : bestPartialMatchLine + 1,
+    bestPartialMatchPreview: formatLinePreview(lines, previewLine, previewRadius),
+    bestPartialMatchPrefixLength,
+    exactMatchCount: exactMatchLines.length,
+    exactMatchLines: exactMatchLines.length > 0 ? exactMatchLines.map((lineIndex) => lineIndex + 1).join(', ') : 'none',
+    fileLineCount: endIndex,
+    firstContextLine: needleLines[0] ?? '',
+    firstContextLineMatchCount: firstContextLineMatchLines.length,
+    firstContextLineMatchLines:
+      firstContextLineMatchLines.length > 0
+        ? firstContextLineMatchLines.map((lineIndex) => lineIndex + 1).join(', ')
+        : 'none',
+    hunkContext: needleLines.join('\n'),
+    hunkLineCount: needleLines.length,
+    searchEndLine: endIndex,
+    searchStartLine: startIndex + 1,
+    searchWindowPreview: formatLinePreview(lines, startIndex, previewRadius),
+  }
 }
 
 function parsePatchText(patchText: string, cwd: string) {
@@ -328,7 +432,14 @@ function hunkToReplacement(hunk: ParsedUpdateHunk) {
   return { endOfFile: hunk.endOfFile, newLines, oldLines }
 }
 
-function findUniqueBlock(lines: string[], needleLines: string[], startIndex: number, endIndex: number) {
+function findUniqueBlock(
+  lines: string[],
+  needleLines: string[],
+  startIndex: number,
+  endIndex: number,
+  filePath?: string,
+  resolvedPath?: string,
+) {
   if (needleLines.length === 0) {
     fail('Cannot search for an empty block.')
   }
@@ -356,7 +467,12 @@ function findUniqueBlock(lines: string[], needleLines: string[], startIndex: num
   }
 
   if (matches.length > 1) {
-    fail('Found multiple matches for update hunk context. Add more surrounding lines.')
+    const diagnostics = collectBlockSearchDiagnostics(lines, needleLines, startIndex, endIndex)
+    fail('Found multiple matches for update hunk context. Add more surrounding lines.', {
+      ...diagnostics,
+      ...(filePath === undefined ? {} : { filePath }),
+      ...(resolvedPath === undefined ? {} : { resolvedPath }),
+    })
   }
 
   return matches[0]
@@ -436,14 +552,19 @@ async function applyUpdateOperation(operation: ParsedUpdateOperation, cwd: strin
   const lineEnding = detectLineEnding(existing.content)
   let lines = splitContent(existing.content.replace(/\r\n/g, '\n'))
   let searchStart = 0
-  const logicalLength = effectiveLineCount(lines)
 
   for (const hunk of operation.hunks) {
+    const logicalLength = effectiveLineCount(lines)
     const { endOfFile, newLines, oldLines } = hunkToReplacement(hunk)
-    const matchIndex = findUniqueBlock(lines, oldLines, searchStart, logicalLength)
+    const matchIndex = findUniqueBlock(lines, oldLines, searchStart, logicalLength, operation.path, sourcePath)
 
     if (matchIndex === null) {
-      fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`)
+      const diagnostics = collectBlockSearchDiagnostics(lines, oldLines, searchStart, logicalLength)
+      fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`, {
+        ...diagnostics,
+        filePath: operation.path,
+        resolvedPath: sourcePath,
+      })
     }
 
     const matchEnd = matchIndex + oldLines.length

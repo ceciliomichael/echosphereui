@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { applyPatchTool } from '../../electron/chat/openaiCompatible/tools/apply-patch/index'
+import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext(agentContextRootPath: string) {
   const abortController = new AbortController()
@@ -163,6 +164,42 @@ test('apply_patch tool rejects malformed patch input', async () => {
       (error: unknown) => {
         assert.ok(error instanceof Error)
         assert.match(error.message, /at least one file operation/u)
+        return true
+      },
+    )
+  })
+})
+
+test('apply_patch tool surfaces context diagnostics when a hunk cannot be matched', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'notes.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\ngamma\n', 'utf8')
+
+    await assert.rejects(
+      () =>
+        applyPatchTool.execute(
+          {
+            patch: [
+              '*** Begin Patch',
+              '*** Update File: src/notes.txt',
+              '@@',
+              ' alpha',
+              '-delta',
+              '+epsilon',
+              '*** End Patch',
+            ].join('\n'),
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.match(error.message, /Could not find the hunk context/u)
+        assert.ok(error.details)
+        assert.equal(error.details?.filePath, 'src/notes.txt')
+        assert.equal(error.details?.firstContextLineMatchCount, 1)
+        assert.match(String(error.details?.firstContextLineMatchLines ?? ''), /1/u)
+        assert.match(String(error.details?.searchWindowPreview ?? ''), /alpha/u)
         return true
       },
     )

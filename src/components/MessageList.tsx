@@ -1,6 +1,6 @@
-import { memo, useLayoutEffect, useRef } from 'react'
-import { isVisibleTranscriptMessage } from '../lib/chatMessageMetadata'
-import { useAutoScroll } from '../hooks/useAutoScroll'
+import { memo, useLayoutEffect, useRef } from "react";
+import { isVisibleTranscriptMessage } from "../lib/chatMessageMetadata";
+import { useAutoScroll } from "../hooks/useAutoScroll";
 import type {
   AssistantWaitingIndicatorVariant,
   ChatAttachment,
@@ -8,83 +8,90 @@ import type {
   Message,
   ReasoningEffort,
   ToolInvocationTrace,
-} from '../types/chat'
-import { AssistantMessage } from './AssistantMessage'
-import { ChatInput } from './ChatInput'
-import { UserMessage } from './UserMessage'
-import type { ChatModeOption } from './chat/ChatModeSelectorField'
-import type { ModelSelectorOption } from './chat/ModelSelectorField'
-import type { ToolDecisionSubmission } from './chat/ToolDecisionRequestCard'
+} from "../types/chat";
+import { AssistantMessage } from "./AssistantMessage";
+import { ChatInput } from "./ChatInput";
+import { UserMessage } from "./UserMessage";
+import type { ChatModeOption } from "./chat/ChatModeSelectorField";
+import type { ModelSelectorOption } from "./chat/ModelSelectorField";
+import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
 interface MessageListProps {
-  chatModeOptions?: readonly ChatModeOption[]
-  chatModeSelectorDisabled?: boolean
-  conversationId: string | null
-  composerAttachments: ChatAttachment[]
-  composerValue: string
-  composerFocusSignal?: number
-  editComposerDirty?: boolean
-  editingMessageId?: string | null
-  isSending?: boolean
-  messages: Message[]
-  onAbortStreamingResponse?: () => void
-  onCancelEditingMessage: () => void
-  onChatModeChange?: (mode: ChatMode) => void
-  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
-  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
-  onComposerValueChange: (value: string) => void
-  onEditUserMessage?: (messageId: string) => void
-  onRevertUserMessage?: (messageId: string) => void
-  onModelChange?: (modelId: string) => void
-  onReasoningEffortChange?: (effort: ReasoningEffort) => void
-  onSendEditedMessage: () => void
-  selectedChatMode?: ChatMode
-  modelOptions?: readonly ModelSelectorOption[]
-  modelOptionsLoading?: boolean
-  reasoningEffort?: ReasoningEffort
-  reasoningEffortOptions?: readonly ReasoningEffort[]
-  selectedModelId?: string
-  sendMessageOnEnter: boolean
-  showReasoningEffortSelector?: boolean
-  streamingAssistantMessageId?: string | null
-  streamingWaitingIndicatorVariant?: AssistantWaitingIndicatorVariant | null
-  streamingTextActive?: boolean
-  workspaceRootPath?: string | null
+  chatModeOptions?: readonly ChatModeOption[];
+  chatModeSelectorDisabled?: boolean;
+  conversationId: string | null;
+  composerAttachments: ChatAttachment[];
+  composerValue: string;
+  composerFocusSignal?: number;
+  editComposerDirty?: boolean;
+  editingMessageId?: string | null;
+  isSending?: boolean;
+  messages: Message[];
+  onAbortStreamingResponse?: () => void;
+  onCancelEditingMessage: () => void;
+  onChatModeChange?: (mode: ChatMode) => void;
+  onToolDecisionSubmit?: (
+    invocation: ToolInvocationTrace,
+    submission: ToolDecisionSubmission,
+  ) => void;
+  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void;
+  onComposerValueChange: (value: string) => void;
+  onEditUserMessage?: (messageId: string) => void;
+  onRevertUserMessage?: (messageId: string) => void;
+  onModelChange?: (modelId: string) => void;
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void;
+  onSendEditedMessage: () => void;
+  selectedChatMode?: ChatMode;
+  modelOptions?: readonly ModelSelectorOption[];
+  modelOptionsLoading?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  reasoningEffortOptions?: readonly ReasoningEffort[];
+  selectedModelId?: string;
+  sendMessageOnEnter: boolean;
+  showReasoningEffortSelector?: boolean;
+  streamingAssistantMessageId?: string | null;
+  streamingWaitingIndicatorVariant?: AssistantWaitingIndicatorVariant | null;
+  streamingTextActive?: boolean;
+  workspaceRootPath?: string | null;
 }
 
 interface MessageRowProps {
-  chatModeOptions?: readonly ChatModeOption[]
-  chatModeSelectorDisabled?: boolean
-  composerAttachments: ChatAttachment[]
-  composerFocusSignal?: number
-  composerValue: string
-  editComposerDirty: boolean
-  isEditing: boolean
-  isSending: boolean
-  isStreaming: boolean
-  message: Message
-  onAbortStreamingResponse?: () => void
-  onCancelEditingMessage: () => void
-  onChatModeChange?: (mode: ChatMode) => void
-  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
-  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void
-  onComposerValueChange: (value: string) => void
-  onEditUserMessage?: (messageId: string) => void
-  onRevertUserMessage?: (messageId: string) => void
-  onModelChange?: (modelId: string) => void
-  onReasoningEffortChange?: (effort: ReasoningEffort) => void
-  onSendEditedMessage: () => void
-  selectedChatMode?: ChatMode
-  modelOptions?: readonly ModelSelectorOption[]
-  modelOptionsLoading?: boolean
-  reasoningEffort?: ReasoningEffort
-  reasoningEffortOptions?: readonly ReasoningEffort[]
-  selectedModelId?: string
-  sendMessageOnEnter: boolean
-  showReasoningEffortSelector?: boolean
-  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
-  isTextStreaming?: boolean
-  workspaceRootPath?: string | null
+  chatModeOptions?: readonly ChatModeOption[];
+  chatModeSelectorDisabled?: boolean;
+  composerAttachments: ChatAttachment[];
+  composerFocusSignal?: number;
+  composerValue: string;
+  editComposerDirty: boolean;
+  isEditing: boolean;
+  isSending: boolean;
+  isStreaming: boolean;
+  message: Message;
+  showCopyButton: boolean;
+  onAbortStreamingResponse?: () => void;
+  onCancelEditingMessage: () => void;
+  onChatModeChange?: (mode: ChatMode) => void;
+  onToolDecisionSubmit?: (
+    invocation: ToolInvocationTrace,
+    submission: ToolDecisionSubmission,
+  ) => void;
+  onComposerAttachmentsChange: (attachments: ChatAttachment[]) => void;
+  onComposerValueChange: (value: string) => void;
+  onEditUserMessage?: (messageId: string) => void;
+  onRevertUserMessage?: (messageId: string) => void;
+  onModelChange?: (modelId: string) => void;
+  onReasoningEffortChange?: (effort: ReasoningEffort) => void;
+  onSendEditedMessage: () => void;
+  selectedChatMode?: ChatMode;
+  modelOptions?: readonly ModelSelectorOption[];
+  modelOptionsLoading?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  reasoningEffortOptions?: readonly ReasoningEffort[];
+  selectedModelId?: string;
+  sendMessageOnEnter: boolean;
+  showReasoningEffortSelector?: boolean;
+  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant;
+  isTextStreaming?: boolean;
+  workspaceRootPath?: string | null;
 }
 
 const MessageRow = memo(
@@ -99,6 +106,7 @@ const MessageRow = memo(
     isSending: _isSending,
     isStreaming,
     message,
+    showCopyButton,
     onAbortStreamingResponse,
     onCancelEditingMessage,
     onChatModeChange,
@@ -121,13 +129,17 @@ const MessageRow = memo(
     waitingIndicatorVariant,
     isTextStreaming = false,
     workspaceRootPath = null,
-}: MessageRowProps) {
+  }: MessageRowProps) {
     return (
       <div
         data-message-id={message.id}
-        className={message.role === 'user' ? 'flex w-full min-w-0 justify-start' : 'flex w-full min-w-0 justify-start'}
+        className={
+          message.role === "user"
+            ? "flex w-full min-w-0 justify-start"
+            : "flex w-full min-w-0 justify-start"
+        }
       >
-        {message.role === 'user' ? (
+        {message.role === "user" ? (
           isEditing ? (
             <div className="-mx-4 flex-1 min-w-0 w-[calc(100%+2rem)]">
               <ChatInput
@@ -143,7 +155,9 @@ const MessageRow = memo(
                 onChatModeChange={onChatModeChange}
                 sendOnEnter={sendMessageOnEnter}
                 variant="inline"
-                actionButtonMode={_isSending && !editComposerDirty ? 'abort' : 'send'}
+                actionButtonMode={
+                  _isSending && !editComposerDirty ? "abort" : "send"
+                }
                 focusSignal={composerFocusSignal}
                 disabled={false}
                 isStreaming={_isSending && !editComposerDirty}
@@ -163,8 +177,16 @@ const MessageRow = memo(
             <div className="-mx-4 flex-1 min-w-0 w-[calc(100%+2rem)] max-w-full">
               <UserMessage
                 content={message.content}
-                onEdit={onEditUserMessage ? () => onEditUserMessage(message.id) : undefined}
-                onRevert={onRevertUserMessage ? () => onRevertUserMessage(message.id) : undefined}
+                onEdit={
+                  onEditUserMessage
+                    ? () => onEditUserMessage(message.id)
+                    : undefined
+                }
+                onRevert={
+                  onRevertUserMessage
+                    ? () => onRevertUserMessage(message.id)
+                    : undefined
+                }
               />
             </div>
           )
@@ -173,10 +195,11 @@ const MessageRow = memo(
             content={message.content}
             isStreaming={isStreaming}
             onToolDecisionSubmit={(invocation, submission) => {
-              onToolDecisionSubmit?.(invocation, submission)
+              onToolDecisionSubmit?.(invocation, submission);
             }}
             reasoningCompletedAt={message.reasoningCompletedAt}
             reasoningContent={message.reasoningContent}
+            showCopyButton={showCopyButton}
             timestamp={message.timestamp}
             toolInvocations={message.toolInvocations}
             waitingIndicatorVariant={waitingIndicatorVariant}
@@ -185,25 +208,27 @@ const MessageRow = memo(
           />
         )}
       </div>
-    )
+    );
   },
   (previousProps, nextProps) => {
     if (
       previousProps.message !== nextProps.message ||
       previousProps.isEditing !== nextProps.isEditing ||
       previousProps.isStreaming !== nextProps.isStreaming ||
-      previousProps.waitingIndicatorVariant !== nextProps.waitingIndicatorVariant ||
+      previousProps.showCopyButton !== nextProps.showCopyButton ||
+      previousProps.waitingIndicatorVariant !==
+        nextProps.waitingIndicatorVariant ||
       previousProps.isTextStreaming !== nextProps.isTextStreaming
     ) {
-      return false
+      return false;
     }
 
-    if (previousProps.message.role !== 'user') {
-      return true
+    if (previousProps.message.role !== "user") {
+      return true;
     }
 
     if (!previousProps.isEditing && !nextProps.isEditing) {
-      return true
+      return true;
     }
 
     return (
@@ -211,17 +236,19 @@ const MessageRow = memo(
       previousProps.composerAttachments === nextProps.composerAttachments &&
       previousProps.composerFocusSignal === nextProps.composerFocusSignal &&
       previousProps.isSending === nextProps.isSending &&
-      previousProps.chatModeSelectorDisabled === nextProps.chatModeSelectorDisabled &&
+      previousProps.chatModeSelectorDisabled ===
+        nextProps.chatModeSelectorDisabled &&
       previousProps.selectedChatMode === nextProps.selectedChatMode &&
       previousProps.reasoningEffort === nextProps.reasoningEffort &&
       previousProps.selectedModelId === nextProps.selectedModelId &&
       previousProps.sendMessageOnEnter === nextProps.sendMessageOnEnter &&
-      previousProps.showReasoningEffortSelector === nextProps.showReasoningEffortSelector &&
+      previousProps.showReasoningEffortSelector ===
+        nextProps.showReasoningEffortSelector &&
       previousProps.modelOptionsLoading === nextProps.modelOptionsLoading &&
       previousProps.modelOptions === nextProps.modelOptions
-    )
+    );
   },
-)
+);
 
 export function MessageList({
   chatModeOptions,
@@ -258,76 +285,99 @@ export function MessageList({
   streamingTextActive = false,
   workspaceRootPath = null,
 }: MessageListProps) {
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const visibleMessages = messages.filter((message) => isVisibleTranscriptMessage(message))
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const visibleMessages = messages.filter((message) =>
+    isVisibleTranscriptMessage(message),
+  );
 
   useAutoScroll(scrollContainerRef, visibleMessages, {
     resetKey: conversationId,
     shouldAutoScroll: true,
-  })
+  });
 
   useLayoutEffect(() => {
     if (!editingMessageId) {
-      return
+      return;
     }
 
-    const container = scrollContainerRef.current
+    const container = scrollContainerRef.current;
     if (!container) {
-      return
+      return;
     }
 
-    const targetMessage = container.querySelector<HTMLElement>(`[data-message-id="${editingMessageId}"]`)
+    const targetMessage = container.querySelector<HTMLElement>(
+      `[data-message-id="${editingMessageId}"]`,
+    );
     if (!targetMessage) {
-      return
+      return;
     }
 
     targetMessage.scrollIntoView({
-      block: 'center',
-      behavior: 'auto',
-    })
-  }, [conversationId, editingMessageId, visibleMessages.length])
+      block: "center",
+      behavior: "auto",
+    });
+  }, [conversationId, editingMessageId, visibleMessages.length]);
 
   return (
-    <div ref={scrollContainerRef} className="scroll-stable flex-1 w-full overflow-y-auto">
+    <div
+      ref={scrollContainerRef}
+      className="scroll-stable flex-1 w-full overflow-y-auto"
+    >
       <div className="chat-column mx-auto space-y-2.5 px-4 pb-6 pt-6">
-        {visibleMessages.map((msg) => (
-          <MessageRow
-            key={msg.id}
-            chatModeOptions={chatModeOptions}
-            chatModeSelectorDisabled={chatModeSelectorDisabled}
-            composerAttachments={composerAttachments}
-            composerFocusSignal={composerFocusSignal}
-            composerValue={composerValue}
-            editComposerDirty={editComposerDirty}
-            isEditing={editingMessageId === msg.id}
-            isSending={isSending}
-            isStreaming={streamingAssistantMessageId === msg.id}
-            message={msg}
-            onAbortStreamingResponse={onAbortStreamingResponse}
-            onCancelEditingMessage={onCancelEditingMessage}
-            onChatModeChange={onChatModeChange}
-            onToolDecisionSubmit={onToolDecisionSubmit}
-            onComposerAttachmentsChange={onComposerAttachmentsChange}
-            onComposerValueChange={onComposerValueChange}
-            onEditUserMessage={onEditUserMessage}
-            onRevertUserMessage={onRevertUserMessage}
-            onModelChange={onModelChange}
-            onReasoningEffortChange={onReasoningEffortChange}
-            onSendEditedMessage={onSendEditedMessage}
-            selectedChatMode={selectedChatMode}
-            modelOptions={modelOptions}
-            modelOptionsLoading={modelOptionsLoading}
-            reasoningEffort={reasoningEffort}
-            reasoningEffortOptions={reasoningEffortOptions}
-            selectedModelId={selectedModelId}
-            sendMessageOnEnter={sendMessageOnEnter}
-            showReasoningEffortSelector={showReasoningEffortSelector}
-            waitingIndicatorVariant={streamingAssistantMessageId === msg.id ? streamingWaitingIndicatorVariant ?? 'thinking' : undefined}
-            isTextStreaming={streamingAssistantMessageId === msg.id ? streamingTextActive : false}
-            workspaceRootPath={workspaceRootPath}
-          />
-        ))}
+        {visibleMessages.map((msg, index) => {
+          const showCopyButton =
+            msg.role === "assistant" &&
+            (index === visibleMessages.length - 1 ||
+              visibleMessages[index + 1]?.role !== "assistant");
+
+          return (
+            <MessageRow
+              key={msg.id}
+              chatModeOptions={chatModeOptions}
+              chatModeSelectorDisabled={chatModeSelectorDisabled}
+              composerAttachments={composerAttachments}
+              composerFocusSignal={composerFocusSignal}
+              composerValue={composerValue}
+              editComposerDirty={editComposerDirty}
+              isEditing={editingMessageId === msg.id}
+              isSending={isSending}
+              isStreaming={streamingAssistantMessageId === msg.id}
+              message={msg}
+              showCopyButton={showCopyButton}
+              onAbortStreamingResponse={onAbortStreamingResponse}
+              onCancelEditingMessage={onCancelEditingMessage}
+              onChatModeChange={onChatModeChange}
+              onToolDecisionSubmit={onToolDecisionSubmit}
+              onComposerAttachmentsChange={onComposerAttachmentsChange}
+              onComposerValueChange={onComposerValueChange}
+              onEditUserMessage={onEditUserMessage}
+              onRevertUserMessage={onRevertUserMessage}
+              onModelChange={onModelChange}
+              onReasoningEffortChange={onReasoningEffortChange}
+              onSendEditedMessage={onSendEditedMessage}
+              selectedChatMode={selectedChatMode}
+              modelOptions={modelOptions}
+              modelOptionsLoading={modelOptionsLoading}
+              reasoningEffort={reasoningEffort}
+              reasoningEffortOptions={reasoningEffortOptions}
+              selectedModelId={selectedModelId}
+              sendMessageOnEnter={sendMessageOnEnter}
+              showReasoningEffortSelector={showReasoningEffortSelector}
+              waitingIndicatorVariant={
+                streamingAssistantMessageId === msg.id
+                  ? (streamingWaitingIndicatorVariant ?? "thinking")
+                  : undefined
+              }
+              isTextStreaming={
+                streamingAssistantMessageId === msg.id
+                  ? streamingTextActive
+                  : false
+              }
+              workspaceRootPath={workspaceRootPath}
+            />
+          );
+        })}
       </div>
     </div>
-  )
+  );
 }

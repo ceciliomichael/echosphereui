@@ -1,23 +1,32 @@
-import { chatMessageContentWidthClassName } from '../lib/chatStyles'
-import { normalizeAssistantMessageContent } from '../lib/chatMessageContent'
-import type { AssistantWaitingIndicatorVariant, ToolInvocationTrace } from '../types/chat'
-import { MarkdownRenderer } from './chat/MarkdownRenderer'
-import { ThinkingBlock } from './chat/ThinkingBlock'
-import { ThinkingIndicator } from './chat/ThinkingIndicator'
-import { ToolInvocationBlock } from './chat/ToolInvocationBlock'
-import type { ToolDecisionSubmission } from './chat/ToolDecisionRequestCard'
+import { Check, Copy } from "lucide-react";
+import { useEffect, useState } from "react";
+import { chatMessageContentWidthClassName } from "../lib/chatStyles";
+import { normalizeAssistantMessageContent } from "../lib/chatMessageContent";
+import type {
+  AssistantWaitingIndicatorVariant,
+  ToolInvocationTrace,
+} from "../types/chat";
+import { MarkdownRenderer } from "./chat/MarkdownRenderer";
+import { ThinkingBlock } from "./chat/ThinkingBlock";
+import { ThinkingIndicator } from "./chat/ThinkingIndicator";
+import { ToolInvocationBlock } from "./chat/ToolInvocationBlock";
+import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
 interface AssistantMessageProps {
-  content: string
-  isStreaming?: boolean
-  isTextStreaming?: boolean
-  reasoningCompletedAt?: number
-  reasoningContent?: string
-  timestamp: number
-  toolInvocations?: ToolInvocationTrace[]
-  onToolDecisionSubmit?: (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => void
-  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant
-  workspaceRootPath?: string | null
+  content: string;
+  isStreaming?: boolean;
+  isTextStreaming?: boolean;
+  reasoningCompletedAt?: number;
+  reasoningContent?: string;
+  showCopyButton?: boolean;
+  timestamp: number;
+  toolInvocations?: ToolInvocationTrace[];
+  onToolDecisionSubmit?: (
+    invocation: ToolInvocationTrace,
+    submission: ToolDecisionSubmission,
+  ) => void;
+  waitingIndicatorVariant?: AssistantWaitingIndicatorVariant;
+  workspaceRootPath?: string | null;
 }
 
 export function AssistantMessage({
@@ -25,30 +34,83 @@ export function AssistantMessage({
   isStreaming = false,
   isTextStreaming = false,
   reasoningCompletedAt,
-  reasoningContent = '',
+  reasoningContent = "",
+  showCopyButton = false,
   timestamp,
   toolInvocations = [],
   onToolDecisionSubmit,
-  waitingIndicatorVariant = 'thinking',
+  waitingIndicatorVariant = "thinking",
   workspaceRootPath = null,
 }: AssistantMessageProps) {
+  const [isCopied, setIsCopied] = useState(false);
   const normalizedContent = normalizeAssistantMessageContent({
     content,
     reasoningContent,
-  })
-  const hasContent = normalizedContent.content.trim().length > 0
-  const hasReasoningContent = normalizedContent.reasoningContent.trim().length > 0
-  const hasActiveReasoningBlock = hasReasoningContent && reasoningCompletedAt === undefined
-  const hasRunningToolInvocation = toolInvocations.some((invocation) => invocation.state === 'running')
+  });
+  const hasContent = normalizedContent.content.trim().length > 0;
+  const hasReasoningContent =
+    normalizedContent.reasoningContent.trim().length > 0;
+  const hasActiveReasoningBlock =
+    hasReasoningContent && reasoningCompletedAt === undefined;
+  const hasRunningToolInvocation = toolInvocations.some(
+    (invocation) => invocation.state === "running",
+  );
   const shouldShowWaitingIndicator =
-    isStreaming && !isTextStreaming && !hasRunningToolInvocation && !hasActiveReasoningBlock
+    isStreaming &&
+    !isTextStreaming &&
+    !hasRunningToolInvocation &&
+    !hasActiveReasoningBlock;
+  const copyableText = [
+    normalizedContent.reasoningContent.trim(),
+    normalizedContent.content.trim(),
+  ]
+    .filter((value) => value.length > 0)
+    .join("\n\n");
+  const canShowCopyButton = showCopyButton && copyableText.length > 0;
+  const messagePaddingClassName = canShowCopyButton ? "pb-5 pr-5" : "";
 
-  if (!hasContent && !hasReasoningContent && toolInvocations.length === 0 && !shouldShowWaitingIndicator) {
-    return null
+  useEffect(() => {
+    if (!isCopied) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsCopied(false);
+    }, 1400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isCopied]);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(copyableText);
+      setIsCopied(true);
+    } catch {
+      setIsCopied(false);
+    }
+  }
+
+  if (
+    !hasContent &&
+    !hasReasoningContent &&
+    toolInvocations.length === 0 &&
+    !shouldShowWaitingIndicator
+  ) {
+    return null;
   }
 
   return (
-    <div className={[chatMessageContentWidthClassName, 'space-y-2'].join(' ')}>
+    <div
+      className={[
+        "group relative space-y-2",
+        messagePaddingClassName,
+        chatMessageContentWidthClassName,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {hasReasoningContent ? (
         <ThinkingBlock
           content={normalizedContent.reasoningContent}
@@ -59,7 +121,11 @@ export function AssistantMessage({
       ) : null}
 
       {hasContent ? (
-        <MarkdownRenderer content={normalizedContent.content} className="text-left text-[15px]" isStreaming={isStreaming} />
+        <MarkdownRenderer
+          content={normalizedContent.content}
+          className="text-left text-[15px]"
+          isStreaming={isStreaming}
+        />
       ) : null}
 
       {toolInvocations.map((invocation) => (
@@ -71,7 +137,25 @@ export function AssistantMessage({
         />
       ))}
 
-      {shouldShowWaitingIndicator ? <ThinkingIndicator variant={waitingIndicatorVariant} /> : null}
+      {shouldShowWaitingIndicator ? (
+        <ThinkingIndicator variant={waitingIndicatorVariant} />
+      ) : null}
+
+      {canShowCopyButton ? (
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="absolute bottom-1.5 right-1.5 inline-flex h-5 w-5 items-center justify-center text-muted-foreground opacity-0 pointer-events-none transition-[color,opacity,transform] duration-150 hover:scale-105 hover:text-foreground group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
+          aria-label={isCopied ? "Copied message" : "Copy message"}
+          title={isCopied ? "Copied" : "Copy"}
+        >
+          {isCopied ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </button>
+      ) : null}
     </div>
-  )
+  );
 }

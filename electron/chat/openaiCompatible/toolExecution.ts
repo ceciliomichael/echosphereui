@@ -199,6 +199,16 @@ export async function executeToolCallWithPolicies(
   } catch (error) {
     const errorMessage = toErrorMessage(error)
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
+    if (toolCall.name === 'apply_patch') {
+      console.log('[tool-execution:apply-patch-failed]', {
+        errorDetails: errorDetails ?? null,
+        errorMessage,
+        invocationId: toolCall.id,
+        rawArgumentsLength: toolCall.argumentsText.length,
+        rawArgumentsPreview:
+          toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
+      })
+    }
     emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, errorDetails)
   }
 }

@@ -11,8 +11,16 @@ const UPDATE_FILE_MARKER = '*** Update File: '
 const MOVE_TO_MARKER = '*** Move to: '
 const EOF_MARKER = '*** End of File'
 
-function fail(message) {
-  throw new Error(message)
+class PatchApplicationError extends Error {
+  constructor(message, details) {
+    super(message)
+    this.name = 'PatchApplicationError'
+    this.details = details
+  }
+}
+
+function fail(message, details) {
+  throw new PatchApplicationError(message, details)
 }
 
 function normalizePatchText(text) {
@@ -68,6 +76,14 @@ function readLineEnding(text) {
   return text.includes('\r\n') ? '\r\n' : '\n'
 }
 
+function effectiveLineCount(lines) {
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    return lines.length - 1
+  }
+
+  return lines.length
+}
+
 function stripCommonLineNumberPrefix(line) {
   const match = line.match(/^\s*\d+\s*(?:\||:)\s?(.*)$/u)
   return match ? match[1] : line
@@ -75,6 +91,20 @@ function stripCommonLineNumberPrefix(line) {
 
 function normalizeWhitespace(text) {
   return text.replace(/\s+/g, ' ').trim()
+}
+
+function formatLinePreview(lines, centerIndex, radius) {
+  if (lines.length === 0) {
+    return 'No file content available.'
+  }
+
+  const startIndex = Math.max(0, centerIndex - radius)
+  const endIndex = Math.min(lines.length, centerIndex + radius + 1)
+
+  return lines
+    .slice(startIndex, endIndex)
+    .map((line, offset) => `${startIndex + offset + 1}: ${line}`)
+    .join('\n')
 }
 
 function compareLines(actualLine, expectedLine) {
@@ -97,6 +127,64 @@ function compareLines(actualLine, expectedLine) {
   }
 
   return normalizeWhitespace(strippedActualLine) === normalizeWhitespace(strippedExpectedLine)
+}
+
+function collectBlockSearchDiagnostics(lines, needleLines, startIndex, endIndex) {
+  const exactMatchLines = []
+  const firstContextLineMatchLines = []
+  let bestPartialMatchLine = null
+  let bestPartialMatchPrefixLength = 0
+
+  for (let index = startIndex; index <= endIndex - needleLines.length; index += 1) {
+    let matchedPrefixLength = 0
+
+    for (let offset = 0; offset < needleLines.length; offset += 1) {
+      if (!compareLines(lines[index + offset], needleLines[offset])) {
+        break
+      }
+
+      matchedPrefixLength += 1
+    }
+
+    if (matchedPrefixLength > 0) {
+      firstContextLineMatchLines.push(index)
+    }
+
+    if (matchedPrefixLength > bestPartialMatchPrefixLength) {
+      bestPartialMatchPrefixLength = matchedPrefixLength
+      bestPartialMatchLine = index
+    }
+
+    if (matchedPrefixLength === needleLines.length) {
+      exactMatchLines.push(index)
+      if (exactMatchLines.length > 1) {
+        break
+      }
+    }
+  }
+
+  const previewLine = bestPartialMatchLine ?? startIndex
+  const previewRadius = Math.max(2, needleLines.length + 1)
+
+  return {
+    bestPartialMatchLine: bestPartialMatchLine === null ? null : bestPartialMatchLine + 1,
+    bestPartialMatchPreview: formatLinePreview(lines, previewLine, previewRadius),
+    bestPartialMatchPrefixLength,
+    exactMatchCount: exactMatchLines.length,
+    exactMatchLines: exactMatchLines.length > 0 ? exactMatchLines.map((lineIndex) => lineIndex + 1).join(', ') : 'none',
+    fileLineCount: endIndex,
+    firstContextLine: needleLines[0] ?? '',
+    firstContextLineMatchCount: firstContextLineMatchLines.length,
+    firstContextLineMatchLines:
+      firstContextLineMatchLines.length > 0
+        ? firstContextLineMatchLines.map((lineIndex) => lineIndex + 1).join(', ')
+        : 'none',
+    hunkContext: needleLines.join('\n'),
+    hunkLineCount: needleLines.length,
+    searchEndLine: endIndex,
+    searchStartLine: startIndex + 1,
+    searchWindowPreview: formatLinePreview(lines, startIndex, previewRadius),
+  }
 }
 
 function parsePatch(patchText) {
@@ -286,7 +374,7 @@ function hunkToReplacement(hunk) {
   return { oldLines, newLines, endOfFile: hunk.endOfFile }
 }
 
-function findUniqueBlock(haystackLines, needleLines, startIndex = 0) {
+function findUniqueBlock(haystackLines, needleLines, startIndex = 0, filePath = '.', resolvedPath = null) {
   if (needleLines.length === 0) {
     fail('Cannot search for an empty block.')
   }
@@ -314,7 +402,11 @@ function findUniqueBlock(haystackLines, needleLines, startIndex = 0) {
   }
 
   if (matches.length > 1) {
-    fail('Found multiple matches for update hunk context. Add more surrounding lines.')
+    fail('Found multiple matches for update hunk context. Add more surrounding lines.', {
+      ...collectBlockSearchDiagnostics(haystackLines, needleLines, startIndex, haystackLines.length),
+      filePath,
+      ...(resolvedPath === null ? {} : { resolvedPath }),
+    })
   }
 
   return matches[0]
@@ -366,11 +458,16 @@ async function applyUpdateFile(operation, cwd) {
   let mustRemoveTrailingNewline = false
 
   for (const hunk of operation.hunks) {
+    const logicalLength = effectiveLineCount(contentLines)
     const { oldLines, newLines, endOfFile } = hunkToReplacement(hunk)
-    const matchIndex = findUniqueBlock(contentLines, oldLines, searchStart)
+    const matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, operation.path, sourcePath)
 
     if (matchIndex === null) {
-      fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`)
+      fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`, {
+        ...collectBlockSearchDiagnostics(contentLines, oldLines, searchStart, logicalLength),
+        filePath: operation.path,
+        resolvedPath: sourcePath,
+      })
     }
 
     contentLines = [
@@ -448,6 +545,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`apply_patch failed: ${message}`)
+    const details = error && typeof error === 'object' ? error.details : null
+    if (details && typeof details === 'object') {
+      for (const [key, value] of Object.entries(details)) {
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          console.error(`${key}: ${value}`)
+        }
+      }
+    }
     process.exitCode = 1
   })
 }

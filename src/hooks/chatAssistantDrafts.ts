@@ -198,6 +198,33 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     }
   }
 
+  const updateActiveDraftWithFailureMessage = (failureMessage: string) => {
+    const draftAssistantId =
+      activeAssistantDraftId ??
+      [...streamedMessageOrder].reverse().find((entry) => entry.kind === 'assistant')?.id ??
+      null
+
+    if (!draftAssistantId) {
+      return
+    }
+
+    const draftAssistantMessage = draftAssistantMessages.get(draftAssistantId)
+    if (!draftAssistantMessage) {
+      return
+    }
+
+    const nextMessage = normalizeAssistantMessage({
+      ...draftAssistantMessage,
+      content: failureMessage,
+      reasoningCompletedAt: draftAssistantMessage.reasoningCompletedAt ?? undefined,
+      reasoningContent: undefined,
+    })
+
+    draftAssistantMessages.set(draftAssistantId, nextMessage)
+    input.updateLocalMessage(input.conversationId, draftAssistantId, () => nextMessage)
+    updateSnapshotMessage(draftAssistantId, nextMessage, { immediate: true })
+  }
+
   const updateStreamingIndicatorState = (draftAssistantId: string) => {
     input.updateConversationRuntimeState(input.conversationId, {
       streamingAssistantMessageId: draftAssistantId,
@@ -521,6 +548,11 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       })
       input.stopTextStreaming(input.conversationId)
       const finalizedAt = Date.now()
+      const normalizedFailureMessage = typeof failureMessage === 'string' ? failureMessage.trim() : ''
+      if (!wasAborted && normalizedFailureMessage.length > 0) {
+        updateActiveDraftWithFailureMessage(normalizedFailureMessage)
+      }
+
       const incompleteToolFailureMessage =
         failureMessage ??
         (wasAborted ? 'Tool execution aborted before completion.' : 'Tool execution ended before completion.')

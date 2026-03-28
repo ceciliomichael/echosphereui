@@ -307,24 +307,30 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     }
 
     const shouldRetainProgress = isRateLimitError(caughtError)
+    const providerLabel = input.runtimeSelection.providerLabel ?? 'the selected provider'
+    const failureMessage = toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`)
+
     if (draftManager) {
       if (shouldRetainProgress) {
         draftManager.showRateLimitRetryIndicator()
       } else {
-        draftManager.removeInsertedMessages()
+        draftManager.finalizeStreamedMessages(false, failureMessage)
       }
     }
 
     if (streamProgressPersistence) {
-      await streamProgressPersistence.flush()
+      const savedConversation = await streamProgressPersistence.flush()
+      if (savedConversation && savedConversation.id in input.conversationRuntimeStatesRef.current) {
+        input.upsertConversation(savedConversation)
+        input.updateConversationSummary(savedConversation)
+      }
     }
 
     if (shouldRetainProgress) {
       shouldKeepWaitingIndicatorActive = true
       input.setError(null)
     } else {
-      const providerLabel = input.runtimeSelection.providerLabel ?? 'the selected provider'
-      input.setError(toErrorMessage(caughtError, `Unable to get a response from ${providerLabel} right now.`))
+      input.setError(failureMessage)
     }
   } finally {
     releasePendingDraftReservation()
