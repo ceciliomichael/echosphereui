@@ -5,9 +5,9 @@ const TOOL_DESCRIPTIONS = {
   read: 'Read text file contents from the workspace. Read only if the file is already outdated in your historical context or you cannot calculate your changes, do not over-read the same file just for the sake of it.',
   glob: 'Find file paths by glob pattern inside the workspace.',
   grep: 'Search file contents by pattern inside the workspace.',
-  apply_patch: `Edit an existing workspace file using the *** Begin Patch / *** End Patch format. File paths may be relative to the workspace root or absolute paths inside the workspace. Only Update File hunks are supported.
+  apply_patch: `Edit an existing workspace file using the *** Begin Patch / *** End Patch format. File paths may be relative to the workspace root or absolute paths inside the workspace. Only Update File hunks are supported. Always read before you edit.
 
-How to write a reliable hunk:
+How to write a reliable hunk
 - Copy the exact current file text from the workspace.
 - Include 3 to 8 surrounding lines that uniquely identify the spot.
 - Avoid generic anchors like "import {" or "function".
@@ -22,8 +22,8 @@ Example:
 +  return "hi"
  }
 *** End Patch`,
-  edit: 'Edit files in the workspace only when the requested change will actually alter the file. Before calling edit, read the file and copy the exact current text you intend to replace. Include enough surrounding lines to uniquely anchor the replacement, and do not rely on stale memory or paraphrases. If the desired content already matches, do not call edit. After you edit, do not read the file back; assume and trust that the edit was successful.',
-  write: 'Write or overwrite a file in the workspace. After writing, do not read the file back; assume and trust that the write was successful.',
+  edit: 'Edit files in the workspace only when the requested change will actually alter the file. Before calling edit, read the file and copy the exact current text you intend to replace. Include enough surrounding lines to uniquely anchor the replacement, and do not rely on stale memory or paraphrases. If the desired content already matches, do not call edit. Always read before you edit, but never read after you edit, trust the tools to do their job.',
+  write: 'Write or overwrite a file in the workspace.',
   run_terminal: 'Run a shell command in a managed terminal session.',
   get_terminal_output: 'Read output from an existing terminal session.',
 } as const

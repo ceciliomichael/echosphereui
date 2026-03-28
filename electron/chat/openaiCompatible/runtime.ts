@@ -12,7 +12,10 @@ import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { buildPromptCacheKey } from '../prompts/promptCache'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
-import { buildSerializedAssistantTurnContent } from './assistantToolInvocationContext'
+import {
+  buildSerializedAssistantTurnContent,
+  buildSerializedAssistantTurnReasoningContent,
+} from './assistantToolInvocationContext'
 import {
   buildOpenAIClient,
   hasNonEmptyString,
@@ -43,7 +46,11 @@ interface StreamOpenAICompatibleTurnResult {
   toolCalls: OpenAICompatibleToolCall[]
 }
 
-function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | null {
+type OpenAICompatibleAssistantMessageWithReasoning = Extract<ChatCompletionMessageParam, { role: 'assistant' }> & {
+  reasoning_content?: string
+}
+
+function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam | OpenAICompatibleAssistantMessageWithReasoning | null {
   if (message.role === 'user') {
     const contentParts: ChatCompletionContentPart[] = []
 
@@ -78,9 +85,11 @@ function toOpenAICompatibleMessage(message: Message): ChatCompletionMessageParam
     if (!hasText(content)) {
       return null
     }
+    const reasoningContent = buildSerializedAssistantTurnReasoningContent(message)
 
     return {
       content,
+      ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
       role: 'assistant',
     }
   }

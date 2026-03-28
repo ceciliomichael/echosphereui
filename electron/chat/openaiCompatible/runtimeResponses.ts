@@ -12,7 +12,10 @@ import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { buildPromptCacheKey } from '../prompts/promptCache'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
-import { buildSerializedAssistantTurnContent } from './assistantToolInvocationContext'
+import {
+  buildSerializedAssistantTurnContent,
+  buildSerializedAssistantTurnReasoningContent,
+} from './assistantToolInvocationContext'
 import {
   buildOpenAIClient,
   hasText,
@@ -44,6 +47,10 @@ interface StreamOpenAICompatibleResponsesWithToolsInput {
   terminalExecutionMode?: AppTerminalExecutionMode
 }
 
+type OpenAICompatibleInputMessageWithReasoning = EasyInputMessage & {
+  reasoning_content?: string
+}
+
 function buildOpenAICompatibleUserContent(message: Message): ResponseInputMessageContentList {
   const content: ResponseInputMessageContentList = []
 
@@ -65,7 +72,7 @@ function buildOpenAICompatibleUserContent(message: Message): ResponseInputMessag
   return content
 }
 
-function toOpenAICompatibleInputMessage(message: Message): EasyInputMessage | null {
+function toOpenAICompatibleInputMessage(message: Message): OpenAICompatibleInputMessageWithReasoning | null {
   if (message.role === 'tool') {
     return null
   }
@@ -87,9 +94,11 @@ function toOpenAICompatibleInputMessage(message: Message): EasyInputMessage | nu
   if (!hasText(content)) {
     return null
   }
+  const reasoningContent = buildSerializedAssistantTurnReasoningContent(message)
 
   return {
     content,
+    ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
     role: 'assistant',
     type: 'message',
   }
@@ -98,7 +107,7 @@ function toOpenAICompatibleInputMessage(message: Message): EasyInputMessage | nu
 function buildOpenAICompatibleInput(messages: Message[]) {
   return messages
     .map(toOpenAICompatibleInputMessage)
-    .filter((value): value is EasyInputMessage => value !== null)
+    .filter((value): value is OpenAICompatibleInputMessageWithReasoning => value !== null)
 }
 
 function toResponsesToolChoice(forceToolChoice: 'none' | 'required' | undefined) {

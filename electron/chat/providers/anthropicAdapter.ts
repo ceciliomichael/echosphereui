@@ -9,7 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
-import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
+import { buildSerializedAssistantTurnContentWithInlineReasoning } from '../openaiCompatible/assistantToolInvocationContext'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import type { ChatProviderAdapter } from '../providerTypes'
 import {
@@ -45,7 +45,7 @@ function isAnthropicImageMimeType(value: string): value is AnthropicImageMimeTyp
 
 function toAnthropicNonToolMessage(message: Message): MessageParam | null {
   if (message.role === 'assistant') {
-    const content = buildSerializedAssistantTurnContent(message)?.trim() ?? ''
+    const content = buildSerializedAssistantTurnContentWithInlineReasoning(message)?.trim() ?? ''
     if (content.length === 0) {
       return null
     }

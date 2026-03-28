@@ -1,7 +1,7 @@
 import type { Content, GenerateContentResponse, Part } from '@google/genai/web'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
-import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
+import { buildSerializedAssistantTurnContentWithInlineReasoning } from '../openaiCompatible/assistantToolInvocationContext'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import type { ChatProviderAdapter } from '../providerTypes'
 import {
@@ -52,7 +52,7 @@ function buildGoogleUserParts(message: Message): Part[] {
 }
 
 function toGoogleContent(message: Message): Content | null {
-  const assistantContent = message.role === 'assistant' ? buildSerializedAssistantTurnContent(message) : null
+  const assistantContent = message.role === 'assistant' ? buildSerializedAssistantTurnContentWithInlineReasoning(message) : null
   const parts = message.role === 'assistant' ? (assistantContent ? [{ text: assistantContent }] : []) : buildGoogleUserParts(message)
   const hasVisiblePart = parts.some((part) => typeof part.text === 'string' || part.inlineData !== undefined)
   if (!hasVisiblePart) {

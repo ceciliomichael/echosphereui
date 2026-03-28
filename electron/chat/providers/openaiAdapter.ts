@@ -7,7 +7,10 @@ import type {
 } from 'openai/resources/responses/responses'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import type { ChatProviderAdapter } from '../providerTypes'
-import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
+import {
+  buildSerializedAssistantTurnContent,
+  buildSerializedAssistantTurnReasoningContent,
+} from '../openaiCompatible/assistantToolInvocationContext'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from './messageAttachments'
 import {
   buildOpenAIClient,
@@ -31,6 +34,10 @@ interface OpenAIStreamEventPayload {
   type?: unknown
 }
 
+type OpenAIInputMessageWithReasoning = EasyInputMessage & {
+  reasoning_content?: string
+}
+
 function buildOpenAIUserContent(message: Message): ResponseInputMessageContentList {
   const content: ResponseInputMessageContentList = []
 
@@ -52,7 +59,7 @@ function buildOpenAIUserContent(message: Message): ResponseInputMessageContentLi
   return content
 }
 
-function toOpenAIInputMessage(message: Message): EasyInputMessage | null {
+function toOpenAIInputMessage(message: Message): OpenAIInputMessageWithReasoning | null {
   if (message.role === 'tool') {
     return null
   }
@@ -74,16 +81,18 @@ function toOpenAIInputMessage(message: Message): EasyInputMessage | null {
   if (!hasText(content)) {
     return null
   }
+  const reasoningContent = buildSerializedAssistantTurnReasoningContent(message)
 
   return {
     content,
+    ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
     role: 'assistant',
     type: 'message',
   }
 }
 
 function buildOpenAIInput(messages: Message[]) {
-  return messages.map(toOpenAIInputMessage).filter((value): value is EasyInputMessage => value !== null)
+  return messages.map(toOpenAIInputMessage).filter((value): value is OpenAIInputMessageWithReasoning => value !== null)
 }
 
 function extractReasoningTextFromOutputItem(payload: OpenAIStreamEventPayload): string | null {

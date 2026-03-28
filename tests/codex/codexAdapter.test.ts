@@ -112,6 +112,50 @@ test('buildCodexInputMessages keeps assistant content and groups tool results wi
   ])
 })
 
+test('buildCodexInputMessages inlines assistant reasoning content when present', () => {
+  const messages: Message[] = [
+    {
+      content: 'I will inspect the workspace.',
+      id: 'assistant-message-1',
+      reasoningContent: 'Need to inspect files first, then patch.',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{
+        text: '<think>\nNeed to inspect files first, then patch.\n</think>\n\nI will inspect the workspace.',
+        type: 'output_text',
+      }],
+      role: 'assistant',
+    },
+  ])
+})
+
+test('buildCodexInputMessages omits inline reasoning block when assistant reasoning is empty', () => {
+  const messages: Message[] = [
+    {
+      content: 'I will inspect the workspace.',
+      id: 'assistant-message-1',
+      reasoningContent: '   ',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{
+        text: 'I will inspect the workspace.',
+        type: 'output_text',
+      }],
+      role: 'assistant',
+    },
+  ])
+})
+
 test('buildCodexInputMessages omits tool-only assistant turns that have no assistant text content', () => {
   const messages: Message[] = [
     {

@@ -114,7 +114,9 @@ export function WorkspaceExplorerPanelView({
               <FileIcon size={14} className="shrink-0" style={{ color: fileIconConfig?.color }} />
             ) : null}
             <span className="truncate">{entry.name}</span>
-            {isLoading ? <RefreshCw size={12} className="ml-auto shrink-0 animate-spin text-subtle-foreground" /> : null}
+            {isLoading && !isExpanded ? (
+              <RefreshCw size={12} className="ml-auto shrink-0 animate-spin text-subtle-foreground" />
+            ) : null}
           </button>
         </li>
       )

@@ -1,5 +1,7 @@
 import type { ChatMode, Message } from '../../../src/types/chat'
-import { buildSerializedAssistantTurnContent } from '../openaiCompatible/assistantToolInvocationContext'
+import {
+  buildSerializedAssistantTurnContentWithInlineReasoning,
+} from '../openaiCompatible/assistantToolInvocationContext'
 import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
 import { ensureToolOutputMessageEnvelope } from '../openaiCompatible/toolResultReplayEnvelope'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
@@ -48,7 +50,7 @@ function hasText(value: unknown): value is string {
 
 export function toCodexInputMessage(message: Message): CodexInputMessage | null {
   if (message.role === 'assistant') {
-    const content = buildSerializedAssistantTurnContent(message)
+    const content = buildSerializedAssistantTurnContentWithInlineReasoning(message)
     if (!hasText(content)) {
       return null
     }
