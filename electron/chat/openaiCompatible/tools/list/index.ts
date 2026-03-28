@@ -7,7 +7,12 @@ import {
   resolveToolPath,
   toDisplayPath,
 } from '../filesystemToolUtils'
-import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from '../gitignoreMatcher'
+import {
+  isGitignored,
+  loadGitignoreMatchers,
+  shouldAlwaysShowEntry,
+  shouldIgnoreWorkspaceEntry,
+} from '../gitignoreMatcher'
 import { getToolDescription } from '../descriptionCatalog'
 import type { OpenAICompatibleToolDefinition } from '../../toolTypes'
 import { OpenAICompatibleToolError } from '../../toolTypes'
@@ -113,6 +118,10 @@ export const listTool: OpenAICompatibleToolDefinition = {
 
     const gitignoreMatchers = await loadGitignoreMatchers(normalizedRootPath, normalizedTargetPath)
     const visibleEntries = directoryEntries.filter((entry) => {
+      if (shouldIgnoreWorkspaceEntry(entry.name)) {
+        return false
+      }
+
       if (shouldAlwaysShowEntry(entry.name)) {
         return true
       }

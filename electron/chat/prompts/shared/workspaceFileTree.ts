@@ -1,6 +1,11 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from '../../openaiCompatible/tools/gitignoreMatcher'
+import {
+  isGitignored,
+  loadGitignoreMatchers,
+  shouldAlwaysShowEntry,
+  shouldIgnoreWorkspaceEntry,
+} from '../../openaiCompatible/tools/gitignoreMatcher'
 
 const MAX_TREE_DEPTH = 3
 const MAX_TREE_LINES = 120
@@ -59,7 +64,10 @@ async function readVisibleEntries(
       continue
     }
 
-    if (shouldAlwaysShowEntry(entry.name) || !isGitignored(absolutePath, isDirectory, matchers)) {
+    if (
+      !shouldIgnoreWorkspaceEntry(entry.name) &&
+      (shouldAlwaysShowEntry(entry.name) || !isGitignored(absolutePath, isDirectory, matchers))
+    ) {
       visibleEntries.push({
         absolutePath,
         isDirectory,

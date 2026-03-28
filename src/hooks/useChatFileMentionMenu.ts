@@ -25,8 +25,8 @@ interface UseChatFileMentionMenuInput {
 }
 
 const MAX_MENTION_RESULTS = 8
-const MAX_SCANNED_FILES = 1200
-const MAX_SCANNED_DIRECTORIES = 220
+const MAX_SCANNED_FILES = 10000
+const MAX_SCANNED_DIRECTORIES = 1000
 const ROOT_MENU_OPTION_COUNT = 2
 
 function normalizeRelativePath(relativePath: string) {
@@ -52,20 +52,40 @@ function toMentionLabel(relativePath: string, basenameCounts: ReadonlyMap<string
   return (basenameCounts.get(basename) ?? 0) > 1 ? normalizeRelativePath(relativePath) : basename
 }
 
+function normalizeMentionSearchValue(value: string) {
+  return normalizeRelativePath(value).toLowerCase()
+}
+
+function compactSearchValue(value: string) {
+  return normalizeMentionSearchValue(value).replace(/[.\s_-]+/gu, '')
+}
+
 function scoreMentionResult(relativePath: string, query: string) {
-  const normalizedPath = normalizeRelativePath(relativePath).toLowerCase()
-  const basename = getPathBasename(relativePath).toLowerCase()
+  const normalizedPath = normalizeMentionSearchValue(relativePath)
+  const normalizedBasename = getPathBasename(relativePath).toLowerCase()
+  const pathWithoutExtension = normalizedPath.replace(/\.[^./\\]+$/u, '')
+  const compactQuery = compactSearchValue(query)
+  const compactBasename = compactSearchValue(pathWithoutExtension.split('/').pop() ?? normalizedBasename)
+  const compactPath = compactSearchValue(pathWithoutExtension)
 
   if (query.length === 0) {
     return [0, normalizedPath.length] as const
   }
 
-  if (basename === query) {
+  if (normalizedBasename === query) {
     return [1, normalizedPath.length] as const
   }
 
-  if (basename.startsWith(query)) {
+  if (normalizedBasename.startsWith(query)) {
     return [2, normalizedPath.length] as const
+  }
+
+  if (compactQuery.length > 0 && compactBasename === compactQuery) {
+    return [2, normalizedPath.length] as const
+  }
+
+  if (compactQuery.length > 0 && compactBasename.startsWith(compactQuery)) {
+    return [3, normalizedPath.length] as const
   }
 
   if (normalizedPath.endsWith(`/${query}`)) {
@@ -74,6 +94,10 @@ function scoreMentionResult(relativePath: string, query: string) {
 
   if (normalizedPath.includes(query)) {
     return [4, normalizedPath.length] as const
+  }
+
+  if (compactQuery.length > 0 && compactPath.includes(compactQuery)) {
+    return [5, normalizedPath.length] as const
   }
 
   return null
@@ -245,12 +269,14 @@ export function useChatFileMentionMenu({
   }, [isOpen, workspaceMentionIndex?.workspaceRootPath, workspaceRootPath])
 
   const searchResults = useMemo(() => {
-    if (!workspaceMentionIndex || selectedMenuType === null) {
+    if (!workspaceMentionIndex) {
       return [] as ChatMentionMenuItem[]
     }
 
     const normalizedQuery = searchQuery.trim().toLowerCase()
-    const scoredResults = workspaceMentionIndex.entries.filter((item) => item.kind === selectedMenuType)
+    const scoredResults = workspaceMentionIndex.entries.filter((item) =>
+      selectedMenuType === null ? true : item.kind === selectedMenuType,
+    )
       .map((item) => {
         const score = scoreMentionResult(item.relativePath, normalizedQuery)
         return score
@@ -462,13 +488,15 @@ export function useChatFileMentionMenu({
         return false
       }
 
+      const hasSearchQuery = searchQuery.trim().length > 0
+
       if (event.key === 'Escape') {
         event.preventDefault()
         closeMenu()
         return true
       }
 
-      if (selectedMenuType === null) {
+      if (selectedMenuType === null && !hasSearchQuery) {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault()
           const direction = event.key === 'ArrowDown' ? 1 : -1
@@ -518,7 +546,7 @@ export function useChatFileMentionMenu({
 
       return false
     },
-    [closeMenu, handleSelectCategory, handleSelectMention, isOpen, searchResults, selectedIndex, selectedMenuType],
+    [closeMenu, handleSelectCategory, handleSelectMention, isOpen, searchQuery, searchResults, selectedIndex, selectedMenuType],
   )
 
   const handleBlur = useCallback(() => {

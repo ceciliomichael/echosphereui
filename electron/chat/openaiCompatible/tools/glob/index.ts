@@ -7,7 +7,12 @@ import {
   resolveToolPath,
   toDisplayPath,
 } from '../filesystemToolUtils'
-import { isGitignored, loadGitignoreMatchers, shouldAlwaysShowEntry } from '../gitignoreMatcher'
+import {
+  isGitignored,
+  loadGitignoreMatchers,
+  shouldAlwaysShowEntry,
+  shouldIgnoreWorkspaceEntry,
+} from '../gitignoreMatcher'
 import { getToolDescription } from '../descriptionCatalog'
 import { resolveRipgrepBinaryPath } from '../ripgrepBinary'
 import { runRipgrepGlob } from '../ripgrepGlobRunner'
@@ -81,7 +86,12 @@ export const globTool: OpenAICompatibleToolDefinition = {
     const visiblePaths: string[] = []
 
     for (const matchedPath of globResult.absolutePaths) {
-      if (shouldAlwaysShowEntry(path.basename(matchedPath))) {
+      const baseName = path.basename(matchedPath)
+      if (shouldIgnoreWorkspaceEntry(baseName)) {
+        continue
+      }
+
+      if (shouldAlwaysShowEntry(baseName)) {
         visiblePaths.push(matchedPath)
         continue
       }

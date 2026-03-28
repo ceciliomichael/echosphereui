@@ -26,6 +26,7 @@ interface ChatMentionMenuProps {
   results: readonly ChatMentionMenuItem[]
   highlightedIndex: number
   selectedMenuType: ChatMentionMenuType | null
+  searchQuery: string
   workspaceRootAvailable: boolean
 }
 
@@ -63,14 +64,16 @@ export function ChatMentionMenu({
   results,
   highlightedIndex,
   selectedMenuType,
+  searchQuery,
   workspaceRootAvailable,
 }: ChatMentionMenuProps) {
   if (!isOpen) {
     return null
   }
 
+  const hasSearchQuery = searchQuery.trim().length > 0
   const content =
-    selectedMenuType === null ? (
+    selectedMenuType === null && !hasSearchQuery ? (
       <div
         ref={menuRef}
         role="listbox"
@@ -82,7 +85,7 @@ export function ChatMentionMenu({
         <div onMouseLeave={onResetHighlight}>
           <div>
             {!workspaceRootAvailable ? (
-              <div className="px-2.5 py-2 text-sm text-subtle-foreground">Select a workspace folder to mention files.</div>
+              <div className="px-4 py-3 text-sm text-subtle-foreground">Select a workspace folder to mention files.</div>
             ) : (
               ROOT_OPTIONS.map((option, index) => {
                 const isHighlighted = index === highlightedIndex
@@ -102,7 +105,7 @@ export function ChatMentionMenu({
                     onMouseEnter={() => onHighlightIndex(index)}
                     onClick={() => onSelectCategory(option.kind)}
                     className={[
-                      'flex w-full items-center gap-3 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+                      'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-[background-color,color,box-shadow]',
                       isHighlighted
                         ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
                         : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',
@@ -124,23 +127,35 @@ export function ChatMentionMenu({
       <div
         ref={menuRef}
         role="listbox"
-        aria-label={selectedMenuType === 'folder' ? 'Folder mentions' : 'File mentions'}
+        aria-label={
+          selectedMenuType === 'folder'
+            ? 'Folder mentions'
+            : selectedMenuType === 'file'
+              ? 'File mentions'
+              : 'File and folder mentions'
+        }
         data-floating-menu-root="true"
         className="fixed z-40 w-[min(26rem,calc(100vw-1rem))] overflow-hidden rounded-[22px] border border-border bg-surface shadow-[0_10px_30px_rgba(15,23,42,0.08)]"
         style={menuStyle}
       >
         <div className="max-h-[200px] overflow-y-auto" onMouseLeave={onResetHighlight}>
           {!workspaceRootAvailable ? (
-            <div className="px-2.5 py-2 text-sm text-subtle-foreground">
+            <div className="px-4 py-3 text-sm text-subtle-foreground">
               Select a workspace folder to mention files.
             </div>
           ) : loading ? (
-            <div className="px-2.5 py-2 text-sm text-subtle-foreground">
+            <div className="px-4 py-3 text-sm text-subtle-foreground">
               Loading files...
             </div>
           ) : results.length === 0 ? (
-            <div className="px-2.5 py-2 text-sm text-subtle-foreground">
-              {selectedMenuType === 'folder' ? 'Type to search folders...' : 'Type to search files...'}
+            <div className="px-4 py-3 text-sm text-subtle-foreground">
+              {searchQuery.trim().length > 0
+                ? 'No matching options'
+                : selectedMenuType === 'folder'
+                  ? 'Type to search folders...'
+                  : selectedMenuType === 'file'
+                    ? 'Type to search files...'
+                    : 'Type to search files or folders...'}
             </div>
           ) : (
             results.map((item, index) => {
@@ -162,7 +177,7 @@ export function ChatMentionMenu({
                   onMouseEnter={() => onHighlightIndex(index)}
                   onClick={() => onSelect(item)}
                   className={[
-                    'flex w-full items-center gap-2 px-2.5 py-2 text-left transition-[background-color,color,box-shadow]',
+                    'flex w-full items-center gap-2 px-4 py-2.5 text-left transition-[background-color,color,box-shadow]',
                     isHighlighted
                       ? 'bg-[var(--dropdown-option-active-surface)] text-foreground shadow-sm'
                       : 'text-foreground hover:bg-[var(--dropdown-option-active-surface)]',

@@ -366,6 +366,7 @@ export function ChatInput({
             results={mentionMenu.searchResults}
             highlightedIndex={mentionMenu.highlightedIndex}
             selectedMenuType={mentionMenu.selectedMenuType}
+            searchQuery={mentionMenu.searchQuery}
             workspaceRootAvailable={mentionMenu.workspaceRootAvailable}
           />
         </div>

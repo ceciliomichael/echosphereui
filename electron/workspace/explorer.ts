@@ -1,5 +1,11 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import {
+  isGitignored,
+  loadGitignoreMatchers,
+  shouldAlwaysShowEntry,
+  shouldIgnoreWorkspaceEntry,
+} from '../chat/openaiCompatible/tools/gitignoreMatcher'
 import type {
   WorkspaceExplorerCreateEntryInput,
   WorkspaceExplorerCreateEntryResult,
@@ -18,8 +24,6 @@ import type {
 } from '../../src/types/chat'
 
 const DEFAULT_RELATIVE_PATH = '.'
-const IGNORED_DIRECTORY_NAMES = new Set(['.git', 'node_modules', '.next'])
-const IGNORED_FILE_NAMES = new Set(['.DS_Store', 'Thumbs.db'])
 const MAX_TEXT_FILE_BYTES = 256 * 1024
 
 function normalizeWorkspacePath(workspaceRootPath: string) {
@@ -54,13 +58,6 @@ async function assertWorkspaceDirectory(workspaceRootPath: string) {
   if (!stats.isDirectory()) {
     throw new Error(`Workspace root must be a directory: ${workspaceRootPath}`)
   }
-}
-
-function shouldIncludeEntry(entryName: string, isDirectory: boolean) {
-  if (isDirectory) {
-    return !IGNORED_DIRECTORY_NAMES.has(entryName)
-  }
-  return !IGNORED_FILE_NAMES.has(entryName)
 }
 
 function sortWorkspaceEntries(entries: WorkspaceExplorerEntry[]) {
@@ -156,6 +153,7 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
   }
 
   const directoryEntries = await fs.readdir(target.absolutePath, { withFileTypes: true })
+  const gitignoreMatchers = await loadGitignoreMatchers(workspaceRootPath, target.absolutePath)
   const explorerEntries: WorkspaceExplorerEntry[] = []
   for (const directoryEntry of directoryEntries) {
     if (directoryEntry.isSymbolicLink()) {
@@ -165,7 +163,13 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
     if (!isDirectory && !directoryEntry.isFile()) {
       continue
     }
-    if (!shouldIncludeEntry(directoryEntry.name, isDirectory)) {
+    if (shouldIgnoreWorkspaceEntry(directoryEntry.name)) {
+      continue
+    }
+    if (
+      !shouldAlwaysShowEntry(directoryEntry.name) &&
+      isGitignored(path.join(target.absolutePath, directoryEntry.name), isDirectory, gitignoreMatchers)
+    ) {
       continue
     }
     const entryRelativePath =
