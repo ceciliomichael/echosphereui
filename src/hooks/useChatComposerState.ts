@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isHumanUserMessage } from '../lib/chatMessageMetadata'
+import { buildChatMentionPathMap, collapseChatMentionMarkup } from '../lib/chatMentions'
 import type { ChatAttachment, Message } from '../types/chat'
 
 function getAttachmentFingerprint(attachment: ChatAttachment) {
@@ -38,6 +39,7 @@ export function useChatComposerState(messages: Message[]) {
   const [editComposerFocusSignal, setEditComposerFocusSignal] = useState(0)
   const [editInitialValue, setEditInitialValue] = useState('')
   const [editInitialAttachments, setEditInitialAttachments] = useState<ChatAttachment[]>([])
+  const [editComposerMentionPathMap, setEditComposerMentionPathMap] = useState<Map<string, string>>(() => new Map())
   const messagesRef = useRef(messages)
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export function useChatComposerState(messages: Message[]) {
     setEditComposerAttachments([])
     setEditInitialValue('')
     setEditInitialAttachments([])
+    setEditComposerMentionPathMap(new Map())
   }, [])
 
   const startEditingMessage = useCallback((messageId: string) => {
@@ -60,11 +63,13 @@ export function useChatComposerState(messages: Message[]) {
       return
     }
 
+    const collapsedContent = collapseChatMentionMarkup(targetMessage.content)
     setEditingMessageId(messageId)
-    setEditComposerValue(targetMessage.content)
+    setEditComposerValue(collapsedContent)
     setEditComposerAttachments(targetMessage.attachments ?? [])
-    setEditInitialValue(targetMessage.content)
+    setEditInitialValue(collapsedContent)
     setEditInitialAttachments(targetMessage.attachments ?? [])
+    setEditComposerMentionPathMap(buildChatMentionPathMap(targetMessage.content))
     setEditComposerFocusSignal((currentValue) => currentValue + 1)
   }, [])
 
@@ -74,6 +79,7 @@ export function useChatComposerState(messages: Message[]) {
     setEditComposerAttachments([])
     setEditInitialValue('')
     setEditInitialAttachments([])
+    setEditComposerMentionPathMap(new Map())
   }, [])
 
   const isEditComposerDirty =
@@ -88,6 +94,7 @@ export function useChatComposerState(messages: Message[]) {
     setEditComposerValue,
     editComposerAttachments,
     setEditComposerAttachments,
+    editComposerMentionPathMap,
     isEditComposerDirty,
     editingMessageId,
     editComposerFocusSignal,

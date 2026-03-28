@@ -42,6 +42,15 @@ export function ChatMentionTextarea({
 }: ChatMentionTextareaProps) {
   const backdropRef = useRef<HTMLDivElement>(null)
   const [scrollOffset, setScrollOffset] = useState({ left: 0, top: 0 })
+  const textareaStyle = useMemo(
+    () =>
+      ({
+        ...style,
+        caretColor: 'var(--color-foreground)',
+        color: 'transparent',
+      }) as CSSProperties,
+    [style],
+  )
 
   const textareaClassName = useMemo(
     () =>
@@ -148,7 +157,7 @@ export function ChatMentionTextarea({
         rows={rows}
         spellCheck={false}
         className={textareaClassName}
-        style={style}
+        style={textareaStyle}
       />
     </div>
   )

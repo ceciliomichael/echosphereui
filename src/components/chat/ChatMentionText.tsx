@@ -17,7 +17,7 @@ export const ChatMentionText = memo(function ChatMentionText({
   const segments = splitChatMentionSegments(text, mentionPathMap)
   const rootClassName = [
     'whitespace-pre-wrap [overflow-wrap:anywhere]',
-    variant === 'backdrop' ? 'text-transparent' : 'text-foreground',
+    variant === 'backdrop' ? 'select-none text-foreground' : 'text-foreground',
     className,
   ]
     .filter(Boolean)
@@ -31,19 +31,12 @@ export const ChatMentionText = memo(function ChatMentionText({
     <div className={rootClassName}>
       {segments.map((segment, index) => {
         if (segment.type === 'text') {
-          return (
-            <span key={`text-${index}`} className={variant === 'backdrop' ? 'text-transparent' : undefined}>
-              {segment.text}
-            </span>
-          )
+          return <span key={`text-${index}`}>{segment.text}</span>
         }
 
-        const isBackdrop = variant === 'backdrop'
         const mentionClassName = [
           'inline-block',
-          isBackdrop
-            ? 'rounded-[4px] bg-[rgba(59,130,246,0.18)] text-transparent'
-            : 'rounded-md bg-[#DBEAFE] px-1.5 py-0.5 font-medium text-[#1D4ED8]',
+          'rounded-[4px] bg-[rgba(59,130,246,0.18)] font-medium text-foreground',
         ]
           .filter(Boolean)
           .join(' ')

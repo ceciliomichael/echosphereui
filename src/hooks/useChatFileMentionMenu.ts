@@ -18,6 +18,7 @@ interface ChatFileMentionIndex {
 
 interface UseChatFileMentionMenuInput {
   disabled?: boolean
+  initialMentionPathMap?: ReadonlyMap<string, string> | null
   textareaRef: RefObject<HTMLTextAreaElement | null>
   value: string
   workspaceRootPath: string | null | undefined
@@ -168,6 +169,7 @@ async function loadWorkspaceMentionIndex(workspaceRootPath: string) {
 
 export function useChatFileMentionMenu({
   disabled = false,
+  initialMentionPathMap = null,
   onValueChange,
   textareaRef,
   value,
@@ -180,7 +182,9 @@ export function useChatFileMentionMenu({
   const [selectedMenuType, setSelectedMenuType] = useState<ChatMentionMenuType | null>(null)
   const [isIndexLoading, setIsIndexLoading] = useState(false)
   const [workspaceMentionIndex, setWorkspaceMentionIndex] = useState<ChatFileMentionIndex | null>(null)
-  const [mentionPathMap, setMentionPathMap] = useState<Map<string, string>>(() => new Map())
+  const [mentionPathMap, setMentionPathMap] = useState<Map<string, string>>(
+    () => (initialMentionPathMap ? new Map(initialMentionPathMap) : new Map()),
+  )
   const mentionPathMapRef = useRef(mentionPathMap)
   const suppressNextTriggerUpdateRef = useRef(false)
   const anchorRef = useRef<HTMLDivElement | null>(null)

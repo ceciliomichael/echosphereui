@@ -8,7 +8,9 @@ import { useChatSessionState } from './useChatSessionState'
 import { useChatStreamingState } from './useChatStreamingState'
 import { useInitializeChatHistory } from './useInitializeChatHistory'
 import type { AppLanguage } from '../lib/appSettings'
-import type { ChatMode, RevertEditSession } from '../types/chat'
+import type { ChatMode, Message, RevertEditSession } from '../types/chat'
+
+const EMPTY_MESSAGES: Message[] = []
 
 interface UseChatMessagesInput {
   language: AppLanguage
@@ -27,7 +29,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     shouldInitializeHistory,
   } = input
   const sessionState = useChatSessionState(language)
-  const messages = sessionState.activeConversationState?.conversation.messages ?? []
+  const messages = sessionState.activeConversationState?.conversation.messages ?? EMPTY_MESSAGES
   const isSending = sessionState.activeConversationState?.isSending ?? false
   const composerState = useChatComposerState(messages)
   const activeConversationId = sessionState.activeConversationId
@@ -316,6 +318,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     deleteConversation: conversationActions.deleteConversation,
     editComposerAttachments: composerState.editComposerAttachments,
     editComposerFocusSignal: composerState.editComposerFocusSignal,
+    editComposerMentionPathMap: composerState.editComposerMentionPathMap,
     editComposerValue: composerState.editComposerValue,
     editingMessageId,
     error: sessionState.error,

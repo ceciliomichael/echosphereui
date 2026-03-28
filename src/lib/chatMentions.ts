@@ -139,6 +139,44 @@ export function splitChatMentionSegments(
   return segments
 }
 
+export function collapseChatMentionMarkup(text: string) {
+  if (text.length === 0) {
+    return text
+  }
+
+  const matches = findChatMentionMatches(text)
+  if (matches.length === 0) {
+    return text
+  }
+
+  let collapsedText = ''
+  let lastIndex = 0
+
+  for (const match of matches) {
+    if (match.start < lastIndex) {
+      continue
+    }
+
+    collapsedText += text.slice(lastIndex, match.start)
+    collapsedText += `@${match.label}`
+    lastIndex = match.end
+  }
+
+  collapsedText += text.slice(lastIndex)
+  return collapsedText
+}
+
+export function buildChatMentionPathMap(text: string) {
+  const mentionPathMap = new Map<string, string>()
+  for (const match of findChatMentionMatches(text)) {
+    if (match.path) {
+      mentionPathMap.set(match.label, match.path)
+    }
+  }
+
+  return mentionPathMap
+}
+
 export function getChatMentionTriggerState(text: string, cursorPosition: number): ChatMentionTriggerState | null {
   const clampedCursorPosition = Math.max(0, Math.min(cursorPosition, text.length))
   const textBeforeCursor = text.slice(0, clampedCursorPosition)

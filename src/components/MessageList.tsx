@@ -24,6 +24,7 @@ interface MessageListProps {
   composerValue: string;
   composerFocusSignal?: number;
   editComposerDirty?: boolean;
+  editComposerMentionPathMap?: ReadonlyMap<string, string>;
   editingMessageId?: string | null;
   isSending?: boolean;
   messages: Message[];
@@ -62,6 +63,7 @@ interface MessageRowProps {
   composerFocusSignal?: number;
   composerValue: string;
   editComposerDirty: boolean;
+  editComposerMentionPathMap?: ReadonlyMap<string, string>;
   isEditing: boolean;
   isSending: boolean;
   isStreaming: boolean;
@@ -102,6 +104,7 @@ const MessageRow = memo(
     composerFocusSignal,
     composerValue,
     editComposerDirty,
+    editComposerMentionPathMap,
     isEditing,
     isSending: _isSending,
     isStreaming,
@@ -172,6 +175,7 @@ const MessageRow = memo(
                 selectedModelId={selectedModelId}
                 showReasoningEffortSelector={showReasoningEffortSelector}
                 workspaceRootPath={workspaceRootPath}
+                initialMentionPathMap={editComposerMentionPathMap}
               />
             </div>
           ) : (
@@ -236,6 +240,7 @@ const MessageRow = memo(
       previousProps.composerValue === nextProps.composerValue &&
       previousProps.composerAttachments === nextProps.composerAttachments &&
       previousProps.composerFocusSignal === nextProps.composerFocusSignal &&
+      previousProps.editComposerMentionPathMap === nextProps.editComposerMentionPathMap &&
       previousProps.isSending === nextProps.isSending &&
       previousProps.chatModeSelectorDisabled ===
         nextProps.chatModeSelectorDisabled &&
@@ -257,6 +262,7 @@ export function MessageList({
   conversationId,
   composerAttachments,
   editComposerDirty = false,
+  editComposerMentionPathMap,
   messages,
   onAbortStreamingResponse,
   editingMessageId = null,
@@ -340,6 +346,7 @@ export function MessageList({
               composerFocusSignal={composerFocusSignal}
               composerValue={composerValue}
               editComposerDirty={editComposerDirty}
+              editComposerMentionPathMap={editComposerMentionPathMap}
               isEditing={editingMessageId === msg.id}
               isSending={isSending}
               isStreaming={streamingAssistantMessageId === msg.id}

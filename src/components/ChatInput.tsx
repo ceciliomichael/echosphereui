@@ -52,6 +52,7 @@ interface ChatInputProps {
   onTerminalExecutionModeChange?: (mode: AppTerminalExecutionMode) => void
   onSend: (value: string) => void
   selectedChatMode?: ChatMode
+  initialMentionPathMap?: ReadonlyMap<string, string> | null
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
   selectedModelId?: string
@@ -84,6 +85,7 @@ export function ChatInput({
   isEditing = false,
   isStreaming = false,
   selectedChatMode = 'agent',
+  initialMentionPathMap = null,
   reasoningEffort = 'medium',
   reasoningEffortOptions = [],
   selectedModelId = '',
@@ -133,6 +135,7 @@ export function ChatInput({
     showRuntimeTargetControl || showTerminalExecutionModeControl || showGitBranchSelector
   const mentionMenu = useChatFileMentionMenu({
     disabled,
+    initialMentionPathMap,
     onValueChange,
     textareaRef,
     value,

@@ -295,6 +295,7 @@ export function ChatInterfaceContent({
                   chatModeOptions={chatModeOptions}
                   editingMessageId={chatMessages.editingMessageId}
                   editComposerDirty={chatMessages.isEditComposerDirty}
+                  editComposerMentionPathMap={chatMessages.editComposerMentionPathMap}
                   onChatModeChange={chatMessages.setSelectedChatMode}
                   onToolDecisionSubmit={handleToolDecisionSubmit}
                   onEditUserMessage={chatMessages.startEditingMessage}

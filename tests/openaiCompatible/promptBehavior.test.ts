@@ -37,24 +37,30 @@ test('plan prompt stays compact and scope-first', () => {
 
   assert.match(prompt, /<plan_mode>/u)
   assert.match(prompt, /<identity>\n## Identity/u)
-  assert.match(prompt, /You are Echo in Plan mode\. Help shape a practical, implementation-ready plan/u)
+  assert.match(
+    prompt,
+    /You are Echo in Plan mode\. Focus on producing a clear, practical, maintainable, testable, and scalable plan that can be implemented directly\./u,
+  )
   assert.match(prompt, /<workspace_context>\n## Workspace Context/u)
-  assert.match(prompt, /<instruction_precedence>\n## Instruction Priority/u)
-  assert.match(prompt, /Higher-priority instructions take precedence: system, developer, user, then repository instructions included in the prompt\./u)
-  assert.match(prompt, /<agents_scope>\n## Repository Instruction Scope/u)
-  assert.match(prompt, /Repository instruction files apply to the directory that contains them and all descendant paths\./u)
+  assert.match(prompt, /<maintainability>\n## Maintainability/u)
+  assert.match(
+    prompt,
+    /Prefer maintainable, testable, scalable changes that are easy for other engineers to extend\./u,
+  )
+  assert.match(prompt, /Optimize for long-term code quality over the shortest path\./u)
+  assert.match(
+    prompt,
+    /Match repository conventions unless they clearly conflict with correctness or maintainability\./u,
+  )
   assert.match(prompt, /<workspace_folder_tree>\n## Workspace Folder Tree \(gitignore-filtered\)/u)
   assert.match(prompt, /<workflow>\n## Planning Approach/u)
-  assert.match(prompt, /Start by identifying the relevant files, behaviors, and constraints\./u)
-  assert.match(prompt, /Build a concrete implementation plan with affected files, responsibility boundaries, and verification steps\./u)
-  assert.match(prompt, /Preserve multiline structure and indentation when describing edits or examples\./u)
-  assert.match(prompt, /<plan_shape>\n## Preferred Plan Shape/u)
-  assert.match(prompt, /Goal or desired outcome\./u)
-  assert.match(prompt, /<toolusage>\n## Tool Guidance/u)
-  assert.match(prompt, /Use only planning tools available in this mode\./u)
-  assert.match(prompt, /`ask_question` is helpful when a missing decision would materially affect correctness or scope\./u)
-  assert.match(prompt, /Use `list`, `read`, `glob`, and `grep` to inspect the workspace before proposing edits\./u)
-  assert.match(prompt, /Use `ready_implement` when the plan is ready for approval\./u)
-  assert.match(prompt, /<shell_context>\n## Shell Context/u)
-  assert.match(prompt, /Terminal execution mode is `full`/u)
+  assert.match(prompt, /Identify the relevant files, behaviors, and constraints first\./u)
+  assert.match(prompt, /Build a concrete implementation plan with clear steps and file-level impact\./u)
+  assert.match(prompt, /Keep the scope tight, practical, and reversible\./u)
+  assert.match(prompt, /Include verification only when it adds real value\./u)
+  assert.equal(prompt.includes('<instruction_precedence>'), false)
+  assert.equal(prompt.includes('<agents_scope>'), false)
+  assert.equal(prompt.includes('<plan_shape>'), false)
+  assert.equal(prompt.includes('<toolusage>'), false)
+  assert.equal(prompt.includes('<shell_context>'), false)
 })
