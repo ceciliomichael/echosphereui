@@ -100,6 +100,20 @@ test('get_terminal_output can continue polling an active run_terminal session', 
     assert.equal(followUpResult.processId, null)
     assert.equal(typeof combinedOutput, 'string')
     assert.doesNotMatch(combinedOutput, /Chunk ID:/u)
+
+    const repeatedResult = await writeStdinTool.execute(
+      {
+        chars: '',
+        session_id: initialResult.processId,
+        yield_time_ms: 0,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(repeatedResult.ok, true)
+    assert.equal(repeatedResult.operation, 'get_terminal_output')
+    assert.equal(repeatedResult.processId, null)
+    assert.equal(typeof repeatedResult.output, 'string')
   })
 })
 

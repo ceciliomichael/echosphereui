@@ -303,7 +303,7 @@ export function ChatInterfaceContent({
                   composerValue={chatMessages.editComposerValue}
                   onComposerAttachmentsChange={chatMessages.setEditComposerAttachments}
                   onComposerValueChange={chatMessages.setEditComposerValue}
-                  onSendEditedMessage={() => void chatMessages.sendEditedMessage(runtimeSelection)}
+                  onSendEditedMessage={(value) => void chatMessages.sendEditedMessage(runtimeSelection, value)}
                   onAbortStreamingResponse={chatMessages.abortStreamingResponse}
                   onCancelEditingMessage={chatMessages.cancelEditingMessage}
                   composerFocusSignal={chatMessages.editComposerFocusSignal}
@@ -321,7 +321,7 @@ export function ChatInterfaceContent({
                   streamingAssistantMessageId={chatMessages.streamingAssistantMessageId}
                   streamingWaitingIndicatorVariant={chatMessages.streamingWaitingIndicatorVariant}
                   streamingTextActive={chatMessages.isStreamingTextActive}
-                  workspaceRootPath={chatMessages.activeConversationRootPath}
+                  workspaceRootPath={activeWorkspacePath}
                 />
               )}
             </div>
@@ -334,7 +334,7 @@ export function ChatInterfaceContent({
                   value={chatMessages.mainComposerValue}
                   onAttachmentsChange={chatMessages.setMainComposerAttachments}
                   onValueChange={chatMessages.setMainComposerValue}
-                  onSend={() => void chatMessages.sendNewMessage(runtimeSelection)}
+                  onSend={(value) => void chatMessages.sendNewMessage(runtimeSelection, value)}
                   onAbort={chatMessages.abortStreamingResponse}
                   chatModeOptions={chatModeOptions}
                   isStreaming={chatMessages.isStreamingResponse}
@@ -361,6 +361,7 @@ export function ChatInterfaceContent({
                   showReasoningEffortSelector={chatRuntimeConfig.showReasoningEffortSelector}
                   terminalExecutionMode={settings.terminalExecutionMode}
                   onTerminalExecutionModeChange={interfaceController.handleTerminalExecutionModeChange}
+                  workspaceRootPath={activeWorkspacePath}
                 />
               </div>
             </div>

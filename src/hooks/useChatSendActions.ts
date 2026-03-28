@@ -139,7 +139,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
   }, [getConversationState, waitForAbortableConversationId, waitForConversationRunState])
 
   const sendNewMessage = useCallback(
-    async (runtimeSelection: ChatRuntimeSelection) => {
+    async (runtimeSelection: ChatRuntimeSelection, messageText?: string) => {
       if (
         actionInFlightRef.current ||
         input.activeConversationStateIsSending ||
@@ -148,7 +148,8 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         return
       }
 
-      const trimmedText = input.mainComposerValue.trim()
+      const nextMessageText = messageText ?? input.mainComposerValue
+      const trimmedText = nextMessageText.trim()
       if (trimmedText.length === 0 && input.mainComposerAttachments.length === 0) {
         return
       }
@@ -198,13 +199,14 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
   )
 
   const sendEditedMessage = useCallback(
-    async (runtimeSelection: ChatRuntimeSelection) => {
+    async (runtimeSelection: ChatRuntimeSelection, messageText?: string) => {
       const conversationId = input.activeConversationIdRef.current ?? input.activeConversationId
       if (actionInFlightRef.current || input.editingMessageId === null || conversationId === null) {
         return
       }
 
-      const trimmedText = input.editComposerValue.trim()
+      const nextMessageText = messageText ?? input.editComposerValue
+      const trimmedText = nextMessageText.trim()
       if (trimmedText.length === 0 && input.editComposerAttachments.length === 0) {
         return
       }
@@ -276,7 +278,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         })
       }
     },
-    [abortActiveStreamIfNeeded, input],
+    [abortActiveStreamIfNeeded, getConversationState, input],
   )
 
   const abortStreamingResponse = useCallback(async () => {

@@ -2,15 +2,12 @@ import type { KeyboardEvent, MouseEvent } from 'react'
 import { Undo2 } from 'lucide-react'
 import { chatMessageSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
+import { ChatMentionText } from './chat/ChatMentionText'
 
 interface UserMessageProps {
   content: string
   onEdit?: () => void
   onRevert?: () => void
-}
-
-function UserMessageBody({ content }: Pick<UserMessageProps, 'content'>) {
-  return content.trim().length > 0 ? <div>{content}</div> : null
 }
 
 export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
@@ -46,7 +43,7 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
       aria-label={onEdit ? 'Edit message' : undefined}
     >
       <div className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-        <UserMessageBody content={content} />
+        {content.trim().length > 0 ? <ChatMentionText text={content} /> : null}
       </div>
 
       {onRevert ? (

@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, typ
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../lib/chatStyles'
+import { ChatMentionMenu } from './chat/ChatMentionMenu'
+import { ChatMentionTextarea } from './chat/ChatMentionTextarea'
+import { useChatFileMentionMenu } from '../hooks/useChatFileMentionMenu'
+import { useChatMentionNavigation } from '../hooks/useChatMentionNavigation'
 import type {
   AppTerminalExecutionMode,
   ChatAttachment,
@@ -46,7 +50,7 @@ interface ChatInputProps {
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onTerminalExecutionModeChange?: (mode: AppTerminalExecutionMode) => void
-  onSend: () => void
+  onSend: (value: string) => void
   selectedChatMode?: ChatMode
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
@@ -55,6 +59,7 @@ interface ChatInputProps {
   showTerminalExecutionModeSelector?: boolean
   showReasoningEffortSelector?: boolean
   terminalExecutionMode?: AppTerminalExecutionMode
+  workspaceRootPath?: string | null
   value: string
   onValueChange: (value: string) => void
   sendOnEnter?: boolean
@@ -100,6 +105,7 @@ export function ChatInput({
   onGitBranchRefresh,
   showRuntimeTargetSelector = false,
   showTerminalExecutionModeSelector = false,
+  workspaceRootPath = null,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -125,6 +131,21 @@ export function ChatInput({
   const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
   const showDetachedFooterControls =
     showRuntimeTargetControl || showTerminalExecutionModeControl || showGitBranchSelector
+  const mentionMenu = useChatFileMentionMenu({
+    disabled,
+    onValueChange,
+    textareaRef,
+    value,
+    workspaceRootPath,
+  })
+  const clearMentionPathMap = mentionMenu.clearMentionPathMap
+  const mentionNavigation = useChatMentionNavigation({
+    onMentionBoundaryJump: mentionMenu.markTriggerUpdateSuppressed,
+    mentionPathMap: mentionMenu.mentionPathMap,
+    onValueChange,
+    textareaRef,
+    value,
+  })
   const resolvedActionButtonMode =
     actionButtonMode === 'auto' ? (isStreaming && typeof onAbort === 'function' ? 'abort' : 'send') : actionButtonMode
   const canAbort = resolvedActionButtonMode === 'abort' && typeof onAbort === 'function'
@@ -142,7 +163,9 @@ export function ChatInput({
 
   function handleSend() {
     if (!canSend) return
-    onSend()
+    mentionMenu.closeMenu()
+    onSend(mentionMenu.expandValueForSend(value))
+    mentionMenu.clearMentionPathMap()
   }
 
   function handlePrimaryAction() {
@@ -155,6 +178,14 @@ export function ChatInput({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionMenu.handleKeyDown(e)) {
+      return
+    }
+
+    if (mentionNavigation.handleKeyDown(e)) {
+      return
+    }
+
     if (sendOnEnter && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handlePrimaryAction()
@@ -222,17 +253,6 @@ export function ChatInput({
     setAttachmentError(null)
   }
 
-  function handleInput() {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-  }
-
-  useEffect(() => {
-    handleInput()
-  }, [value])
-
   useEffect(() => {
     if (focusSignal === undefined) {
       return
@@ -279,6 +299,14 @@ export function ChatInput({
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [isInline, isEditing, onCancelEdit])
 
+  useEffect(() => {
+    if (value.trim().length > 0 || disabled) {
+      return
+    }
+
+    clearMentionPathMap()
+  }, [clearMentionPathMap, disabled, value])
+
   return (
     <div ref={containerRef} className="w-full">
       <div className={`${chatInputSurfaceClassName} ${isInline ? 'px-4 py-3' : 'p-3'}`}>
@@ -304,20 +332,41 @@ export function ChatInput({
           </div>
         ) : null}
 
-        <div>
-          <textarea
-            ref={textareaRef}
+        <div ref={mentionMenu.anchorRef} className="relative">
+          <ChatMentionTextarea
+            textareaRef={textareaRef}
             value={value}
-            onChange={(e) => onValueChange(e.target.value)}
+            onChange={(event) => mentionMenu.handleValueChange(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            onInput={handleInput}
+            onClick={mentionNavigation.handleClick}
+            onBlur={mentionMenu.handleBlur}
+            onFocus={mentionMenu.handleFocus}
+            onSelect={() => {
+              const cursorPosition = textareaRef.current?.selectionStart ?? value.length
+              mentionMenu.updateTriggerState(value, cursorPosition)
+            }}
             placeholder={isEditing ? 'Edit your message...' : 'Type a message...'}
             disabled={disabled}
-            spellCheck={false}
             rows={1}
-            className="min-h-[28px] max-h-[150px] w-full resize-none border-none bg-transparent text-[15px] leading-6 text-foreground outline-none placeholder:text-subtle-foreground focus:outline-none focus:ring-0"
+            mentionPathMap={mentionMenu.mentionPathMap}
             style={{ fieldSizing: 'content' } as CSSProperties}
+          />
+
+          <ChatMentionMenu
+            anchorRef={mentionMenu.anchorRef}
+            isOpen={mentionMenu.isOpen}
+            loading={mentionMenu.isIndexLoading}
+            menuRef={mentionMenu.menuRef}
+            menuStyle={mentionMenu.menuStyle}
+            onSelect={mentionMenu.handleSelectMention}
+            onSelectCategory={mentionMenu.handleSelectCategory}
+            onHighlightIndex={mentionMenu.setHighlightedIndex}
+            onResetHighlight={() => mentionMenu.setHighlightedIndex(mentionMenu.selectedIndex)}
+            results={mentionMenu.searchResults}
+            highlightedIndex={mentionMenu.highlightedIndex}
+            selectedMenuType={mentionMenu.selectedMenuType}
+            workspaceRootAvailable={mentionMenu.workspaceRootAvailable}
           />
         </div>
 
