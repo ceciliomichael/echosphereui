@@ -21,10 +21,12 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
   const [isMultiline, setIsMultiline] = useState(false)
   const trimmedContent = content.trim()
   const contentClampClassName = 'line-clamp-10 overflow-hidden'
+  const rowAlignmentClassName = isMultiline ? 'items-end' : 'items-center'
+  const revertButtonAlignmentClassName = isMultiline ? 'self-end' : 'self-center'
 
   const surfaceClassName = [
     chatMessageSurfaceClassName,
-    `group inline-flex w-fit min-w-0 max-w-full items-start gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
+    `group inline-flex w-fit min-w-0 max-w-full ${rowAlignmentClassName} gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
     onEdit ? 'cursor-pointer' : '',
   ].join(' ')
 
@@ -96,8 +98,8 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
             type="button"
             onClick={handleUndoClick}
             className={[
-              'invisible inline-flex h-4 w-4 shrink-0 items-center justify-center self-center text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
-              isMultiline ? 'self-end' : 'self-center',
+              'invisible inline-flex h-4 w-4 shrink-0 items-center justify-center self-center leading-none text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
+              revertButtonAlignmentClassName,
             ].join(' ')}
             aria-label="Revert and edit this message"
           >
