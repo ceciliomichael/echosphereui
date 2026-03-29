@@ -21,11 +21,12 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
   const [isMultiline, setIsMultiline] = useState(false)
   const trimmedContent = content.trim()
   const contentClampClassName = 'line-clamp-10 overflow-hidden'
-  const revertButtonAlignmentClassName = isMultiline ? 'self-end' : 'self-center translate-y-px'
+  const surfaceAlignmentClassName = isMultiline ? 'items-stretch' : 'items-center'
+  const revertButtonContainerClassName = isMultiline ? 'self-stretch flex items-end' : 'self-center flex items-center'
 
   const surfaceClassName = [
     chatMessageSurfaceClassName,
-    `group inline-flex w-fit min-w-0 max-w-full items-start gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
+    `group inline-flex w-fit min-w-0 max-w-full ${surfaceAlignmentClassName} gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
     onEdit ? 'cursor-pointer' : '',
   ].join(' ')
 
@@ -92,19 +93,18 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
       </div>
 
       {onRevert ? (
-        <Tooltip content="Revert and edit this message" side="right">
-          <button
-            type="button"
-            onClick={handleUndoClick}
-            className={[
-              'invisible inline-flex h-4 w-4 shrink-0 items-center justify-center self-center leading-none text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
-              revertButtonAlignmentClassName,
-            ].join(' ')}
-            aria-label="Revert and edit this message"
-          >
-            <Undo2 size={13} />
-          </button>
-        </Tooltip>
+        <div className={revertButtonContainerClassName}>
+          <Tooltip content="Revert and edit this message" side="right">
+            <button
+              type="button"
+              onClick={handleUndoClick}
+              className="invisible inline-flex h-4 w-4 shrink-0 items-center justify-center leading-none text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+              aria-label="Revert and edit this message"
+            >
+              <Undo2 size={13} />
+            </button>
+          </Tooltip>
+        </div>
       ) : null}
     </div>
   )
