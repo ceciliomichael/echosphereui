@@ -21,12 +21,11 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
   const [isMultiline, setIsMultiline] = useState(false)
   const trimmedContent = content.trim()
   const contentClampClassName = 'line-clamp-10 overflow-hidden'
-  const rowAlignmentClassName = isMultiline ? 'items-end' : 'items-center'
-  const revertButtonAlignmentClassName = isMultiline ? 'self-end' : 'self-center'
+  const revertButtonAlignmentClassName = isMultiline ? 'self-end' : 'self-center translate-y-px'
 
   const surfaceClassName = [
     chatMessageSurfaceClassName,
-    `group inline-flex w-fit min-w-0 max-w-full ${rowAlignmentClassName} gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
+    `group inline-flex w-fit min-w-0 max-w-full items-start gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
     onEdit ? 'cursor-pointer' : '',
   ].join(' ')
 
