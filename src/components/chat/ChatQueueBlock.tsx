@@ -37,9 +37,7 @@ export function ChatQueueBlock({
         <div className="flex min-w-0 items-center gap-2">
           <Clock size={14} className="shrink-0 text-muted-foreground" />
           <span className="truncate text-sm font-medium text-foreground">Queued messages</span>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border bg-surface px-1.5 text-[11px] font-semibold text-muted-foreground">
-            {queuedMessages.length}
-          </span>
+          <span className="shrink-0 text-sm font-medium text-muted-foreground">{`(${queuedMessages.length})`}</span>
         </div>
 
         <div className="flex items-center gap-2 text-muted-foreground">

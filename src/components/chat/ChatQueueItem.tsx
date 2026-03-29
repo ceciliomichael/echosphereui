@@ -201,14 +201,8 @@ export function ChatQueueItem({
       }}
       className="group flex cursor-pointer items-center justify-between gap-2 px-2 py-2 text-left transition-[background-color,color,box-shadow] hover:bg-surface-muted/70"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <div
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-surface-muted text-[11px] font-semibold text-foreground"
-          aria-hidden="true"
-        >
-          {index + 1}
-        </div>
-
+      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+        <span className="shrink-0 text-sm font-medium leading-5 text-muted-foreground">{`${index + 1}.`}</span>
         <div className="min-w-0 flex-1">
           <ChatMentionText text={message.content} variant="rendered" className="truncate text-sm leading-5 text-foreground" />
           {attachmentCount > 0 ? (
@@ -226,7 +220,7 @@ export function ChatQueueItem({
             event.stopPropagation()
             onForceSend(message.id)
           }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+          className="inline-flex h-8 w-8 items-center justify-center bg-transparent text-emerald-600 transition-colors hover:text-emerald-700"
           aria-label="Send queued message now"
           title="Send queued message now"
         >
@@ -238,7 +232,7 @@ export function ChatQueueItem({
             event.stopPropagation()
             onRemove(message.id)
           }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+          className="inline-flex h-8 w-8 items-center justify-center bg-transparent text-red-600 transition-colors hover:text-red-700"
           aria-label="Remove queued message"
           title="Remove queued message"
         >

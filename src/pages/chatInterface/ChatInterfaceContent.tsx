@@ -382,7 +382,7 @@ export function ChatInterfaceContent({
               ) : chatMessages.messages.length === 0 ? (
                 <EmptyState folderName={chatMessages.selectedFolderName} />
               ) : (
-                <div ref={messageListBoundaryRef} className="min-h-0 flex-1">
+                <div ref={messageListBoundaryRef} className="flex min-h-0 flex-1 flex-col">
                   <MessageList
                     conversationId={chatMessages.activeConversationId}
                     messages={chatMessages.messages}
