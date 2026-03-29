@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef, type RefObject } from "react";
 import { isVisibleTranscriptMessage } from "../lib/chatMessageMetadata";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import type {
@@ -94,6 +94,7 @@ interface MessageRowProps {
   waitingIndicatorVariant?: AssistantWaitingIndicatorVariant;
   isTextStreaming?: boolean;
   workspaceRootPath?: string | null;
+  editClickBoundaryRef?: RefObject<HTMLElement>;
 }
 
 const MessageRow = memo(
@@ -132,6 +133,7 @@ const MessageRow = memo(
     waitingIndicatorVariant,
     isTextStreaming = false,
     workspaceRootPath = null,
+    editClickBoundaryRef,
   }: MessageRowProps) {
     return (
       <div
@@ -176,6 +178,7 @@ const MessageRow = memo(
                 showReasoningEffortSelector={showReasoningEffortSelector}
                 workspaceRootPath={workspaceRootPath}
                 initialMentionPathMap={editComposerMentionPathMap}
+                editClickBoundaryRef={editClickBoundaryRef}
               />
             </div>
           ) : (
@@ -371,6 +374,7 @@ export function MessageList({
               selectedModelId={selectedModelId}
               sendMessageOnEnter={sendMessageOnEnter}
               showReasoningEffortSelector={showReasoningEffortSelector}
+              editClickBoundaryRef={scrollContainerRef}
               waitingIndicatorVariant={
                 streamingAssistantMessageId === msg.id
                   ? (streamingWaitingIndicatorVariant ?? "thinking")

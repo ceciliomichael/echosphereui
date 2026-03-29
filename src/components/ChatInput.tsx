@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
 import { ArrowUp, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatConversationSurfacePaddingClassName, chatInputSurfaceClassName } from '../lib/chatStyles'
@@ -65,6 +65,7 @@ interface ChatInputProps {
   onValueChange: (value: string) => void
   sendOnEnter?: boolean
   variant?: 'composer' | 'inline'
+  editClickBoundaryRef?: RefObject<HTMLElement | null>
 }
 
 export function ChatInput({
@@ -108,6 +109,7 @@ export function ChatInput({
   showRuntimeTargetSelector = false,
   showTerminalExecutionModeSelector = false,
   workspaceRootPath = null,
+  editClickBoundaryRef,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -283,7 +285,12 @@ export function ChatInput({
         return
       }
 
-      if (event.target instanceof Node && !container.contains(event.target)) {
+      const boundary = editClickBoundaryRef?.current
+      if (!boundary) {
+        return
+      }
+
+      if (event.target instanceof Node && boundary.contains(event.target) && !container.contains(event.target)) {
         if (event.target instanceof Element) {
           if (event.target.closest('[data-floating-menu-root="true"]')) {
             return
@@ -300,7 +307,7 @@ export function ChatInput({
 
     document.addEventListener('pointerdown', handlePointerDown)
     return () => document.removeEventListener('pointerdown', handlePointerDown)
-  }, [isInline, isEditing, onCancelEdit])
+  }, [editClickBoundaryRef, isInline, isEditing, onCancelEdit])
 
   useEffect(() => {
     if (value.trim().length > 0 || disabled) {

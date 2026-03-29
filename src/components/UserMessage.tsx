@@ -1,4 +1,10 @@
-import type { KeyboardEvent, MouseEvent } from 'react'
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react'
 import { Undo2 } from 'lucide-react'
 import { chatConversationSurfacePaddingClassName, chatMessageSurfaceClassName } from '../lib/chatStyles'
 import { Tooltip } from './Tooltip'
@@ -11,11 +17,49 @@ interface UserMessageProps {
 }
 
 export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [isMultiline, setIsMultiline] = useState(false)
+  const trimmedContent = content.trim()
+  const contentClampClassName = 'line-clamp-10 overflow-hidden'
+
   const surfaceClassName = [
     chatMessageSurfaceClassName,
     `group inline-flex w-fit min-w-0 max-w-full items-start gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
     onEdit ? 'cursor-pointer' : '',
   ].join(' ')
+
+  useLayoutEffect(() => {
+    const contentElement = contentRef.current
+    if (!contentElement || trimmedContent.length === 0) {
+      setIsMultiline(false)
+      return
+    }
+
+    const updateMultilineState = () => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(contentElement).lineHeight)
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+        setIsMultiline(false)
+        return
+      }
+
+      setIsMultiline(contentElement.getBoundingClientRect().height > lineHeight * 1.5)
+    }
+
+    updateMultilineState()
+
+    const resizeObserver =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            updateMultilineState()
+          })
+        : null
+
+    resizeObserver?.observe(contentElement)
+
+    return () => {
+      resizeObserver?.disconnect()
+    }
+  }, [trimmedContent])
 
   const handleSurfaceClick = () => {
     onEdit?.()
@@ -42,8 +86,8 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
       tabIndex={onEdit ? 0 : undefined}
       aria-label={onEdit ? 'Edit message' : undefined}
     >
-      <div className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-        {content.trim().length > 0 ? <ChatMentionText text={content} variant="rendered" /> : null}
+      <div ref={contentRef} className={`min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] ${contentClampClassName}`}>
+        {trimmedContent.length > 0 ? <ChatMentionText text={content} variant="rendered" /> : null}
       </div>
 
       {onRevert ? (
@@ -51,7 +95,10 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
           <button
             type="button"
             onClick={handleUndoClick}
-            className="invisible inline-flex h-4 w-4 shrink-0 items-center justify-center text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+            className={[
+              'invisible inline-flex h-4 w-4 shrink-0 items-center justify-center self-center text-subtle-foreground opacity-0 transition-[color,opacity] duration-150 hover:text-foreground group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
+              isMultiline ? 'self-end' : 'self-center',
+            ].join(' ')}
             aria-label="Revert and edit this message"
           >
             <Undo2 size={13} />
