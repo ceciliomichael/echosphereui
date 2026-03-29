@@ -72,6 +72,13 @@ export interface ChatTextAttachment extends ChatAttachmentBase {
 
 export type ChatAttachment = ChatImageAttachment | ChatTextAttachment
 
+export interface QueuedMessage {
+  attachments?: ChatAttachment[]
+  content: string
+  id: string
+  timestamp: number
+}
+
 export interface ToolInvocationTrace {
   argumentsText: string
   completedAt?: number

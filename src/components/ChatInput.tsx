@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
-import { ArrowUp, Paperclip, Square } from 'lucide-react'
+import { ArrowUp, Clock, Paperclip, Square } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../lib/chatAttachmentFiles'
 import { chatConversationSurfacePaddingClassName, chatInputSurfaceClassName } from '../lib/chatStyles'
 import { ChatMentionMenu } from './chat/ChatMentionMenu'
@@ -50,7 +50,8 @@ interface ChatInputProps {
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
   onTerminalExecutionModeChange?: (mode: AppTerminalExecutionMode) => void
-  onSend: (value: string) => void
+  onQueue?: (value: string, attachments: ChatAttachment[]) => void
+  onSend: (value: string, attachments: ChatAttachment[]) => void
   selectedChatMode?: ChatMode
   initialMentionPathMap?: ReadonlyMap<string, string> | null
   reasoningEffort?: ReasoningEffort
@@ -98,6 +99,7 @@ export function ChatInput({
   disabled = false,
   onAbort,
   onAttachmentsChange,
+  onQueue,
   contextUsage,
   gitBranchError = null,
   gitBranchLoading = false,
@@ -151,9 +153,17 @@ export function ChatInput({
     textareaRef,
     value,
   })
+  const hasContent = value.trim().length > 0 || attachments.length > 0
   const resolvedActionButtonMode =
-    actionButtonMode === 'auto' ? (isStreaming && typeof onAbort === 'function' ? 'abort' : 'send') : actionButtonMode
+    actionButtonMode === 'auto'
+      ? isStreaming && hasContent && typeof onQueue === 'function'
+        ? 'queue'
+        : isStreaming && typeof onAbort === 'function' && !hasContent
+          ? 'abort'
+          : 'send'
+      : actionButtonMode
   const canAbort = resolvedActionButtonMode === 'abort' && typeof onAbort === 'function'
+  const canQueue = resolvedActionButtonMode === 'queue' && typeof onQueue === 'function'
   const gitBranchTooltip = gitBranchState?.hasRepository ? 'Switch branch' : 'Open a git-backed folder to view branches'
 
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !disabled
@@ -166,16 +176,34 @@ export function ChatInput({
     onAbort()
   }
 
+  function handleQueue() {
+    if (!canQueue || !canSend) {
+      return
+    }
+
+    mentionMenu.closeMenu()
+    onQueue(mentionMenu.expandValueForSend(value), attachments)
+    onValueChange('')
+    onAttachmentsChange?.([])
+    mentionMenu.clearMentionPathMap()
+    setAttachmentError(null)
+  }
+
   function handleSend() {
     if (!canSend) return
     mentionMenu.closeMenu()
-    onSend(mentionMenu.expandValueForSend(value))
+    onSend(mentionMenu.expandValueForSend(value), attachments)
     mentionMenu.clearMentionPathMap()
   }
 
   function handlePrimaryAction() {
     if (canAbort) {
       handleAbort()
+      return
+    }
+
+    if (canQueue) {
+      handleQueue()
       return
     }
 
@@ -439,12 +467,30 @@ export function ChatInput({
           <div className="flex shrink-0 items-center justify-end gap-2 self-end">
             {contextUsage ? <ContextIndicator disabled={disabled && !canAbort} usage={contextUsage} /> : null}
 
-            <Tooltip content={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}>
+            <Tooltip
+              content={
+                canAbort
+                  ? 'Stop generating'
+                  : canQueue
+                    ? 'Queue message'
+                    : isEditing
+                      ? 'Send edited message'
+                      : 'Send message'
+              }
+            >
               <button
                 type="button"
                 onClick={handlePrimaryAction}
                 disabled={canAbort ? false : !canSend}
-                aria-label={canAbort ? 'Stop generating' : isEditing ? 'Send edited message' : 'Send message'}
+                aria-label={
+                  canAbort
+                    ? 'Stop generating'
+                    : canQueue
+                      ? 'Queue message'
+                      : isEditing
+                        ? 'Send edited message'
+                        : 'Send message'
+                }
                 className={[
                   'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
                   canAbort || canSend
@@ -452,7 +498,13 @@ export function ChatInput({
                     : 'chat-send-button-disabled cursor-not-allowed',
                 ].join(' ')}
               >
-                {canAbort ? <Square size={14} strokeWidth={2.5} fill="currentColor" /> : <ArrowUp size={16} strokeWidth={2.5} />}
+                {canAbort ? (
+                  <Square size={14} strokeWidth={2.5} fill="currentColor" />
+                ) : canQueue ? (
+                  <Clock size={16} strokeWidth={2.5} />
+                ) : (
+                  <ArrowUp size={16} strokeWidth={2.5} />
+                )}
               </button>
             </Tooltip>
           </div>

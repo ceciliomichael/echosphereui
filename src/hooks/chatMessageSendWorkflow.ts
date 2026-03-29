@@ -138,10 +138,10 @@ function createStreamProgressPersistenceController(input: {
   }
 }
 
-export async function persistAndStreamMessage(input: PersistAndStreamMessageInput) {
+export async function persistAndStreamMessage(input: PersistAndStreamMessageInput): Promise<boolean> {
   const providerId = validateRuntimeSelection(input)
   if (!providerId) {
-    return
+    return false
   }
 
   const initiatingConversationId = input.activeConversationId
@@ -151,6 +151,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   let streamProgressPersistence: ReturnType<typeof createStreamProgressPersistenceController> | null = null
   let shouldKeepWaitingIndicatorActive = false
   let hasPendingDraftReservation = false
+  let requestAccepted = false
 
   const releasePendingDraftReservation = () => {
     if (!hasPendingDraftReservation) {
@@ -203,6 +204,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       isSending: true,
     })
     releasePendingDraftReservation()
+    requestAccepted = true
 
     if (shouldKeepSelected) {
       input.applyConversation(conversationForRun)
@@ -265,7 +267,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
         await streamProgressPersistence.flush()
       }
 
-      return
+      return requestAccepted
     }
 
     for (const message of streamedMessages) {
@@ -280,7 +282,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     streamProgressPersistence?.queueSnapshot(finalizedConversationMessages, { immediate: true })
 
     if (!(conversationForRun.id in input.conversationRuntimeStatesRef.current)) {
-      return
+      return requestAccepted
     }
 
     const savedConversation =
@@ -292,9 +294,9 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
         : {
             ...savedConversation,
             chatMode: input.draftChatMode,
-          }
+    }
     if (!(savedConversationForRun.id in input.conversationRuntimeStatesRef.current)) {
-      return
+      return requestAccepted
     }
 
     input.upsertConversation(savedConversationForRun)
@@ -304,7 +306,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     if (input.targetEditMessageId !== null && isMessageNotFoundError(caughtError)) {
       input.completeEditingMessage()
       input.setError('This message is no longer available to edit.')
-      return
+      return requestAccepted
     }
 
     const shouldRetainProgress = isRateLimitError(caughtError)
@@ -333,6 +335,8 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     } else {
       input.setError(failureMessage)
     }
+
+    return requestAccepted
   } finally {
     releasePendingDraftReservation()
 
@@ -355,4 +359,6 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.clearTextStreamingIdleTimeout(conversationIdForCleanup)
     }
   }
+
+  return true
 }

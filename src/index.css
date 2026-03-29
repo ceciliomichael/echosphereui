@@ -198,6 +198,11 @@
     min-width: 0;
   }
 
+  .chat-queue-shell {
+    width: min(688px, calc(100% - 2rem));
+    min-width: 0;
+  }
+
   .chat-send-button-enabled {
     background-color: var(--color-action);
     color: #fff;

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { FolderTree, GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../../components/ChatHeader'
 import { MessageList } from '../../components/MessageList'
@@ -8,6 +8,7 @@ import { CommitModal } from '../../components/commit/CommitModal'
 import { CommitSuccessDialog } from '../../components/commit/CommitSuccessDialog'
 import type { ChatModeOption } from '../../components/chat/ChatModeSelectorField'
 import { ConversationDiffPanel, type DiffPanelScope } from '../../components/chat/ConversationDiffPanel'
+import { ChatQueueBlock } from '../../components/chat/ChatQueueBlock'
 import type { ToolDecisionSubmission } from '../../components/chat/ToolDecisionRequestCard'
 import { AppWorkspaceShell } from '../../components/layout/AppWorkspaceShell'
 import { WorkspaceFloatingControls } from '../../components/layout/WorkspaceFloatingControls'
@@ -25,8 +26,9 @@ import type { ChatInterfaceControllerState } from '../../hooks/useChatInterfaceC
 import type { GitBranchStateController } from '../../hooks/useGitBranchState'
 import type { GitCommitController } from '../../hooks/useGitCommit'
 import type { GitDiffSnapshotController } from '../../hooks/useGitDiffSnapshot'
+import { useChatMessageQueue } from './useChatMessageQueue'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
-import type { AppSettings, ToolInvocationTrace } from '../../types/chat'
+import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
 import type { ResolvedTheme } from '../../lib/theme'
 
 const CHAT_MODE_OPTIONS: readonly ChatModeOption[] = [
@@ -106,6 +108,24 @@ export function ChatInterfaceContent({
     messages: chatMessages.messages,
     providerId: runtimeSelection.providerId,
   })
+  const sendQueuedMessage = useCallback(
+    (queuedMessage: { content: string; attachments?: ChatAttachment[] }) => {
+      return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments)
+    },
+    [chatMessages, runtimeSelection],
+  )
+
+  const {
+    clearQueuedMessages,
+    enqueueMessage,
+    forceSendQueuedMessage,
+    queuedMessages,
+    removeQueuedMessage,
+    updateQueuedMessage,
+  } = useChatMessageQueue({
+    isBusy: chatMessages.isLoading || chatMessages.isSending,
+    onSendMessage: sendQueuedMessage,
+  })
   const selectorOptions = useMemo(
     () =>
       chatRuntimeConfig.modelOptions.map((option) => ({
@@ -117,6 +137,79 @@ export function ChatInterfaceContent({
   )
   const chatModeOptions = CHAT_MODE_OPTIONS
   const hasRepository = gitBranchState.branchState.hasRepository
+  const messageListBoundaryRef = useRef<HTMLDivElement>(null)
+
+  const handleCreateConversation = useCallback(async (folderId?: string | null) => {
+    clearQueuedMessages()
+    await chatMessages.createConversation(folderId)
+  }, [chatMessages, clearQueuedMessages])
+
+  const handleSelectConversation = useCallback(
+    (conversationId: string) => {
+      clearQueuedMessages()
+      void chatMessages.selectConversation(conversationId)
+    },
+    [chatMessages, clearQueuedMessages],
+  )
+
+  const handleSelectFolder = useCallback(async (folderId: string | null) => {
+    clearQueuedMessages()
+    await chatMessages.selectFolder(folderId)
+  }, [chatMessages, clearQueuedMessages])
+
+  const handleCreateFolder = useCallback(async () => {
+    clearQueuedMessages()
+    await chatMessages.createFolder()
+  }, [chatMessages, clearQueuedMessages])
+
+  const handleDeleteConversation = useCallback(
+    (conversationId: string) => {
+      clearQueuedMessages()
+      void chatMessages.deleteConversation(conversationId)
+    },
+    [chatMessages, clearQueuedMessages],
+  )
+
+  const handleDeleteFolder = useCallback(
+    async (folderId: string) => {
+      clearQueuedMessages()
+      await chatMessages.deleteFolder(folderId)
+    },
+    [chatMessages, clearQueuedMessages],
+  )
+
+  const handleRevertUserMessage = useCallback(
+    (messageId: string) => {
+      clearQueuedMessages()
+      void chatMessages.revertUserMessage(messageId)
+    },
+    [chatMessages, clearQueuedMessages],
+  )
+
+  const handleSendMainMessage = useCallback(
+    (value: string, attachments: ChatAttachment[]) => {
+      if (chatMessages.isLoading || chatMessages.isSending) {
+        enqueueMessage(value, attachments)
+        return
+      }
+
+      void chatMessages.sendNewMessage(runtimeSelection, value, attachments)
+    },
+    [chatMessages, enqueueMessage, runtimeSelection],
+  )
+
+  const handleSendEditedMessage = useCallback(
+    (value: string, attachments: ChatAttachment[]) => {
+      void chatMessages.sendEditedMessage(runtimeSelection, value, attachments)
+    },
+    [chatMessages, runtimeSelection],
+  )
+
+  const showQueueBlock =
+    queuedMessages.length > 0 &&
+    typeof removeQueuedMessage === 'function' &&
+    typeof updateQueuedMessage === 'function' &&
+    typeof forceSendQueuedMessage === 'function'
 
   const handleToolDecisionSubmit = useCallback(
     (invocation: ToolInvocationTrace, submission: ToolDecisionSubmission) => {
@@ -158,21 +251,21 @@ export function ChatInterfaceContent({
           isSidebarOpen={interfaceController.isSidebarOpen}
           onToggleSidebar={interfaceController.handleToggleSidebar}
           newThreadButton={{
-            onClick: () => void chatMessages.createConversation(),
+            onClick: handleCreateConversation,
           }}
         />
       }
       sidebar={
         <SidebarPanel
           conversationGroups={chatMessages.conversationGroups}
-          onCreateFolder={chatMessages.createFolder}
-          onCreateConversation={chatMessages.createConversation}
-          onDeleteConversation={chatMessages.deleteConversation}
-          onDeleteFolder={chatMessages.deleteFolder}
+          onCreateFolder={handleCreateFolder}
+          onCreateConversation={handleCreateConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onDeleteFolder={handleDeleteFolder}
           onOpenSettings={onOpenSettings}
           onRenameFolder={chatMessages.renameFolder}
-          onSelectConversation={chatMessages.selectConversation}
-          onSelectFolder={chatMessages.selectFolder}
+          onSelectConversation={handleSelectConversation}
+          onSelectFolder={handleSelectFolder}
         />
       }
       sidebarWidth={sidebarWidth}
@@ -289,45 +382,60 @@ export function ChatInterfaceContent({
               ) : chatMessages.messages.length === 0 ? (
                 <EmptyState folderName={chatMessages.selectedFolderName} />
               ) : (
-                <MessageList
-                  conversationId={chatMessages.activeConversationId}
-                  messages={chatMessages.messages}
-                  chatModeOptions={chatModeOptions}
-                  editingMessageId={chatMessages.editingMessageId}
-                  editComposerDirty={chatMessages.isEditComposerDirty}
-                  editComposerMentionPathMap={chatMessages.editComposerMentionPathMap}
-                  onChatModeChange={chatMessages.setSelectedChatMode}
-                  onToolDecisionSubmit={handleToolDecisionSubmit}
-                  onEditUserMessage={chatMessages.startEditingMessage}
-                  onRevertUserMessage={chatMessages.revertUserMessage}
-                  composerAttachments={chatMessages.editComposerAttachments}
-                  composerValue={chatMessages.editComposerValue}
-                  onComposerAttachmentsChange={chatMessages.setEditComposerAttachments}
-                  onComposerValueChange={chatMessages.setEditComposerValue}
-                  onSendEditedMessage={(value) => void chatMessages.sendEditedMessage(runtimeSelection, value)}
-                  onAbortStreamingResponse={chatMessages.abortStreamingResponse}
-                  onCancelEditingMessage={chatMessages.cancelEditingMessage}
-                  composerFocusSignal={chatMessages.editComposerFocusSignal}
-                  isSending={chatMessages.isSending}
-                  modelOptions={selectorOptions}
-                  modelOptionsLoading={chatRuntimeConfig.isModelOptionsLoading}
-                  onModelChange={chatRuntimeConfig.setSelectedModelId}
-                  onReasoningEffortChange={chatRuntimeConfig.setReasoningEffort}
-                  reasoningEffort={chatRuntimeConfig.reasoningEffort}
-                  reasoningEffortOptions={chatRuntimeConfig.availableReasoningEfforts}
-                  selectedChatMode={chatMessages.selectedChatMode}
-                  selectedModelId={chatRuntimeConfig.selectedModelId}
-                  sendMessageOnEnter={sendMessageOnEnter}
-                  showReasoningEffortSelector={chatRuntimeConfig.showReasoningEffortSelector}
-                  streamingAssistantMessageId={chatMessages.streamingAssistantMessageId}
-                  streamingWaitingIndicatorVariant={chatMessages.streamingWaitingIndicatorVariant}
-                  streamingTextActive={chatMessages.isStreamingTextActive}
-                  workspaceRootPath={activeWorkspacePath}
-                />
+                <div ref={messageListBoundaryRef} className="min-h-0 flex-1">
+                  <MessageList
+                    conversationId={chatMessages.activeConversationId}
+                    messages={chatMessages.messages}
+                    chatModeOptions={chatModeOptions}
+                    editingMessageId={chatMessages.editingMessageId}
+                    editComposerDirty={chatMessages.isEditComposerDirty}
+                    editComposerMentionPathMap={chatMessages.editComposerMentionPathMap}
+                    onChatModeChange={chatMessages.setSelectedChatMode}
+                    onToolDecisionSubmit={handleToolDecisionSubmit}
+                    onEditUserMessage={chatMessages.startEditingMessage}
+                    onRevertUserMessage={handleRevertUserMessage}
+                    composerAttachments={chatMessages.editComposerAttachments}
+                    composerValue={chatMessages.editComposerValue}
+                    onComposerAttachmentsChange={chatMessages.setEditComposerAttachments}
+                    onComposerValueChange={chatMessages.setEditComposerValue}
+                    onSendEditedMessage={handleSendEditedMessage}
+                    onAbortStreamingResponse={chatMessages.abortStreamingResponse}
+                    onCancelEditingMessage={chatMessages.cancelEditingMessage}
+                    composerFocusSignal={chatMessages.editComposerFocusSignal}
+                    isSending={chatMessages.isSending}
+                    modelOptions={selectorOptions}
+                    modelOptionsLoading={chatRuntimeConfig.isModelOptionsLoading}
+                    onModelChange={chatRuntimeConfig.setSelectedModelId}
+                    onReasoningEffortChange={chatRuntimeConfig.setReasoningEffort}
+                    reasoningEffort={chatRuntimeConfig.reasoningEffort}
+                    reasoningEffortOptions={chatRuntimeConfig.availableReasoningEfforts}
+                    selectedChatMode={chatMessages.selectedChatMode}
+                    selectedModelId={chatRuntimeConfig.selectedModelId}
+                    sendMessageOnEnter={sendMessageOnEnter}
+                    showReasoningEffortSelector={chatRuntimeConfig.showReasoningEffortSelector}
+                    streamingAssistantMessageId={chatMessages.streamingAssistantMessageId}
+                    streamingWaitingIndicatorVariant={chatMessages.streamingWaitingIndicatorVariant}
+                    streamingTextActive={chatMessages.isStreamingTextActive}
+                    workspaceRootPath={activeWorkspacePath}
+                  />
+                </div>
               )}
             </div>
 
-            <div className="flex w-full shrink-0 justify-center pb-4">
+            <div className="flex w-full shrink-0 flex-col items-center pb-4">
+              {showQueueBlock ? (
+                <div className="chat-queue-shell">
+                  <ChatQueueBlock
+                    queuedMessages={queuedMessages}
+                    editCancelBoundaryRef={messageListBoundaryRef}
+                    onClearQueue={clearQueuedMessages}
+                    onForceSend={forceSendQueuedMessage}
+                    onRemove={removeQueuedMessage}
+                    onUpdate={updateQueuedMessage}
+                  />
+                </div>
+              ) : null}
+
               <div className="chat-input-shell">
                 <ChatInput
                   attachments={chatMessages.mainComposerAttachments}
@@ -335,12 +443,13 @@ export function ChatInterfaceContent({
                   value={chatMessages.mainComposerValue}
                   onAttachmentsChange={chatMessages.setMainComposerAttachments}
                   onValueChange={chatMessages.setMainComposerValue}
-                  onSend={(value) => void chatMessages.sendNewMessage(runtimeSelection, value)}
+                  onSend={handleSendMainMessage}
+                  onQueue={(value, attachments) => enqueueMessage(value, attachments)}
                   onAbort={chatMessages.abortStreamingResponse}
                   chatModeOptions={chatModeOptions}
-                  isStreaming={chatMessages.isStreamingResponse}
+                  isStreaming={chatMessages.isStreamingResponse || chatMessages.isSending}
                   sendOnEnter={sendMessageOnEnter}
-                  disabled={chatMessages.isLoading || chatMessages.isSending}
+                  disabled={chatMessages.isLoading}
                   gitBranchError={gitBranchState.errorMessage}
                   gitBranchLoading={gitBranchState.isLoading}
                   gitBranchState={gitBranchState.branchState}

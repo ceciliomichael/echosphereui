@@ -139,24 +139,24 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
   }, [getConversationState, waitForAbortableConversationId, waitForConversationRunState])
 
   const sendNewMessage = useCallback(
-    async (runtimeSelection: ChatRuntimeSelection, messageText?: string) => {
+    async (runtimeSelection: ChatRuntimeSelection, messageText?: string, attachments = input.mainComposerAttachments) => {
       if (
         actionInFlightRef.current ||
         input.activeConversationStateIsSending ||
         (input.activeConversationId === null && input.pendingDraftSendCount > 0)
       ) {
-        return
+        return false
       }
 
       const nextMessageText = messageText ?? input.mainComposerValue
       const trimmedText = nextMessageText.trim()
-      if (trimmedText.length === 0 && input.mainComposerAttachments.length === 0) {
-        return
+      if (trimmedText.length === 0 && attachments.length === 0) {
+        return false
       }
 
-      await persistAndStreamMessage({
+      return persistAndStreamMessage({
         ...input,
-        attachments: input.mainComposerAttachments,
+        attachments,
         runtimeSelection,
         targetEditMessageId: null,
         trimmedText,
@@ -199,7 +199,11 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
   )
 
   const sendEditedMessage = useCallback(
-    async (runtimeSelection: ChatRuntimeSelection, messageText?: string) => {
+    async (
+      runtimeSelection: ChatRuntimeSelection,
+      messageText?: string,
+      attachments = input.editComposerAttachments,
+    ) => {
       const conversationId = input.activeConversationIdRef.current ?? input.activeConversationId
       if (actionInFlightRef.current || input.editingMessageId === null || conversationId === null) {
         return
@@ -207,7 +211,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
 
       const nextMessageText = messageText ?? input.editComposerValue
       const trimmedText = nextMessageText.trim()
-      if (trimmedText.length === 0 && input.editComposerAttachments.length === 0) {
+      if (trimmedText.length === 0 && attachments.length === 0) {
         return
       }
 
@@ -271,7 +275,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       if (setupSuccessful) {
         await persistAndStreamMessage({
           ...input,
-          attachments: input.editComposerAttachments,
+          attachments,
           runtimeSelection,
           targetEditMessageId: input.editingMessageId,
           trimmedText,
