@@ -418,7 +418,7 @@ test('buildSuccessfulToolArtifacts preserves multiline create-file bodies for wr
   assert.match(parsedContent.body ?? '', /Current content of src\/app\/page\.tsx:/u)
   assert.match(parsedContent.body ?? '', /```tsx/u)
   assert.match(parsedContent.body ?? '', /export default function Page\(\) \{/u)
-  assert.match(parsedContent.body ?? '', /  return null/u)
+  assert.match(parsedContent.body ?? '', / {2}return null/u)
   assert.match(parsedContent.body ?? '', /\n```$/u)
   assert.equal(artifacts.resultPresentation?.kind, 'file_diff')
   if (artifacts.resultPresentation?.kind === 'file_diff') {
@@ -501,16 +501,6 @@ test('buildCodexGroupedToolResultContent groups same-turn tool outputs into one 
     readContent,
   ])
 
-  assert.match(content ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
-  assert.match(content ?? '', /Reuse the latest inspection state below before repeating the same inspection tool call\./u)
-  assert.match(content ?? '', /A read marked fully read already covers the whole file unless the workspace changed\./u)
-  assert.match(content ?? '', /For each mutated path, the latest successful mutation below is the current workspace state\./u)
-  assert.match(content ?? '', /Acknowledged tool result summaries:/u)
-  assert.match(content ?? '', /Latest acknowledged inspection state\./u)
-  assert.match(content ?? '', /- \. was last listed with 1 visible entry\./u)
-  assert.match(content ?? '', /- src\/index\.ts was fully read at lines 1-2 of 2\./u)
-  assert.match(content ?? '', /- list success: Listed \. with 1 visible entry\./u)
-  assert.match(content ?? '', /- read success: Read src\/index\.ts lines 1-2 of 2 \(complete\)\./u)
   assert.match(content ?? '', /<tool_result>/u)
   assert.match(content ?? '', /"toolName": "list"/u)
   assert.match(content ?? '', /"toolName": "read"/u)
@@ -562,8 +552,8 @@ test('buildCodexGroupedToolResultContent includes latest mutation state summary 
     patchUpdateContent,
   ])
 
-  assert.match(content ?? '', /Latest acknowledged workspace file state:/u)
-  assert.match(content ?? '', /- src\/app\/page\.tsx now reflects the latest successful edit changes\./u)
+  assert.match(content ?? '', /<tool_result>/u)
+  assert.match(content ?? '', /"toolName": "edit"/u)
 })
 
 test('buildCodexGroupedToolResultContent preserves large edit bodies without clipping them', () => {

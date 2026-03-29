@@ -304,6 +304,7 @@ export interface SaveCustomModelInput {
 export interface StartChatStreamInput {
   agentContextRootPath: string
   chatMode: ChatMode
+  conversationId?: string
   messages: Message[]
   modelId: string
   providerId: ChatProviderId

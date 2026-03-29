@@ -2,6 +2,10 @@ import type { ChatMode, Message } from '../../../src/types/chat'
 import {
   buildSerializedAssistantTurnContentWithInlineReasoning,
 } from '../openaiCompatible/assistantToolInvocationContext'
+import type {
+  OpenAICompatibleResponsesFunctionCallOutputInput,
+  OpenAICompatibleResponsesRequestOverrides,
+} from '../openaiCompatible/responsesState'
 import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
 import { ensureToolOutputMessageEnvelope } from '../openaiCompatible/toolResultReplayEnvelope'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
@@ -30,10 +34,11 @@ export interface CodexInputMessage {
 
 export interface CodexRequestPayload {
   include: string[]
-  input: CodexInputMessage[]
+  input: Array<CodexInputMessage | OpenAICompatibleResponsesFunctionCallOutputInput>
   instructions: string
   model: string
   parallel_tool_calls: boolean
+  previous_response_id?: string
   reasoning: {
     effort: string
     summary: 'auto'
@@ -143,6 +148,7 @@ export function getCodexToolDefinitions(chatMode: ChatMode): CodexFunctionToolDe
 export async function buildCodexPayload(
   request: ProviderStreamRequest,
   messages: Message[],
+  overrides: OpenAICompatibleResponsesRequestOverrides = {},
 ): Promise<CodexRequestPayload> {
   const instructions = await buildSystemPrompt({
     agentContextRootPath: request.agentContextRootPath,
@@ -154,10 +160,11 @@ export async function buildCodexPayload(
 
   return {
     include: ['reasoning.encrypted_content'],
-    input: buildCodexInputMessages(messages),
+    input: overrides.input ?? buildCodexInputMessages(messages),
     instructions,
     model: request.modelId,
     parallel_tool_calls: true,
+    ...(overrides.previousResponseId ? { previous_response_id: overrides.previousResponseId } : {}),
     reasoning: {
       effort: request.reasoningEffort,
       summary: 'auto',

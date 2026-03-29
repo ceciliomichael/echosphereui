@@ -10,14 +10,14 @@ const CODEX_VERSION_HEADER = '0.101.0'
 const CODEX_USER_AGENT = 'codex_cli_rs/0.101.0 (Windows; x86_64)'
 const CODEX_ORIGINATOR = 'codex_cli_rs'
 
-function buildCodexHeaders(accessToken: string, accountId: string) {
+function buildCodexHeaders(accessToken: string, accountId: string, sessionId: string) {
   return {
     Accept: 'text/event-stream',
     Authorization: `Bearer ${accessToken}`,
     'Chatgpt-Account-Id': accountId,
     'Content-Type': 'application/json',
     Originator: CODEX_ORIGINATOR,
-    Session_id: randomUUID(),
+    Session_id: sessionId,
     'User-Agent': CODEX_USER_AGENT,
     Version: CODEX_VERSION_HEADER,
   }
@@ -26,18 +26,19 @@ function buildCodexHeaders(accessToken: string, accountId: string) {
 async function sendCodexStreamingRequest(
   payload: CodexRequestPayload,
   signal: AbortSignal,
+  sessionId: string,
   forceRefresh = false,
 ) {
   const authData = forceRefresh ? await forceRefreshCodexAuthData() : await loadCodexAuthData()
   const response = await fetch(CODEX_RESPONSES_URL, {
     body: JSON.stringify(payload),
-    headers: buildCodexHeaders(authData.tokens.access_token, authData.tokens.account_id),
+    headers: buildCodexHeaders(authData.tokens.access_token, authData.tokens.account_id, sessionId),
     method: 'POST',
     signal,
   })
 
   if (response.status === 401 && !forceRefresh) {
-    return sendCodexStreamingRequest(payload, signal, true)
+    return sendCodexStreamingRequest(payload, signal, sessionId, true)
   }
 
   if (!response.ok) {
@@ -49,6 +50,8 @@ async function sendCodexStreamingRequest(
 }
 
 export async function streamCodexResponsesWithTools(request: ProviderStreamRequest, context: ProviderStreamContext) {
+  const codexSessionId = context.streamId.trim().length > 0 ? context.streamId : randomUUID()
+
   return streamAgentLoopWithTools(
     {
       agentContextRootPath: request.agentContextRootPath,
@@ -73,7 +76,7 @@ export async function streamCodexResponsesWithTools(request: ProviderStreamReque
         },
         turnRequest.messages,
       )
-      const response = await sendCodexStreamingRequest(payload, turnContext.signal)
+      const response = await sendCodexStreamingRequest(payload, turnContext.signal, codexSessionId)
       return parseSseResponseStream(response, turnContext.emitDelta, turnContext.signal, {
         onToolCallReady: options?.onToolCallReady,
       })

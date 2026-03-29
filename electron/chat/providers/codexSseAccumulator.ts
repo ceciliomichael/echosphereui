@@ -11,6 +11,7 @@ import {
 
 export interface CodexStreamTurnResult {
   assistantContent: string
+  responseId: string | null
   toolCalls: OpenAICompatibleToolCall[]
 }
 
@@ -37,6 +38,7 @@ export function createCodexStreamAccumulator(
   options: CreateCodexStreamAccumulatorOptions = {},
 ) {
   let assistantContent = ''
+  let responseId: string | null = null
   let hasReasoningContent = false
   let shouldPrefixNextReasoningSummaryDelta = false
 
@@ -84,6 +86,21 @@ export function createCodexStreamAccumulator(
       }
 
       const parsedPayload = payload as CodexStreamEventPayload
+      if (responseId === null) {
+        const directResponseId = hasText(parsedPayload.response_id) ? parsedPayload.response_id : null
+        if (directResponseId) {
+          responseId = directResponseId
+        } else {
+          const nestedResponse = parsedPayload.response
+          if (typeof nestedResponse === 'object' && nestedResponse !== null) {
+            const nestedResponseId = (nestedResponse as Record<string, unknown>).id
+            if (hasText(nestedResponseId)) {
+              responseId = nestedResponseId
+            }
+          }
+        }
+      }
+
       const eventType = parsedPayload.type
       if (!hasText(eventType)) {
         return
@@ -150,6 +167,7 @@ export function createCodexStreamAccumulator(
     buildResult(): CodexStreamTurnResult {
       return {
         assistantContent,
+        responseId,
         toolCalls: toolCalls.buildToolCalls(),
       }
     },

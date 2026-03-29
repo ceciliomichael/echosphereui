@@ -242,6 +242,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     const streamedAssistant = await streamAssistantResponse({
       agentContextRootPath: conversationForRun.agentContextRootPath,
       chatMode: input.draftChatMode,
+      conversationId: conversationForRun.id,
       messages: conversationForRun.messages,
       modelId: input.runtimeSelection.modelId,
       onContentDelta: draftManager.handleContentDelta,

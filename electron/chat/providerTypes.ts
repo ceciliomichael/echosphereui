@@ -65,6 +65,7 @@ export type StreamDeltaEvent =
 export interface ProviderStreamRequest {
   agentContextRootPath: string
   chatMode: ChatMode
+  conversationId?: string
   messages: Message[]
   modelId: string
   providerId: ChatProviderId

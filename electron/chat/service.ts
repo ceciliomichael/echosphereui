@@ -211,6 +211,7 @@ export function startChatStream(webContents: WebContents, input: StartChatStream
               {
                 agentContextRootPath: input.agentContextRootPath,
                 chatMode: input.chatMode,
+                conversationId: input.conversationId,
                 messages: input.messages,
                 modelId: input.modelId,
                 providerId: input.providerId,

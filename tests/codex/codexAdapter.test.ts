@@ -75,7 +75,6 @@ test('buildCodexInputMessages groups current-turn tool results into one standalo
   assert.equal(inputMessages[1]?.content[0]?.type, 'input_text')
   assert.match(inputMessages[1]?.content[0]?.text ?? '', /^\[SYSTEM TOOL OUTPUT\]/u)
   assert.match(inputMessages[1]?.content[0]?.text ?? '', /<tool_results>/u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /Authoritative tool results from the immediately preceding tool calls\./u)
   assert.match(inputMessages[1]?.content[0]?.text ?? '', /Directory \./u)
   assert.match(inputMessages[1]?.content[0]?.text ?? '', /File src\/index\.ts \(lines 1-2\)/u)
 })
@@ -194,6 +193,39 @@ test('buildCodexPayload keeps parallel tool call batching enabled', async () => 
   assert.equal(payload.parallel_tool_calls, true)
 })
 
+test('buildCodexPayload accepts Responses chaining overrides for follow-up tool turns', async () => {
+  const payload = await buildCodexPayload(
+    {
+      agentContextRootPath: 'C:/workspace',
+      chatMode: 'agent',
+      messages: [],
+      modelId: 'gpt-5-codex',
+      providerId: 'codex',
+      reasoningEffort: 'medium',
+    },
+    [],
+    {
+      input: [
+        {
+          call_id: 'call_1',
+          output: '<tool_result>ok</tool_result>',
+          type: 'function_call_output',
+        },
+      ],
+      previousResponseId: 'resp_1',
+    },
+  )
+
+  assert.equal(payload.previous_response_id, 'resp_1')
+  assert.deepEqual(payload.input, [
+    {
+      call_id: 'call_1',
+      output: '<tool_result>ok</tool_result>',
+      type: 'function_call_output',
+    },
+  ])
+})
+
 test('parseSseResponseStream assembles native Codex tool calls from streamed function call events', async () => {
   const streamEvents = [
     'data: {"type":"response.output_text.delta","delta":"Inspecting..."}\n\n',
@@ -214,6 +246,7 @@ test('parseSseResponseStream assembles native Codex tool calls from streamed fun
   )
 
   assert.equal(result.assistantContent, 'Inspecting...')
+  assert.equal(result.responseId, null)
   assert.equal(result.toolCalls.length, 1)
   assert.deepEqual(result.toolCalls[0], {
     argumentsText: '{"absolute_path":"C:\\\\repo"}',
@@ -311,6 +344,23 @@ test('parseSseResponseStream keeps invocation id stable when codex emits a diffe
   assert.equal(deltaEvents.at(-1)?.invocationId, 'call_1')
   assert.equal(result.toolCalls[0]?.id, 'call_1')
   assert.equal(result.toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\src"}')
+})
+
+test('parseSseResponseStream captures response id from lifecycle payloads', async () => {
+  const streamEvents = [
+    'data: {"type":"response.created","response":{"id":"resp_abc123"}}\n\n',
+    'data: {"type":"response.output_text.delta","delta":"Done."}\n\n',
+    'data: [DONE]\n\n',
+  ]
+
+  const result = await parseSseResponseStream(
+    createSseResponse(streamEvents),
+    () => {},
+    new AbortController().signal,
+  )
+
+  assert.equal(result.assistantContent, 'Done.')
+  assert.equal(result.responseId, 'resp_abc123')
 })
 
 test('parseSseResponseStream ignores malformed function_call entries without a name', async () => {

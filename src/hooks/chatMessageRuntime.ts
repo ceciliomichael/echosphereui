@@ -24,6 +24,7 @@ export interface ChatRuntimeSelection {
 interface StreamAssistantResponseInput {
   agentContextRootPath: string
   chatMode: ChatMode
+  conversationId: string
   messages: Message[]
   modelId: string
   onContentDelta: (delta: string) => void
@@ -212,6 +213,7 @@ export async function streamAssistantResponse(
         messages: input.messages,
         agentContextRootPath: input.agentContextRootPath,
         chatMode: input.chatMode,
+        conversationId: input.conversationId,
         modelId: input.modelId,
         providerId: input.providerId,
         reasoningEffort: input.reasoningEffort,
