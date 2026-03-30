@@ -44,6 +44,7 @@ import type {
   ReplaceConversationMessagesInput,
   SaveApiKeyProviderInput,
   SubmitToolDecisionInput,
+  WorkspaceExplorerImportEntryInput,
   WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
@@ -114,6 +115,7 @@ import {
   listWorkspaceDirectory,
   readWorkspaceFile,
   renameWorkspaceEntry,
+  importWorkspaceEntry,
   transferWorkspaceEntry,
   writeWorkspaceFile,
 } from './workspace/explorer'
@@ -420,6 +422,9 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:explorer:transferEntry', async (_event, input: WorkspaceExplorerTransferEntryInput) =>
     transferWorkspaceEntry(input),
+  )
+  ipcMain.handle('workspace:explorer:importEntry', async (_event, input: WorkspaceExplorerImportEntryInput) =>
+    importWorkspaceEntry(input),
   )
 }
 

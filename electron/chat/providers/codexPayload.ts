@@ -2,12 +2,7 @@ import type { ChatMode, Message } from '../../../src/types/chat'
 import {
   buildSerializedAssistantTurnContentWithInlineReasoning,
 } from '../openaiCompatible/assistantToolInvocationContext'
-import type {
-  OpenAICompatibleResponsesFunctionCallOutputInput,
-  OpenAICompatibleResponsesRequestOverrides,
-} from '../openaiCompatible/responsesState'
-import { buildCodexGroupedToolResultContent } from '../openaiCompatible/toolResultFormatter'
-import { ensureToolOutputMessageEnvelope } from '../openaiCompatible/toolResultReplayEnvelope'
+import type { OpenAICompatibleResponsesFunctionCallOutputInput } from '../openaiCompatible/responsesState'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
 import type { ProviderStreamRequest } from '../providerTypes'
@@ -32,13 +27,20 @@ export interface CodexInputMessage {
   role: 'assistant' | 'user'
 }
 
+export interface CodexFunctionCallInputItem {
+  arguments: string
+  call_id: string
+  name: string
+  status?: 'in_progress' | 'completed' | 'incomplete'
+  type: 'function_call'
+}
+
 export interface CodexRequestPayload {
   include: string[]
-  input: Array<CodexInputMessage | OpenAICompatibleResponsesFunctionCallOutputInput>
+  input: Array<CodexInputMessage | CodexFunctionCallInputItem | OpenAICompatibleResponsesFunctionCallOutputInput>
   instructions: string
   model: string
   parallel_tool_calls: boolean
-  previous_response_id?: string
   reasoning: {
     effort: string
     summary: 'auto'
@@ -49,21 +51,63 @@ export interface CodexRequestPayload {
   tools: CodexFunctionToolDefinition[]
 }
 
+type CodexPayloadInputItem = CodexInputMessage | CodexFunctionCallInputItem | OpenAICompatibleResponsesFunctionCallOutputInput
+
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-export function toCodexInputMessage(message: Message): CodexInputMessage | null {
-  if (message.role === 'assistant') {
-    const content = buildSerializedAssistantTurnContentWithInlineReasoning(message)
-    if (!hasText(content)) {
-      return null
+function toCodexFunctionCallItem(
+  invocation: NonNullable<Message['toolInvocations']>[number],
+): CodexFunctionCallInputItem | null {
+  if (invocation.id.trim().length === 0 || invocation.toolName.trim().length === 0) {
+    return null
+  }
+
+  return {
+    arguments: invocation.argumentsText,
+    call_id: invocation.id,
+    name: invocation.toolName,
+    status: invocation.state === 'failed' ? 'incomplete' : 'completed',
+    type: 'function_call',
+  }
+}
+
+function toCodexInputItems(
+  message: Message,
+): Array<CodexInputMessage | CodexFunctionCallInputItem | OpenAICompatibleResponsesFunctionCallOutputInput> {
+  if (message.role === 'tool') {
+    if (!hasText(message.content) || !hasText(message.toolCallId)) {
+      return []
     }
 
-    return {
-      role: 'assistant',
-      content: [{ text: content, type: 'output_text' }],
+    return [
+      {
+        call_id: message.toolCallId,
+        output: message.content,
+        type: 'function_call_output',
+      },
+    ]
+  }
+
+  if (message.role === 'assistant') {
+    const inputItems: Array<CodexInputMessage | CodexFunctionCallInputItem> = []
+    const content = buildSerializedAssistantTurnContentWithInlineReasoning(message)
+    if (hasText(content)) {
+      inputItems.push({
+        role: 'assistant',
+        content: [{ text: content, type: 'output_text' }],
+      })
     }
+
+    for (const invocation of message.toolInvocations ?? []) {
+      const functionCallItem = toCodexFunctionCallItem(invocation)
+      if (functionCallItem) {
+        inputItems.push(functionCallItem)
+      }
+    }
+
+    return inputItems
   }
 
   const content: CodexMessageContentItem[] = []
@@ -84,50 +128,23 @@ export function toCodexInputMessage(message: Message): CodexInputMessage | null 
   }
 
   if (content.length === 0) {
-    return null
+    return []
   }
 
-  return {
-    role: 'user',
-    content,
-  }
+  return [{ role: 'user', content }]
 }
 
 export function buildCodexInputMessages(messages: Message[]) {
-  const inputMessages: CodexInputMessage[] = []
-  const pendingToolContentsByTurn: string[] = []
+  return messages.flatMap((message) => toCodexInputItems(message))
+}
 
-  const flushPendingToolContents = () => {
-    const groupedContent = buildCodexGroupedToolResultContent(pendingToolContentsByTurn)
-    pendingToolContentsByTurn.length = 0
-
-    if (!groupedContent) {
-      return
-    }
-
-    inputMessages.push({
-      content: [{ text: ensureToolOutputMessageEnvelope(groupedContent), type: 'input_text' }],
-      role: 'user',
-    })
+function stripCodexInputItemIds(item: CodexPayloadInputItem): CodexPayloadInputItem {
+  if (!('id' in item)) {
+    return item
   }
 
-  for (const message of messages) {
-    if (message.role === 'tool') {
-      if (hasText(message.content)) {
-        pendingToolContentsByTurn.push(message.content)
-      }
-      continue
-    }
-
-    flushPendingToolContents()
-    const inputMessage = toCodexInputMessage(message)
-    if (inputMessage) {
-      inputMessages.push(inputMessage)
-    }
-  }
-
-  flushPendingToolContents()
-  return inputMessages
+  const { id: _ignoredId, ...rest } = item
+  return rest as CodexPayloadInputItem
 }
 
 export function getCodexToolDefinitions(chatMode: ChatMode): CodexFunctionToolDefinition[] {
@@ -147,8 +164,6 @@ export function getCodexToolDefinitions(chatMode: ChatMode): CodexFunctionToolDe
 
 export async function buildCodexPayload(
   request: ProviderStreamRequest,
-  messages: Message[],
-  overrides: OpenAICompatibleResponsesRequestOverrides = {},
 ): Promise<CodexRequestPayload> {
   const instructions = await buildSystemPrompt({
     agentContextRootPath: request.agentContextRootPath,
@@ -160,11 +175,10 @@ export async function buildCodexPayload(
 
   return {
     include: ['reasoning.encrypted_content'],
-    input: overrides.input ?? buildCodexInputMessages(messages),
+    input: buildCodexInputMessages(request.messages).map((item) => stripCodexInputItemIds(item)),
     instructions,
     model: request.modelId,
     parallel_tool_calls: true,
-    ...(overrides.previousResponseId ? { previous_response_id: overrides.previousResponseId } : {}),
     reasoning: {
       effort: request.reasoningEffort,
       summary: 'auto',

@@ -40,8 +40,6 @@ Follow this sequence for every code-modifying task.
 10. Run relevant validation such as tests, type checks, linters, or targeted diagnostics.
 11. Finalize only after verifying the result, summarizing important tradeoffs, and noting any remaining risk or assumption.
 
-Do not skip planning because a change looks small. Small changes still require structure decisions.
-
 ## Structure Rules
 - Separate code by responsibility, not by file length.
 - Small code is not the same as single responsibility.

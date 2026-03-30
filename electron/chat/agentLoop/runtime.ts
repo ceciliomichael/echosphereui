@@ -7,11 +7,6 @@ import {
   createToolExecutionScheduler,
 } from '../openaiCompatible/toolExecution'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
-import {
-  appendRuntimeContextMessageIfChanged,
-  readLatestRuntimeContextSnapshot,
-  type RuntimeContextSnapshot,
-} from './runtimeContext'
 
 interface AgentLoopStreamRequest {
   agentContextRootPath: string
@@ -84,14 +79,6 @@ function buildInMemoryAssistantMessageWithToolInvocations(content: string, toolC
   }
 }
 
-function toRuntimeContextSnapshot(request: AgentLoopStreamRequest): RuntimeContextSnapshot {
-  return {
-    agentContextRootPath: request.agentContextRootPath,
-    providerId: request.providerId,
-    terminalExecutionMode: request.terminalExecutionMode,
-  }
-}
-
 export async function streamAgentLoopWithTools(
   request: AgentLoopStreamRequest,
   context: ProviderStreamContext,
@@ -122,18 +109,9 @@ export async function streamAgentLoopWithTools(
     },
     turnState,
   })
-  let previousRuntimeContextSnapshot = readLatestRuntimeContextSnapshot(request.messages)
-  const currentRuntimeContextSnapshot = toRuntimeContextSnapshot(request)
 
   while (!context.signal.aborted) {
-    const replayableMessages = buildReplayableMessageHistory(inMemoryMessages)
-    const runtimeContextResult = appendRuntimeContextMessageIfChanged(
-      replayableMessages,
-      currentRuntimeContextSnapshot,
-      previousRuntimeContextSnapshot,
-    )
-    previousRuntimeContextSnapshot = runtimeContextResult.snapshot
-    const replayableMessagesForTurn = runtimeContextResult.messages
+    const replayableMessagesForTurn = buildReplayableMessageHistory(inMemoryMessages)
 
     const toolCallsById = new Map<string, OpenAICompatibleToolCall>()
     const scheduledToolCallIds = new Set<string>()

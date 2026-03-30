@@ -11,10 +11,10 @@ export {
   buildCodexInputMessages,
   buildCodexPayload,
   getCodexToolDefinitions,
-  toCodexInputMessage,
 } from './codexPayload'
 export type {
   CodexFunctionToolDefinition,
+  CodexFunctionCallInputItem,
   CodexInputMessage,
   CodexMessageContentItem,
   CodexRequestPayload,

@@ -499,6 +499,7 @@ export function ChatInterfaceContent({
               onCreateEntry={workspaceState.handleCreateWorkspaceEntry}
               onCutEntry={workspaceState.handleCutWorkspaceEntry}
               onDeleteEntry={workspaceState.handleDeleteWorkspaceEntry}
+              onImportEntry={workspaceState.handleImportWorkspaceEntry}
               onMoveEntry={workspaceState.handleMoveWorkspaceEntry}
               onOpenFile={workspaceState.handleOpenWorkspaceFile}
               onPasteEntry={workspaceState.handlePasteWorkspaceEntry}

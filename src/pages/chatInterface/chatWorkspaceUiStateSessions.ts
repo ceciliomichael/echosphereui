@@ -1,0 +1,207 @@
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { ChatInterfaceRightPanelTab } from "../../hooks/useChatInterfaceController";
+import type { WorkspaceFileTab } from "../../components/workspaceExplorer/types";
+import type { WorkspaceUiSession } from "./chatWorkspaceUiState.types";
+
+interface SaveWorkspaceUiSessionInput {
+  activeWorkspaceFilePath: string | null;
+  activeWorkspaceUiKey: string;
+  isExplorerOpen: boolean;
+  isRightPanelOpen: boolean;
+  isWorkspaceTabsPanelVisible: boolean;
+  rightPanelTab: ChatInterfaceRightPanelTab;
+  workspaceFileTabs: WorkspaceFileTab[];
+  workspaceUiSessionsRef: MutableRefObject<Record<string, WorkspaceUiSession>>;
+}
+
+interface RestoreWorkspaceUiSessionInput {
+  activeWorkspaceFilePath: string | null;
+  activeWorkspaceUiKey: string;
+  isExplorerOpen: boolean;
+  isRightPanelOpen: boolean;
+  isWorkspaceTabsPanelVisible: boolean;
+  onRightPanelOpenChange: (nextValue: boolean) => void;
+  onRightPanelTabChange: (nextTab: ChatInterfaceRightPanelTab) => void;
+  previousWorkspaceUiKeyRef: MutableRefObject<string>;
+  setActiveWorkspaceFilePath: Dispatch<SetStateAction<string | null>>;
+  setIsExplorerOpen: Dispatch<SetStateAction<boolean>>;
+  setIsWorkspaceTabsPanelVisible: Dispatch<SetStateAction<boolean>>;
+  setWorkspaceFileTabs: Dispatch<SetStateAction<WorkspaceFileTab[]>>;
+  workspaceFileTabs: WorkspaceFileTab[];
+  workspaceUiSessionsRef: MutableRefObject<Record<string, WorkspaceUiSession>>;
+}
+
+interface SidebarPanelRestoreRef {
+  shouldRestoreExplorer: boolean;
+  shouldRestoreRightPanel: boolean;
+  shouldRestoreTabs: boolean;
+}
+
+interface HandleSidebarOpenChangeInput {
+  isExplorerOpen: boolean;
+  isRightPanelOpen: boolean;
+  isWorkspaceTabsPanelVisible: boolean;
+  onRightPanelOpenChange: (nextValue: boolean) => void;
+  setIsExplorerOpen: Dispatch<SetStateAction<boolean>>;
+  setIsWorkspaceTabsPanelVisible: Dispatch<SetStateAction<boolean>>;
+  sidebarPanelRestoreRef: MutableRefObject<SidebarPanelRestoreRef | null>;
+  workspaceFileTabsLength: number;
+}
+
+interface WorkspacePathRefInput {
+  activeWorkspacePath: string | null;
+  activeWorkspacePathRef: MutableRefObject<string | null>;
+}
+
+interface WorkspaceAutosaveTimeoutsRefInput {
+  workspaceAutosaveTimeoutsRef: MutableRefObject<Map<string, number>>;
+}
+
+export function saveWorkspaceUiSession({
+  activeWorkspaceFilePath,
+  activeWorkspaceUiKey,
+  isExplorerOpen,
+  isRightPanelOpen,
+  isWorkspaceTabsPanelVisible,
+  rightPanelTab,
+  workspaceFileTabs,
+  workspaceUiSessionsRef,
+}: SaveWorkspaceUiSessionInput) {
+  workspaceUiSessionsRef.current[activeWorkspaceUiKey] = {
+    activeFilePath: activeWorkspaceFilePath,
+    isExplorerOpen,
+    isRightPanelOpen,
+    isTabsVisible: isWorkspaceTabsPanelVisible,
+    rightPanelTab,
+    tabs: workspaceFileTabs,
+  };
+}
+
+export function restoreWorkspaceUiSession({
+  activeWorkspaceFilePath,
+  activeWorkspaceUiKey,
+  isExplorerOpen,
+  isRightPanelOpen,
+  isWorkspaceTabsPanelVisible,
+  onRightPanelOpenChange,
+  onRightPanelTabChange,
+  previousWorkspaceUiKeyRef,
+  setActiveWorkspaceFilePath,
+  setIsExplorerOpen,
+  setIsWorkspaceTabsPanelVisible,
+  setWorkspaceFileTabs,
+  workspaceFileTabs,
+  workspaceUiSessionsRef,
+}: RestoreWorkspaceUiSessionInput) {
+  const previousWorkspaceUiKey = previousWorkspaceUiKeyRef.current;
+  if (previousWorkspaceUiKey === activeWorkspaceUiKey) {
+    return;
+  }
+
+  saveWorkspaceUiSession({
+    activeWorkspaceFilePath,
+    activeWorkspaceUiKey: previousWorkspaceUiKey,
+    isExplorerOpen,
+    isRightPanelOpen,
+    isWorkspaceTabsPanelVisible,
+    rightPanelTab:
+      workspaceUiSessionsRef.current[previousWorkspaceUiKey]?.rightPanelTab ??
+      "diff",
+    workspaceFileTabs,
+    workspaceUiSessionsRef,
+  });
+
+  const nextSession = workspaceUiSessionsRef.current[activeWorkspaceUiKey];
+  if (nextSession) {
+    setActiveWorkspaceFilePath(nextSession.activeFilePath);
+    setIsWorkspaceTabsPanelVisible(nextSession.isTabsVisible);
+    setIsExplorerOpen(nextSession.isExplorerOpen);
+    onRightPanelTabChange(nextSession.rightPanelTab);
+    onRightPanelOpenChange(nextSession.isRightPanelOpen);
+  } else {
+    setWorkspaceFileTabs([]);
+    setActiveWorkspaceFilePath(null);
+    setIsWorkspaceTabsPanelVisible(false);
+    setIsExplorerOpen(false);
+    onRightPanelTabChange("diff");
+    onRightPanelOpenChange(false);
+  }
+
+  previousWorkspaceUiKeyRef.current = activeWorkspaceUiKey;
+}
+
+export function syncActiveWorkspacePathRef({
+  activeWorkspacePath,
+  activeWorkspacePathRef,
+}: WorkspacePathRefInput) {
+  activeWorkspacePathRef.current = activeWorkspacePath;
+}
+
+export function clearWorkspaceAutosaveTimeoutsForWorkspace({
+  workspaceAutosaveTimeoutsRef,
+}: WorkspaceAutosaveTimeoutsRefInput) {
+  workspaceAutosaveTimeoutsRef.current.forEach((timeoutId) => {
+    window.clearTimeout(timeoutId);
+  });
+  workspaceAutosaveTimeoutsRef.current.clear();
+}
+
+export function createHandleSidebarOpenChange({
+  isExplorerOpen,
+  isRightPanelOpen,
+  isWorkspaceTabsPanelVisible,
+  onRightPanelOpenChange,
+  setIsExplorerOpen,
+  setIsWorkspaceTabsPanelVisible,
+  sidebarPanelRestoreRef,
+  workspaceFileTabsLength,
+}: HandleSidebarOpenChangeInput) {
+  return (nextSidebarOpen: boolean) => {
+    if (nextSidebarOpen) {
+      const shouldCloseTabs =
+        isWorkspaceTabsPanelVisible && workspaceFileTabsLength > 0;
+      const shouldCloseRightPanel = isRightPanelOpen;
+      const shouldCloseExplorer = isExplorerOpen;
+      const shouldClosePanels =
+        shouldCloseTabs || shouldCloseRightPanel || shouldCloseExplorer;
+
+      if (!shouldClosePanels) {
+        sidebarPanelRestoreRef.current = null;
+        return;
+      }
+
+      sidebarPanelRestoreRef.current = {
+        shouldRestoreExplorer: shouldCloseExplorer,
+        shouldRestoreRightPanel: shouldCloseRightPanel,
+        shouldRestoreTabs: shouldCloseTabs,
+      };
+
+      if (shouldCloseTabs) {
+        setIsWorkspaceTabsPanelVisible(false);
+      }
+      if (shouldCloseRightPanel) {
+        onRightPanelOpenChange(false);
+      }
+      if (shouldCloseExplorer) {
+        setIsExplorerOpen(false);
+      }
+      return;
+    }
+
+    const restoreState = sidebarPanelRestoreRef.current;
+    sidebarPanelRestoreRef.current = null;
+    if (!restoreState) {
+      return;
+    }
+
+    if (restoreState.shouldRestoreTabs && workspaceFileTabsLength > 0) {
+      setIsWorkspaceTabsPanelVisible(true);
+    }
+    if (restoreState.shouldRestoreRightPanel) {
+      onRightPanelOpenChange(true);
+    }
+    if (restoreState.shouldRestoreExplorer) {
+      setIsExplorerOpen(true);
+    }
+  };
+}

@@ -40,7 +40,7 @@ test('getCodexToolDefinitions returns flat function tools for native Responses p
   assert.equal('function' in listTool, false)
 })
 
-test('buildCodexInputMessages groups current-turn tool results into one standalone user tool-output item', () => {
+test('buildCodexInputMessages serializes tool-role history as function_call_output items', () => {
   const messages: Message[] = [
     {
       content: 'Inspecting now.',
@@ -66,20 +66,25 @@ test('buildCodexInputMessages groups current-turn tool results into one standalo
 
   const inputMessages = buildCodexInputMessages(messages)
 
-  assert.equal(inputMessages.length, 2)
-  assert.deepEqual(inputMessages[0], {
-    content: [{ text: 'Inspecting now.', type: 'output_text' }],
-    role: 'assistant',
-  })
-  assert.equal(inputMessages[1]?.role, 'user')
-  assert.equal(inputMessages[1]?.content[0]?.type, 'input_text')
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /^\[SYSTEM TOOL OUTPUT\]/u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /<tool_results>/u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /Directory \./u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /File src\/index\.ts \(lines 1-2\)/u)
+  assert.deepEqual(inputMessages, [
+    {
+      content: [{ text: 'Inspecting now.', type: 'output_text' }],
+      role: 'assistant',
+    },
+    {
+      call_id: 'call_123',
+      output: 'Directory .\n[F] package.json',
+      type: 'function_call_output',
+    },
+    {
+      call_id: 'call_456',
+      output: 'File src/index.ts (lines 1-2)\n```\nexport {}\n```',
+      type: 'function_call_output',
+    },
+  ])
 })
 
-test('buildCodexInputMessages keeps assistant content and groups tool results without serializing tool invocation context', () => {
+test('buildCodexInputMessages keeps assistant content, function calls, and tool outputs for Codex manual replay', () => {
   const messages: Message[] = [
     {
       content: 'I will inspect the workspace.',
@@ -98,6 +103,13 @@ test('buildCodexInputMessages keeps assistant content and groups tool results wi
         },
       ],
     },
+    {
+      content: 'Listed C:/workspace.',
+      id: 'tool-message-1',
+      role: 'tool',
+      timestamp: 1_700_000_000_015,
+      toolCallId: 'call-1',
+    },
   ]
 
   assert.deepEqual(buildCodexInputMessages(messages), [
@@ -107,6 +119,18 @@ test('buildCodexInputMessages keeps assistant content and groups tool results wi
         type: 'output_text',
       }],
       role: 'assistant',
+    },
+    {
+      arguments: '{"absolute_path":"C:/workspace"}',
+      call_id: 'call-1',
+      name: 'list',
+      status: 'completed',
+      type: 'function_call',
+    },
+    {
+      call_id: 'call-1',
+      output: 'Listed C:/workspace.',
+      type: 'function_call_output',
     },
   ])
 })
@@ -155,7 +179,7 @@ test('buildCodexInputMessages omits inline reasoning block when assistant reason
   ])
 })
 
-test('buildCodexInputMessages omits tool-only assistant turns that have no assistant text content', () => {
+test('buildCodexInputMessages keeps tool-only assistant turns as function_call items', () => {
   const messages: Message[] = [
     {
       content: '',
@@ -174,7 +198,15 @@ test('buildCodexInputMessages omits tool-only assistant turns that have no assis
     },
   ]
 
-  assert.deepEqual(buildCodexInputMessages(messages), [])
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      arguments: '{"absolute_path":"C:/workspace"}',
+      call_id: 'call-1',
+      name: 'list',
+      status: 'completed',
+      type: 'function_call',
+    },
+  ])
 })
 
 test('buildCodexPayload keeps parallel tool call batching enabled', async () => {
@@ -187,43 +219,68 @@ test('buildCodexPayload keeps parallel tool call batching enabled', async () => 
       providerId: 'codex',
       reasoningEffort: 'medium',
     },
-    [],
   )
 
   assert.equal(payload.parallel_tool_calls, true)
 })
 
-test('buildCodexPayload accepts Responses chaining overrides for follow-up tool turns', async () => {
+test('buildCodexPayload includes the full manual replay history for Codex backend requests', async () => {
   const payload = await buildCodexPayload(
     {
       agentContextRootPath: 'C:/workspace',
       chatMode: 'agent',
-      messages: [],
+      messages: [
+        {
+          content: 'I will inspect the workspace.',
+          id: 'assistant-message-1',
+          role: 'assistant',
+          timestamp: 1_700_000_000_000,
+          toolInvocations: [
+            {
+              argumentsText: '{"absolute_path":"C:/workspace"}',
+              id: 'call-1',
+              startedAt: 1_700_000_000_005,
+              state: 'completed',
+              toolName: 'list',
+            },
+          ],
+        },
+        {
+          content: 'Listed C:/workspace.',
+          id: 'tool-message-1',
+          role: 'tool',
+          timestamp: 1_700_000_000_015,
+          toolCallId: 'call-1',
+        },
+      ],
       modelId: 'gpt-5-codex',
       providerId: 'codex',
       reasoningEffort: 'medium',
     },
-    [],
-    {
-      input: [
-        {
-          call_id: 'call_1',
-          output: '<tool_result>ok</tool_result>',
-          type: 'function_call_output',
-        },
-      ],
-      previousResponseId: 'resp_1',
-    },
   )
 
-  assert.equal(payload.previous_response_id, 'resp_1')
   assert.deepEqual(payload.input, [
     {
-      call_id: 'call_1',
-      output: '<tool_result>ok</tool_result>',
+      content: [{
+        text: 'I will inspect the workspace.',
+        type: 'output_text',
+      }],
+      role: 'assistant',
+    },
+    {
+      arguments: '{"absolute_path":"C:/workspace"}',
+      call_id: 'call-1',
+      name: 'list',
+      status: 'completed',
+      type: 'function_call',
+    },
+    {
+      call_id: 'call-1',
+      output: 'Listed C:/workspace.',
       type: 'function_call_output',
     },
   ])
+  assert.equal('previous_response_id' in payload, false)
 })
 
 test('parseSseResponseStream assembles native Codex tool calls from streamed function call events', async () => {

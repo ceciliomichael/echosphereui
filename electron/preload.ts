@@ -32,6 +32,7 @@ import type {
   ResizeTerminalSessionInput,
   SubmitToolDecisionInput,
   StartChatStreamInput,
+  WorkspaceExplorerImportEntryInput,
   WorkspaceExplorerChangeEvent,
   WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
@@ -137,6 +138,8 @@ const workspaceApi: EchosphereWorkspaceApi = {
     ipcRenderer.invoke('workspace:checkpoint:createRedoFromSource', sourceCheckpointId),
   createEntry: (input) => ipcRenderer.invoke('workspace:explorer:createEntry', input),
   deleteEntry: (input) => ipcRenderer.invoke('workspace:explorer:deleteEntry', input),
+  importEntry: (input: WorkspaceExplorerImportEntryInput) =>
+    ipcRenderer.invoke('workspace:explorer:importEntry', input),
   onExplorerChange: (listener: (event: WorkspaceExplorerChangeEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: WorkspaceExplorerChangeEvent) => listener(payload)
     ipcRenderer.on('workspace:explorer:changed', wrappedListener)

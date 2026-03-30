@@ -92,6 +92,29 @@ async function statIfExists(targetPath: string) {
   })
 }
 
+async function copyDirectoryRecursively(sourcePath: string, targetPath: string) {
+  await fs.mkdir(targetPath, { recursive: true })
+  const entries = await fs.readdir(sourcePath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      continue
+    }
+
+    const sourceEntryPath = path.join(sourcePath, entry.name)
+    const targetEntryPath = path.join(targetPath, entry.name)
+
+    if (entry.isDirectory()) {
+      await copyDirectoryRecursively(sourceEntryPath, targetEntryPath)
+      continue
+    }
+
+    if (entry.isFile()) {
+      await fs.copyFile(sourceEntryPath, targetEntryPath)
+    }
+  }
+}
+
 function isNestedWithinDirectory(parentAbsolutePath: string, targetAbsolutePath: string) {
   const relativePath = path.relative(parentAbsolutePath, targetAbsolutePath)
   return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
@@ -440,6 +463,60 @@ export async function transferWorkspaceEntry(
   return {
     mode: input.mode,
     relativePath: sourceTarget.relativePath,
+    targetRelativePath: destinationTarget.relativePath,
+  }
+}
+
+export async function importWorkspaceEntry(input: {
+  sourcePath: string
+  targetDirectoryRelativePath?: string
+  workspaceRootPath: string
+}): Promise<WorkspaceExplorerTransferEntryResult> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+
+  const sourcePath = path.resolve(input.sourcePath.trim())
+  const sourceStats = await fs.stat(sourcePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Entry does not exist: ${sourcePath}`)
+    }
+    throw error
+  })
+
+  if (!sourceStats.isDirectory() && !sourceStats.isFile()) {
+    throw new Error(`Unsupported entry type: ${sourcePath}`)
+  }
+
+  const destinationDirectoryTarget = getSafeTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
+  const destinationDirectoryStats = await fs.stat(destinationDirectoryTarget.absolutePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Directory does not exist: ${destinationDirectoryTarget.relativePath}`)
+    }
+    throw error
+  })
+
+  if (!destinationDirectoryStats.isDirectory()) {
+    throw new Error(`Expected a directory: ${destinationDirectoryTarget.relativePath}`)
+  }
+
+  const sourceEntryName = path.basename(sourcePath)
+  const destinationTarget = await resolveTransferDestinationPath(
+    destinationDirectoryTarget.absolutePath,
+    destinationDirectoryTarget.relativePath,
+    sourceEntryName,
+    sourceStats.isDirectory(),
+    'copy',
+  )
+
+  if (sourceStats.isDirectory()) {
+    await copyDirectoryRecursively(sourcePath, destinationTarget.absolutePath)
+  } else {
+    await fs.copyFile(sourcePath, destinationTarget.absolutePath)
+  }
+
+  return {
+    mode: 'copy',
+    relativePath: sourcePath,
     targetRelativePath: destinationTarget.relativePath,
   }
 }

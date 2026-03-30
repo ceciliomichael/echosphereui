@@ -120,7 +120,7 @@ test('buildOpenAICompatibleCompletionMessages repairs orphan tool messages using
   assert.equal(serializedMessages[2]?.tool_call_id, 'call-1')
 })
 
-test('buildCodexInputMessages converts tool-role history to a single tool-output user item for Codex payloads', () => {
+test('buildCodexInputMessages omits tool-role history for Codex Responses payloads', () => {
   const messages: Message[] = [
     {
       content: 'Inspecting now.',
@@ -144,13 +144,11 @@ test('buildCodexInputMessages converts tool-role history to a single tool-output
   ]
 
   const inputMessages = buildCodexInputMessages(messages)
-  assert.equal(inputMessages.length, 3)
+  assert.equal(inputMessages.length, 2)
   assert.equal(inputMessages[0]?.role, 'assistant')
   assert.equal(inputMessages[1]?.role, 'user')
-  assert.equal(inputMessages[2]?.role, 'user')
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /^\[SYSTEM TOOL OUTPUT\]/u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /<tool_results>/u)
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /Directory \./u)
+  assert.equal(inputMessages[1]?.content[0]?.type, 'input_text')
+  assert.equal(inputMessages[1]?.content[0]?.text, 'Continue from that.')
 })
 
 test('buildCodexInputMessages preserves assistant reasoning in tool-loop follow-up payloads', () => {
@@ -178,7 +176,7 @@ test('buildCodexInputMessages preserves assistant reasoning in tool-loop follow-
   ]
 
   const inputMessages = buildCodexInputMessages(messages)
-  assert.equal(inputMessages.length, 3)
+  assert.equal(inputMessages.length, 2)
   assert.equal(inputMessages[0]?.role, 'assistant')
   assert.equal(inputMessages[0]?.content[0]?.type, 'output_text')
   assert.match(
@@ -186,8 +184,6 @@ test('buildCodexInputMessages preserves assistant reasoning in tool-loop follow-
     /<think>\nNeed to inspect project files before editing\.\n<\/think>\n\nInspecting now\./u,
   )
   assert.equal(inputMessages[1]?.role, 'user')
-  assert.match(inputMessages[1]?.content[0]?.text ?? '', /<tool_results>/u)
-  assert.equal(inputMessages[2]?.role, 'user')
-  assert.equal(inputMessages[2]?.content[0]?.type, 'input_text')
-  assert.equal(inputMessages[2]?.content[0]?.text, 'Continue from that.')
+  assert.equal(inputMessages[1]?.content[0]?.type, 'input_text')
+  assert.equal(inputMessages[1]?.content[0]?.text, 'Continue from that.')
 })

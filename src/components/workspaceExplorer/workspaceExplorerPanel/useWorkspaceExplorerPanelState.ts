@@ -22,6 +22,30 @@ import {
 } from './workspaceExplorerPanelUtils'
 import type { PendingExplorerCreation, WorkspaceExplorerContextMenuState } from './workspaceExplorerPanelTypes'
 
+interface ExternalFileDropItem {
+  path: string
+}
+
+function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
+  const items = Array.from(event.dataTransfer.items)
+  const filePaths: string[] = []
+
+  for (const item of items) {
+    if (item.kind !== 'file') {
+      continue
+    }
+
+    const file = item.getAsFile() as ExternalFileDropItem | null
+    if (!file || typeof file.path !== 'string' || file.path.trim().length === 0) {
+      continue
+    }
+
+    filePaths.push(file.path)
+  }
+
+  return filePaths
+}
+
 export function useWorkspaceExplorerPanelState({
   clipboardEntry,
   isOpen,
@@ -29,6 +53,7 @@ export function useWorkspaceExplorerPanelState({
   onCreateEntry,
   onCutEntry,
   onDeleteEntry,
+  onImportEntry,
   onMoveEntry,
   onOpenFile,
   onPasteEntry,
@@ -444,6 +469,24 @@ export function useWorkspaceExplorerPanelState({
     [loadDirectory, onMoveEntry],
   )
 
+  const submitImportEntry = useCallback(
+    async (sourcePath: string, targetDirectoryRelativePath: string) => {
+      if (!workspaceRootPath) {
+        throw new Error('Select a workspace folder first.')
+      }
+
+      setDropTargetDirectoryPath(null)
+      try {
+        await onImportEntry(sourcePath, targetDirectoryRelativePath)
+        setErrorMessage(null)
+        await Promise.all([loadDirectory(ROOT_DIRECTORY_KEY), loadDirectory(targetDirectoryRelativePath)])
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to import workspace entry.')
+      }
+    },
+    [loadDirectory, onImportEntry, workspaceRootPath],
+  )
+
   const handleEntryDragStart = useCallback((event: ReactDragEvent<HTMLButtonElement>, entry: WorkspaceExplorerEntry) => {
     draggedEntryRef.current = entry
     event.dataTransfer.effectAllowed = 'move'
@@ -495,6 +538,69 @@ export function useWorkspaceExplorerPanelState({
       setDropTargetDirectoryPath(null)
     },
     [dropTargetDirectoryPath],
+  )
+
+  const handleExternalDragOver = useCallback(
+    (event: ReactDragEvent<HTMLElement>, targetDirectoryRelativePath: string) => {
+      if (!workspaceRootPath) {
+        return
+      }
+
+      const hasFiles = Array.from(event.dataTransfer.types).includes('Files')
+      if (!hasFiles) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'copy'
+      if (dropTargetDirectoryPath !== targetDirectoryRelativePath) {
+        setDropTargetDirectoryPath(targetDirectoryRelativePath)
+      }
+    },
+    [dropTargetDirectoryPath, workspaceRootPath],
+  )
+
+  const handleExternalDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLElement>, targetDirectoryRelativePath: string) => {
+      if (dropTargetDirectoryPath !== targetDirectoryRelativePath) {
+        return
+      }
+
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        return
+      }
+
+      setDropTargetDirectoryPath(null)
+    },
+    [dropTargetDirectoryPath],
+  )
+
+  const handleExternalDrop = useCallback(
+    async (event: ReactDragEvent<HTMLElement>, targetDirectoryRelativePath: string) => {
+      if (!workspaceRootPath) {
+        return
+      }
+
+      const filePaths = getExternalFilePaths(event)
+
+      if (filePaths.length === 0) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setDropTargetDirectoryPath(null)
+
+      try {
+        for (const filePath of filePaths) {
+          await submitImportEntry(filePath, targetDirectoryRelativePath)
+        }
+      } finally {
+        setDropTargetDirectoryPath(null)
+      }
+    },
+    [submitImportEntry, workspaceRootPath],
   )
 
   const requestRenameEntry = useCallback(() => {
@@ -625,6 +731,9 @@ export function useWorkspaceExplorerPanelState({
     handleDirectoryDragLeave,
     handleDirectoryDragOver,
     handleDirectoryDrop,
+    handleExternalDragLeave,
+    handleExternalDragOver,
+    handleExternalDrop,
     handleEntryDragEnd,
     handleEntryDragStart,
     handleResizePointerDown,

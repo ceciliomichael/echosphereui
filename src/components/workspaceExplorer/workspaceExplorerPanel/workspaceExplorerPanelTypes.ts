@@ -14,6 +14,7 @@ export interface WorkspaceExplorerPanelProps {
   onCutEntry: (relativePath: string) => Promise<void>
   onDeleteEntry: (relativePath: string) => Promise<void>
   onMoveEntry: (relativePath: string, targetDirectoryRelativePath: string) => Promise<void>
+  onImportEntry: (sourcePath: string, targetDirectoryRelativePath: string) => Promise<void>
   onOpenFile: (relativePath: string) => void
   onPasteEntry: (targetDirectoryRelativePath: string) => Promise<void>
   onRenameEntry: (relativePath: string, nextRelativePath: string) => Promise<void>

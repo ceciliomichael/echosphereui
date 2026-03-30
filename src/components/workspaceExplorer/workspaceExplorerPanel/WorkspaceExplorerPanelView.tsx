@@ -1,4 +1,5 @@
 import { ChevronRight, File, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import type { DragEvent as ReactDragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { resolveFileIconConfig } from '../../../lib/fileIconResolver'
 import type { WorkspaceExplorerEntry } from '../../../types/chat'
@@ -16,6 +17,11 @@ export function WorkspaceExplorerPanelView({
   onOpenFile,
   panelState,
 }: WorkspaceExplorerPanelViewProps) {
+  function isExternalFileDrag(event: ReactDragEvent<HTMLElement>) {
+    const items = Array.from(event.dataTransfer.items)
+    return Array.from(event.dataTransfer.types).includes('Files') || items.some((item) => item.kind === 'file')
+  }
+
   function renderCreationRow(depth: number) {
     const draft = panelState.creationDraft
     if (!draft) {
@@ -86,9 +92,39 @@ export function WorkspaceExplorerPanelView({
             onContextMenu={(event) => panelState.openContextMenu(event, entry)}
             onDragStart={(event) => panelState.handleEntryDragStart(event, entry)}
             onDragEnd={panelState.handleEntryDragEnd}
-            onDragOver={isDirectory ? (event) => panelState.handleDirectoryDragOver(event, entry.relativePath) : undefined}
-            onDragLeave={isDirectory ? (event) => panelState.handleDirectoryDragLeave(event, entry.relativePath) : undefined}
-            onDrop={isDirectory ? (event) => panelState.handleDirectoryDrop(event, entry.relativePath) : undefined}
+            onDragOver={
+              isDirectory
+                ? (event) => {
+                    if (isExternalFileDrag(event)) {
+                      panelState.handleExternalDragOver(event, entry.relativePath)
+                      return
+                    }
+                    panelState.handleDirectoryDragOver(event, entry.relativePath)
+                  }
+                : undefined
+            }
+            onDragLeave={
+              isDirectory
+                ? (event) => {
+                    if (isExternalFileDrag(event)) {
+                      panelState.handleExternalDragLeave(event, entry.relativePath)
+                      return
+                    }
+                    panelState.handleDirectoryDragLeave(event, entry.relativePath)
+                  }
+                : undefined
+            }
+            onDrop={
+              isDirectory
+                ? (event) => {
+                    if (isExternalFileDrag(event)) {
+                      void panelState.handleExternalDrop(event, entry.relativePath)
+                      return
+                    }
+                    panelState.handleDirectoryDrop(event, entry.relativePath)
+                  }
+                : undefined
+            }
             className={[
               'flex h-8 w-full min-w-0 items-center gap-1 rounded-none px-2 text-left text-sm transition-colors',
               isCutEntry ? 'opacity-55' : '',
@@ -156,16 +192,28 @@ export function WorkspaceExplorerPanelView({
           if (event.target !== event.currentTarget) {
             return
           }
+          if (isExternalFileDrag(event)) {
+            panelState.handleExternalDragOver(event, ROOT_DIRECTORY_KEY)
+            return
+          }
           panelState.handleDirectoryDragOver(event, ROOT_DIRECTORY_KEY)
         }}
         onDragLeave={(event) => {
           if (event.target !== event.currentTarget) {
             return
           }
+          if (isExternalFileDrag(event)) {
+            panelState.handleExternalDragLeave(event, ROOT_DIRECTORY_KEY)
+            return
+          }
           panelState.handleDirectoryDragLeave(event, ROOT_DIRECTORY_KEY)
         }}
         onDrop={(event) => {
           if (event.target !== event.currentTarget) {
+            return
+          }
+          if (isExternalFileDrag(event)) {
+            void panelState.handleExternalDrop(event, ROOT_DIRECTORY_KEY)
             return
           }
           panelState.handleDirectoryDrop(event, ROOT_DIRECTORY_KEY)
@@ -192,16 +240,28 @@ export function WorkspaceExplorerPanelView({
               if (event.target !== event.currentTarget) {
                 return
               }
+              if (isExternalFileDrag(event)) {
+                panelState.handleExternalDragOver(event, ROOT_DIRECTORY_KEY)
+                return
+              }
               panelState.handleDirectoryDragOver(event, ROOT_DIRECTORY_KEY)
             }}
             onDragLeave={(event) => {
               if (event.target !== event.currentTarget) {
                 return
               }
+              if (isExternalFileDrag(event)) {
+                panelState.handleExternalDragLeave(event, ROOT_DIRECTORY_KEY)
+                return
+              }
               panelState.handleDirectoryDragLeave(event, ROOT_DIRECTORY_KEY)
             }}
             onDrop={(event) => {
               if (event.target !== event.currentTarget) {
+                return
+              }
+              if (isExternalFileDrag(event)) {
+                void panelState.handleExternalDrop(event, ROOT_DIRECTORY_KEY)
                 return
               }
               panelState.handleDirectoryDrop(event, ROOT_DIRECTORY_KEY)

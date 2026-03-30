@@ -65,21 +65,23 @@ export async function streamCodexResponsesWithTools(request: ProviderStreamReque
     },
     context,
     async (turnRequest, turnContext, options) => {
-      const payload = await buildCodexPayload(
-        {
-          ...request,
-          agentContextRootPath: turnRequest.agentContextRootPath,
-          chatMode: turnRequest.chatMode,
-          messages: turnRequest.messages,
-          modelId: turnRequest.modelId,
-          reasoningEffort: turnRequest.reasoningEffort,
-        },
-        turnRequest.messages,
-      )
+      const payload = await buildCodexPayload({
+        ...request,
+        agentContextRootPath: turnRequest.agentContextRootPath,
+        chatMode: turnRequest.chatMode,
+        messages: turnRequest.messages,
+        modelId: turnRequest.modelId,
+        reasoningEffort: turnRequest.reasoningEffort,
+      })
       const response = await sendCodexStreamingRequest(payload, turnContext.signal, codexSessionId)
-      return parseSseResponseStream(response, turnContext.emitDelta, turnContext.signal, {
+      const turnResult = await parseSseResponseStream(response, turnContext.emitDelta, turnContext.signal, {
         onToolCallReady: options?.onToolCallReady,
       })
+
+      return {
+        assistantContent: turnResult.assistantContent,
+        toolCalls: turnResult.toolCalls,
+      }
     },
   )
 }
