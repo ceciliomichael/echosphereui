@@ -88,9 +88,15 @@ export function ChatInterface({
     workspacePath: activeWorkspacePath,
   })
   const sidebarOpenChangeHandlerRef = useRef<(nextSidebarOpen: boolean) => void>(() => undefined)
+  const activeTerminalWorkspaceKey =
+    chatMessages.selectedFolderId === null
+      ? chatMessages.activeConversationId
+        ? `unfiled:${chatMessages.activeConversationId}`
+        : activeWorkspacePath?.trim() ?? '__global__'
+      : activeWorkspacePath?.trim() ?? '__global__'
 
   const interfaceController = useChatInterfaceController({
-    activeTerminalWorkspaceKey: activeWorkspacePath?.trim() ?? '__global__',
+    activeTerminalWorkspaceKey,
     activeWorkspacePath,
     createConversation: chatMessages.createConversation,
     gitBranchState,
@@ -108,6 +114,7 @@ export function ChatInterface({
     settings,
   })
   const workspaceState = useChatWorkspaceUiState({
+    activeConversationId: chatMessages.activeConversationId,
     activeWorkspacePath,
     diffPanelWidth,
     isRightPanelOpen,
@@ -118,6 +125,7 @@ export function ChatInterface({
     onRightPanelTabChange,
     onUpdateSettings,
     rightPanelTab,
+    selectedFolderId: chatMessages.selectedFolderId,
     setIsSidebarOpen: interfaceController.setIsSidebarOpen,
     settings,
   })

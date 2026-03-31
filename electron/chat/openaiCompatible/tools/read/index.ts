@@ -157,13 +157,13 @@ export const readTool: OpenAICompatibleToolDefinition = {
             type: 'string',
           },
           max_lines: {
-            description: 'Optional line cap (1-500) for the chunk returned by the read tool.',
+            description: 'Max lines to read',
             maximum: 500,
             minimum: 1,
             type: 'integer',
           },
           start_line: {
-            description: 'Optional 1-based starting line (inclusive) for the next chunk to read.',
+            description: 'Start line',
             minimum: 1,
             type: 'integer',
           },

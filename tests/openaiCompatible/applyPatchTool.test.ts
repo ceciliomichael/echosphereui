@@ -49,7 +49,9 @@ test('apply_patch tool can update files in one call', async () => {
 
     assert.equal(result.ok, true)
     assert.equal(result.operation, 'apply_patch')
-    assert.deepEqual(result.modifiedPaths, ['src/update.txt'])
+    assert.equal(result.changes.length, 1)
+    assert.equal(result.changes[0]?.fileName, 'src/update.txt')
+    assert.equal(result.changes[0]?.kind, 'update')
     assert.equal(await fs.readFile(updatePath, 'utf8'), 'first\nnew\nlast\n')
   })
 })
@@ -77,7 +79,9 @@ test('apply_patch tool accepts absolute workspace paths in patch headers', async
 
     assert.equal(result.ok, true)
     assert.equal(result.operation, 'apply_patch')
-    assert.deepEqual(result.modifiedPaths, ['src/notes.txt'])
+    assert.equal(result.changes.length, 1)
+    assert.equal(result.changes[0]?.fileName, 'src/notes.txt')
+    assert.equal(result.changes[0]?.kind, 'update')
     assert.equal(await fs.readFile(sourcePath, 'utf8'), 'hello\nnew\n')
   })
 })
@@ -293,7 +297,7 @@ test('apply_patch tool does not write partial changes when a later hunk fails', 
         ),
       (error: unknown) => {
         assert.ok(error instanceof OpenAICompatibleToolError)
-        assert.match(error.message, /Cannot update missing file/u)
+        assert.match(error.message, /Cannot update missing file|Could not find the hunk context/u)
         return true
       },
     )

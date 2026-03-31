@@ -19,6 +19,7 @@ export interface WorkspaceClipboardEntry {
 }
 
 export interface UseChatWorkspaceUiStateInput {
+  activeConversationId: string | null;
   activeWorkspacePath: string | null;
   diffPanelWidth: number;
   isRightPanelOpen: boolean;
@@ -31,6 +32,7 @@ export interface UseChatWorkspaceUiStateInput {
     input: Partial<AppSettings>,
   ) => Promise<AppSettings | null>;
   rightPanelTab: ChatInterfaceRightPanelTab;
+  selectedFolderId: string | null;
   setIsSidebarOpen: (nextValue: boolean) => void;
   settings: AppSettings;
 }

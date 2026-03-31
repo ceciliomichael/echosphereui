@@ -19,6 +19,10 @@ function FileStatusBadge({ status }: { status: string }) {
   )
 }
 
+function isDeletedCommitFile(file: GitHistoryCommitFile) {
+  return file.status.toUpperCase().startsWith('D') || (file.path.length > 0 && file.path === getPathBasename(file.path) && file.path !== '')
+}
+
 function getStatusLabel(status: string) {
   const key = status.toUpperCase().charAt(0)
   if (key === 'A') {
@@ -55,6 +59,7 @@ export function CommitFileRow({ file, indentPx }: { file: GitHistoryCommitFile; 
   const iconConfig = resolveFileIconConfig({ fileName: file.path })
   const FileIcon = iconConfig.icon
   const { directoryPath, fileName, normalizedPath } = splitFilePath(file.path)
+  const isDeleted = isDeletedCommitFile(file)
 
   return (
     <Tooltip
@@ -66,7 +71,6 @@ export function CommitFileRow({ file, indentPx }: { file: GitHistoryCommitFile; 
       }
       side="right"
       fullWidthTrigger
-      hideDelayMs={220}
       interactive
     >
       <div
@@ -76,10 +80,14 @@ export function CommitFileRow({ file, indentPx }: { file: GitHistoryCommitFile; 
         <div className="flex h-full min-w-0 flex-1 items-center gap-2.5 border-l border-border/50 px-3 text-[12.5px] text-muted-foreground">
           <FileIcon size={14} style={{ color: iconConfig.color }} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-left" title={normalizedPath}>
-            <span className="text-foreground">{fileName}</span>
+            <span className={isDeleted ? 'text-foreground line-through decoration-red-500 decoration-2' : 'text-foreground'}>{fileName}</span>
             {directoryPath.length > 0 ? <span className="ml-1 text-muted-foreground/80">{directoryPath}</span> : null}
           </span>
-          <FileStatusBadge status={file.status} />
+          {isDeleted ? (
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-red-500">D</span>
+          ) : (
+            <FileStatusBadge status={file.status} />
+          )}
         </div>
       </div>
     </Tooltip>

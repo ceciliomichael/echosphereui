@@ -257,7 +257,6 @@ export function SourceControlHistorySection({
                     side="right"
                     fullWidthTrigger
                     interactive
-                    hideDelayMs={220}
                     panelClassName="!max-w-[min(42rem,calc(100vw-24px))] !border-0 !bg-transparent !p-0 !text-left !shadow-none"
                   >
                     <button

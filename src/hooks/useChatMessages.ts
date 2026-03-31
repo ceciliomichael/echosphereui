@@ -332,6 +332,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     mainComposerValue: composerState.mainComposerValue,
     messages,
     selectedChatMode: draftChatMode,
+    selectedFolderId: sessionState.selectedFolderId,
     selectedFolderName: sessionState.selectedFolderName,
     selectedFolderPath: sessionState.selectedFolderPath,
     selectConversation: conversationActions.selectConversation,

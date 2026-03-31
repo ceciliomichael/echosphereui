@@ -209,20 +209,19 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     const changes = Array.isArray(semanticResult.changes)
       ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
       : []
+    const totalChangedPaths = changes.length
 
-    if (changes.length === 0) {
-      return readString(semanticResult.message) ?? 'Patch applied.'
+    if (totalChangedPaths === 0) {
+      return readString(semanticResult.message) ?? 'Patch applied with no file changes.'
     }
 
-    const totalChangedPaths =
-      (readNumber(semanticResult.added_path_count) ?? 0) +
-      (readNumber(semanticResult.modified_path_count) ?? 0) +
-      (readNumber(semanticResult.deleted_path_count) ?? 0)
-
     if (totalChangedPaths === 1) {
-      const firstChange = changes[0] as Record<string, unknown>
-      const firstPath = readString(firstChange.fileName) ?? readString(firstChange.path) ?? 'unknown'
-      const firstKind = readString(firstChange.kind)
+      const firstChange = changes[0]
+      const firstPath =
+        firstChange && typeof firstChange === 'object'
+          ? readString(firstChange.fileName) ?? readString(firstChange.path) ?? 'unknown'
+          : 'unknown'
+      const firstKind = firstChange && typeof firstChange === 'object' ? readString(firstChange.kind) : null
       const verb = firstKind === 'add' ? 'Created' : firstKind === 'delete' ? 'Deleted' : 'Updated'
       return `${verb} ${firstPath}.`
     }
@@ -472,28 +471,12 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     const changes = Array.isArray(semanticResult.changes)
       ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
       : []
-    const addedPaths = changes
-      .filter((change) => readString(change.kind) === 'add')
-      .map((change) => readString(change.fileName))
-      .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    const modifiedPaths = changes
-      .filter((change) => readString(change.kind) === 'update')
-      .map((change) => readString(change.fileName))
-      .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    const deletedPaths = changes
-      .filter((change) => readString(change.kind) === 'delete')
-      .map((change) => readString(change.fileName))
-      .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    const changedPaths = [...addedPaths, ...modifiedPaths, ...deletedPaths]
-    const totalChangedPaths = changedPaths.length
+    const totalChangedPaths = changes.length
     return filterUndefinedEntries({
       ...sharedSemantics,
-      added_path_count: addedPaths.length,
-      changed_paths: changedPaths,
+      change_count: totalChangedPaths,
       content_changed: totalChangedPaths > 0,
-      deleted_path_count: deletedPaths.length,
       mutation_applied: totalChangedPaths > 0,
-      modified_path_count: modifiedPaths.length,
       operation: 'apply_patch',
       target_exists_after_call: totalChangedPaths > 0,
       workspace_effect: totalChangedPaths > 0 ? 'files_edited' : 'file_already_matched',

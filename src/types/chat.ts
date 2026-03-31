@@ -457,6 +457,7 @@ export interface WorkspaceExplorerImportEntryResult {
 export interface CreateTerminalSessionInput {
   cols: number
   cwd?: string | null
+  sessionKey?: string | null
   rows: number
 }
 
@@ -528,6 +529,7 @@ export interface CreateGitBranchInput {
 export interface GitFileDiff {
   addedLineCount?: number
   fileName: string
+  isDeleted?: boolean
   isStaged: boolean
   isUnstaged: boolean
   isUntracked: boolean

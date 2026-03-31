@@ -356,8 +356,18 @@ export function ConversationFolderSection({
         <div className="min-h-0 overflow-hidden">
           <div className="space-y-2 px-0 pb-0.5 pt-0.5">
             {group.conversations.length === 0 ? (
-              <div className="w-full px-4 py-1.5">
-                <p className="truncate text-xs text-subtle-foreground">No threads in this folder yet.</p>
+              <div className="flex min-h-[140px] items-center justify-center px-4 py-6 text-center">
+                <div className="flex max-w-[240px] flex-col items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
+                    <FolderOpen size={22} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">No threads here</p>
+                    <p className="text-sm leading-6 text-subtle-foreground">
+                      Start a new thread in this folder to keep conversations organized.
+                    </p>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="space-y-1.5">

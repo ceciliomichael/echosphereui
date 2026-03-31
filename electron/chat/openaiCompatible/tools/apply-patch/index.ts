@@ -7,13 +7,9 @@ import { applyPatchText, PatchApplicationError, type ApplyPatchChange } from './
 const TOOL_DESCRIPTION = getToolDescription('apply_patch')
 
 interface ApplyPatchOperationResult extends Record<string, unknown> {
-  addedPaths: string[]
-  changeCount: number
   changes: ApplyPatchChange[]
   contentChanged: boolean
-  deletedPaths: string[]
   message: string
-  modifiedPaths: string[]
   ok: true
   operation: 'apply_patch'
   path: string
@@ -34,40 +30,26 @@ function normalizeArguments(argumentsValue: Record<string, unknown>) {
 }
 
 function summarizeChanges(changes: ApplyPatchChange[]) {
-  const addedPaths = changes.filter((change) => change.kind === 'add').map((change) => change.fileName)
-  const modifiedPaths = changes.filter((change) => change.kind === 'update').map((change) => change.fileName)
-  const deletedPaths = changes.filter((change) => change.kind === 'delete').map((change) => change.fileName)
-  const changedPaths = [...addedPaths, ...modifiedPaths, ...deletedPaths]
-
-  if (changedPaths.length === 0) {
+  if (changes.length === 0) {
     return {
-      addedPaths,
-      deletedPaths,
       message: 'Patch applied with no file changes.',
-      modifiedPaths,
       path: '.',
       targetKind: 'workspace' as const,
     }
   }
 
-  if (changedPaths.length === 1) {
+  if (changes.length === 1) {
     const singleChange = changes[0]
     const verb = singleChange.kind === 'add' ? 'Created' : singleChange.kind === 'delete' ? 'Deleted' : 'Updated'
     return {
-      addedPaths,
-      deletedPaths,
       message: `${verb} ${singleChange.fileName} successfully.`,
-      modifiedPaths,
       path: singleChange.fileName,
       targetKind: 'file' as const,
     }
   }
 
   return {
-    addedPaths,
-    deletedPaths,
-    message: `Applied patch to ${changedPaths.length} files successfully.`,
-    modifiedPaths,
+    message: `Applied patch to ${changes.length} files successfully.`,
     path: '.',
     targetKind: 'workspace' as const,
   }
@@ -109,17 +91,13 @@ export const applyPatchTool: OpenAICompatibleToolDefinition = {
       throw toPatchToolError(error)
     }
 
-    const { addedPaths, deletedPaths, message, modifiedPaths, path, targetKind } = summarizeChanges(result.changes)
+    const { message, path, targetKind } = summarizeChanges(result.changes)
     const contentChanged = result.changes.length > 0
 
     return {
-      addedPaths,
-      changeCount: result.changes.length,
       changes: result.changes,
       contentChanged,
-      deletedPaths,
       message,
-      modifiedPaths,
       ok: true,
       operation: 'apply_patch',
       path,

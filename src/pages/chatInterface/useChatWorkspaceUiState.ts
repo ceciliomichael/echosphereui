@@ -34,6 +34,7 @@ export type {
 } from "./chatWorkspaceUiState.types";
 
 export function useChatWorkspaceUiState({
+  activeConversationId,
   activeWorkspacePath,
   diffPanelWidth,
   isRightPanelOpen,
@@ -44,6 +45,7 @@ export function useChatWorkspaceUiState({
   onRightPanelTabChange,
   onUpdateSettings,
   rightPanelTab,
+  selectedFolderId,
   setIsSidebarOpen,
   settings,
 }: UseChatWorkspaceUiStateInput): ChatWorkspaceUiState {
@@ -184,7 +186,12 @@ export function useChatWorkspaceUiState({
     setConversationDiffPanelWidth(diffPanelWidth);
   }, [diffPanelWidth]);
 
-  const activeTerminalWorkspaceKey = toWorkspaceScopedKey(activeWorkspacePath);
+  const activeTerminalWorkspaceKey =
+    selectedFolderId === null
+      ? activeConversationId
+        ? `unfiled:${activeConversationId}`
+        : toWorkspaceScopedKey(activeWorkspacePath)
+      : toWorkspaceScopedKey(activeWorkspacePath);
   const isTerminalOpen =
     settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false;
   const terminalPanelHeight =

@@ -50,6 +50,13 @@ const sampleEditCreateToolCall: OpenAICompatibleToolCall = {
   startedAt: 1_700_000_000_000,
 }
 
+const sampleApplyPatchToolCall: OpenAICompatibleToolCall = {
+  argumentsText: '{"patch":"*** Begin Patch\\n*** Update File: src/app.ts\\n@@\\n-old\\n+new\\n*** End Patch"}',
+  id: 'tool-call-apply-patch-123',
+  name: 'apply_patch',
+  startedAt: 1_700_000_000_000,
+}
+
 const sampleWriteCreateToolCall: OpenAICompatibleToolCall = {
   argumentsText: '{"absolute_path":"C:\\\\repo\\\\src\\\\app\\\\page.tsx","content":"export default function Page() {\\n  return null\\n}\\n"}',
   id: 'tool-call-write-create-123',
@@ -393,6 +400,40 @@ test('buildSuccessfulToolArtifacts exposes create-file diff presentation for edi
   })
 })
 
+test('buildSuccessfulToolArtifacts exposes apply_patch change counts in structured metadata', () => {
+  const completedAt = 1_700_000_000_182
+  const artifacts = buildSuccessfulToolArtifacts(
+    sampleApplyPatchToolCall,
+    {
+      changes: [
+        {
+          addedLineCount: 1,
+          fileName: 'src/app.ts',
+          kind: 'update',
+          newContent: 'old\nnew\n',
+          oldContent: 'old\nold\n',
+          removedLineCount: 1,
+        },
+      ],
+      contentChanged: true,
+      message: 'Updated src/app.ts successfully.',
+      operation: 'apply_patch',
+      path: 'src/app.ts',
+      targetKind: 'file',
+    },
+    sampleApplyPatchToolCall.startedAt,
+    completedAt,
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+
+  assert.match(parsedContent.metadata?.summary ?? '', /Updated src\/app\.ts\./u)
+  assert.equal(parsedContent.metadata?.semantics?.operation, 'apply_patch')
+  assert.equal(parsedContent.metadata?.semantics?.change_count, 1)
+  assert.equal(parsedContent.metadata?.semantics?.mutation_applied, true)
+  assert.equal(parsedContent.metadata?.semantics?.target_exists_after_call, true)
+})
+
 test('buildSuccessfulToolArtifacts preserves multiline create-file bodies for write results', () => {
   const completedAt = 1_700_000_000_181
   const artifacts = buildSuccessfulToolArtifacts(
@@ -623,7 +664,8 @@ test('buildCodexGroupedToolResultContent compacts replay terminal bodies and kee
 
   const groupedContent = buildCodexGroupedToolResultContent([startedSessionContent, latestSessionContent])
   assert.ok(groupedContent)
-  assert.match(groupedContent ?? '', /get_terminal_output success: Fetched terminal output for session 77 \(exit code 0\)\./u)
+  assert.match(groupedContent ?? '', /"toolName": "get_terminal_output"/u)
+  assert.match(groupedContent ?? '', /"summary": "Fetched terminal output for session 77 \(exit code 0\)\."/u)
   assert.match(groupedContent ?? '', /\[terminal replay context clipped to reduce context growth/u)
   assert.equal((groupedContent ?? '').split('"toolName": "run_terminal"').length - 1, 0)
   assert.equal((groupedContent ?? '').split('"toolName": "get_terminal_output"').length - 1, 1)

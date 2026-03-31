@@ -556,6 +556,7 @@ export function ChatInterfaceContent({
           onHeightCommit={interfaceController.handleTerminalPanelHeightCommit}
           resolvedTheme={resolvedTheme}
           storedHeight={workspaceState.terminalPanelHeight}
+          workspaceKey={workspaceState.activeWorkspacePath ?? '__global__'}
           workspacePath={workspaceState.activeWorkspacePath}
         />
       </WorkspacePanel>

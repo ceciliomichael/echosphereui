@@ -8,6 +8,7 @@ export interface ConversationFileDiff {
   isStaged: boolean
   isUnstaged: boolean
   isUntracked: boolean
+  isDeleted: boolean
   newContent: string
   oldContent: string | null
   removedLineCount: number
@@ -31,6 +32,7 @@ function normalizeFileDiff(result: FileDiffToolResultPresentation): Conversation
     isStaged: false,
     isUnstaged: false,
     isUntracked: false,
+    isDeleted: false,
     newContent: result.newContent,
     oldContent: result.oldContent,
     removedLineCount: result.removedLineCount ?? computedSummary.removedLineCount,
@@ -41,6 +43,7 @@ function normalizeFileDiff(result: FileDiffToolResultPresentation): Conversation
 
 function normalizeRawFileDiff(result: GitFileDiff): ConversationFileDiff {
   const computedSummary = getDiffSummary(result.oldContent, result.newContent)
+  const isDeleted = result.isDeleted ?? (!result.isUntracked && result.oldContent !== null && result.newContent.length === 0)
 
   return {
     addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
@@ -48,6 +51,7 @@ function normalizeRawFileDiff(result: GitFileDiff): ConversationFileDiff {
     isStaged: result.isStaged,
     isUnstaged: result.isUnstaged,
     isUntracked: result.isUntracked,
+    isDeleted,
     newContent: result.newContent,
     oldContent: result.oldContent,
     removedLineCount: result.removedLineCount ?? computedSummary.removedLineCount,

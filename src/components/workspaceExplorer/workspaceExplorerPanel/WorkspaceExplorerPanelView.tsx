@@ -184,7 +184,7 @@ export function WorkspaceExplorerPanelView({
       </div>
       <div
         className={[
-          'min-h-0 flex-1 overflow-y-auto py-2',
+          'min-h-0 flex flex-1 flex-col overflow-y-auto',
           panelState.dropTargetDirectoryPath === ROOT_DIRECTORY_KEY ? 'bg-surface/60' : '',
         ].join(' ')}
         onContextMenu={(event) => panelState.openContextMenu(event, null)}
@@ -220,22 +220,40 @@ export function WorkspaceExplorerPanelView({
         }}
       >
         {!panelState.isWorkspaceConfigured ? (
-          <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-subtle-foreground">
-            Select a workspace folder to use Explorer.
-          </p>
+          <div className="flex flex-1 items-center justify-center px-4 py-6 text-center">
+            <div className="flex max-w-[240px] flex-col items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
+                <FolderOpen size={22} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Explorer is waiting</p>
+                <p className="text-sm leading-6 text-subtle-foreground">
+                  Select a workspace folder to browse files here.
+                </p>
+              </div>
+            </div>
+          </div>
         ) : panelState.errorMessage ? (
           <div className="rounded-xl border border-danger-border bg-danger-surface px-3 py-2 text-sm text-danger-foreground">
             {panelState.errorMessage}
           </div>
         ) : !showExplorerTree ? (
-          <button
-            type="button"
-            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm text-subtle-foreground"
-          >
-            No files found in this workspace.
-          </button>
+          <div className="flex flex-1 items-center justify-center px-4 py-6 text-center">
+            <div className="flex max-w-[240px] flex-col items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
+                <FolderOpen size={22} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">No files found</p>
+                <p className="text-sm leading-6 text-subtle-foreground">
+                  This workspace is empty. Add a file or folder to start browsing here.
+                </p>
+              </div>
+            </div>
+          </div>
         ) : (
           <ul
+            className="py-2"
             onDragOver={(event) => {
               if (event.target !== event.currentTarget) {
                 return

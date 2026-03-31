@@ -67,6 +67,9 @@ export function SourceControlChangesSection({
   onUnstageFile,
   onUnstagedSectionOpenChange,
 }: SourceControlChangesSectionProps) {
+  const sectionBodyClassName = 'min-h-0 flex flex-1 flex-col overflow-hidden'
+  const diffViewportClassName = 'min-h-0 flex-1 overflow-y-auto'
+
   return (
     <section className={['border-b border-border', isChangesSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
       <button
@@ -77,7 +80,7 @@ export function SourceControlChangesSection({
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
         <ChevronDown size={13} className={['text-muted-foreground transition-transform', isChangesSectionOpen ? '' : '-rotate-90'].join(' ')} />
       </button>
-      <div className={['min-h-0 border-t border-border transition-[opacity] duration-200', isChangesSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0'].join(' ')}>
+      <div className={['min-h-0 border-t border-border transition-[opacity] duration-200', isChangesSectionOpen ? 'flex flex-1 flex-col overflow-hidden opacity-100' : 'hidden opacity-0'].join(' ')}>
         <div className="shrink-0 border-b border-border px-4 py-3">
           <textarea
             value={commitMessage}
@@ -166,9 +169,9 @@ export function SourceControlChangesSection({
           {!syncError && syncMessage ? <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p> : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={sectionBodyClassName}>
           {stagedFileDiffs.length > 0 ? (
-            <section className="shrink-0 border-b border-border">
+            <section className="min-h-0 flex flex-1 flex-col border-b border-border">
               <button
                 type="button"
                 onClick={() => onStagedSectionOpenChange(!isStagedSectionOpen)}
@@ -177,9 +180,15 @@ export function SourceControlChangesSection({
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Staged Changes</span>
                 <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
               </button>
-              <div className={['transition-[opacity] duration-200', isStagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
+              <div
+                className={[
+                  'min-h-0 border-t border-border transition-[opacity] duration-200',
+                  isStagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
+                ].join(' ')}
+              >
                 <SourceControlDiffSection
-                  sectionClassName="border-b-0"
+                  bodyClassName={diffViewportClassName}
+                  sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
                   title=""
                   scope="staged"
                   diffs={stagedFileDiffs}
@@ -195,7 +204,7 @@ export function SourceControlChangesSection({
             </section>
           ) : null}
 
-          <section className={['border-border', isUnstagedSectionOpen ? 'border-b-0' : 'border-b'].join(' ')}>
+          <section className={['min-h-0 flex flex-1 flex-col border-border', isUnstagedSectionOpen ? 'border-b-0' : 'border-b'].join(' ')}>
             <button
               type="button"
               onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
@@ -204,9 +213,15 @@ export function SourceControlChangesSection({
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
               <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
             </button>
-            <div className={['transition-[opacity] duration-200', isUnstagedSectionOpen ? 'border-t border-border opacity-100' : 'hidden opacity-0'].join(' ')}>
+            <div
+              className={[
+                'min-h-0 border-t border-border transition-[opacity] duration-200',
+                isUnstagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
+              ].join(' ')}
+            >
               <SourceControlDiffSection
-                sectionClassName="border-b-0"
+                bodyClassName={diffViewportClassName}
+                sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
                 title=""
                 scope="unstaged"
                 diffs={unstagedFileDiffs}
