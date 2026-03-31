@@ -104,8 +104,7 @@ function SourceControlPanelComponent({
     [fileDiffs, isUnstagedLikeFileDiff],
   )
   const totalChangedFileCount = fileDiffs.length
-  const hasChangedFiles = totalChangedFileCount > 0
-  const shouldUseSplitLayout = hasChangedFiles && isChangesSectionOpen
+  const shouldUseSplitLayout = isChangesSectionOpen
   const canQuickCommit =
     !isQuickCommitting &&
     (includeUnstaged ? totalChangedFileCount > 0 : stagedFileDiffs.length > 0)
@@ -634,40 +633,39 @@ function SourceControlPanelComponent({
             isHistoryResizing ? 'cursor-row-resize' : '',
           ].join(' ')}
         >
-          {hasChangedFiles ? (
-            <SourceControlChangesSection
-              commitActionControlsRef={commitActionControlsRef}
-              commitMessage={commitMessage}
-              expandedChangeFilePaths={expandedChangeFilePaths}
-              includeUnstaged={includeUnstaged}
-              isChangesSectionOpen={isChangesSectionOpen}
-              isCommitActionDisabled={isCommitActionDisabled}
-              isCommitActionMenuOpen={isCommitActionMenuOpen}
-              isCommitPrimaryBusy={isCommitPrimaryBusy}
-              isQuickCommitting={isQuickCommitting}
-              isStagedSectionOpen={isStagedSectionOpen}
-              isUnstagedSectionOpen={isUnstagedSectionOpen}
-              pendingFileActionPath={pendingFileActionPath}
-              quickCommitError={quickCommitError}
-              stagedFileDiffs={stagedFileDiffs}
-              syncError={syncError}
-              syncMessage={syncMessage}
-              unstagedFileCount={unstagedFileDiffs.length}
-              unstagedFileDiffs={unstagedFileDiffs}
-              onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
-              onCommitMessageChange={setCommitMessage}
-              onDiscardFile={onDiscardFile}
-              onExpandedChange={handleChangeFileExpandedChange}
-              onIncludeUnstagedChange={setIncludeUnstaged}
-              onOpenCommitModal={onOpenCommitModal}
-              onQuickCommitSubmit={handleQuickCommitSubmit}
-              onStageFile={onStageFile}
-              onStagedSectionOpenChange={handleStagedSectionOpenChange}
-              onToggleChangesSection={handleToggleChangesSection}
-              onUnstageFile={onUnstageFile}
-              onUnstagedSectionOpenChange={handleUnstagedSectionOpenChange}
-            />
-          ) : null}
+          <SourceControlChangesSection
+            commitActionControlsRef={commitActionControlsRef}
+            commitMessage={commitMessage}
+            expandedChangeFilePaths={expandedChangeFilePaths}
+            includeUnstaged={includeUnstaged}
+            isChangesSectionOpen={isChangesSectionOpen}
+            isCommitActionDisabled={isCommitActionDisabled}
+            isCommitActionMenuOpen={isCommitActionMenuOpen}
+            isCommitPrimaryBusy={isCommitPrimaryBusy}
+            isQuickCommitting={isQuickCommitting}
+            isStagedSectionOpen={isStagedSectionOpen}
+            isUnstagedSectionOpen={isUnstagedSectionOpen}
+            pendingFileActionPath={pendingFileActionPath}
+            quickCommitError={quickCommitError}
+            stagedFileCount={stagedFileDiffs.length}
+            stagedFileDiffs={stagedFileDiffs}
+            syncError={syncError}
+            syncMessage={syncMessage}
+            unstagedFileCount={unstagedFileDiffs.length}
+            unstagedFileDiffs={unstagedFileDiffs}
+            onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
+            onCommitMessageChange={setCommitMessage}
+            onDiscardFile={onDiscardFile}
+            onExpandedChange={handleChangeFileExpandedChange}
+            onIncludeUnstagedChange={setIncludeUnstaged}
+            onOpenCommitModal={onOpenCommitModal}
+            onQuickCommitSubmit={handleQuickCommitSubmit}
+            onStageFile={onStageFile}
+            onStagedSectionOpenChange={handleStagedSectionOpenChange}
+            onToggleChangesSection={handleToggleChangesSection}
+            onUnstageFile={onUnstageFile}
+            onUnstagedSectionOpenChange={handleUnstagedSectionOpenChange}
+          />
 
           <SourceControlHistorySection
             commitDetailsByHash={commitDetailsByHash}

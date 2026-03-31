@@ -18,6 +18,7 @@ interface SourceControlChangesSectionProps {
   isUnstagedSectionOpen: boolean
   pendingFileActionPath: string | null
   quickCommitError: string | null
+  stagedFileCount: number
   stagedFileDiffs: readonly ConversationFileDiff[]
   syncError: string | null
   syncMessage: string | null
@@ -51,6 +52,7 @@ export function SourceControlChangesSection({
   isUnstagedSectionOpen,
   pendingFileActionPath,
   quickCommitError,
+  stagedFileCount,
   stagedFileDiffs,
   syncError,
   syncMessage,
@@ -71,9 +73,16 @@ export function SourceControlChangesSection({
 }: SourceControlChangesSectionProps) {
   const sectionBodyClassName = 'min-h-0 flex flex-1 flex-col overflow-hidden'
   const diffViewportClassName = 'min-h-0 flex-1 overflow-y-auto'
+  const hasStagedSection = stagedFileDiffs.length > 0
+  const shouldShowUnstagedSectionTopBorder = hasStagedSection && isStagedSectionOpen
+  const shouldShowUnstagedSectionBottomBorder = isUnstagedSectionOpen || !isStagedSectionOpen
 
   return (
-    <section className={['border-b border-border', isChangesSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
+    <section
+      className={[
+        isChangesSectionOpen ? 'border-b border-border min-h-0 flex flex-1 flex-col' : 'shrink-0',
+      ].join(' ')}
+    >
       <button type="button" onClick={onToggleChangesSection} className="flex h-10 w-full items-center justify-between px-4 text-left">
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
         <ChevronDown size={13} className={['text-muted-foreground transition-transform', isChangesSectionOpen ? '' : '-rotate-90'].join(' ')} />
@@ -169,13 +178,18 @@ export function SourceControlChangesSection({
 
         <div className={sectionBodyClassName}>
           {stagedFileDiffs.length > 0 ? (
-            <section className={['min-h-0 flex flex-col border-b border-border', isStagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
+            <section className={['min-h-0 flex flex-col', isStagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
               <button
                 type="button"
                 onClick={() => onStagedSectionOpenChange(!isStagedSectionOpen)}
-                className="flex h-10 w-full items-center justify-between px-4 text-left"
+                className="flex h-10 w-full items-center justify-between border-b border-border px-4 text-left"
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Staged Changes</span>
+                <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <span>Staged Changes</span>
+                  <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
+                    <span className="translate-x-px tabular-nums">{stagedFileCount}</span>
+                  </span>
+                </span>
                 <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
               </button>
               <div
@@ -202,42 +216,53 @@ export function SourceControlChangesSection({
             </section>
           ) : null}
 
-          <section className={['min-h-0 flex flex-col border-border', isUnstagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
-            <button
-              type="button"
-              onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
-              className="flex h-10 w-full items-center justify-between border-b border-border px-4 text-left"
-            >
-              <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                <span>Changes</span>
-                <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
-                  <span className="translate-x-px tabular-nums">{unstagedFileCount}</span>
-                </span>
-              </span>
-              <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-            </button>
-            <div
+          {unstagedFileDiffs.length > 0 ? (
+            <section
               className={[
-                'min-h-0 transition-[opacity] duration-200',
-                isUnstagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
+                'min-h-0 flex flex-col',
+                isUnstagedSectionOpen ? 'flex-1' : 'shrink-0',
+                shouldShowUnstagedSectionTopBorder ? 'border-t border-border' : '',
               ].join(' ')}
             >
-              <SourceControlDiffSection
-                bodyClassName={diffViewportClassName}
-                sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
-                title=""
-                scope="unstaged"
-                diffs={unstagedFileDiffs}
-                emptyLabel="No unstaged files."
-                expandedFilePaths={expandedChangeFilePaths}
-                pendingFileActionPath={pendingFileActionPath}
-                onDiscardFile={onDiscardFile}
-                onExpandedChange={onExpandedChange}
-                onStageFile={onStageFile}
-                onUnstageFile={onUnstageFile}
-              />
-            </div>
-          </section>
+              <button
+                type="button"
+                onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
+                className={[
+                  'flex h-10 w-full items-center justify-between px-4 text-left',
+                  shouldShowUnstagedSectionBottomBorder ? 'border-b border-border' : '',
+                ].join(' ')}
+              >
+                <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <span>Changes</span>
+                  <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
+                    <span className="translate-x-px tabular-nums">{unstagedFileCount}</span>
+                  </span>
+                </span>
+                <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
+              </button>
+              <div
+                className={[
+                  'min-h-0 transition-[opacity] duration-200',
+                  isUnstagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
+                ].join(' ')}
+              >
+                <SourceControlDiffSection
+                  bodyClassName={diffViewportClassName}
+                  sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
+                  title=""
+                  scope="unstaged"
+                  diffs={unstagedFileDiffs}
+                  emptyLabel="No unstaged files."
+                  expandedFilePaths={expandedChangeFilePaths}
+                  pendingFileActionPath={pendingFileActionPath}
+                  onDiscardFile={onDiscardFile}
+                  onExpandedChange={onExpandedChange}
+                  onStageFile={onStageFile}
+                  onUnstageFile={onUnstageFile}
+                />
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
     </section>
