@@ -88,7 +88,7 @@ export async function retryRateLimitedRequest<T>(
   let attempt = 0
   let delayMs = initialDelayMs
 
-  while (true) {
+  for (;;) {
     if (options.signal?.aborted) {
       throw new Error('Request was aborted before it started.')
     }

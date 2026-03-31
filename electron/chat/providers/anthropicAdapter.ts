@@ -10,6 +10,7 @@ import type {
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
 import { buildSerializedAssistantTurnContentWithInlineReasoning } from '../openaiCompatible/assistantToolInvocationContext'
+import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import type { ChatProviderAdapter } from '../providerTypes'
 import {
@@ -128,7 +129,7 @@ function buildAnthropicMessages(messages: Message[], pendingToolCallsById: Map<s
       if (toolCall) {
         knownToolCalls.push(toolCall)
         toolResultBlocks.push({
-          content: toolMessage.content,
+          content: getToolResultModelContent(toolMessage.content),
           tool_use_id: toolCall.id,
           type: 'tool_result',
         })
@@ -138,7 +139,7 @@ function buildAnthropicMessages(messages: Message[], pendingToolCallsById: Map<s
 
       if (hasText(toolMessage.content)) {
         fallbackTextBlocks.push({
-          text: toolMessage.content,
+          text: getToolResultModelContent(toolMessage.content),
           type: 'text',
         })
       }

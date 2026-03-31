@@ -1,4 +1,5 @@
 import type { StreamDeltaEvent } from '../providerTypes'
+import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
 
 export interface OpenAICompatibleResponsesFunctionCallOutputInput {
   call_id: string
@@ -54,7 +55,7 @@ export function createOpenAICompatibleResponsesLoopState() {
 
       pendingToolOutputs.push({
         call_id: event.invocationId,
-        output: event.resultContent,
+        output: getToolResultModelContent(event.resultContent),
         type: 'function_call_output',
       })
     },

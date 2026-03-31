@@ -72,7 +72,7 @@ test("write tool formats multiline source files before writing them", async () =
     assert.match(writtenContent, /const metrics = \[/u);
     assert.match(
       writtenContent,
-      /\n  \{ value: "48%", label: "faster team handoffs" \},/u,
+      /\n {2}\{ value: "48%", label: "faster team handoffs" \},/u,
     );
     assert.match(writtenContent, /export default function Page\(\) \{/u);
     assert.match(writtenContent, /return \(/u);

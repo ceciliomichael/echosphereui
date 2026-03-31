@@ -386,7 +386,7 @@ function parsePatchText(patchText: string, cwd: string) {
     if (trimmed.startsWith(UPDATE_FILE_MARKER)) {
       const filePath = ensureWorkspacePath(trimmed.slice(UPDATE_FILE_MARKER.length), 'Update File', cwd)
       index += 1
-      let moveTo: string | null = null
+      const moveTo: string | null = null
 
       if (index < lines.length - 1 && lines[index].trim().startsWith(MOVE_TO_MARKER)) {
         fail('apply_patch only supports editing existing files. Move the file with a separate filesystem operation.')
@@ -630,7 +630,8 @@ async function applyUpdateOperation(
 
   for (const hunk of operation.hunks) {
     const logicalLength = effectiveLineCount(lines)
-    let { endOfFile, newLines, oldLines } = hunkToReplacement(hunk)
+    const { endOfFile } = hunkToReplacement(hunk)
+    let { newLines, oldLines } = hunkToReplacement(hunk)
     let matchIndex = findUniqueBlock(lines, oldLines, searchStart, logicalLength, endOfFile)
 
     if (matchIndex === null && oldLines.length > 0 && oldLines.at(-1) === '') {

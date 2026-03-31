@@ -200,8 +200,8 @@ test('buildSystemPrompt filters nested .gitignore entries from the workspace fol
   assert.ok(treeBlockMatch, 'workspace tree block must be present')
   const treeBlock = treeBlockMatch[1]
 
-  assert.match(treeBlock, /backend\/\n  ├─ src\//u)
-  assert.match(treeBlock, /frontend\/\n  ├─ src\//u)
+  assert.match(treeBlock, /backend\/\n {2}├─ src\//u)
+  assert.match(treeBlock, /frontend\/\n {2}├─ src\//u)
   assert.equal(treeBlock.includes('AGENTS.md'), false)
   assert.equal(treeBlock.includes('DESIGN.md'), false)
   assert.equal(treeBlock.includes('root-ignored.txt'), false)

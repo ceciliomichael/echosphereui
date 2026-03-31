@@ -2,6 +2,7 @@ import type { Content, GenerateContentResponse, Part } from '@google/genai/web'
 import type { Message, ReasoningEffort } from '../../../src/types/chat'
 import { streamAgentLoopWithTools, type AgentLoopTurnOptions } from '../agentLoop/runtime'
 import { buildSerializedAssistantTurnContentWithInlineReasoning } from '../openaiCompatible/assistantToolInvocationContext'
+import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
 import type { OpenAICompatibleToolCall } from '../openaiCompatible/toolTypes'
 import type { ChatProviderAdapter } from '../providerTypes'
 import {
@@ -93,7 +94,7 @@ function buildGoogleContents(messages: Message[], pendingToolCallsById: Map<stri
             id: toolCall.id,
             name: toolCall.name,
             response: {
-              output: toolMessage.content,
+              output: getToolResultModelContent(toolMessage.content),
             },
           },
         })
@@ -103,7 +104,7 @@ function buildGoogleContents(messages: Message[], pendingToolCallsById: Map<stri
 
       if (hasText(toolMessage.content)) {
         fallbackTextParts.push({
-          text: toolMessage.content,
+          text: getToolResultModelContent(toolMessage.content),
         })
       }
     }
@@ -256,8 +257,9 @@ async function streamGoogleResponse(
     type: 'content_delta' | 'reasoning_delta' | 'tool_invocation_delta' | 'tool_invocation_started'
   }) => void,
   signal: AbortSignal,
-  _options: AgentLoopTurnOptions = {},
+  options: AgentLoopTurnOptions = {},
 ) {
+  void options
   const contents = buildGoogleContents(request.messages, pendingToolCallsById)
   if (contents.length === 0) {
     throw new Error('Google Gemini requests require at least one non-empty message.')

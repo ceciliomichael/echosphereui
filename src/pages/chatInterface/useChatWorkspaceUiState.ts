@@ -17,13 +17,11 @@ import {
 } from "./chatWorkspaceUiState.utils";
 import {
   clearWorkspaceAutosaveTimeoutsForWorkspace,
-  createHandleSidebarOpenChange,
   restoreWorkspaceUiSession,
   saveWorkspaceUiSession,
   syncActiveWorkspacePathRef,
 } from "./chatWorkspaceUiStateSessions";
 import {
-  createClearWorkspaceClipboardByPathPrefix,
   createWorkspaceEntryHandlers,
 } from "./chatWorkspaceUiStateEntries";
 import { getActiveWorkspacePanelWidth } from "./chatWorkspaceUiStatePanels";
@@ -239,7 +237,17 @@ export function useChatWorkspaceUiState({
   }, []);
 
   const clearWorkspaceClipboardByPathPrefix = useCallback(
-    createClearWorkspaceClipboardByPathPrefix({ setWorkspaceClipboard }),
+    (targetPath: string) => {
+      setWorkspaceClipboard((currentClipboard) => {
+        if (
+          !currentClipboard ||
+          !isWorkspacePathWithinTarget(currentClipboard.relativePath, targetPath)
+        ) {
+          return currentClipboard;
+        }
+        return null;
+      });
+    },
     [],
   );
 
@@ -587,16 +595,54 @@ export function useChatWorkspaceUiState({
   ]);
 
   const handleSidebarOpenChange = useCallback(
-    createHandleSidebarOpenChange({
-      isExplorerOpen,
-      isRightPanelOpen,
-      isWorkspaceTabsPanelVisible,
-      onRightPanelOpenChange,
-      setIsExplorerOpen,
-      setIsWorkspaceTabsPanelVisible,
-      sidebarPanelRestoreRef,
-      workspaceFileTabsLength: workspaceFileTabs.length,
-    }),
+    (nextSidebarOpen: boolean) => {
+      if (nextSidebarOpen) {
+        const shouldCloseTabs =
+          isWorkspaceTabsPanelVisible && workspaceFileTabs.length > 0;
+        const shouldCloseRightPanel = isRightPanelOpen;
+        const shouldCloseExplorer = isExplorerOpen;
+        const shouldClosePanels =
+          shouldCloseTabs || shouldCloseRightPanel || shouldCloseExplorer;
+
+        if (!shouldClosePanels) {
+          sidebarPanelRestoreRef.current = null;
+          return;
+        }
+
+        sidebarPanelRestoreRef.current = {
+          shouldRestoreExplorer: shouldCloseExplorer,
+          shouldRestoreRightPanel: shouldCloseRightPanel,
+          shouldRestoreTabs: shouldCloseTabs,
+        };
+
+        if (shouldCloseTabs) {
+          setIsWorkspaceTabsPanelVisible(false);
+        }
+        if (shouldCloseRightPanel) {
+          onRightPanelOpenChange(false);
+        }
+        if (shouldCloseExplorer) {
+          setIsExplorerOpen(false);
+        }
+        return;
+      }
+
+      const restoreState = sidebarPanelRestoreRef.current;
+      sidebarPanelRestoreRef.current = null;
+      if (!restoreState) {
+        return;
+      }
+
+      if (restoreState.shouldRestoreTabs && workspaceFileTabs.length > 0) {
+        setIsWorkspaceTabsPanelVisible(true);
+      }
+      if (restoreState.shouldRestoreRightPanel) {
+        onRightPanelOpenChange(true);
+      }
+      if (restoreState.shouldRestoreExplorer) {
+        setIsExplorerOpen(true);
+      }
+    },
     [
       isExplorerOpen,
       isRightPanelOpen,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ChangeEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ChangeEvent, type RefObject } from 'react'
 import { Check, Paperclip, Play, X } from 'lucide-react'
 import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../../lib/chatAttachmentFiles'
 import { chatInputSurfaceClassName } from '../../lib/chatStyles'
@@ -61,12 +61,12 @@ export function ChatQueueItem({
     setIsEditing(true)
   }
 
-  function handleCancel() {
+  const handleCancel = useCallback(() => {
     setDraftContent(message.content)
     setDraftAttachments(message.attachments ?? [])
     setAttachmentError(null)
     setIsEditing(false)
-  }
+  }, [message.attachments, message.content])
 
   async function handleAttachmentsChange(files: readonly File[]) {
     if (files.length === 0) {
@@ -116,7 +116,7 @@ export function ChatQueueItem({
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [editCancelBoundaryRef, isEditing, message.attachments, message.content])
+  }, [editCancelBoundaryRef, handleCancel, isEditing])
 
   if (isEditing) {
     return (

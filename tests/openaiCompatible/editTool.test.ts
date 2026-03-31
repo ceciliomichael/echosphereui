@@ -66,7 +66,7 @@ test('edit tool formats multiline source files after create-mode edits', async (
     assert.equal(result.operation, 'edit')
     assert.deepEqual(result.addedPaths, ['src/app/page.tsx'])
     assert.match(writtenContent, /const metrics = \[/u)
-    assert.match(writtenContent, /\n  \{ value: "48%", label: "faster team handoffs" \},/u)
+    assert.match(writtenContent, /\n {2}\{ value: "48%", label: "faster team handoffs" \},/u)
     assert.match(writtenContent, /export default function Page\(\) \{/u)
     assert.match(writtenContent, /return \(/u)
     assert.match(writtenContent, /<section>/u)

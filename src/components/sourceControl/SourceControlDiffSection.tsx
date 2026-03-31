@@ -54,9 +54,8 @@ function splitFilePath(path: string) {
   }
 }
 
-function DeletedDiffRow({ filePath, fileDiff, pendingFileActionPath, scope, onDiscardFile, onStageFile, onUnstageFile }: {
+function DeletedDiffRow({ filePath, pendingFileActionPath, scope, onDiscardFile, onStageFile, onUnstageFile }: {
   filePath: string
-  fileDiff: ConversationFileDiff
   pendingFileActionPath: string | null
   scope: 'staged' | 'unstaged'
   onDiscardFile: (filePath: string) => Promise<void>
@@ -228,7 +227,6 @@ export function SourceControlDiffSection({
               <DeletedDiffRow
                 key={`${scope}-${fileDiff.fileName}`}
                 filePath={fileDiff.fileName}
-                fileDiff={fileDiff}
                 pendingFileActionPath={pendingFileActionPath}
                 scope={scope}
                 onDiscardFile={onDiscardFile}

@@ -2,18 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getToolDescription } from '../../electron/chat/openaiCompatible/tools/descriptionCatalog.ts'
 
-test('tool descriptions include the shared contract and the tool purpose', () => {
+test('tool descriptions stay literal and compact', () => {
   const description = getToolDescription('apply_patch')
-  assert.match(description, /Global tool contract:/u)
-  assert.match(description, /Treat tool outputs as source of truth\./u)
-  assert.match(description, /Edit an existing workspace file using the \*\*\* Begin Patch \/ \*\*\* End Patch format\./u)
-  assert.match(description, /Only Update File hunks are supported\./u)
-  assert.match(description, /How to write a reliable hunk:/u)
-  assert.match(description, /Avoid generic anchors like "import \{" or "function"\./u)
-  assert.match(description, /Example:/u)
+  assert.equal(description, 'Apply a patch to an existing workspace file.')
 })
 
-test('tool descriptions stay short for the per-tool portion', () => {
+test('tool descriptions stay short for each tool', () => {
   const description = getToolDescription('run_terminal')
-  assert.equal(description.endsWith('Run a shell command in a managed terminal session.'), true)
+  assert.equal(description, 'Run a shell command in a managed terminal session.')
 })

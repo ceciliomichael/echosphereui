@@ -13,7 +13,7 @@ import type { ProviderStreamContext } from '../providerTypes'
 import { buildSystemPrompt } from '../prompts'
 import { buildPromptCacheKey } from '../prompts/promptCache'
 import { getUserMessageImageAttachments, getUserMessageTextBlocks } from '../providers/messageAttachments'
-import { parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
+import { getToolResultModelContent, parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
 import {
   buildSerializedAssistantTurnContent,
   buildSerializedAssistantTurnReasoningContent,
@@ -110,7 +110,7 @@ function buildOpenAICompatibleToolMessage(message: Message): ChatCompletionMessa
   }
 
   return {
-    content: message.content,
+    content: getToolResultModelContent(message.content),
     role: 'tool',
     tool_call_id: message.toolCallId,
   }

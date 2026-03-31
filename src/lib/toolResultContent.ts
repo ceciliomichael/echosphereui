@@ -20,95 +20,10 @@ export interface ParsedStructuredToolResultContent {
   metadata: StructuredToolResultMetadata | null
 }
 
-const TOOL_RESULT_START = '<tool_result>'
-const TOOL_RESULT_END = '</tool_result>'
-const TOOL_RESULT_BODY_START = '<tool_result_body>'
-const TOOL_RESULT_BODY_END = '</tool_result_body>'
-
-function ensureSentenceEnding(text: string) {
-  const trimmedText = text.trim()
-  if (trimmedText.length === 0) {
-    return trimmedText
-  }
-
-  const lastCharacter = trimmedText.at(-1)
-  if (lastCharacter === '.' || lastCharacter === '!' || lastCharacter === '?') {
-    return trimmedText
-  }
-
-  return `${trimmedText}.`
-}
-
-function buildMutationAcknowledgement(metadata: StructuredToolResultMetadata) {
-  if (metadata.status !== 'success') {
-    return null
-  }
-
-  if (metadata.toolName !== 'edit' && metadata.toolName !== 'apply_patch') {
-    return null
-  }
-
-  const subjectPath = metadata.subject?.path
-  const operation = typeof metadata.semantics?.operation === 'string' ? metadata.semantics.operation : null
-  if (typeof subjectPath !== 'string' || subjectPath.trim().length === 0) {
-    return null
-  }
-
-  if (operation === 'noop') {
-    return `Acknowledged workspace state: ${subjectPath} already matched the requested ${metadata.toolName} outcome and remains unchanged.`
-  }
-
-  if (metadata.toolName === 'apply_patch') {
-    return `Acknowledged workspace state: ${subjectPath} was patched successfully and now reflects the applied changes. Trust this result as the current workspace state for that path.`
-  }
-
-  return `Acknowledged workspace state: ${subjectPath} was edited successfully and now reflects the applied changes. Trust this result as the current workspace state for that path.`
-}
-
-function buildGeneralSuccessAcknowledgement(metadata: StructuredToolResultMetadata) {
-  if (metadata.status !== 'success') {
-    return null
-  }
-
-  if (typeof metadata.summary !== 'string' || metadata.summary.trim().length === 0) {
-    return null
-  }
-
-  if (metadata.toolName === 'list') {
-    return `Acknowledged directory inspection result: ${ensureSentenceEnding(metadata.summary)}`
-  }
-
-  if (metadata.toolName === 'read') {
-    return `Acknowledged file read result: ${ensureSentenceEnding(metadata.summary)}`
-  }
-
-  if (metadata.toolName === 'glob') {
-    return `Acknowledged path search result: ${ensureSentenceEnding(metadata.summary)}`
-  }
-
-  if (metadata.toolName === 'grep') {
-    return `Acknowledged content search result: ${ensureSentenceEnding(metadata.summary)}`
-  }
-
-  return `Acknowledged tool result: ${ensureSentenceEnding(metadata.summary)}`
-}
-
-function buildToolResultPreamble(metadata: StructuredToolResultMetadata) {
-  const mutationAcknowledgement = buildMutationAcknowledgement(metadata)
-  if (mutationAcknowledgement) {
-    return `${mutationAcknowledgement} The structured block below is authoritative.`
-  }
-
-  if (metadata.status === 'error') {
-    return `Acknowledged tool failure: ${ensureSentenceEnding(metadata.summary)} The structured block below is authoritative.`
-  }
-
-  const generalAcknowledgement = buildGeneralSuccessAcknowledgement(metadata)
-  if (generalAcknowledgement) {
-    return `${generalAcknowledgement} The structured block below is authoritative.`
-  }
-
-  return 'Completed tool result. The structured block below is authoritative.'
+interface StructuredToolResultEnvelope {
+  body?: string
+  metadata: StructuredToolResultMetadata
+  schema: 'echosphere.tool_result/v2'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -150,65 +65,59 @@ function isStructuredToolResultMetadata(value: unknown): value is StructuredTool
   )
 }
 
-function readBetweenMarkers(input: string, startMarker: string, endMarker: string) {
-  const startIndex = input.indexOf(startMarker)
-  if (startIndex < 0) {
-    return null
+function isStructuredToolResultEnvelope(value: unknown): value is StructuredToolResultEnvelope {
+  if (!isRecord(value)) {
+    return false
   }
 
-  const contentStartIndex = startIndex + startMarker.length
-  const endIndex = input.indexOf(endMarker, contentStartIndex)
-  if (endIndex < 0) {
-    return null
-  }
-
-  return input.slice(contentStartIndex, endIndex).trim()
+  return (
+    value.schema === 'echosphere.tool_result/v2' &&
+    isStructuredToolResultMetadata(value.metadata) &&
+    (value.body === undefined || typeof value.body === 'string')
+  )
 }
 
 export function formatStructuredToolResultContent(
   metadata: StructuredToolResultMetadata,
   body?: string | null,
 ) {
-  const parts = [buildToolResultPreamble(metadata), TOOL_RESULT_START, JSON.stringify(metadata, null, 2), TOOL_RESULT_END]
-
-  if (typeof body === 'string' && body.length > 0) {
-    parts.push(TOOL_RESULT_BODY_START, body, TOOL_RESULT_BODY_END)
+  const envelope: StructuredToolResultEnvelope = {
+    ...(typeof body === 'string' && body.length > 0 ? { body } : {}),
+    metadata,
+    schema: 'echosphere.tool_result/v2',
   }
 
-  return parts.join('\n')
+  return JSON.stringify(envelope, null, 2)
 }
 
 export function parseStructuredToolResultContent(content: string): ParsedStructuredToolResultContent {
-  const metadataBlock = readBetweenMarkers(content, TOOL_RESULT_START, TOOL_RESULT_END)
-  const bodyBlock = readBetweenMarkers(content, TOOL_RESULT_BODY_START, TOOL_RESULT_BODY_END)
-
-  if (!metadataBlock) {
-    return {
-      body: null,
-      metadata: null,
-    }
-  }
-
   try {
-    const parsedMetadata = JSON.parse(metadataBlock) as unknown
-    if (!isStructuredToolResultMetadata(parsedMetadata)) {
+    const parsedContent = JSON.parse(content) as unknown
+    if (isStructuredToolResultEnvelope(parsedContent)) {
       return {
-        body: bodyBlock,
-        metadata: null,
+        body: parsedContent.body ?? null,
+        metadata: parsedContent.metadata,
       }
     }
-
-    return {
-      body: bodyBlock,
-      metadata: {
-        ...parsedMetadata,
-        ...(parsedMetadata.subject === undefined ? {} : { subject: readSubject(parsedMetadata.subject) }),
-      },
-    }
   } catch {
-    return {
-      body: bodyBlock,
-      metadata: null,
-    }
+    // Invalid JSON means this is not a structured tool result envelope.
   }
+
+  return {
+    body: null,
+    metadata: null,
+  }
+}
+
+export function getToolResultModelContent(content: string) {
+  const parsedContent = parseStructuredToolResultContent(content)
+  if (parsedContent.body) {
+    return parsedContent.body
+  }
+
+  if (parsedContent.metadata?.summary.trim().length) {
+    return parsedContent.metadata.summary.trim()
+  }
+
+  return content.trim()
 }

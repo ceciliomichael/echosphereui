@@ -1,9 +1,5 @@
 import type { Message } from '../../../src/types/chat'
 
-export const TOOL_OUTPUT_PREFIX = '[SYSTEM TOOL OUTPUT]'
-export const TOOL_RESULTS_TAG_OPEN = '<tool_results>'
-export const TOOL_RESULTS_TAG_CLOSE = '</tool_results>'
-export const TOOL_RESULTS_SUMMARY_TAG_OPEN = '<tool_results_summary>'
 export const TOOL_RESULT_TO_USER_BRIDGE_TEXT =
   '[Received tool results above. The following is a new message from the user.]'
 
@@ -33,12 +29,7 @@ export function isHumanUserMessage(message: Message) {
 }
 
 export function isToolOutputMessageContent(content: string) {
-  const normalizedContent = content.trim()
-  return (
-    normalizedContent.startsWith(TOOL_OUTPUT_PREFIX) ||
-    normalizedContent.startsWith(TOOL_RESULTS_TAG_OPEN) ||
-    normalizedContent.startsWith(TOOL_RESULTS_SUMMARY_TAG_OPEN)
-  )
+  return hasText(content)
 }
 
 export function ensureToolOutputMessageEnvelope(content: string) {
@@ -46,10 +37,5 @@ export function ensureToolOutputMessageEnvelope(content: string) {
     return content
   }
 
-  const normalizedContent = content.trim()
-  if (isToolOutputMessageContent(normalizedContent)) {
-    return normalizedContent
-  }
-
-  return `${TOOL_OUTPUT_PREFIX}\n${TOOL_RESULTS_TAG_OPEN}\n${normalizedContent}\n${TOOL_RESULTS_TAG_CLOSE}`
+  return content.trim()
 }

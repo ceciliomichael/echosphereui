@@ -118,6 +118,7 @@ test('buildOpenAICompatibleCompletionMessages repairs orphan tool messages using
   assert.equal(serializedMessages[1]?.tool_calls?.[0]?.function.name, 'read')
   assert.equal(serializedMessages[2]?.role, 'tool')
   assert.equal(serializedMessages[2]?.tool_call_id, 'call-1')
+  assert.equal(serializedMessages[2]?.content, 'export const value = 1;')
 })
 
 test('buildCodexInputMessages omits tool-role history for Codex Responses payloads', () => {

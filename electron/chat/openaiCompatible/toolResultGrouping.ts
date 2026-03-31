@@ -1,4 +1,4 @@
-import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../../src/lib/toolResultContent'
+import { getToolResultModelContent, parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../../src/lib/toolResultContent'
 
 const TERMINAL_REPLAY_MAX_BODY_CHARACTERS = 1_600
 const INSPECTION_REPLAY_MAX_BODY_CHARACTERS = Number.MAX_SAFE_INTEGER
@@ -78,29 +78,32 @@ function buildClippedReplaySnippet(
 }
 
 function buildRawToolContentReplaySnippet(toolContent: string) {
-  if (toolContent.length <= RAW_TOOL_CONTENT_MAX_CHARACTERS) {
-    return toolContent
+  const cleanedToolContent = getToolResultModelContent(toolContent)
+  if (cleanedToolContent.length <= RAW_TOOL_CONTENT_MAX_CHARACTERS) {
+    return cleanedToolContent
   }
 
   return [
-    toolContent.slice(0, RAW_TOOL_CONTENT_MAX_CHARACTERS),
+    cleanedToolContent.slice(0, RAW_TOOL_CONTENT_MAX_CHARACTERS),
     '',
     '[legacy tool replay context clipped to reduce context growth]',
   ].join('\n')
 }
 
-function buildCompactedToolContent(metadata: StructuredToolResultMetadata, body: string | null) {
+interface GroupedToolResultContentItem {
+  body: string
+  metadata: StructuredToolResultMetadata | null
+}
+
+function buildCompactedToolContent(metadata: StructuredToolResultMetadata, body: string | null): GroupedToolResultContentItem {
   const compactedBody = isTerminalToolName(metadata.toolName)
     ? buildTerminalBodyReplaySnippet(body)
     : buildClippedReplaySnippet(body, resolveReplayBodyCharacterLimit(metadata.toolName))
-  const metadataJson = JSON.stringify(metadata, null, 2)
-  const compactedParts = ['<tool_result>', metadataJson, '</tool_result>']
 
-  if (compactedBody !== null) {
-    compactedParts.push('<tool_result_body>', compactedBody, '</tool_result_body>')
+  return {
+    body: compactedBody ?? '',
+    metadata,
   }
-
-  return compactedParts.join('\n')
 }
 
 function buildReplayKeyForToolContent(metadata: StructuredToolResultMetadata) {
@@ -153,7 +156,7 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
     return null
   }
 
-  const replayToolContentByKey = new Map<string, string>()
+  const replayToolContentByKey = new Map<string, GroupedToolResultContentItem>()
   let unknownToolContentCounter = 0
 
   for (const toolContent of toolContents) {
@@ -161,7 +164,10 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
     const metadata = parsedResult.metadata
     if (!metadata) {
       unknownToolContentCounter += 1
-      replayToolContentByKey.set(`legacy:${unknownToolContentCounter}`, buildRawToolContentReplaySnippet(toolContent))
+      replayToolContentByKey.set(`legacy:${unknownToolContentCounter}`, {
+        body: buildRawToolContentReplaySnippet(toolContent),
+        metadata: null,
+      })
       continue
     }
 
@@ -174,5 +180,8 @@ export function buildCodexGroupedToolResultContent(toolContents: string[]) {
   }
   const replayToolContents = Array.from(replayToolContentByKey.values())
 
-  return replayToolContents.join('\n\n')
+  return JSON.stringify({
+    schema: 'echosphere.tool_result_group/v1',
+    toolResults: replayToolContents,
+  }, null, 2)
 }

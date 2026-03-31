@@ -2,6 +2,7 @@ import type { ChatMode, Message } from '../../../src/types/chat'
 import {
   buildSerializedAssistantTurnContentWithInlineReasoning,
 } from '../openaiCompatible/assistantToolInvocationContext'
+import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
 import type { OpenAICompatibleResponsesFunctionCallOutputInput } from '../openaiCompatible/responsesState'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
@@ -84,7 +85,7 @@ function toCodexInputItems(
     return [
       {
         call_id: message.toolCallId,
-        output: message.content,
+        output: getToolResultModelContent(message.content),
         type: 'function_call_output',
       },
     ]
@@ -143,7 +144,8 @@ function stripCodexInputItemIds(item: CodexPayloadInputItem): CodexPayloadInputI
     return item
   }
 
-  const { id: _ignoredId, ...rest } = item
+  const rest = { ...item }
+  delete rest.id
   return rest as CodexPayloadInputItem
 }
 

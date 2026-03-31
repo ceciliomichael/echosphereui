@@ -407,7 +407,7 @@ export function WorkspaceTerminalPanel({
     } else if (isOpen) {
       terminalRef.current?.focus();
     }
-  }, [activeTerminalTabKey, isOpen, renderActiveTerminalTab, terminalTabs, workspaceKey]);
+  }, [activeTerminalTabKey, isOpen, onClose, renderActiveTerminalTab, terminalTabs, workspaceKey]);
 
   const ensureTerminal = useCallback(() => {
     const hostElement = terminalHostRef.current;
