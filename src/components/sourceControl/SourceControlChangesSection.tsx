@@ -21,6 +21,7 @@ interface SourceControlChangesSectionProps {
   stagedFileDiffs: readonly ConversationFileDiff[]
   syncError: string | null
   syncMessage: string | null
+  unstagedFileCount: number
   unstagedFileDiffs: readonly ConversationFileDiff[]
   onCommitActionMenuOpenChange: (nextValue: boolean) => void
   onCommitMessageChange: (nextValue: string) => void
@@ -53,6 +54,7 @@ export function SourceControlChangesSection({
   stagedFileDiffs,
   syncError,
   syncMessage,
+  unstagedFileCount,
   unstagedFileDiffs,
   onCommitActionMenuOpenChange,
   onCommitMessageChange,
@@ -72,11 +74,7 @@ export function SourceControlChangesSection({
 
   return (
     <section className={['border-b border-border', isChangesSectionOpen ? 'min-h-0 flex flex-1 flex-col' : 'shrink-0'].join(' ')}>
-      <button
-        type="button"
-        onClick={onToggleChangesSection}
-        className="flex h-10 w-full items-center justify-between px-4 text-left"
-      >
+      <button type="button" onClick={onToggleChangesSection} className="flex h-10 w-full items-center justify-between px-4 text-left">
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
         <ChevronDown size={13} className={['text-muted-foreground transition-transform', isChangesSectionOpen ? '' : '-rotate-90'].join(' ')} />
       </button>
@@ -171,7 +169,7 @@ export function SourceControlChangesSection({
 
         <div className={sectionBodyClassName}>
           {stagedFileDiffs.length > 0 ? (
-            <section className="min-h-0 flex flex-1 flex-col border-b border-border">
+            <section className={['min-h-0 flex flex-col border-b border-border', isStagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
               <button
                 type="button"
                 onClick={() => onStagedSectionOpenChange(!isStagedSectionOpen)}
@@ -182,7 +180,7 @@ export function SourceControlChangesSection({
               </button>
               <div
                 className={[
-                  'min-h-0 border-t border-border transition-[opacity] duration-200',
+                  'min-h-0 transition-[opacity] duration-200',
                   isStagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
                 ].join(' ')}
               >
@@ -204,18 +202,23 @@ export function SourceControlChangesSection({
             </section>
           ) : null}
 
-          <section className={['min-h-0 flex flex-1 flex-col border-border', isUnstagedSectionOpen ? 'border-b-0' : 'border-b'].join(' ')}>
+          <section className={['min-h-0 flex flex-col border-border', isUnstagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
             <button
               type="button"
               onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
-              className="flex h-10 w-full items-center justify-between px-4 text-left"
+              className="flex h-10 w-full items-center justify-between border-b border-border px-4 text-left"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
+              <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <span>Changes</span>
+                <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
+                  <span className="translate-x-px tabular-nums">{unstagedFileCount}</span>
+                </span>
+              </span>
               <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
             </button>
             <div
               className={[
-                'min-h-0 border-t border-border transition-[opacity] duration-200',
+                'min-h-0 transition-[opacity] duration-200',
                 isUnstagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
               ].join(' ')}
             >

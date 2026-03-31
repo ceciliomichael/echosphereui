@@ -58,6 +58,7 @@ interface SourceControlHistorySectionProps {
   loadingCommitHashes: readonly string[]
   pendingSyncAction: GitSyncAction | 'refresh' | null
   selectedCommitHash: string | null
+  showResizeHandle: boolean
   onGoToCurrentCommit: () => Promise<void>
   onHistoryResizePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   onLoadCommitDetails: (commitHash: string) => Promise<void>
@@ -121,6 +122,7 @@ export function SourceControlHistorySection({
   loadingCommitHashes,
   pendingSyncAction,
   selectedCommitHash,
+  showResizeHandle,
   onGoToCurrentCommit,
   onHistoryResizePointerDown,
   onLoadCommitDetails,
@@ -145,16 +147,18 @@ export function SourceControlHistorySection({
           : undefined
       }
     >
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize history section"
-        onPointerDown={onHistoryResizePointerDown}
-        className={[
-          'h-1 w-full bg-transparent',
-          isHistorySectionOpen ? 'cursor-row-resize' : 'cursor-default',
-        ].join(' ')}
-      />
+      {showResizeHandle ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize history section"
+          onPointerDown={onHistoryResizePointerDown}
+          className={[
+            'h-1 w-full bg-transparent',
+            isHistorySectionOpen ? 'cursor-row-resize' : 'cursor-default',
+          ].join(' ')}
+        />
+      ) : null}
       <div
         role="button"
         tabIndex={0}

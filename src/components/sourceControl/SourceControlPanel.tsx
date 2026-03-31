@@ -1,7 +1,8 @@
 import { GitCommitHorizontal } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
+import { clampSourceControlHistoryHeight, getDefaultSourceControlHistoryHeight } from '../../lib/sourceControlSizing'
 import type {
   GitHistoryCommitDetailsResult,
   GitHistoryEntry,
@@ -103,6 +104,8 @@ function SourceControlPanelComponent({
     [fileDiffs, isUnstagedLikeFileDiff],
   )
   const totalChangedFileCount = fileDiffs.length
+  const hasChangedFiles = totalChangedFileCount > 0
+  const shouldUseSplitLayout = hasChangedFiles && isChangesSectionOpen
   const canQuickCommit =
     !isQuickCommitting &&
     (includeUnstaged ? totalChangedFileCount > 0 : stagedFileDiffs.length > 0)
@@ -237,7 +240,7 @@ function SourceControlPanelComponent({
         return
       }
 
-      const nextHeight = clampHistoryHeight(
+      const nextHeight = clampSourceControlHistoryHeight(
         resizeState.startHeight + (resizeState.startY - event.clientY),
         resizeState.containerHeight,
       )
@@ -268,8 +271,8 @@ function SourceControlPanelComponent({
     }
   }, [])
 
-  useEffect(() => {
-    if (!isHistorySectionOpen || historyHeight === null) {
+  useLayoutEffect(() => {
+    if (!shouldUseSplitLayout || historyHeight !== null) {
       return
     }
 
@@ -278,11 +281,8 @@ function SourceControlPanelComponent({
       return
     }
 
-    const clampedHeight = clampHistoryHeight(historyHeight, containerHeight)
-    if (clampedHeight !== historyHeight) {
-      setHistoryHeight(clampedHeight)
-    }
-  }, [historyHeight, isHistorySectionOpen])
+    setHistoryHeight(getDefaultSourceControlHistoryHeight(containerHeight))
+  }, [historyHeight, shouldUseSplitLayout])
 
   const loadHistoryPage = useCallback(
     async (offset: number, append: boolean) => {
@@ -536,13 +536,6 @@ function SourceControlPanelComponent({
     document.body.style.cursor = 'col-resize'
   }
 
-  function clampHistoryHeight(nextHeight: number, containerHeight: number) {
-    const minHistoryHeight = 140
-    const minNonHistoryHeight = 160
-    const maxHistoryHeight = Math.max(minHistoryHeight, containerHeight - minNonHistoryHeight)
-    return Math.min(maxHistoryHeight, Math.max(minHistoryHeight, Math.round(nextHeight)))
-  }
-
   function handleHistoryResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!isHistorySectionOpen) {
       return
@@ -553,7 +546,7 @@ function SourceControlPanelComponent({
       return
     }
 
-    const startHeight = historyHeight ?? Math.round(containerHeight * 0.45)
+    const startHeight = historyHeight ?? getDefaultSourceControlHistoryHeight(containerHeight)
     historyResizeStateRef.current = {
       containerHeight,
       pointerId: event.pointerId,
@@ -641,37 +634,40 @@ function SourceControlPanelComponent({
             isHistoryResizing ? 'cursor-row-resize' : '',
           ].join(' ')}
         >
-          <SourceControlChangesSection
-            commitActionControlsRef={commitActionControlsRef}
-            commitMessage={commitMessage}
-            expandedChangeFilePaths={expandedChangeFilePaths}
-            includeUnstaged={includeUnstaged}
-            isChangesSectionOpen={isChangesSectionOpen}
-            isCommitActionDisabled={isCommitActionDisabled}
-            isCommitActionMenuOpen={isCommitActionMenuOpen}
-            isCommitPrimaryBusy={isCommitPrimaryBusy}
-            isQuickCommitting={isQuickCommitting}
-            isStagedSectionOpen={isStagedSectionOpen}
-            isUnstagedSectionOpen={isUnstagedSectionOpen}
-            pendingFileActionPath={pendingFileActionPath}
-            quickCommitError={quickCommitError}
-            stagedFileDiffs={stagedFileDiffs}
-            syncError={syncError}
-            syncMessage={syncMessage}
-            unstagedFileDiffs={unstagedFileDiffs}
-            onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
-            onCommitMessageChange={setCommitMessage}
-            onDiscardFile={onDiscardFile}
-            onExpandedChange={handleChangeFileExpandedChange}
-            onIncludeUnstagedChange={setIncludeUnstaged}
-            onOpenCommitModal={onOpenCommitModal}
-            onQuickCommitSubmit={handleQuickCommitSubmit}
-            onStageFile={onStageFile}
-            onStagedSectionOpenChange={handleStagedSectionOpenChange}
-            onToggleChangesSection={handleToggleChangesSection}
-            onUnstageFile={onUnstageFile}
-            onUnstagedSectionOpenChange={handleUnstagedSectionOpenChange}
-          />
+          {hasChangedFiles ? (
+            <SourceControlChangesSection
+              commitActionControlsRef={commitActionControlsRef}
+              commitMessage={commitMessage}
+              expandedChangeFilePaths={expandedChangeFilePaths}
+              includeUnstaged={includeUnstaged}
+              isChangesSectionOpen={isChangesSectionOpen}
+              isCommitActionDisabled={isCommitActionDisabled}
+              isCommitActionMenuOpen={isCommitActionMenuOpen}
+              isCommitPrimaryBusy={isCommitPrimaryBusy}
+              isQuickCommitting={isQuickCommitting}
+              isStagedSectionOpen={isStagedSectionOpen}
+              isUnstagedSectionOpen={isUnstagedSectionOpen}
+              pendingFileActionPath={pendingFileActionPath}
+              quickCommitError={quickCommitError}
+              stagedFileDiffs={stagedFileDiffs}
+              syncError={syncError}
+              syncMessage={syncMessage}
+              unstagedFileCount={unstagedFileDiffs.length}
+              unstagedFileDiffs={unstagedFileDiffs}
+              onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
+              onCommitMessageChange={setCommitMessage}
+              onDiscardFile={onDiscardFile}
+              onExpandedChange={handleChangeFileExpandedChange}
+              onIncludeUnstagedChange={setIncludeUnstaged}
+              onOpenCommitModal={onOpenCommitModal}
+              onQuickCommitSubmit={handleQuickCommitSubmit}
+              onStageFile={onStageFile}
+              onStagedSectionOpenChange={handleStagedSectionOpenChange}
+              onToggleChangesSection={handleToggleChangesSection}
+              onUnstageFile={onUnstageFile}
+              onUnstagedSectionOpenChange={handleUnstagedSectionOpenChange}
+            />
+          ) : null}
 
           <SourceControlHistorySection
             commitDetailsByHash={commitDetailsByHash}
@@ -681,7 +677,7 @@ function SourceControlPanelComponent({
             headHash={headHash}
             historyEntries={historyEntries}
             historyError={historyError}
-            historyHeight={historyHeight}
+            historyHeight={shouldUseSplitLayout ? historyHeight : null}
             historyRowRefMap={historyRowRefMap}
             historyViewModels={historyViewModels}
             isHistorySectionOpen={isHistorySectionOpen}
@@ -690,6 +686,7 @@ function SourceControlPanelComponent({
             loadingCommitHashes={loadingCommitHashes}
             pendingSyncAction={pendingSyncAction}
             selectedCommitHash={selectedCommitHash}
+            showResizeHandle={shouldUseSplitLayout}
             onGoToCurrentCommit={handleGoToCurrentCommit}
             onHistoryResizePointerDown={handleHistoryResizePointerDown}
             onLoadCommitDetails={loadCommitDetails}
