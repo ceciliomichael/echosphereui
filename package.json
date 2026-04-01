@@ -3,7 +3,7 @@
   "description": "Desktop AI workspace built with Electron, Vite, and React.",
   "author": "Echosphere Team",
   "private": true,
-  "version": "0.1.20",
+  "version": "0.1.21",
   "type": "module",
   "bin": {
     "apply_patch": "./scripts/apply-patch.mjs"
