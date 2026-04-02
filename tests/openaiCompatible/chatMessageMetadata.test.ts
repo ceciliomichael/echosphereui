@@ -3,7 +3,7 @@ import test from 'node:test'
 import { getConversationPreviewContent } from '../../src/lib/chatMessageMetadata'
 import type { Message } from '../../src/types/chat'
 
-test('getConversationPreviewContent ignores assistant tool-call scaffolding and falls back to tool activity', () => {
+test('getConversationPreviewContent reflects visible assistant text even when tool invocations are present', () => {
   const messages: Message[] = [
     {
       content: 'Assistant to=run_terminal.run_terminal json {"cmd":"npm run lint"}',
@@ -22,5 +22,8 @@ test('getConversationPreviewContent ignores assistant tool-call scaffolding and 
     },
   ]
 
-  assert.equal(getConversationPreviewContent(messages), 'Tool activity')
+  assert.equal(
+    getConversationPreviewContent(messages),
+    'Assistant to=run_terminal.run_terminal json {"cmd":"npm run lint"}',
+  )
 })

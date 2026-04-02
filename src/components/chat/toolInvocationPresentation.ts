@@ -6,7 +6,6 @@ interface ToolArgumentsValue {
   absolute_path?: unknown
   command?: unknown
   cmd?: unknown
-  edits?: unknown
   pattern?: unknown
   query?: unknown
   workdir?: unknown
@@ -93,15 +92,6 @@ function extractPartialAbsolutePath(argumentsText: string) {
 
 function getAbsolutePath(invocation: ToolInvocationTrace) {
   const argumentsValue = parseCompleteToolArguments(invocation.argumentsText)
-  if (Array.isArray(argumentsValue?.edits)) {
-    const firstEdit = argumentsValue.edits[0]
-    if (typeof firstEdit === 'object' && firstEdit !== null) {
-      const firstEditRecord = firstEdit as Record<string, unknown>
-      if (typeof firstEditRecord.absolute_path === 'string' && firstEditRecord.absolute_path.trim().length > 0) {
-        return firstEditRecord.absolute_path.trim()
-      }
-    }
-  }
 
   if (typeof argumentsValue?.absolute_path === 'string' && argumentsValue.absolute_path.trim().length > 0) {
     return argumentsValue.absolute_path.trim()
@@ -179,10 +169,6 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
   }
 
-  if (invocation.toolName === 'read') {
-    return invocation.state === 'running' ? 'Reading' : invocation.state === 'completed' ? 'Read' : 'Read failed'
-  }
-
   if (invocation.toolName === 'glob' || invocation.toolName === 'grep') {
     return invocation.state === 'running'
       ? 'Searching'
@@ -191,27 +177,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Search failed'
   }
 
-  if (invocation.toolName === 'write') {
-    if (invocation.state === 'running') {
-      return 'Writing'
-    }
-    if (invocation.state === 'failed') {
-      return 'Write failed'
-    }
-    return 'Created'
-  }
-
-  if (invocation.toolName === 'apply_patch') {
-    if (invocation.state === 'running') {
-      return 'Editing'
-    }
-    if (invocation.state === 'failed') {
-      return 'Patch failed'
-    }
-    return 'Edited'
-  }
-
-  if (invocation.toolName === 'edit') {
+  if (invocation.toolName === 'file_change') {
     if (invocation.state === 'running') {
       return 'Editing'
     }
@@ -290,7 +256,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if ((invocation.toolName === 'edit' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
+    if (invocation.toolName === 'file_change' && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }

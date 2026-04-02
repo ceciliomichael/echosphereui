@@ -4,8 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { execCommandTool } from '../../electron/chat/openaiCompatible/tools/exec-command/index'
+import {
+  clearTerminalSessionsForTests,
+  clampOutputByTokenLimit,
+} from '../../electron/chat/openaiCompatible/tools/terminalSessionManager'
 import { writeStdinTool } from '../../electron/chat/openaiCompatible/tools/write-stdin/index'
-import { clearTerminalSessionsForTests } from '../../electron/chat/openaiCompatible/tools/terminalSessionManager'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext(agentContextRootPath: string) {
@@ -31,11 +34,7 @@ async function withTemporaryDirectory<T>(callback: (directoryPath: string) => Pr
 }
 
 function buildDelayedCommand() {
-  if (process.platform === 'win32') {
-    return 'Start-Sleep -Seconds 1; Write-Output done'
-  }
-
-  return 'sleep 1; echo done'
+  return `node -e "setTimeout(() => console.log('done'), 1000)"`
 }
 
 function buildNodeEnvEchoCommand() {
@@ -82,12 +81,24 @@ test('get_terminal_output can continue polling an active run_terminal session', 
       buildExecutionContext(workspacePath),
     )
 
-    for (let attempt = 0; attempt < 3 && followUpResult.processId !== null; attempt += 1) {
+    for (let attempt = 0; attempt < 5 && followUpResult.processId !== null; attempt += 1) {
       followUpResult = await writeStdinTool.execute(
         {
           chars: '',
           session_id: followUpResult.processId,
-          yield_time_ms: 1_500,
+          yield_time_ms: 2_000,
+        },
+        buildExecutionContext(workspacePath),
+      )
+      outputChunks.push(followUpResult.output)
+    }
+
+    if (followUpResult.processId !== null) {
+      followUpResult = await writeStdinTool.execute(
+        {
+          chars: '',
+          session_id: followUpResult.processId,
+          yield_time_ms: 3_000,
         },
         buildExecutionContext(workspacePath),
       )
@@ -115,6 +126,20 @@ test('get_terminal_output can continue polling an active run_terminal session', 
     assert.equal(repeatedResult.processId, null)
     assert.equal(typeof repeatedResult.output, 'string')
   })
+})
+
+test('terminal output truncation preserves the unread tail for the next poll', () => {
+  const firstChunk = clampOutputByTokenLimit('0123456789', 1)
+  assert.equal(firstChunk.truncated, true)
+  assert.equal(firstChunk.consumedLength, 4)
+  assert.match(firstChunk.output, /0123/u)
+  assert.match(firstChunk.output, /\[output truncated\]/u)
+
+  const secondChunk = clampOutputByTokenLimit('0123456789'.slice(firstChunk.consumedLength), 1)
+  assert.equal(secondChunk.truncated, true)
+  assert.equal(secondChunk.consumedLength, 4)
+  assert.match(secondChunk.output, /4567/u)
+  assert.match(secondChunk.output, /\[output truncated\]/u)
 })
 
 test('get_terminal_output rejects unknown sessions', async () => {

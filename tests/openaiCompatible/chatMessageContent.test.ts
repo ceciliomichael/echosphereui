@@ -52,8 +52,8 @@ test('normalizeAssistantMessageContent preserves natural content text without sc
 test('stripInternalToolCallLeakage removes leaked internal tool routing lines', () => {
   const sanitized = stripInternalToolCallLeakage([
     'I am checking the shared scaffold.',
-    '{"absolute_path":"C:\\\\repo\\\\file.dart","max_lines":260,"start_line":1} to=functions.read code',
-    '彩冲争勇直了下载assistant to=functions.read in commentary {"absolute_path":"C:\\\\repo\\\\file.dart"}',
+    '{"absolute_path":"C:\\\\repo"} to=functions.list code',
+    '彩冲争勇直了下载assistant to=functions.list in commentary {"absolute_path":"C:\\\\repo"}',
     'Then I will patch the right boundary.',
   ].join('\n'))
 
@@ -69,8 +69,8 @@ test('stripInternalToolCallLeakage removes leaked internal tool routing lines', 
 test('stripInternalToolCallLeakage removes raw argument fragments adjacent to leaked tool routing lines', () => {
   const sanitized = stripInternalToolCallLeakage([
     'I am checking the shared scaffold.',
-    '{"absolute_path":"C:\\\\repo\\\\file.dart","max_lines":260,"start_line":1}',
-    'assistant to=functions.read in commentary',
+    '{"absolute_path":"C:\\\\repo"}',
+    'assistant to=functions.list in commentary',
     'Then I will patch the right boundary.',
   ].join('\n'))
 
@@ -87,7 +87,7 @@ test('normalizeAssistantMessageContent strips leaked internal tool routing lines
   const parsed = normalizeAssistantMessageContent({
     content: [
       'I am checking the shared scaffold.',
-      '{"absolute_path":"C:\\\\repo\\\\file.dart","max_lines":260,"start_line":1} to=functions.read code',
+      '{"absolute_path":"C:\\\\repo"} to=functions.list code',
       'Then I will patch the right boundary.',
     ].join('\n'),
     reasoningContent: '',

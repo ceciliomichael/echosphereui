@@ -19,6 +19,12 @@ interface TerminalSession {
   waiters: Set<() => void>
 }
 
+interface ClampedTerminalOutput {
+  consumedLength: number
+  output: string
+  truncated: boolean
+}
+
 export interface OpenTerminalSessionInput {
   args: string[]
   command: string
@@ -42,6 +48,7 @@ export interface TerminalSessionPollResult {
   originalTokenCount: number
   processId: number | null
   spawnError: string | null
+  truncated: boolean
   wallTimeMs: number
 }
 
@@ -56,7 +63,7 @@ function estimateTokenCount(text: string) {
   return Math.ceil(text.length / 4)
 }
 
-function clampOutputByTokenLimit(output: string, maxOutputTokens?: number) {
+export function clampOutputByTokenLimit(output: string, maxOutputTokens?: number): ClampedTerminalOutput {
   const outputTokenLimit =
     typeof maxOutputTokens === 'number' && Number.isFinite(maxOutputTokens) && maxOutputTokens > 0
       ? Math.floor(maxOutputTokens)
@@ -64,11 +71,19 @@ function clampOutputByTokenLimit(output: string, maxOutputTokens?: number) {
   const outputCharacterLimit = outputTokenLimit * 4
 
   if (output.length <= outputCharacterLimit) {
-    return output
+    return {
+      consumedLength: output.length,
+      output,
+      truncated: false,
+    }
   }
 
   const clippedOutput = output.slice(0, outputCharacterLimit)
-  return `${clippedOutput}\n\n[output truncated]`
+  return {
+    consumedLength: clippedOutput.length,
+    output: `${clippedOutput}\n\n[output truncated]`,
+    truncated: true,
+  }
 }
 
 function hasUnreadOutput(session: TerminalSession) {
@@ -115,11 +130,13 @@ function pruneExpiredSessions() {
 
 function readSessionOutput(session: TerminalSession, maxOutputTokens?: number) {
   const unreadOutput = session.output.slice(session.consumedLength)
-  session.consumedLength = session.output.length
+  const clampedOutput = clampOutputByTokenLimit(unreadOutput, maxOutputTokens)
+  session.consumedLength = Math.min(session.output.length, session.consumedLength + clampedOutput.consumedLength)
 
   return {
-    output: clampOutputByTokenLimit(unreadOutput, maxOutputTokens),
+    output: clampedOutput.output,
     originalTokenCount: estimateTokenCount(unreadOutput),
+    truncated: clampedOutput.truncated,
   }
 }
 
@@ -217,6 +234,7 @@ function buildSessionPollResult(
   session: TerminalSession,
   output: string,
   originalTokenCount: number,
+  truncated: boolean,
 ): TerminalSessionPollResult {
   return {
     chunkId: session.chunkId,
@@ -226,6 +244,7 @@ function buildSessionPollResult(
     originalTokenCount,
     processId: session.exitedAt === null ? sessionId : null,
     spawnError: session.spawnError,
+    truncated,
     wallTimeMs: Math.max(0, Date.now() - session.createdAt),
   }
 }
@@ -238,8 +257,8 @@ export async function pollTerminalSession(input: PollTerminalSessionInput): Prom
   }
 
   await waitForSessionActivity(session, input.signal, input.yieldTimeMs)
-  const { output, originalTokenCount } = readSessionOutput(session, input.maxOutputTokens)
-  return buildSessionPollResult(input.sessionId, session, output, originalTokenCount)
+  const { output, originalTokenCount, truncated } = readSessionOutput(session, input.maxOutputTokens)
+  return buildSessionPollResult(input.sessionId, session, output, originalTokenCount, truncated)
 }
 
 export async function writeTerminalSession(

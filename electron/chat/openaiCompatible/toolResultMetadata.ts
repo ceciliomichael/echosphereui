@@ -2,7 +2,6 @@ import type { StructuredToolResultMetadata } from '../../../src/lib/toolResultCo
 import type { OpenAICompatibleToolCall } from './toolTypes'
 import {
   filterUndefinedEntries,
-  inferFenceLanguage,
   parseArguments,
   readBoolean,
   readListEntries,
@@ -23,14 +22,6 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
     }
   }
 
-  if (toolName === 'read') {
-    return {
-      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
-      max_lines: readNumber(argumentsValue.max_lines) ?? undefined,
-      start_line: readNumber(argumentsValue.start_line) ?? undefined,
-    }
-  }
-
   if (toolName === 'glob') {
     return {
       absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
@@ -46,36 +37,6 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
       is_regex: readBoolean(argumentsValue.is_regex),
       max_results: readNumber(argumentsValue.max_results) ?? undefined,
       pattern: readString(argumentsValue.pattern) ?? undefined,
-    }
-  }
-
-  if (toolName === 'write') {
-    const content = readString(argumentsValue.content)
-    return {
-      absolute_path: readString(argumentsValue.absolute_path) ?? undefined,
-      content_length: content?.length ?? undefined,
-    }
-  }
-
-  if (toolName === 'edit') {
-    const edits = Array.isArray(argumentsValue.edits) ? argumentsValue.edits : []
-    const singleEdit =
-      edits.length === 1 && typeof edits[0] === 'object' && edits[0] !== null && !Array.isArray(edits[0])
-        ? (edits[0] as Record<string, unknown>)
-        : argumentsValue
-    return {
-      edit_count: edits.length || undefined,
-      end_line: readNumber(singleEdit.end_line) ?? undefined,
-      start_line: readNumber(singleEdit.start_line) ?? undefined,
-    }
-  }
-
-  if (toolName === 'apply_patch') {
-    const patch = readString(argumentsValue.patch) ?? readString(argumentsValue.input)
-    const lineRanges = Array.isArray(argumentsValue.line_ranges) ? argumentsValue.line_ranges : []
-    return {
-      line_range_count: lineRanges.length || undefined,
-      patch_length: patch?.length ?? undefined,
     }
   }
 
@@ -138,17 +99,6 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Listed ${subjectPath} with ${entryCount} visible entr${entryCount === 1 ? 'y' : 'ies'}${truncated ? ' (truncated)' : ''}.`
   }
 
-  if (toolName === 'read') {
-    const startLine = readNumber(semanticResult.startLine) ?? 1
-    const endLine = readNumber(semanticResult.endLine) ?? startLine
-    const totalLineCount = readNumber(semanticResult.totalLineCount)
-    const remainingLineCount = readNumber(semanticResult.remainingLineCount)
-    const coverageSummary = readBoolean(semanticResult.hasMoreLines)
-      ? `partial${remainingLineCount !== null ? `, ${remainingLineCount} lines remaining` : ''}`
-      : 'complete'
-    return `Read ${subjectPath} lines ${startLine}-${endLine}${totalLineCount !== null ? ` of ${totalLineCount}` : ''} (${coverageSummary}).`
-  }
-
   if (toolName === 'glob') {
     const matchCount = readNumber(semanticResult.matchCount) ?? 0
     const pattern = readString(semanticResult.pattern) ?? '*'
@@ -159,33 +109,6 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     const matchCount = readNumber(semanticResult.matchCount) ?? 0
     const pattern = readString(semanticResult.pattern) ?? ''
     return `Found ${matchCount} search hit${matchCount === 1 ? '' : 's'} for ${pattern} in ${subjectPath}${truncated ? ' (truncated)' : ''}.`
-  }
-
-  if (toolName === 'write') {
-    const subjectPath = readString(semanticResult.path) ?? 'unknown'
-    const contentChanged = readBoolean(semanticResult.contentChanged)
-    if (contentChanged === false) {
-      return readString(semanticResult.message) ?? `Write completed with no content change for ${subjectPath}.`
-    }
-
-    return `Created ${subjectPath}. The reported file content now reflects the current workspace state.`
-  }
-
-  if (toolName === 'edit') {
-    const operation = readString(semanticResult.operation) ?? 'edit'
-    const subjectPath = readString(semanticResult.path) ?? 'unknown'
-    const contentChanged = readBoolean(semanticResult.contentChanged)
-    const hasCurrentContent = typeof semanticResult.newContent === 'string'
-
-    if (operation === 'noop' || contentChanged === false) {
-      return readString(semanticResult.message) ?? `Edit completed with no content change for ${subjectPath}.`
-    }
-
-    if (hasCurrentContent) {
-      return `Applied edits to ${subjectPath}. The current workspace state for this path is included below and should be treated as authoritative.`
-    }
-
-    return 'Applied edits successfully. Treat the reported changed paths as the current workspace state.'
   }
 
   if (toolName === 'file_change') {
@@ -213,50 +136,28 @@ function buildSuccessSummary(toolName: string, semanticResult: Record<string, un
     return `Updated ${totalChangedPaths} files.`
   }
 
-  if (toolName === 'apply_patch') {
-    const changes = Array.isArray(semanticResult.changes)
-      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
-      : []
-    const totalChangedPaths = changes.length
-
-    if (totalChangedPaths === 0) {
-      return readString(semanticResult.message) ?? 'Patch applied with no file changes.'
-    }
-
-    if (totalChangedPaths === 1) {
-      const firstChange = changes[0]
-      const firstPath =
-        firstChange && typeof firstChange === 'object'
-          ? readString(firstChange.fileName) ?? readString(firstChange.path) ?? 'unknown'
-          : 'unknown'
-      const firstKind = firstChange && typeof firstChange === 'object' ? readString(firstChange.kind) : null
-      const verb = firstKind === 'add' ? 'Created' : firstKind === 'delete' ? 'Deleted' : 'Updated'
-      return `${verb} ${firstPath}.`
-    }
-
-    return `Applied patch to ${totalChangedPaths} files.`
-  }
-
   if (toolName === 'run_terminal') {
     const executionMode = readString(semanticResult.executionMode) ?? 'full'
     const sessionId = readNumber(semanticResult.processId)
     const exitCode = readNumber(semanticResult.exitCode)
+    const truncationNote = truncated ? ' (output truncated; fetch again for more)' : ''
     if (sessionId !== null) {
-      return `Started terminal run in ${executionMode} mode with session ${sessionId}.`
+      return `Started terminal run in ${executionMode} mode with session ${sessionId}${truncationNote}.`
     }
 
-    return `Executed terminal run in ${executionMode} mode${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+    return `Executed terminal run in ${executionMode} mode${exitCode !== null ? ` (exit code ${exitCode})` : ''}${truncationNote}.`
   }
 
   if (toolName === 'get_terminal_output') {
     const sessionId = readNumber(semanticResult.sessionId)
     const nextProcessId = readNumber(semanticResult.processId)
     const exitCode = readNumber(semanticResult.exitCode)
+    const truncationNote = truncated ? ' (output truncated; fetch again for more)' : ''
     if (nextProcessId !== null) {
-      return `Fetched terminal output for session ${sessionId ?? nextProcessId}; session is still running.`
+      return `Fetched terminal output for session ${sessionId ?? nextProcessId}; session is still running${truncationNote}.`
     }
 
-    return `Fetched terminal output for session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}.`
+    return `Fetched terminal output for session ${sessionId ?? 'unknown'}${exitCode !== null ? ` (exit code ${exitCode})` : ''}${truncationNote}.`
   }
 
   if (toolName === 'ready_implement') {
@@ -304,25 +205,6 @@ function buildSubject(toolName: string, semanticResult: Record<string, unknown>)
     }
   }
 
-  if (toolName === 'apply_patch') {
-    const changes = Array.isArray(semanticResult.changes)
-      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
-      : []
-    if (changes.length !== 1) {
-      return undefined
-    }
-
-    const firstPath = readString(changes[0]?.fileName) ?? readString(changes[0]?.path)
-    if (!firstPath) {
-      return undefined
-    }
-
-    return {
-      kind: 'file',
-      path: firstPath,
-    }
-  }
-
   const subjectPath = readString(semanticResult.path)
   if (!subjectPath) {
     return undefined
@@ -360,23 +242,6 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     })
   }
 
-  if (toolName === 'read') {
-    return filterUndefinedEntries({
-      ...sharedSemantics,
-      end_line: readNumber(semanticResult.endLine) ?? undefined,
-      has_more_lines: readBoolean(semanticResult.hasMoreLines),
-      fully_read: !readBoolean(semanticResult.hasMoreLines),
-      language: inferFenceLanguage(readString(semanticResult.path) ?? ''),
-      max_read_line_count: readNumber(semanticResult.maxReadLineCount) ?? undefined,
-      next_end_line: readNumber(semanticResult.nextEndLine) ?? undefined,
-      next_start_line: readNumber(semanticResult.nextStartLine) ?? undefined,
-      line_count: readNumber(semanticResult.lineCount) ?? undefined,
-      remaining_line_count: readNumber(semanticResult.remainingLineCount) ?? undefined,
-      start_line: readNumber(semanticResult.startLine) ?? undefined,
-      total_line_count: readNumber(semanticResult.totalLineCount) ?? undefined,
-    })
-  }
-
   if (toolName === 'glob') {
     return filterUndefinedEntries({
       ...sharedSemantics,
@@ -391,59 +256,6 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
       ...sharedSemantics,
       match_count: readNumber(semanticResult.matchCount) ?? undefined,
       pattern: readString(semanticResult.pattern) ?? undefined,
-    })
-  }
-
-  if (toolName === 'write') {
-    const addedPaths = Array.isArray(semanticResult.addedPaths)
-      ? semanticResult.addedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const modifiedPaths = Array.isArray(semanticResult.modifiedPaths)
-      ? semanticResult.modifiedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const deletedPaths = Array.isArray(semanticResult.deletedPaths)
-      ? semanticResult.deletedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
-    const operation = readString(semanticResult.operation) ?? 'write'
-    return filterUndefinedEntries({
-      ...sharedSemantics,
-      added_path_count: addedPaths.length,
-      changed_paths: [...addedPaths, ...modifiedPaths, ...deletedPaths],
-      content_changed: readBoolean(semanticResult.contentChanged),
-      deleted_path_count: deletedPaths.length,
-      mutation_applied: totalChangedPaths > 0 || readBoolean(semanticResult.contentChanged),
-      modified_path_count: modifiedPaths.length,
-      operation,
-      target_exists_after_call: true,
-      workspace_effect: totalChangedPaths > 0 || readBoolean(semanticResult.contentChanged) ? 'files_edited' : 'file_already_matched',
-    })
-  }
-
-  if (toolName === 'edit') {
-    const addedPaths = Array.isArray(semanticResult.addedPaths)
-      ? semanticResult.addedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const modifiedPaths = Array.isArray(semanticResult.modifiedPaths)
-      ? semanticResult.modifiedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const deletedPaths = Array.isArray(semanticResult.deletedPaths)
-      ? semanticResult.deletedPaths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    const totalChangedPaths = addedPaths.length + modifiedPaths.length + deletedPaths.length
-    const operation = readString(semanticResult.operation) ?? 'edit'
-    const contentChanged = readBoolean(semanticResult.contentChanged)
-    return filterUndefinedEntries({
-      ...sharedSemantics,
-      added_path_count: addedPaths.length,
-      changed_paths: [...addedPaths, ...modifiedPaths, ...deletedPaths],
-      content_changed: contentChanged,
-      deleted_path_count: deletedPaths.length,
-      mutation_applied: totalChangedPaths > 0 || contentChanged,
-      modified_path_count: modifiedPaths.length,
-      operation,
-      target_exists_after_call: true,
-      workspace_effect: totalChangedPaths > 0 || contentChanged ? 'files_edited' : 'file_already_matched',
     })
   }
 
@@ -478,38 +290,16 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     })
   }
 
-  if (toolName === 'apply_patch') {
-    const changes = Array.isArray(semanticResult.changes)
-      ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
-      : []
-    const changedPaths = changes
-      .map((change) => readString(change.fileName) ?? readString(change.path))
-      .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    const totalChangedPaths = changes.length
-    return filterUndefinedEntries({
-      ...sharedSemantics,
-      change_count: totalChangedPaths,
-      changed_paths: changedPaths,
-      content_changed: totalChangedPaths > 0,
-      mutation_applied: totalChangedPaths > 0,
-      operation: 'apply_patch',
-      target_exists_after_call: totalChangedPaths > 0,
-      workspace_effect: totalChangedPaths > 0 ? 'files_edited' : 'file_already_matched',
-    })
-  }
-
   if (toolName === 'run_terminal') {
     const processId = readNumber(semanticResult.processId)
     return filterUndefinedEntries({
       ...sharedSemantics,
       command_running: processId !== null,
-      end_line_number: undefined,
       exit_code: readNumber(semanticResult.exitCode) ?? undefined,
       mutation_applied: false,
       operation: readString(semanticResult.operation) ?? undefined,
       output_token_count: readNumber(semanticResult.originalTokenCount) ?? undefined,
       process_id: processId ?? undefined,
-      start_line_number: undefined,
       target_exists_after_call: true,
       working_directory: readString(semanticResult.path) ?? undefined,
       workspace_effect: 'no_file_change',
@@ -521,14 +311,12 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     return filterUndefinedEntries({
       ...sharedSemantics,
       command_running: processId !== null,
-      end_line_number: undefined,
       exit_code: readNumber(semanticResult.exitCode) ?? undefined,
       mutation_applied: false,
       operation: readString(semanticResult.operation) ?? undefined,
       output_token_count: readNumber(semanticResult.originalTokenCount) ?? undefined,
       process_id: processId ?? undefined,
       session_id: readNumber(semanticResult.sessionId) ?? undefined,
-      start_line_number: undefined,
       target_exists_after_call: true,
       workspace_effect: 'no_file_change',
     })
@@ -589,47 +377,15 @@ export function buildFailureMetadata(
   details?: Record<string, unknown>,
 ): StructuredToolResultMetadata {
   const argumentsSummary = buildArgumentsSummary(toolCall.name, toolCall.argumentsText)
-  const sanitizedDetails = (() => {
-    if (!details) {
-      return undefined
-    }
-
-    if (toolCall.name === 'apply_patch' && readString(details.failureReason) === 'hunk_context_mismatch') {
-      return filterUndefinedEntries({
-        bestPartialMatchLine: readNumber(details.bestPartialMatchLine) ?? undefined,
-        bestPartialMatchPrefixLength: readNumber(details.bestPartialMatchPrefixLength) ?? undefined,
-        failureReason: readString(details.failureReason) ?? undefined,
-        filePath: readString(details.filePath) ?? undefined,
-        firstContextLineMatchCount: readNumber(details.firstContextLineMatchCount) ?? undefined,
-        hunkLineCount: readNumber(details.hunkLineCount) ?? undefined,
-      })
-    }
-
-    if (
-      toolCall.name === 'edit' &&
-      (readString(details.failureReason) === 'old_string_not_found' ||
-        readString(details.failureReason) === 'old_string_ambiguous')
-    ) {
-      return filterUndefinedEntries({
-        bestPartialMatchLine: readNumber(details.bestPartialMatchLine) ?? undefined,
-        bestPartialMatchPrefixLength: readNumber(details.bestPartialMatchPrefixLength) ?? undefined,
-        failureReason: readString(details.failureReason) ?? undefined,
-        filePath: readString(details.filePath) ?? undefined,
-        firstContextLineMatchCount: readNumber(details.firstContextLineMatchCount) ?? undefined,
-        hunkLineCount: readNumber(details.hunkLineCount) ?? undefined,
-        lineRangeEndLine: readNumber(details.lineRangeEndLine) ?? undefined,
-        lineRangeStartLine: readNumber(details.lineRangeStartLine) ?? undefined,
-      })
-    }
-
-    return filterUndefinedEntries(
-      Object.fromEntries(
-        Object.entries(details)
-          .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-          .slice(0, 12),
-      ),
-    )
-  })()
+  const sanitizedDetails = !details
+    ? undefined
+    : filterUndefinedEntries(
+        Object.fromEntries(
+          Object.entries(details)
+            .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+            .slice(0, 12),
+        ),
+      )
   const semantics = filterUndefinedEntries({
     authoritative: true,
     ...(sanitizedDetails ? { details: sanitizedDetails } : {}),

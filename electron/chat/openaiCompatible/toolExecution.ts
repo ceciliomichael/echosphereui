@@ -12,6 +12,7 @@ import {
   type OpenAICompatibleToolCall,
   type OpenAICompatibleToolExecutionMode,
 } from './toolTypes'
+import { resolveToolPath } from './tools/filesystemToolUtils'
 
 export { createToolExecutionTurnState } from './toolExecutionTurnState'
 export type { ToolExecutionTurnState } from './toolExecutionTurnState'
@@ -29,7 +30,11 @@ interface ToolExecutionSchedulerInput {
 interface ToolExecutionSchedulerDependencies {
   executeToolCall?: typeof executeToolCallWithPolicies
   resolveExecutionMode?: (toolName: string, chatMode: ChatMode) => OpenAICompatibleToolExecutionMode
-  resolveExecutionResourceKey?: (toolCall: OpenAICompatibleToolCall, chatMode: ChatMode) => string | null
+  resolveExecutionResourceKey?: (
+    toolCall: OpenAICompatibleToolCall,
+    chatMode: ChatMode,
+    agentContextRootPath?: string,
+  ) => string | null
 }
 
 export interface ToolExecutionScheduler {
@@ -43,39 +48,6 @@ function toErrorMessage(error: unknown) {
   }
 
   return 'Tool execution failed.'
-}
-
-function summarizeApplyPatchFailureDetails(details: Record<string, unknown> | undefined) {
-  if (!details) {
-    return null
-  }
-
-  return {
-    bestPartialMatchLine:
-      typeof details.bestPartialMatchLine === 'number' ? details.bestPartialMatchLine : null,
-    bestPartialMatchPrefixLength:
-      typeof details.bestPartialMatchPrefixLength === 'number' ? details.bestPartialMatchPrefixLength : null,
-    failureReason: typeof details.failureReason === 'string' ? details.failureReason : null,
-    filePath: typeof details.filePath === 'string' ? details.filePath : null,
-    hunkLineCount: typeof details.hunkLineCount === 'number' ? details.hunkLineCount : null,
-  }
-}
-
-function summarizeEditFailureDetails(details: Record<string, unknown> | undefined) {
-  if (!details) {
-    return null
-  }
-
-  return {
-    bestPartialMatchLine:
-      typeof details.bestPartialMatchLine === 'number' ? details.bestPartialMatchLine : null,
-    bestPartialMatchPrefixLength:
-      typeof details.bestPartialMatchPrefixLength === 'number' ? details.bestPartialMatchPrefixLength : null,
-    failureReason: typeof details.failureReason === 'string' ? details.failureReason : null,
-    filePath: typeof details.filePath === 'string' ? details.filePath : null,
-    lineRangeEndLine: typeof details.lineRangeEndLine === 'number' ? details.lineRangeEndLine : null,
-    lineRangeStartLine: typeof details.lineRangeStartLine === 'number' ? details.lineRangeStartLine : null,
-  }
 }
 
 function emitFailureEvent(
@@ -131,7 +103,11 @@ function readNextChatMode(semanticResult: Record<string, unknown>): ChatMode | n
   return null
 }
 
-export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCall, chatMode: ChatMode) {
+export function resolveToolExecutionResourceKey(
+  toolCall: OpenAICompatibleToolCall,
+  chatMode: ChatMode,
+  agentContextRootPath?: string,
+) {
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
   if (!toolDefinition || toolDefinition.executionMode !== 'path-exclusive') {
     return null
@@ -142,6 +118,11 @@ export function resolveToolExecutionResourceKey(toolCall: OpenAICompatibleToolCa
     const absolutePath = argumentsValue.absolute_path
     if (typeof absolutePath !== 'string' || absolutePath.trim().length === 0) {
       return null
+    }
+
+    if (typeof agentContextRootPath === 'string' && agentContextRootPath.trim().length > 0) {
+      const { normalizedTargetPath } = resolveToolPath(agentContextRootPath, absolutePath.trim())
+      return normalizeExecutionResourceKey(normalizedTargetPath)
     }
 
     return normalizeExecutionResourceKey(absolutePath.trim())
@@ -163,6 +144,11 @@ export async function executeToolCallWithPolicies(
   const inMemoryMessages = Array.isArray(chatModeOrInMemoryMessages)
     ? chatModeOrInMemoryMessages
     : (inMemoryMessagesOrTurnState as Message[])
+  const turnState =
+    typeof chatModeOrInMemoryMessages === 'string'
+      ? ((_maybeTurnState as ToolExecutionTurnState | undefined) ?? null)
+      : ((inMemoryMessagesOrTurnState as ToolExecutionTurnState | undefined) ?? null)
+  void turnState
 
   const startedAt = toolCall.startedAt
   const toolDefinition = getOpenAICompatibleToolDefinition(toolCall.name, chatMode)
@@ -232,70 +218,6 @@ export async function executeToolCallWithPolicies(
   } catch (error) {
     const errorMessage = toErrorMessage(error)
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
-    if (toolCall.name === 'apply_patch') {
-      const compactDetails = summarizeApplyPatchFailureDetails(errorDetails)
-      console.log('[tool-execution:apply-patch-failed]', {
-        compactDetails,
-        errorDetails: errorDetails ?? null,
-        errorMessage,
-        invocationId: toolCall.id,
-        rawArgumentsLength: toolCall.argumentsText.length,
-        rawArgumentsPreview:
-          toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
-      })
-      const timestamp = new Date().toISOString()
-      // Keep a copy-friendly terminal line for quick debugging.
-      console.error(
-        `[apply_patch_failure_compact] ${JSON.stringify({
-          compactDetails,
-          errorMessage,
-          invocationId: toolCall.id,
-          timestamp,
-        })}`,
-      )
-      // Keep full diagnostics available in terminal logs for deep investigation.
-      console.error(
-        `[apply_patch_failure_full] ${JSON.stringify({
-          details: errorDetails ?? null,
-          errorMessage,
-          invocationId: toolCall.id,
-          rawArguments:
-            toolCall.argumentsText.length > 4000 ? `${toolCall.argumentsText.slice(0, 4000)}…` : toolCall.argumentsText,
-          timestamp,
-        })}`,
-      )
-    }
-    if (toolCall.name === 'edit') {
-      const compactDetails = summarizeEditFailureDetails(errorDetails)
-      console.log('[tool-execution:edit-failed]', {
-        compactDetails,
-        errorDetails: errorDetails ?? null,
-        errorMessage,
-        invocationId: toolCall.id,
-        rawArgumentsLength: toolCall.argumentsText.length,
-        rawArgumentsPreview:
-          toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
-      })
-      const timestamp = new Date().toISOString()
-      console.error(
-        `[edit_failure_compact] ${JSON.stringify({
-          compactDetails,
-          errorMessage,
-          invocationId: toolCall.id,
-          timestamp,
-        })}`,
-      )
-      console.error(
-        `[edit_failure_full] ${JSON.stringify({
-          details: errorDetails ?? null,
-          errorMessage,
-          invocationId: toolCall.id,
-          rawArguments:
-            toolCall.argumentsText.length > 4000 ? `${toolCall.argumentsText.slice(0, 4000)}…` : toolCall.argumentsText,
-          timestamp,
-        })}`,
-      )
-    }
     emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, errorDetails)
   }
 }
@@ -355,7 +277,7 @@ export function createToolExecutionScheduler(
     }
 
     if (executionMode === 'path-exclusive') {
-      const resourceKey = resolveExecutionResourceKey(toolCall, currentChatMode)
+      const resourceKey = resolveExecutionResourceKey(toolCall, currentChatMode, input.agentContextRootPath)
       if (resourceKey) {
         const resourceBarrier = resourceBarriers.get(resourceKey) ?? Promise.resolve()
         const resourceExecution = exclusiveBarrier

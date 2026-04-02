@@ -60,8 +60,13 @@ function hasText(value: unknown): value is string {
 
 function toCodexFunctionCallItem(
   invocation: NonNullable<Message['toolInvocations']>[number],
+  allowedToolNames: ReadonlySet<string>,
 ): CodexFunctionCallInputItem | null {
-  if (invocation.id.trim().length === 0 || invocation.toolName.trim().length === 0) {
+  if (
+    invocation.id.trim().length === 0 ||
+    invocation.toolName.trim().length === 0 ||
+    !allowedToolNames.has(invocation.toolName.trim())
+  ) {
     return null
   }
 
@@ -74,14 +79,22 @@ function toCodexFunctionCallItem(
   }
 }
 
-function buildCodexFunctionCallItemFromToolMessage(message: Message): CodexFunctionCallInputItem | null {
+function buildCodexFunctionCallItemFromToolMessage(
+  message: Message,
+  allowedToolNames: ReadonlySet<string>,
+): CodexFunctionCallInputItem | null {
   if (message.role !== 'tool' || !hasText(message.toolCallId)) {
     return null
   }
 
   const metadata = parseStructuredToolResultContent(message.content).metadata
+  if (!metadata || typeof metadata.toolName !== 'string' || metadata.toolName.trim().length === 0) {
+    return null
+  }
 
-  const toolName = typeof metadata?.toolName === 'string' && metadata.toolName.trim().length > 0 ? metadata.toolName : 'unknown_tool'
+  const requestedToolName = metadata.toolName.trim()
+  const toolName =
+    requestedToolName.length > 0 && allowedToolNames.has(requestedToolName) ? requestedToolName : 'unknown_tool'
   const argumentsText =
     metadata?.arguments && Object.keys(metadata.arguments).length > 0 ? JSON.stringify(metadata.arguments) : '{}'
 
@@ -96,6 +109,7 @@ function buildCodexFunctionCallItemFromToolMessage(message: Message): CodexFunct
 
 function toCodexInputItems(
   message: Message,
+  allowedToolNames: ReadonlySet<string>,
 ): Array<CodexInputMessage | CodexFunctionCallInputItem | OpenAICompatibleResponsesFunctionCallOutputInput> {
   if (message.role === 'tool') {
     if (!hasText(message.content) || !hasText(message.toolCallId)) {
@@ -122,7 +136,7 @@ function toCodexInputItems(
     }
 
     for (const invocation of message.toolInvocations ?? []) {
-      const functionCallItem = toCodexFunctionCallItem(invocation)
+      const functionCallItem = toCodexFunctionCallItem(invocation, allowedToolNames)
       if (functionCallItem) {
         inputItems.push(functionCallItem)
       }
@@ -155,7 +169,10 @@ function toCodexInputItems(
   return [{ role: 'user', content }]
 }
 
-export function buildCodexInputMessages(messages: Message[]) {
+export function buildCodexInputMessages(messages: Message[], chatMode: ChatMode = 'agent') {
+  const allowedToolNames = new Set(
+    getOpenAICompatibleToolDefinitions(chatMode).map((toolDefinition) => toolDefinition.name),
+  )
   const toolMessageCallIds = new Set(
     messages
       .filter((message) => message.role === 'tool' && hasText(message.toolCallId))
@@ -173,14 +190,14 @@ export function buildCodexInputMessages(messages: Message[]) {
       }
 
       if (!emittedFunctionCallIds.has(message.toolCallId)) {
-        const synthesizedCall = buildCodexFunctionCallItemFromToolMessage(message)
+        const synthesizedCall = buildCodexFunctionCallItemFromToolMessage(message, allowedToolNames)
         if (synthesizedCall) {
           inputItems.push(synthesizedCall)
           emittedFunctionCallIds.add(synthesizedCall.call_id)
         }
       }
 
-      const toolOutputItems = toCodexInputItems(message)
+      const toolOutputItems = toCodexInputItems(message, allowedToolNames)
       if (toolOutputItems.length > 0) {
         inputItems.push(...toolOutputItems)
         emittedFunctionCallOutputIds.add(message.toolCallId)
@@ -194,7 +211,7 @@ export function buildCodexInputMessages(messages: Message[]) {
         ...message,
         toolInvocations: keptToolInvocations,
       }
-      const nextItems = toCodexInputItems(filteredMessage)
+      const nextItems = toCodexInputItems(filteredMessage, allowedToolNames)
       inputItems.push(...nextItems)
       for (const invocation of keptToolInvocations) {
         emittedFunctionCallIds.add(invocation.id)
@@ -202,7 +219,7 @@ export function buildCodexInputMessages(messages: Message[]) {
       continue
     }
 
-    inputItems.push(...toCodexInputItems(message))
+    inputItems.push(...toCodexInputItems(message, allowedToolNames))
   }
 
   return inputItems
@@ -246,7 +263,7 @@ export async function buildCodexPayload(
 
   return {
     include: ['reasoning.encrypted_content'],
-    input: buildCodexInputMessages(request.messages).map((item) => stripCodexInputItemIds(item)),
+    input: buildCodexInputMessages(request.messages, request.chatMode).map((item) => stripCodexInputItemIds(item)),
     instructions,
     model: request.modelId,
     parallel_tool_calls: true,

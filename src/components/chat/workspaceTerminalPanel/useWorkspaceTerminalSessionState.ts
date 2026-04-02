@@ -13,8 +13,11 @@ import {
   getErrorMessage,
   getNativeSelectionTextWithinHost,
   getSessionDimensions,
+  MIN_TERMINAL_COLS,
+  MIN_TERMINAL_ROWS,
   getTerminalTheme,
   getWorkspaceKeyFromTerminalTabKey,
+  isRenderableTerminalDimensions,
 } from "./workspaceTerminalPanelUtils";
 import "@xterm/xterm/css/xterm.css";
 
@@ -43,8 +46,6 @@ interface WorkspaceTerminalSessionState {
 }
 
 const TERMINAL_THEME_SYNC_DELAY_MS = 200;
-const MIN_TERMINAL_COLS = 20;
-const MIN_TERMINAL_ROWS = 6;
 
 export function useWorkspaceTerminalSessionState({
   isOpen,
@@ -62,6 +63,10 @@ export function useWorkspaceTerminalSessionState({
   const workspacePathRef = useRef<string | null>(workspacePath);
   const activeWorkspaceKeyRef = useRef(workspaceKey);
   const isResizingRef = useRef(isResizing);
+  const pendingTerminalRenderRef = useRef<{
+    sessionId: number | null;
+    tabKey: string | null;
+  } | null>(null);
   const lastSyncedSizeRef = useRef<{
     cols: number;
     rows: number;
@@ -104,6 +109,18 @@ export function useWorkspaceTerminalSessionState({
     activeSessionIdRef.current = activeTerminalTab?.sessionId ?? null;
   }, [activeTerminalTab, activeTerminalTabKey]);
 
+  const getRenderableTerminalDimensions = useCallback(() => {
+    const fitAddon = fitAddonRef.current;
+    if (!fitAddon) {
+      return null;
+    }
+
+    const proposedDimensions = fitAddon.proposeDimensions();
+    return isRenderableTerminalDimensions(proposedDimensions)
+      ? proposedDimensions
+      : null;
+  }, []);
+
   const sendTerminalSizeToSession = useCallback(
     (dimensions: { cols: number; rows: number }) => {
       const activeSessionId = activeSessionIdRef.current;
@@ -144,19 +161,24 @@ export function useWorkspaceTerminalSessionState({
   const syncTerminalSize = useCallback(
     (force = false) => {
       if (!force && isResizingRef.current) {
-        return;
+        return false;
       }
 
       const terminal = terminalRef.current;
-      const fitAddon = fitAddonRef.current;
-      if (!terminal || !fitAddon) {
-        return;
+      if (!terminal) {
+        return false;
       }
 
-      fitAddon.fit();
+      const proposedDimensions = getRenderableTerminalDimensions();
+      if (!proposedDimensions) {
+        return false;
+      }
+
+      fitAddonRef.current?.fit();
       sendTerminalSizeToSession(getSessionDimensions(terminal));
+      return true;
     },
-    [sendTerminalSizeToSession],
+    [getRenderableTerminalDimensions, sendTerminalSizeToSession],
   );
 
   const syncTerminalTheme = useCallback(() => {
@@ -172,7 +194,7 @@ export function useWorkspaceTerminalSessionState({
     terminal.refresh(0, Math.max(terminal.rows - 1, 0));
   }, [resolvedTheme]);
 
-  const renderActiveTerminalTab = useCallback(
+  const renderActiveTerminalTabNow = useCallback(
     (nextTabKey: string | null, sessionIdOverride?: number | null) => {
       const terminal = terminalRef.current;
       if (!terminal) {
@@ -211,6 +233,44 @@ export function useWorkspaceTerminalSessionState({
     [syncTerminalSize],
   );
 
+  const flushPendingTerminalRender = useCallback(() => {
+    const pendingTerminalRender = pendingTerminalRenderRef.current;
+    if (!pendingTerminalRender) {
+      return;
+    }
+
+    if (!getRenderableTerminalDimensions()) {
+      return;
+    }
+
+    pendingTerminalRenderRef.current = null;
+    renderActiveTerminalTabNow(
+      pendingTerminalRender.tabKey,
+      pendingTerminalRender.sessionId,
+    );
+  }, [getRenderableTerminalDimensions, renderActiveTerminalTabNow]);
+
+  const renderActiveTerminalTab = useCallback(
+    (nextTabKey: string | null, sessionIdOverride?: number | null) => {
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
+
+      if (!getRenderableTerminalDimensions()) {
+        pendingTerminalRenderRef.current = {
+          sessionId: sessionIdOverride ?? null,
+          tabKey: nextTabKey,
+        };
+        return;
+      }
+
+      pendingTerminalRenderRef.current = null;
+      renderActiveTerminalTabNow(nextTabKey, sessionIdOverride);
+    },
+    [getRenderableTerminalDimensions, renderActiveTerminalTabNow],
+  );
+
   const ensureTerminal = useCallback(() => {
     const hostElement = terminalHostRef.current;
     if (!hostElement || terminalRef.current) {
@@ -243,7 +303,6 @@ export function useWorkspaceTerminalSessionState({
     terminal.loadAddon(webLinksAddon);
     terminal.open(hostElement);
     terminal.focus();
-    fitAddon.fit();
     terminal.attachCustomKeyEventHandler((event) => {
       const isCopyShortcut =
         (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "c";
@@ -294,9 +353,11 @@ export function useWorkspaceTerminalSessionState({
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-  }, [resolvedTheme, sendTerminalSizeToSession]);
+    syncTerminalSize(true);
+  }, [resolvedTheme, sendTerminalSizeToSession, syncTerminalSize]);
 
   const disposeTerminal = useCallback(() => {
+    pendingTerminalRenderRef.current = null;
     terminalInputDisposableRef.current?.dispose();
     terminalResizeDisposableRef.current?.dispose();
     terminalInputDisposableRef.current = null;
@@ -400,6 +461,10 @@ export function useWorkspaceTerminalSessionState({
           });
       }
 
+      if (pendingTerminalRenderRef.current?.tabKey === tabKey) {
+        pendingTerminalRenderRef.current = null;
+      }
+
       tabBuffersRef.current.delete(tabKey);
       const nextTabs = currentTabs.filter((tab) => tab.key !== tabKey);
       const wasActive = activeTabKeyRef.current === tabKey;
@@ -407,6 +472,7 @@ export function useWorkspaceTerminalSessionState({
       setTerminalTabs(nextTabs);
 
       if (nextTabs.length === 0) {
+        pendingTerminalRenderRef.current = null;
         setActiveTerminalTabKey(null);
         activeTabKeyRef.current = null;
         activeSessionIdRef.current = null;
@@ -570,17 +636,28 @@ export function useWorkspaceTerminalSessionState({
     }
 
     const animationFrameId = window.requestAnimationFrame(() => {
-      syncTerminalSize(true);
+      if (syncTerminalSize(true)) {
+        flushPendingTerminalRender();
+      }
     });
     const timeoutId = window.setTimeout(() => {
-      syncTerminalSize(true);
+      if (syncTerminalSize(true)) {
+        flushPendingTerminalRender();
+      }
     }, TERMINAL_THEME_SYNC_DELAY_MS);
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       window.clearTimeout(timeoutId);
     };
-  }, [activeTerminalTabKey, isOpen, isResizing, syncTerminalSize, workspaceKey]);
+  }, [
+    activeTerminalTabKey,
+    flushPendingTerminalRender,
+    isOpen,
+    isResizing,
+    syncTerminalSize,
+    workspaceKey,
+  ]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -593,13 +670,15 @@ export function useWorkspaceTerminalSessionState({
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      syncTerminalSize();
+      if (syncTerminalSize()) {
+        flushPendingTerminalRender();
+      }
     });
     resizeObserver.observe(hostElement);
     return () => {
       resizeObserver.disconnect();
     };
-  }, [isOpen, syncTerminalSize]);
+  }, [flushPendingTerminalRender, isOpen, syncTerminalSize]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -607,14 +686,16 @@ export function useWorkspaceTerminalSessionState({
     }
 
     const handleWindowResize = () => {
-      syncTerminalSize();
+      if (syncTerminalSize()) {
+        flushPendingTerminalRender();
+      }
     };
 
     window.addEventListener("resize", handleWindowResize);
     return () => {
       window.removeEventListener("resize", handleWindowResize);
     };
-  }, [isOpen, syncTerminalSize]);
+  }, [flushPendingTerminalRender, isOpen, syncTerminalSize]);
 
   useEffect(() => {
     return () => {
@@ -629,6 +710,7 @@ export function useWorkspaceTerminalSessionState({
       return;
     }
 
+    pendingTerminalRenderRef.current = null;
     terminalWorkspaceStateRef.current[previousWorkspaceKey] = {
       activeTerminalTabKey,
       nextTabIndex: nextTabIndexRef.current,
@@ -644,6 +726,7 @@ export function useWorkspaceTerminalSessionState({
 
     if (nextWorkspaceState.terminalTabs.length === 0) {
       previousWorkspaceKeyRef.current = nextWorkspaceKey;
+      pendingTerminalRenderRef.current = null;
       setTerminalTabs([]);
       setActiveTerminalTabKey(null);
       nextTabIndexRef.current = 1;
@@ -667,6 +750,7 @@ export function useWorkspaceTerminalSessionState({
         (tab) => tab.key === nextWorkspaceState.activeTerminalTabKey,
       )?.sessionId ?? null;
     lastSyncedSizeRef.current = null;
+    pendingTerminalRenderRef.current = null;
     terminalRef.current?.reset();
 
     const nextActiveTab = nextWorkspaceState.activeTerminalTabKey

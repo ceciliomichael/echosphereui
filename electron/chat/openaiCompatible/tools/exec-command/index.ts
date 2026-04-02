@@ -256,10 +256,11 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
       pollResult.cwd ?? resolvedCwd,
     )
     const formattedOutput = formatTerminalToolOutput(pollResult)
+    const truncationNote = pollResult.truncated ? ' Output was truncated; fetch again for more.' : ''
     const message =
       pollResult.processId === null
-        ? `Executed terminal run in ${modeLabel} mode (exit code ${pollResult.exitCode ?? 1}).`
-        : `Started terminal run in ${modeLabel} mode with session ${pollResult.processId}.`
+        ? `Executed terminal run in ${modeLabel} mode (exit code ${pollResult.exitCode ?? 1}).${truncationNote}`
+        : `Started terminal run in ${modeLabel} mode with session ${pollResult.processId}.${truncationNote}`
 
     return {
       chunkId: pollResult.chunkId,
@@ -273,6 +274,7 @@ export const execCommandTool: OpenAICompatibleToolDefinition = {
       output: formattedOutput,
       path: workdirDisplayPath,
       processId: pollResult.processId,
+      truncated: pollResult.truncated,
       targetKind: 'directory',
       ttyRequested: tty,
       wallTimeMs: pollResult.wallTimeMs,

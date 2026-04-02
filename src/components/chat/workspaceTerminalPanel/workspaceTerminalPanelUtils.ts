@@ -2,11 +2,16 @@ import type { ITerminalOptions, Terminal } from "@xterm/xterm";
 import type { ResolvedTheme } from "../../../lib/theme";
 import { MIN_TERMINAL_PANEL_HEIGHT } from "../../../lib/terminalPanelSizing";
 
-const MIN_TERMINAL_COLS = 20;
-const MIN_TERMINAL_ROWS = 6;
+export const MIN_TERMINAL_COLS = 20;
+export const MIN_TERMINAL_ROWS = 6;
 const TERMINAL_TAB_KEY_SEPARATOR = "::terminal-tab-";
 
 type TerminalTheme = NonNullable<ITerminalOptions["theme"]>;
+
+export interface TerminalDimensions {
+  cols: number;
+  rows: number;
+}
 
 export function clampPanelHeight(nextHeight: number, maxHeightLimit: number) {
   const safeMaxHeight = Math.max(MIN_TERMINAL_PANEL_HEIGHT, maxHeightLimit);
@@ -26,6 +31,16 @@ export function getSessionDimensions(terminal: Terminal) {
     cols: Math.max(MIN_TERMINAL_COLS, terminal.cols || 80),
     rows: Math.max(MIN_TERMINAL_ROWS, terminal.rows || 24),
   };
+}
+
+export function isRenderableTerminalDimensions(
+  dimensions: TerminalDimensions | null | undefined,
+): dimensions is TerminalDimensions {
+  return Boolean(
+    dimensions &&
+      dimensions.cols >= MIN_TERMINAL_COLS &&
+      dimensions.rows >= MIN_TERMINAL_ROWS,
+  );
 }
 
 export function getNativeSelectionTextWithinHost(hostElement: HTMLElement) {

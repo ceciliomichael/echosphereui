@@ -21,6 +21,7 @@ test('agent prompt stays compact and workspace-first', () => {
   assert.ok(prompt.includes('Workspace root: `C:/workspace`'))
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
   assert.match(prompt, /Terminal execution mode is `full`/u)
+  assert.match(prompt, /Use tools silently and summarize their purpose or result in plain English instead of printing the underlying invocation payload\./u)
   assert.equal(prompt.includes('<task_classification>'), false)
   assert.equal(prompt.includes('<required_workflow>'), false)
   assert.equal(prompt.includes('<production_readiness>'), false)

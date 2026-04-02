@@ -125,31 +125,33 @@ function resolveWindowsShellSpecs() {
     "pwsh.exe",
   );
   const windowsCandidates: TerminalShellSpec[] = [];
+  const interactivePowerShellArgs = createPowerShellInteractiveArgs();
+
+  if (existsSync(pwshPath)) {
+    windowsCandidates.push({
+      args: interactivePowerShellArgs,
+      command: pwshPath,
+      label: "PowerShell 7",
+    });
+  }
+
+  windowsCandidates.push({
+    args: interactivePowerShellArgs,
+    command: "pwsh.exe",
+    label: "PowerShell 7",
+  });
 
   if (existsSync(windowsPowerShellPath)) {
     windowsCandidates.push({
-      args: ["-NoLogo", "-NoProfile"],
+      args: interactivePowerShellArgs,
       command: windowsPowerShellPath,
       label: "PowerShell",
     });
   }
 
-  if (existsSync(pwshPath)) {
-    windowsCandidates.push({
-      args: ["-NoLogo", "-NoProfile"],
-      command: pwshPath,
-      label: "PowerShell",
-    });
-  }
-
   windowsCandidates.push({
-    args: ["-NoLogo", "-NoProfile"],
+    args: interactivePowerShellArgs,
     command: "powershell.exe",
-    label: "PowerShell",
-  });
-  windowsCandidates.push({
-    args: ["-NoLogo", "-NoProfile"],
-    command: "pwsh.exe",
     label: "PowerShell",
   });
 
@@ -177,6 +179,25 @@ function createTerminalEnvironment() {
   };
   delete environment.ELECTRON_RUN_AS_NODE;
   return environment;
+}
+
+function createPowerShellInteractiveArgs() {
+  return [
+    "-NoLogo",
+    "-NoExit",
+    "-Command",
+    [
+      "$ErrorActionPreference = 'SilentlyContinue'",
+      "if (Get-Module -ListAvailable PSReadLine) { Import-Module PSReadLine -ErrorAction SilentlyContinue }",
+      "if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {",
+      "  try { Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle InlineView -BellStyle None } catch {",
+      "    try { Set-PSReadLineOption -PredictionSource History -PredictionViewStyle InlineView -BellStyle None } catch {",
+      "      try { Set-PSReadLineOption -PredictionSource History } catch {}",
+      "    }",
+      "  }",
+      "}",
+    ].join("; "),
+  ];
 }
 
 function parseExternalTerminalLink(rawUrl: string) {

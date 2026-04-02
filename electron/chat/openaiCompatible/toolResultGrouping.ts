@@ -50,11 +50,11 @@ function resolveReplayBodyCharacterLimit(toolName: string) {
     return TERMINAL_REPLAY_MAX_BODY_CHARACTERS
   }
 
-  if (toolName === 'list' || toolName === 'read' || toolName === 'glob' || toolName === 'grep') {
+  if (toolName === 'list' || toolName === 'glob' || toolName === 'grep') {
     return INSPECTION_REPLAY_MAX_BODY_CHARACTERS
   }
 
-  if (toolName === 'write' || toolName === 'edit' || toolName === 'apply_patch' || toolName === 'file_change') {
+  if (toolName === 'file_change') {
     return MUTATION_REPLAY_MAX_BODY_CHARACTERS
   }
 
@@ -118,30 +118,8 @@ function buildReplayKeyForToolContent(metadata: StructuredToolResultMetadata) {
     return `${metadata.toolName}:${subjectPath}:${pattern}`
   }
 
-  if (metadata.toolName === 'list' || metadata.toolName === 'read') {
-    if (metadata.toolName === 'read') {
-      const startLine = typeof semantics?.start_line === 'number' ? semantics.start_line : null
-      const endLine = typeof semantics?.end_line === 'number' ? semantics.end_line : null
-      const totalLineCount = typeof semantics?.total_line_count === 'number' ? semantics.total_line_count : null
-      return `${metadata.toolName}:${subjectPath}:${startLine ?? 'unknown'}:${endLine ?? 'unknown'}:${totalLineCount ?? 'unknown'}`
-    }
-
+  if (metadata.toolName === 'list') {
     return `${metadata.toolName}:${subjectPath}`
-  }
-
-  if (metadata.toolName === 'write' || metadata.toolName === 'edit') {
-    return `mutation:${subjectPath}`
-  }
-
-  if (metadata.toolName === 'apply_patch') {
-    const changedPaths = Array.isArray(semantics?.changed_paths)
-      ? semantics.changed_paths.filter((value): value is string => typeof value === 'string' && value.length > 0)
-      : []
-    if (changedPaths.length > 0) {
-      return `apply_patch:${changedPaths.slice().sort().join('|')}`
-    }
-
-    return `apply_patch:${subjectPath}`
   }
 
   if (metadata.toolName === 'file_change') {

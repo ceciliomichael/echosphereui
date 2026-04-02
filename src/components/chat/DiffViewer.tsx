@@ -38,7 +38,7 @@ function getScrollContainer(element: HTMLElement | null): HTMLElement | Window {
     return window
   }
 
-  let currentElement: HTMLElement | null = element.parentElement
+  let currentElement: HTMLElement | null = element
   while (currentElement) {
     const computedStyle = window.getComputedStyle(currentElement)
     if (/(auto|scroll|overlay)/.test(computedStyle.overflowY)) {
@@ -49,6 +49,29 @@ function getScrollContainer(element: HTMLElement | null): HTMLElement | Window {
   }
 
   return window
+}
+
+export function calculateVisibleDiffRange(input: {
+  elementTop: number
+  lineHeight: number
+  overscanCount: number
+  totalLineCount: number
+  viewportHeight: number
+  viewportTop: number
+}) {
+  const totalHeight = input.totalLineCount * input.lineHeight
+  const visibleTop = Math.max(0, Math.min(totalHeight, input.viewportTop - input.elementTop))
+  const visibleBottom = Math.max(0, Math.min(totalHeight, input.viewportTop + input.viewportHeight - input.elementTop))
+  const startIndex = Math.max(0, Math.floor(visibleTop / input.lineHeight) - input.overscanCount)
+  const endIndex = Math.min(
+    input.totalLineCount,
+    Math.ceil(visibleBottom / input.lineHeight) + input.overscanCount,
+  )
+
+  return {
+    endIndex,
+    startIndex,
+  }
 }
 
 function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | undefined) {
@@ -220,27 +243,31 @@ const DiffViewerComponent = ({
         return
       }
 
-      const totalHeight = renderedLines.length * DIFF_LINE_HEIGHT_PX
       let viewportTop = 0
       let viewportHeight = window.innerHeight
       let elementTop = rootElement.getBoundingClientRect().top + window.scrollY
 
       if (scrollContainer instanceof HTMLElement) {
-        const containerRect = scrollContainer.getBoundingClientRect()
         viewportTop = scrollContainer.scrollTop
         viewportHeight = scrollContainer.clientHeight
-        elementTop = rootElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
+        if (scrollContainer === rootElement) {
+          elementTop = 0
+        } else {
+          const containerRect = scrollContainer.getBoundingClientRect()
+          elementTop = rootElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
+        }
       } else {
         viewportTop = window.scrollY
       }
 
-      const visibleTop = Math.max(0, Math.min(totalHeight, viewportTop - elementTop))
-      const visibleBottom = Math.max(0, Math.min(totalHeight, viewportTop + viewportHeight - elementTop))
-      const visibleStart = Math.max(0, Math.floor(visibleTop / DIFF_LINE_HEIGHT_PX) - DIFF_LINE_OVERSCAN_COUNT)
-      const visibleEnd = Math.min(
-        renderedLines.length,
-        Math.ceil(visibleBottom / DIFF_LINE_HEIGHT_PX) + DIFF_LINE_OVERSCAN_COUNT,
-      )
+      const { startIndex: visibleStart, endIndex: visibleEnd } = calculateVisibleDiffRange({
+        elementTop,
+        lineHeight: DIFF_LINE_HEIGHT_PX,
+        overscanCount: DIFF_LINE_OVERSCAN_COUNT,
+        totalLineCount: renderedLines.length,
+        viewportHeight,
+        viewportTop,
+      })
 
       setVirtualRange((currentRange) => {
         if (currentRange.startIndex === visibleStart && currentRange.endIndex === visibleEnd) {

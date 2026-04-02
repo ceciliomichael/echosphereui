@@ -89,10 +89,11 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
     }
 
     const formattedOutput = formatTerminalToolOutput(pollResult)
+    const truncationNote = pollResult.truncated ? ' Output was truncated; fetch again for more.' : ''
     const message =
       pollResult.processId === null
-        ? `Fetched terminal output for session ${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.`
-        : `Fetched terminal output for session ${sessionId}. Session is still running.`
+        ? `Fetched terminal output for session ${sessionId}. Process exited with code ${pollResult.exitCode ?? 1}.${truncationNote}`
+        : `Fetched terminal output for session ${sessionId}. Session is still running.${truncationNote}`
 
     return {
       chunkId: pollResult.chunkId,
@@ -105,6 +106,7 @@ export const writeStdinTool: OpenAICompatibleToolDefinition = {
       output: formattedOutput,
       path: '.',
       processId: pollResult.processId,
+      truncated: pollResult.truncated,
       sessionId,
       targetKind: 'terminal',
       wallTimeMs: pollResult.wallTimeMs,

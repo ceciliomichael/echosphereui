@@ -1,15 +1,13 @@
 import { memo, useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { ToolInvocationTrace } from '../../types/chat'
-import { CodeBlock } from './CodeBlock'
 import { DiffViewer } from './DiffViewer'
 import { FileChangeDiffResult } from './FileChangeDiffResult'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
-import { getRelativeDisplayPath } from '../../lib/pathPresentation'
-import { parseStructuredToolResultContent, type StructuredToolResultMetadata } from '../../lib/toolResultContent'
+import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
   invocation: ToolInvocationTrace
@@ -18,59 +16,6 @@ interface ToolInvocationBlockProps {
     submission: ToolDecisionSubmission,
   ) => void
   workspaceRootPath?: string | null
-}
-
-interface ReadToolResultViewModel {
-  code: string
-  endLineNumber: number
-  filePath: string
-  language?: string
-  startLineNumber: number
-}
-
-function formatReadLineRangeLabel(startLineNumber: number, endLineNumber: number) {
-  return `${startLineNumber}-${endLineNumber}`
-}
-
-function readLineRangeFromMetadata(metadata: StructuredToolResultMetadata | null): {
-  endLineNumber: number
-  startLineNumber: number
-} | null {
-  const semantics = metadata?.semantics
-  if (!semantics) {
-    return null
-  }
-
-  const startLine = semantics.start_line
-  const endLine = semantics.end_line
-  if (typeof startLine !== 'number' || !Number.isInteger(startLine)) {
-    return null
-  }
-  if (typeof endLine !== 'number' || !Number.isInteger(endLine)) {
-    return null
-  }
-
-  return {
-    endLineNumber: endLine,
-    startLineNumber: startLine,
-  }
-}
-
-function parseReadToolResult(resultContent: string, metadata: StructuredToolResultMetadata | null): ReadToolResultViewModel | null {
-  const match = resultContent.match(/^File (.+) \(lines (\d+)-(\d+)(?: of \d+)?(?:, [^)]+)?\)\n```([^\n]*)\n([\s\S]*)\n```$/u)
-  const metadataLineRange = readLineRangeFromMetadata(metadata)
-
-  if (!match) {
-    return null
-  }
-
-  return {
-    code: match[5],
-    endLineNumber: metadataLineRange?.endLineNumber ?? Number.parseInt(match[3], 10),
-    filePath: match[1],
-    language: match[4].trim().length > 0 ? match[4].trim() : undefined,
-    startLineNumber: metadataLineRange?.startLineNumber ?? Number.parseInt(match[2], 10),
-  }
 }
 
 const MIN_RUNNING_LABEL_DURATION_MS = 200
@@ -173,7 +118,6 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   const disableHeaderToggle = isRunning && !hasPendingDecision
   const headerLabel = getToolInvocationHeaderLabel(invocation, displayedState, workspaceRootPath)
   const diffCountSummary = renderDiffCountSummary(invocation)
-  const shouldPreserveLineBreaks = invocation.toolName !== 'read'
   const terminalToolName =
     invocation.toolName === 'run_terminal' || invocation.toolName === 'get_terminal_output'
       ? invocation.toolName
@@ -187,12 +131,6 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     parsedStructuredResult?.metadata?.summary ??
     invocation.resultContent ??
     ''
-  const readResultPresentation =
-    invocation.toolName === 'read' ? parseReadToolResult(resultBody, parsedStructuredResult?.metadata ?? null) : null
-  const readResultDisplayPath =
-    workspaceRootPath && readResultPresentation
-      ? getRelativeDisplayPath(workspaceRootPath, readResultPresentation.filePath)
-      : readResultPresentation?.filePath
 
   return (
     <div className="w-full">
@@ -239,22 +177,6 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
             />
           ) : fileChangeResultPresentation ? (
             <FileChangeDiffResult parsedResult={fileChangeResultPresentation} />
-          ) : readResultPresentation ? (
-            <div className="w-full text-left">
-              <CodeBlock
-                code={readResultPresentation.code}
-                fileName={readResultDisplayPath}
-                headerRightLabel={formatReadLineRangeLabel(
-                  readResultPresentation.startLineNumber,
-                  readResultPresentation.endLineNumber,
-                )}
-                language={readResultPresentation.language}
-                isStreaming={invocation.state === 'running'}
-                startLineNumber={readResultPresentation.startLineNumber}
-                maxBodyHeightClassName="max-h-80"
-                showCopyButton={false}
-              />
-            </div>
           ) : terminalToolName ? (
             <TerminalToolResult
               content={resultBody}
@@ -266,7 +188,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               content={resultBody}
               className="w-full opacity-85"
               isStreaming={invocation.state === 'running'}
-              preserveLineBreaks={shouldPreserveLineBreaks}
+              preserveLineBreaks
             />
           )}
         </div>

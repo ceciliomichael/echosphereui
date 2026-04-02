@@ -47,7 +47,6 @@ test('buildSystemPrompt keeps built-in policy and preserves AGENTS design guidel
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)
   assert.match(prompt, /<preferred_design_guidelines>/u)
   assert.match(prompt, /Frontend styling rules that should not be promoted here\./u)
-  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
   assert.equal(prompt.includes('<preferred_styling_everytime>'), false)
   assert.match(prompt, /<shell_context>\n## Shell Context/u)
@@ -106,7 +105,6 @@ test('buildSystemPrompt includes project AGENTS.md content in plan mode', async 
   assert.match(prompt, /Project instructions for plan mode\./u)
   assert.match(prompt, /Follow the project instructions in every prompt\./u)
   assert.match(prompt, /<repository_instructions>/u)
-  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
   assert.equal(prompt.includes('<SYSTEM_INSTRUCTIONS_DIRECTIVE'), false)
 })
 
@@ -133,7 +131,6 @@ test('buildSystemPrompt includes DESIGN.md content as preferred design guideline
   assert.match(prompt, /<preferred_design_guidelines>/u)
   assert.match(prompt, /Design guidance for the workspace\./u)
   assert.match(prompt, /Use calm neutrals, clear hierarchy, and descriptive labels\./u)
-  assert.match(prompt, /You usually do not need to open AGENTS\.md or DESIGN\.md again\./u)
 })
 
 test('buildSystemPrompt omits user instructions when AGENTS.md is absent', async () => {

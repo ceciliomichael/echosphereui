@@ -157,7 +157,7 @@ test('collectToolCalls marks an earlier tool call ready once a later tool call s
   const readyToolCalls: string[] = []
 
   collectToolCalls(
-    createToolCallChunk(0, 'call-1', 'read', '{"absolute_path":"C:\\\\repo\\\\Hero.tsx"}'),
+    createToolCallChunk(0, 'call-1', 'list', '{"absolute_path":"C:\\\\repo"}'),
     toolCallsByIndex,
     (event) => {
       emittedEvents.push(event)
@@ -169,7 +169,7 @@ test('collectToolCalls marks an earlier tool call ready once a later tool call s
   )
 
   collectToolCalls(
-    createToolCallChunk(1, 'call-2', 'read', '{"absolute_path":"C:\\\\repo\\\\Footer.tsx'),
+    createToolCallChunk(1, 'call-2', 'list', '{"absolute_path":"C:\\\\repo\\\\src'),
     toolCallsByIndex,
     (event) => {
       emittedEvents.push(event)
@@ -200,7 +200,7 @@ test('collectToolCalls marks an earlier tool call ready once a later tool call s
       event.type === 'tool_invocation_delta' && event.invocationId === 'call-2',
   )
   assert.ok(secondToolDelta)
-  assert.equal(secondToolDelta.argumentsText, '{"absolute_path":"C:\\\\repo\\\\Footer.tsx"}')
+  assert.equal(secondToolDelta.argumentsText, '{"absolute_path":"C:\\\\repo\\\\src"}')
 
   assert.deepEqual(
     toToolCallList(toolCallsByIndex).map((toolCall) => toolCall.id),
@@ -214,7 +214,7 @@ test('collectToolCalls assembles legacy function_call deltas into a callable too
   const emittedEvents: StreamDeltaEvent[] = []
 
   collectToolCalls(
-    createLegacyFunctionCallChunk('read', '{"absolute_path":"C:\\\\repo\\\\Hero.tsx'),
+    createLegacyFunctionCallChunk('list', '{"absolute_path":"C:\\\\repo'),
     toolCallsByIndex,
     (event) => {
       emittedEvents.push(event)
@@ -236,24 +236,24 @@ test('collectToolCalls assembles legacy function_call deltas into a callable too
       event.type === 'tool_invocation_started',
   )
   assert.ok(startedEvent)
-  assert.equal(startedEvent.toolName, 'read')
+  assert.equal(startedEvent.toolName, 'list')
 
   const toolCalls = toToolCallList(toolCallsByIndex)
   assert.equal(toolCalls.length, 1)
-  assert.equal(toolCalls[0]?.name, 'read')
-  assert.equal(toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\Hero.tsx"}')
+  assert.equal(toolCalls[0]?.name, 'list')
+  assert.equal(toolCalls[0]?.argumentsText, '{"absolute_path":"C:\\\\repo"}')
 })
 
 test('collectToolCalls preserves whitespace-only argument deltas', () => {
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>()
   const readyToolCallIndexes = new Set<number>()
 
-  collectToolCalls(createToolCallChunk(0, 'call-1', 'write', '{"content":"hello'), toolCallsByIndex, () => {}, readyToolCallIndexes)
+  collectToolCalls(createToolCallChunk(0, 'call-1', 'list', '{"absolute_path":"hello'), toolCallsByIndex, () => {}, readyToolCallIndexes)
   collectToolCalls(createToolCallChunk(0, 'call-1', undefined, ' '), toolCallsByIndex, () => {}, readyToolCallIndexes)
   collectToolCalls(createToolCallChunk(0, 'call-1', undefined, 'world"}'), toolCallsByIndex, () => {}, readyToolCallIndexes)
 
   const [toolCall] = toToolCallList(toolCallsByIndex)
-  assert.equal(toolCall?.argumentsText, '{"content":"hello world"}')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"hello world"}')
 })
 
 test('collectToolCalls keeps invocation id stable after tool start when provider later emits a different id', () => {
@@ -310,7 +310,7 @@ test('collectToolCalls reads terminal non-delta message tool_calls emitted by co
   const emittedEvents: StreamDeltaEvent[] = []
 
   collectToolCalls(
-    createTerminalMessageToolCallChunk(0, 'call-terminal-1', 'read', '{"absolute_path":"C:\\\\repo\\\\page.tsx"}'),
+    createTerminalMessageToolCallChunk(0, 'call-terminal-1', 'list', '{"absolute_path":"C:\\\\repo"}'),
     toolCallsByIndex,
     (event) => {
       emittedEvents.push(event)
@@ -324,12 +324,12 @@ test('collectToolCalls reads terminal non-delta message tool_calls emitted by co
   )
   assert.ok(startedEvent)
   assert.equal(startedEvent.invocationId, 'call-terminal-1')
-  assert.equal(startedEvent.toolName, 'read')
+  assert.equal(startedEvent.toolName, 'list')
 
   const [toolCall] = toToolCallList(toolCallsByIndex)
   assert.equal(toolCall?.id, 'call-terminal-1')
-  assert.equal(toolCall?.name, 'read')
-  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\page.tsx"}')
+  assert.equal(toolCall?.name, 'list')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo"}')
 })
 
 test('collectToolCalls supports singular delta.tool_call payloads', () => {
@@ -337,7 +337,7 @@ test('collectToolCalls supports singular delta.tool_call payloads', () => {
   const readyToolCallIndexes = new Set<number>()
 
   collectToolCalls(
-    createDeltaSingularToolCallChunk(0, 'call-singular-1', 'read', '{"absolute_path":"C:\\\\repo\\\\single.tsx"}'),
+    createDeltaSingularToolCallChunk(0, 'call-singular-1', 'list', '{"absolute_path":"C:\\\\repo"}'),
     toolCallsByIndex,
     () => {},
     readyToolCallIndexes,
@@ -345,8 +345,8 @@ test('collectToolCalls supports singular delta.tool_call payloads', () => {
 
   const [toolCall] = toToolCallList(toolCallsByIndex)
   assert.equal(toolCall?.id, 'call-singular-1')
-  assert.equal(toolCall?.name, 'read')
-  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\single.tsx"}')
+  assert.equal(toolCall?.name, 'list')
+  assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo"}')
 })
 
 test('collectToolCalls stringifies object-form function arguments in non-standard chunks', () => {
@@ -354,7 +354,7 @@ test('collectToolCalls stringifies object-form function arguments in non-standar
   const readyToolCallIndexes = new Set<number>()
 
   collectToolCalls(
-    createDeltaToolCallsObjectArgumentsChunk(0, 'call-object-1', 'read'),
+    createDeltaToolCallsObjectArgumentsChunk(0, 'call-object-1', 'list'),
     toolCallsByIndex,
     () => {},
     readyToolCallIndexes,
@@ -362,18 +362,18 @@ test('collectToolCalls stringifies object-form function arguments in non-standar
 
   const [toolCall] = toToolCallList(toolCallsByIndex)
   assert.equal(toolCall?.id, 'call-object-1')
-  assert.equal(toolCall?.name, 'read')
+  assert.equal(toolCall?.name, 'list')
   assert.equal(toolCall?.argumentsText, '{"absolute_path":"C:\\\\repo\\\\main.tsx"}')
 })
 
 test('toToolCallList ignores malformed tool entries that never receive a name', () => {
   const toolCallsByIndex = new Map<number, ToolCallAccumulator>([
     [0, { argumentsText: '{"absolute_path":"C:\\\\repo\\\\a.ts"}', id: 'call-no-name', name: '', startedAt: Date.now() }],
-    [1, { argumentsText: '{"absolute_path":"C:\\\\repo\\\\b.ts"}', id: 'call-valid', name: 'read', startedAt: Date.now() }],
+    [1, { argumentsText: '{"absolute_path":"C:\\\\repo\\\\b.ts"}', id: 'call-valid', name: 'list', startedAt: Date.now() }],
   ])
 
   const toolCalls = toToolCallList(toolCallsByIndex)
   assert.equal(toolCalls.length, 1)
   assert.equal(toolCalls[0]?.id, 'call-valid')
-  assert.equal(toolCalls[0]?.name, 'read')
+  assert.equal(toolCalls[0]?.name, 'list')
 })

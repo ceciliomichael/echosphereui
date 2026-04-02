@@ -10,7 +10,7 @@ test('buildPromptCacheKey is stable for identical prompt prefixes', () => {
     providerId: 'openai-compatible',
     systemPrompt: 'system prompt',
     terminalExecutionMode: 'full',
-    toolDefinitions: [{ name: 'read' }],
+    toolDefinitions: [{ name: 'list' }],
   })
   const keyB = buildPromptCacheKey({
     chatMode: 'agent',
@@ -19,7 +19,7 @@ test('buildPromptCacheKey is stable for identical prompt prefixes', () => {
     providerId: 'openai-compatible',
     systemPrompt: 'system prompt',
     terminalExecutionMode: 'full',
-    toolDefinitions: [{ name: 'read' }],
+    toolDefinitions: [{ name: 'list' }],
   })
 
   assert.equal(keyA, keyB)
@@ -32,7 +32,7 @@ test('buildPromptCacheKey changes when the prompt prefix changes', () => {
     modelId: 'gpt-5.4',
     systemPrompt: 'system prompt',
     terminalExecutionMode: 'full',
-    toolDefinitions: [{ name: 'read' }],
+    toolDefinitions: [{ name: 'list' }],
   })
   const keyB = buildPromptCacheKey({
     chatMode: 'plan',
@@ -40,7 +40,7 @@ test('buildPromptCacheKey changes when the prompt prefix changes', () => {
     modelId: 'gpt-5.4',
     systemPrompt: 'system prompt',
     terminalExecutionMode: 'full',
-    toolDefinitions: [{ name: 'read' }],
+    toolDefinitions: [{ name: 'list' }],
   })
 
   assert.notEqual(keyA, keyB)

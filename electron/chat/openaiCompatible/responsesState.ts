@@ -21,13 +21,7 @@ function isToolOutputEvent(
 
 function shouldResetResponsesChainForResult(resultContent: string) {
   const toolName = parseStructuredToolResultContent(resultContent).metadata?.toolName ?? null
-  return (
-    toolName === 'read' ||
-    toolName === 'write' ||
-    toolName === 'edit' ||
-    toolName === 'apply_patch' ||
-    toolName === 'file_change'
-  )
+  return toolName === 'file_change'
 }
 
 export function buildResponsesFunctionCallOutputItems(

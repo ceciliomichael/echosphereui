@@ -5,12 +5,8 @@
   "private": true,
   "version": "0.1.21",
   "type": "module",
-  "bin": {
-    "apply_patch": "./scripts/apply-patch.mjs"
-  },
   "scripts": {
     "dev": "vite",
-    "apply_patch": "node ./scripts/apply-patch.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build",
     "icons:generate": "node ./scripts/generate-electron-icons.mjs",

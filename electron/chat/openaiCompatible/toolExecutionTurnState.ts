@@ -1,5 +1,3 @@
-import type { Message } from '../../../src/types/chat'
-
 export interface ToolExecutionTurnState {
   readonly initialized: true
 }
@@ -11,12 +9,9 @@ export function createToolExecutionTurnState(): ToolExecutionTurnState {
 }
 
 export function hydrateToolExecutionTurnStateFromMessages(
-  _messages: Message[],
+  _messages: unknown[],
   _agentContextRootPath: string,
-  _turnState: ToolExecutionTurnState,
+  turnState: ToolExecutionTurnState,
 ) {
-  // state remains as a compatibility boundary for scheduler callers.
-  void _messages
-  void _agentContextRootPath
-  void _turnState
+  void turnState
 }

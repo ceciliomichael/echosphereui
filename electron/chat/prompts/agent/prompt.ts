@@ -11,7 +11,6 @@ function buildIdentitySection() {
     'simplicity does not mean not creative. it just means do not over-engineer solutions. if a simple solution exists, use it.',
     'Never expose raw tool-call JSON, call ids, channel names, recipient names, or tool routing syntax in assistant-visible text.',
     'Use tools silently and summarize their purpose or result in plain English instead of printing the underlying invocation payload.',
-    'Do not reread the same file range if the needed context is already present in the conversation unless the file changed, the earlier read was truncated, or you need a different section to proceed.',
     '</identity>',
   ].join('\n')
 }

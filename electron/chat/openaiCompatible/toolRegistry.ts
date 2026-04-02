@@ -1,29 +1,22 @@
 import type { ChatMode } from '../../../src/types/chat'
 import { askQuestionTool } from './tools/ask-question/index'
-import { editTool } from './tools/edit/index'
 import { execCommandTool } from './tools/exec-command/index'
 import { globTool } from './tools/glob/index'
 import { grepTool } from './tools/grep/index'
 import { listTool } from './tools/list/index'
-import { readTool } from './tools/read/index'
 import { readyImplementTool } from './tools/ready-implement/index'
-import { writeTool } from './tools/write/index'
 import { writeStdinTool } from './tools/write-stdin/index'
 
-const agentToolRegistry = [
+const visibleAgentToolRegistry = [
   listTool,
-  readTool,
   globTool,
   grepTool,
-  editTool,
-  writeTool,
   execCommandTool,
   writeStdinTool,
 ] as const
 
 const planToolRegistry = [
   listTool,
-  readTool,
   globTool,
   grepTool,
   askQuestionTool,
@@ -35,7 +28,7 @@ function getToolRegistry(chatMode: ChatMode) {
     return planToolRegistry
   }
 
-  return agentToolRegistry
+  return visibleAgentToolRegistry
 }
 
 export function getOpenAICompatibleToolDefinitions(chatMode: ChatMode = 'agent') {

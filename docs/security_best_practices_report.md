@@ -21,7 +21,7 @@ Relevant code:
 - [electron/chat/openaiCompatible/runtime.ts](./electron/chat/openaiCompatible/runtime.ts) lines 107, 127, 209, 261
 
 What is injected:
-- Tool results from `list`, `read`, `glob`, `grep`, `write`, `edit`, `apply_patch`, `run_terminal`, `get_terminal_output`, `ask_question`, and `ready_implement`.
+- Tool results from `list`, `glob`, `grep`, `run_terminal`, `get_terminal_output`, `ask_question`, and `ready_implement`.
 - Synthetic tool failure text when a tool errors.
 - Raw tool bodies such as file contents and terminal output.
 - Authoritative wrapper text like `[SYSTEM TOOL OUTPUT]` and `<tool_results>`.
