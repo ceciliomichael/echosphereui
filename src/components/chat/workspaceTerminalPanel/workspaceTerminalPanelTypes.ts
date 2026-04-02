@@ -1,0 +1,44 @@
+import type {
+  RefObject,
+  PointerEvent as ReactPointerEvent,
+  TransitionEvent as ReactTransitionEvent,
+} from "react";
+import type { ResolvedTheme } from "../../../lib/theme";
+
+export type TerminalTabStatus = "connecting" | "ready" | "error" | "exited";
+
+export interface WorkspaceTerminalPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onHeightCommit: (nextHeight: number) => void;
+  resolvedTheme: ResolvedTheme;
+  storedHeight: number;
+  workspaceKey: string;
+  workspacePath: string | null;
+}
+
+export interface TerminalTabState {
+  errorMessage: string | null;
+  exitCode: number | null;
+  key: string;
+  label: string;
+  sessionId: number | null;
+  status: TerminalTabStatus;
+}
+
+export interface WorkspaceTerminalPanelState {
+  activeTerminalTab: TerminalTabState | null;
+  activeTerminalTabKey: string | null;
+  closeTerminalTab: (tabKey: string) => void;
+  handleResizePointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  handleTransitionEnd: (event: ReactTransitionEvent<HTMLElement>) => void;
+  isOpen: boolean;
+  isResizing: boolean;
+  openTerminalTab: () => void;
+  onClose: () => void;
+  panelHeight: number;
+  panelRef: RefObject<HTMLElement>;
+  selectTerminalTab: (tabKey: string) => void;
+  terminalHostRef: RefObject<HTMLDivElement>;
+  terminalTabs: readonly TerminalTabState[];
+}

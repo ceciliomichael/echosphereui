@@ -1,0 +1,124 @@
+import { LoaderCircle, Plus, X } from "lucide-react";
+import { Tooltip } from "../../Tooltip";
+import type { WorkspaceTerminalPanelState } from "./workspaceTerminalPanelTypes";
+
+interface WorkspaceTerminalPanelViewProps {
+  panelState: WorkspaceTerminalPanelState;
+}
+
+export function WorkspaceTerminalPanelView({
+  panelState,
+}: WorkspaceTerminalPanelViewProps) {
+  const activeTerminalTab = panelState.activeTerminalTab;
+
+  return (
+    <section
+      ref={panelState.panelRef}
+      className={[
+        "relative flex min-h-0 w-full shrink-0 self-stretch flex-col overflow-hidden border-t border-border bg-[var(--workspace-panel-surface)]",
+        panelState.isResizing
+          ? ""
+          : "transition-[height,border-color] duration-150 ease-out",
+      ].join(" ")}
+      style={{
+        borderTopColor: panelState.isOpen ? "var(--color-border)" : "transparent",
+        height: panelState.isOpen ? panelState.panelHeight : 0,
+      }}
+      onTransitionEnd={panelState.handleTransitionEnd}
+    >
+      <button
+        type="button"
+        aria-label="Resize terminal panel"
+        onPointerDown={panelState.handleResizePointerDown}
+        className={[
+          "absolute left-0 right-0 top-0 z-20 h-2",
+          panelState.isOpen ? "cursor-row-resize" : "cursor-default",
+        ].join(" ")}
+      />
+      <div className="flex h-10 shrink-0 items-stretch border-b border-border bg-background">
+        <div className="flex min-w-0 flex-1 items-stretch overflow-hidden">
+          <div className="workspace-tabs-scroll-viewport flex min-w-0 flex-1 items-stretch gap-0 overflow-x-auto overflow-y-hidden">
+            {panelState.terminalTabs.map((tab) => {
+              const isActive = tab.key === panelState.activeTerminalTabKey;
+              return (
+                <div
+                  key={tab.key}
+                  className="group relative inline-flex h-full shrink-0 items-stretch border-r border-border"
+                >
+                  <button
+                    type="button"
+                    onClick={() => panelState.selectTerminalTab(tab.key)}
+                    className={[
+                      "inline-flex h-full max-w-[248px] items-center gap-2 px-3 pr-9 text-sm transition-colors",
+                      isActive
+                        ? "border-t-2 border-t-foreground/60 bg-background text-foreground"
+                        : "border-t-2 border-t-transparent bg-background text-muted-foreground hover:bg-surface-muted hover:text-foreground",
+                    ].join(" ")}
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <span className="truncate">{tab.label}</span>
+                    {tab.status === "connecting" ? (
+                      <LoaderCircle size={12} className="shrink-0 animate-spin" />
+                    ) : null}
+                  </button>
+                  <Tooltip content={`Close ${tab.label}`} side="bottom" noWrap>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void panelState.closeTerminalTab(tab.key);
+                      }}
+                      className="absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label={`Close ${tab.label}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </Tooltip>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 border-l border-border px-2">
+          <Tooltip content="New terminal tab" side="bottom" noWrap>
+            <button
+              type="button"
+              onClick={() => {
+                void panelState.openTerminalTab();
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:rounded-xl hover:bg-surface-muted hover:text-foreground"
+              aria-label="New terminal tab"
+            >
+              <Plus size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Close terminal panel" side="bottom" noWrap>
+            <button
+              type="button"
+              onClick={panelState.onClose}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:rounded-xl hover:bg-surface-muted hover:text-foreground"
+              aria-label="Close terminal panel"
+            >
+              <X size={14} />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+      <div
+        ref={panelState.terminalHostRef}
+        className="workspace-terminal-host min-h-0 flex-1 overflow-hidden bg-[var(--workspace-panel-surface)] px-4 py-3 text-foreground"
+      />
+      {activeTerminalTab?.status === "error" &&
+      activeTerminalTab.errorMessage ? (
+        <div className="border-t border-danger-border bg-danger-surface px-4 py-1.5 text-xs text-danger-foreground">
+          {activeTerminalTab.errorMessage}
+        </div>
+      ) : null}
+      {activeTerminalTab?.status === "exited" &&
+      activeTerminalTab.exitCode !== null ? (
+        <div className="border-t border-border bg-surface-muted px-4 py-1.5 text-xs text-muted-foreground">
+          Process exited with code {activeTerminalTab.exitCode}
+        </div>
+      ) : null}
+    </section>
+  );
+}

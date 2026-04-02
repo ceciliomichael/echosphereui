@@ -1,5 +1,6 @@
 import { FileCode } from 'lucide-react'
 import { getPathBasename } from '../../lib/pathPresentation'
+import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 import { useChatInputMetricTooltip } from '../../hooks/useChatInputMetricTooltip'
 import type { WorkspaceRefactorCandidate } from '../../types/chat'
 import { DashedMetricCircle } from './DashedMetricCircle'
@@ -55,37 +56,38 @@ export function RefactorCandidatesIndicator({
   ) : (
     <>
       <p className="text-subtle-foreground">Large code files that are strong refactor candidates.</p>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-surface-muted/35">
-            <div className="max-h-56 overflow-y-auto">
-              {candidates.map((candidate, index) => {
-                const basename = getPathBasename(candidate.relativePath)
-                const isLastItem = index === candidates.length - 1
+      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-surface-muted/35">
+        <div className="max-h-56 overflow-y-auto">
+          {candidates.map((candidate, index) => {
+            const basename = getPathBasename(candidate.relativePath)
+            const iconConfig = resolveFileIconConfig({ fileName: candidate.relativePath })
+            const FileIcon = iconConfig.icon
+            const isLastItem = index === candidates.length - 1
 
-                return (
-                  <button
-                    key={candidate.relativePath}
-                    type="button"
-                    className={[
-                      'flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-muted',
-                      isLastItem ? '' : 'border-b border-border',
-                    ].join(' ')}
-                    onClick={() => {
-                      onSelectCandidate?.(candidate.relativePath)
-                    }}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[12px] font-medium text-foreground">
-                        {basename}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-medium leading-none text-subtle-foreground">
-                      {formatLineCount(candidate.lineCount)} lines
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+            return (
+              <button
+                key={candidate.relativePath}
+                type="button"
+                className={[
+                  'flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-muted',
+                  isLastItem ? '' : 'border-b border-border',
+                ].join(' ')}
+                onClick={() => {
+                  onSelectCandidate?.(candidate.relativePath)
+                }}
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <FileIcon size={14} className="shrink-0" style={{ color: iconConfig.color }} />
+                  <span className="truncate text-[12px] font-medium leading-4 text-foreground">{basename}</span>
+                </span>
+                <span className="shrink-0 text-[11px] font-medium leading-4 text-subtle-foreground">
+                  {formatLineCount(candidate.lineCount)} lines
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
     </>
   )
 
