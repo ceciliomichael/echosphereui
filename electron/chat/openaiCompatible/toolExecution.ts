@@ -45,6 +45,39 @@ function toErrorMessage(error: unknown) {
   return 'Tool execution failed.'
 }
 
+function summarizeApplyPatchFailureDetails(details: Record<string, unknown> | undefined) {
+  if (!details) {
+    return null
+  }
+
+  return {
+    bestPartialMatchLine:
+      typeof details.bestPartialMatchLine === 'number' ? details.bestPartialMatchLine : null,
+    bestPartialMatchPrefixLength:
+      typeof details.bestPartialMatchPrefixLength === 'number' ? details.bestPartialMatchPrefixLength : null,
+    failureReason: typeof details.failureReason === 'string' ? details.failureReason : null,
+    filePath: typeof details.filePath === 'string' ? details.filePath : null,
+    hunkLineCount: typeof details.hunkLineCount === 'number' ? details.hunkLineCount : null,
+  }
+}
+
+function summarizeEditFailureDetails(details: Record<string, unknown> | undefined) {
+  if (!details) {
+    return null
+  }
+
+  return {
+    bestPartialMatchLine:
+      typeof details.bestPartialMatchLine === 'number' ? details.bestPartialMatchLine : null,
+    bestPartialMatchPrefixLength:
+      typeof details.bestPartialMatchPrefixLength === 'number' ? details.bestPartialMatchPrefixLength : null,
+    failureReason: typeof details.failureReason === 'string' ? details.failureReason : null,
+    filePath: typeof details.filePath === 'string' ? details.filePath : null,
+    lineRangeEndLine: typeof details.lineRangeEndLine === 'number' ? details.lineRangeEndLine : null,
+    lineRangeStartLine: typeof details.lineRangeStartLine === 'number' ? details.lineRangeStartLine : null,
+  }
+}
+
 function emitFailureEvent(
   toolCall: OpenAICompatibleToolCall,
   context: ProviderStreamContext,
@@ -200,7 +233,9 @@ export async function executeToolCallWithPolicies(
     const errorMessage = toErrorMessage(error)
     const errorDetails = error instanceof OpenAICompatibleToolError ? error.details : undefined
     if (toolCall.name === 'apply_patch') {
+      const compactDetails = summarizeApplyPatchFailureDetails(errorDetails)
       console.log('[tool-execution:apply-patch-failed]', {
+        compactDetails,
         errorDetails: errorDetails ?? null,
         errorMessage,
         invocationId: toolCall.id,
@@ -208,6 +243,58 @@ export async function executeToolCallWithPolicies(
         rawArgumentsPreview:
           toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
       })
+      const timestamp = new Date().toISOString()
+      // Keep a copy-friendly terminal line for quick debugging.
+      console.error(
+        `[apply_patch_failure_compact] ${JSON.stringify({
+          compactDetails,
+          errorMessage,
+          invocationId: toolCall.id,
+          timestamp,
+        })}`,
+      )
+      // Keep full diagnostics available in terminal logs for deep investigation.
+      console.error(
+        `[apply_patch_failure_full] ${JSON.stringify({
+          details: errorDetails ?? null,
+          errorMessage,
+          invocationId: toolCall.id,
+          rawArguments:
+            toolCall.argumentsText.length > 4000 ? `${toolCall.argumentsText.slice(0, 4000)}…` : toolCall.argumentsText,
+          timestamp,
+        })}`,
+      )
+    }
+    if (toolCall.name === 'edit') {
+      const compactDetails = summarizeEditFailureDetails(errorDetails)
+      console.log('[tool-execution:edit-failed]', {
+        compactDetails,
+        errorDetails: errorDetails ?? null,
+        errorMessage,
+        invocationId: toolCall.id,
+        rawArgumentsLength: toolCall.argumentsText.length,
+        rawArgumentsPreview:
+          toolCall.argumentsText.length > 800 ? `${toolCall.argumentsText.slice(0, 800)}…` : toolCall.argumentsText,
+      })
+      const timestamp = new Date().toISOString()
+      console.error(
+        `[edit_failure_compact] ${JSON.stringify({
+          compactDetails,
+          errorMessage,
+          invocationId: toolCall.id,
+          timestamp,
+        })}`,
+      )
+      console.error(
+        `[edit_failure_full] ${JSON.stringify({
+          details: errorDetails ?? null,
+          errorMessage,
+          invocationId: toolCall.id,
+          rawArguments:
+            toolCall.argumentsText.length > 4000 ? `${toolCall.argumentsText.slice(0, 4000)}…` : toolCall.argumentsText,
+          timestamp,
+        })}`,
+      )
     }
     emitFailureEvent(toolCall, context, inMemoryMessages, errorMessage, startedAt, errorDetails)
   }

@@ -2,7 +2,7 @@ import type { ChatMode, Message } from '../../../src/types/chat'
 import {
   buildSerializedAssistantTurnContentWithInlineReasoning,
 } from '../openaiCompatible/assistantToolInvocationContext'
-import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
+import { getToolResultModelContent, parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
 import type { OpenAICompatibleResponsesFunctionCallOutputInput } from '../openaiCompatible/responsesState'
 import { getOpenAICompatibleToolDefinitions } from '../openaiCompatible/toolRegistry'
 import { buildSystemPrompt } from '../prompts'
@@ -74,6 +74,26 @@ function toCodexFunctionCallItem(
   }
 }
 
+function buildCodexFunctionCallItemFromToolMessage(message: Message): CodexFunctionCallInputItem | null {
+  if (message.role !== 'tool' || !hasText(message.toolCallId)) {
+    return null
+  }
+
+  const metadata = parseStructuredToolResultContent(message.content).metadata
+
+  const toolName = typeof metadata?.toolName === 'string' && metadata.toolName.trim().length > 0 ? metadata.toolName : 'unknown_tool'
+  const argumentsText =
+    metadata?.arguments && Object.keys(metadata.arguments).length > 0 ? JSON.stringify(metadata.arguments) : '{}'
+
+  return {
+    arguments: argumentsText,
+    call_id: message.toolCallId,
+    name: toolName,
+    status: 'completed',
+    type: 'function_call',
+  }
+}
+
 function toCodexInputItems(
   message: Message,
 ): Array<CodexInputMessage | CodexFunctionCallInputItem | OpenAICompatibleResponsesFunctionCallOutputInput> {
@@ -136,7 +156,56 @@ function toCodexInputItems(
 }
 
 export function buildCodexInputMessages(messages: Message[]) {
-  return messages.flatMap((message) => toCodexInputItems(message))
+  const toolMessageCallIds = new Set(
+    messages
+      .filter((message) => message.role === 'tool' && hasText(message.toolCallId))
+      .map((message) => message.toolCallId as string),
+  )
+
+  const inputItems: CodexPayloadInputItem[] = []
+  const emittedFunctionCallIds = new Set<string>()
+  const emittedFunctionCallOutputIds = new Set<string>()
+
+  for (const message of messages) {
+    if (message.role === 'tool') {
+      if (!hasText(message.toolCallId) || emittedFunctionCallOutputIds.has(message.toolCallId)) {
+        continue
+      }
+
+      if (!emittedFunctionCallIds.has(message.toolCallId)) {
+        const synthesizedCall = buildCodexFunctionCallItemFromToolMessage(message)
+        if (synthesizedCall) {
+          inputItems.push(synthesizedCall)
+          emittedFunctionCallIds.add(synthesizedCall.call_id)
+        }
+      }
+
+      const toolOutputItems = toCodexInputItems(message)
+      if (toolOutputItems.length > 0) {
+        inputItems.push(...toolOutputItems)
+        emittedFunctionCallOutputIds.add(message.toolCallId)
+      }
+      continue
+    }
+
+    if (message.role === 'assistant' && Array.isArray(message.toolInvocations) && message.toolInvocations.length > 0) {
+      const keptToolInvocations = message.toolInvocations.filter((invocation) => toolMessageCallIds.has(invocation.id))
+      const filteredMessage: Message = {
+        ...message,
+        toolInvocations: keptToolInvocations,
+      }
+      const nextItems = toCodexInputItems(filteredMessage)
+      inputItems.push(...nextItems)
+      for (const invocation of keptToolInvocations) {
+        emittedFunctionCallIds.add(invocation.id)
+      }
+      continue
+    }
+
+    inputItems.push(...toCodexInputItems(message))
+  }
+
+  return inputItems
 }
 
 function stripCodexInputItemIds(item: CodexPayloadInputItem): CodexPayloadInputItem {

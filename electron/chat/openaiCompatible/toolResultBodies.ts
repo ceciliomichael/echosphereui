@@ -276,15 +276,71 @@ export function formatSuccessResultBody(toolName: string, semanticResult: Record
   return formatFallbackResultBody(semanticResult)
 }
 
-export function formatFailureResultBody(errorMessage: string, details?: Record<string, unknown>) {
+function readApplyPatchFailureHint(details: Record<string, unknown>) {
+  const filePath = readString(details.filePath)
+  const bestPartialMatchLine = readNumber(details.bestPartialMatchLine)
+  const bestPartialMatchPrefixLength = readNumber(details.bestPartialMatchPrefixLength)
+  const hunkLineCount = readNumber(details.hunkLineCount)
+
+  const lines = ['Patch context did not match the current file contents.']
+  if (filePath) {
+    lines.push(`File: ${filePath}`)
+  }
+  if (bestPartialMatchLine !== null) {
+    lines.push(`Closest match line: ${bestPartialMatchLine}`)
+  }
+  if (bestPartialMatchPrefixLength !== null && hunkLineCount !== null) {
+    lines.push(`Matched context lines before mismatch: ${bestPartialMatchPrefixLength}/${hunkLineCount}`)
+  }
+  lines.push('Hint: read that area again and regenerate the hunk using exact current text.')
+  return lines
+}
+
+function summarizeFailureDetails(
+  toolName: string,
+  details: Record<string, unknown>,
+) {
+  if (
+    toolName === 'apply_patch' &&
+    typeof details.failureReason === 'string' &&
+    details.failureReason === 'hunk_context_mismatch'
+  ) {
+    return readApplyPatchFailureHint(details)
+  }
+
+  if (toolName === 'edit' && typeof details.failureReason === 'string') {
+    const filePath = readString(details.filePath)
+    const rangeStart = readNumber(details.lineRangeStartLine)
+    const rangeEnd = readNumber(details.lineRangeEndLine)
+    const lines = [
+      details.failureReason === 'old_string_ambiguous'
+        ? 'Edit target matched multiple locations.'
+        : 'Edit target was not found in the current file content.',
+    ]
+    if (filePath) {
+      lines.push(`File: ${filePath}`)
+    }
+    if (rangeStart !== null && rangeEnd !== null) {
+      lines.push(`Search range: lines ${rangeStart}-${rangeEnd}`)
+    }
+    lines.push('Hint: read the file again and include more unique surrounding context.')
+    return lines
+  }
+
+  const lines: string[] = []
+  for (const [key, value] of Object.entries(details)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      lines.push(`${key}: ${value}`)
+    }
+  }
+  return lines
+}
+
+export function formatFailureResultBody(toolName: string, errorMessage: string, details?: Record<string, unknown>) {
   const lines = [`Tool failed: ${errorMessage}`]
 
   if (details) {
-    for (const [key, value] of Object.entries(details)) {
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        lines.push(`${key}: ${value}`)
-      }
-    }
+    lines.push(...summarizeFailureDetails(toolName, details))
   }
 
   return lines.join('\n')

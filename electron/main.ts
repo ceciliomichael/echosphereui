@@ -24,6 +24,7 @@ import type {
   WorkspaceExplorerCreateEntryInput,
   WorkspaceExplorerDeleteEntryInput,
   WorkspaceExplorerListDirectoryInput,
+  WorkspaceRefactorCandidatesInput,
   WorkspaceExplorerReadFileInput,
   WorkspaceExplorerRenameEntryInput,
   WorkspaceExplorerTransferEntryInput,
@@ -113,6 +114,7 @@ import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   listWorkspaceDirectory,
+  listWorkspaceRefactorCandidates,
   readWorkspaceFile,
   renameWorkspaceEntry,
   importWorkspaceEntry,
@@ -404,6 +406,9 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:explorer:listDirectory', async (_event, input: WorkspaceExplorerListDirectoryInput) =>
     listWorkspaceDirectory(input),
+  )
+  ipcMain.handle('workspace:refactorCandidates:list', async (_event, input: WorkspaceRefactorCandidatesInput) =>
+    listWorkspaceRefactorCandidates(input),
   )
   ipcMain.handle('workspace:explorer:readFile', async (_event, input: WorkspaceExplorerReadFileInput) =>
     readWorkspaceFile(input),

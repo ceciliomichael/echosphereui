@@ -1,5 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId } from 'react'
+import { useChatInputMetricTooltip } from '../../hooks/useChatInputMetricTooltip'
 import type { ContextUsageEstimate } from '../../types/chat'
+import { DashedMetricCircle } from './DashedMetricCircle'
 
 interface ContextIndicatorProps {
   disabled?: boolean
@@ -26,101 +28,36 @@ function getUsageColor(usageRatio: number) {
   return 'var(--color-action)'
 }
 
-function buildDashPath(size: number, dashIndex: number, dashCount: number) {
-  const strokeWidth = 1.5
-  const radius = (size - strokeWidth) / 2
-  const center = size / 2
-  const anglePerDash = 360 / dashCount
-  const dashArcAngle = anglePerDash * 0.58
-  const startAngle = dashIndex * anglePerDash - 90
-  const endAngle = startAngle + dashArcAngle
-  const startRadians = (startAngle * Math.PI) / 180
-  const endRadians = (endAngle * Math.PI) / 180
-  const startX = center + radius * Math.cos(startRadians)
-  const startY = center + radius * Math.sin(startRadians)
-  const endX = center + radius * Math.cos(endRadians)
-  const endY = center + radius * Math.sin(endRadians)
-
-  return `M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`
-}
-
 function DashedUsageCircle({ usage }: { usage: ContextUsageEstimate }) {
-  const size = 18
-  const dashCount = 8
   const usageRatio = usage.maxTokens > 0 ? Math.min(usage.totalTokens / usage.maxTokens, 1) : 0
-  const activeDashCount = Math.min(dashCount, Math.ceil(usageRatio * dashCount))
   const activeColor = getUsageColor(usageRatio)
 
   return (
-    <svg aria-hidden="true" height={size} viewBox={`0 0 ${size} ${size}`} width={size}>
-      {Array.from({ length: dashCount }, (_, dashIndex) => {
-        const isActive = dashIndex < activeDashCount
-        return (
-          <path
-            key={dashIndex}
-            d={buildDashPath(size, dashIndex, dashCount)}
-            fill="none"
-            stroke={isActive ? activeColor : 'var(--color-border)'}
-            strokeLinecap="round"
-            strokeWidth={1.5}
-          />
-        )
-      })}
-    </svg>
+    <DashedMetricCircle activeColor={activeColor} inactiveColor="var(--color-border)" percent={usageRatio * 100} size={18} />
   )
 }
 
 export function ContextIndicator({ disabled = false, usage }: ContextIndicatorProps) {
   const tooltipId = useId()
-  const [isOpen, setIsOpen] = useState(false)
-  const closeTimeoutRef = useRef<number | null>(null)
+  const { buttonRef, containerRef, handleBlur, isOpen, isTopTooltip, openTooltip, scheduleClose, tooltipPosition } =
+    useChatInputMetricTooltip({
+      disabled,
+      hoverKey: 'context',
+      minimumTopSpace: 220,
+    })
   const usageRatio = usage.maxTokens > 0 ? usage.totalTokens / usage.maxTokens : 0
   const usagePercent = Math.min(usageRatio, 1) * 100
 
-  function clearCloseTimeout() {
-    if (closeTimeoutRef.current !== null) {
-      window.clearTimeout(closeTimeoutRef.current)
-      closeTimeoutRef.current = null
-    }
-  }
-
-  function openTooltip() {
-    clearCloseTimeout()
-    setIsOpen(true)
-  }
-
-  function scheduleClose() {
-    clearCloseTimeout()
-    closeTimeoutRef.current = window.setTimeout(() => {
-      setIsOpen(false)
-      closeTimeoutRef.current = null
-    }, 180)
-  }
-
-  function closeImmediately() {
-    clearCloseTimeout()
-    setIsOpen(false)
-  }
-
-  useEffect(
-    () => () => {
-      clearCloseTimeout()
-    },
-    [],
-  )
-
   return (
     <div
+      ref={containerRef}
       className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          scheduleClose()
-        }
-      }}
+      onBlur={handleBlur}
       onMouseEnter={openTooltip}
       onMouseLeave={scheduleClose}
     >
       <button
+        ref={buttonRef}
         type="button"
         aria-describedby={isOpen ? tooltipId : undefined}
         aria-label={`Estimated context usage ${formatTokenCount(usage.totalTokens)} of ${formatTokenCount(usage.maxTokens)} tokens`}
@@ -135,13 +72,15 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
         <div
           id={tooltipId}
           role="tooltip"
-          className="absolute bottom-full right-0 z-50 mb-2 w-56 rounded-2xl border border-border bg-surface p-3 text-xs text-foreground shadow-soft"
-          onMouseEnter={openTooltip}
-          onMouseLeave={closeImmediately}
+          className={[
+            'absolute right-0 z-50 w-56 rounded-2xl border border-border bg-surface p-3 text-xs text-foreground shadow-soft',
+            tooltipPosition === 'above' ? 'bottom-full mb-2' : 'top-full mt-2',
+          ].join(' ')}
+          style={{ zIndex: isTopTooltip ? 60 : 50 }}
         >
           <div className="flex items-center justify-between gap-3">
             <span className="font-medium text-foreground">Context estimate</span>
-            <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+            <span className="inline-flex min-h-5 items-center justify-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium leading-none text-accent-foreground">
               {usagePercent.toFixed(1)}%
             </span>
           </div>

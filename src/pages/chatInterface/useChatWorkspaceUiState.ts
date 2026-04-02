@@ -568,6 +568,13 @@ export function useChatWorkspaceUiState({
   const handleToggleExplorerPanel = useCallback(() => {
     setIsExplorerOpen((currentValue) => {
       const nextValue = !currentValue;
+      if (!nextValue) {
+        sidebarPanelRestoreRef.current = null;
+        setIsSidebarOpen(true);
+        setIsWorkspaceTabsPanelVisible(false);
+        return nextValue;
+      }
+
       if (nextValue) {
         if (activeWorkspacePanelWidth !== null) {
           setWorkspaceExplorerWidth(activeWorkspacePanelWidth);
@@ -590,7 +597,9 @@ export function useChatWorkspaceUiState({
     activeWorkspacePanelWidth,
     isSidebarOpen,
     onRightPanelOpenChange,
+    sidebarPanelRestoreRef,
     setIsSidebarOpen,
+    setIsWorkspaceTabsPanelVisible,
     workspaceFileTabs.length,
   ]);
 

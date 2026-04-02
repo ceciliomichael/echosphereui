@@ -34,6 +34,7 @@ import type {
   StartChatStreamInput,
   WorkspaceExplorerImportEntryInput,
   WorkspaceExplorerChangeEvent,
+  WorkspaceRefactorCandidatesInput,
   WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
@@ -148,6 +149,8 @@ const workspaceApi: EchosphereWorkspaceApi = {
     }
   },
   listDirectory: (input) => ipcRenderer.invoke('workspace:explorer:listDirectory', input),
+  listRefactorCandidates: (input: WorkspaceRefactorCandidatesInput) =>
+    ipcRenderer.invoke('workspace:refactorCandidates:list', input),
   readFile: (input) => ipcRenderer.invoke('workspace:explorer:readFile', input),
   renameEntry: (input) => ipcRenderer.invoke('workspace:explorer:renameEntry', input),
   unwatchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) =>

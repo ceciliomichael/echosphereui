@@ -19,9 +19,11 @@ const TOOL_DESCRIPTION = getToolDescription('edit')
 interface EditOperation {
   [key: string]: unknown
   absolute_path: string
+  end_line?: number
   new_string?: string
   old_string?: string
   replace_all: boolean
+  start_line?: number
 }
 
 function normalizeLineEndings(text: string) {
@@ -67,6 +69,155 @@ function stripCommonLineNumberPrefixes(text: string) {
   }
 
   return strippedLines.join('\n')
+}
+
+function normalizeWhitespace(text: string) {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function compareLines(actualLine: string, expectedLine: string) {
+  if (actualLine === expectedLine) {
+    return true
+  }
+
+  if (actualLine.trim() === expectedLine.trim()) {
+    return true
+  }
+
+  return normalizeWhitespace(actualLine) === normalizeWhitespace(expectedLine)
+}
+
+function formatLinePreview(lines: string[], centerIndex: number, radius: number) {
+  if (lines.length === 0) {
+    return 'No file content available.'
+  }
+
+  const startIndex = Math.max(0, centerIndex - radius)
+  const endIndex = Math.min(lines.length, centerIndex + radius + 1)
+  return lines
+    .slice(startIndex, endIndex)
+    .map((line, offset) => `${startIndex + offset + 1}: ${line}`)
+    .join('\n')
+}
+
+function readOptionalLineNumber(input: Record<string, unknown>, fieldName: 'end_line' | 'start_line') {
+  const rawValue = input[fieldName]
+  if (rawValue === undefined) {
+    return undefined
+  }
+
+  if (typeof rawValue !== 'number' || !Number.isInteger(rawValue) || rawValue < 1) {
+    throw new OpenAICompatibleToolError(`${fieldName} must be a positive integer when provided.`, {
+      fieldName,
+      receivedValue: rawValue,
+    })
+  }
+
+  return rawValue
+}
+
+function locateLineRangeOffsets(content: string, startLine: number, endLine: number) {
+  const lineStartOffsets: number[] = [0]
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === '\n') {
+      lineStartOffsets.push(index + 1)
+    }
+  }
+
+  const totalLineCount = lineStartOffsets.length
+  if (startLine > totalLineCount) {
+    return {
+      endOffsetExclusive: content.length,
+      resolvedEndLine: totalLineCount,
+      resolvedStartLine: totalLineCount + 1,
+      startOffset: content.length,
+      totalLineCount,
+    }
+  }
+
+  const resolvedEndLine = Math.min(endLine, totalLineCount)
+  const startOffset = lineStartOffsets[startLine - 1]
+  const endOffsetExclusive = resolvedEndLine >= totalLineCount ? content.length : lineStartOffsets[resolvedEndLine]
+  return {
+    endOffsetExclusive,
+    resolvedEndLine,
+    resolvedStartLine: startLine,
+    startOffset,
+    totalLineCount,
+  }
+}
+
+function collectEditSearchDiagnostics(
+  content: string,
+  oldString: string,
+  lineRange: { endLine: number; startLine: number } | null,
+) {
+  const contentLines = content.split('\n')
+  const searchLines = oldString.split('\n')
+  if (searchLines.length > 0 && searchLines[searchLines.length - 1] === '') {
+    searchLines.pop()
+  }
+
+  if (searchLines.length === 0) {
+    return {}
+  }
+
+  const searchStartLine = lineRange?.startLine ?? 1
+  const searchEndLine = Math.min(lineRange?.endLine ?? contentLines.length, contentLines.length)
+  const startIndex = Math.max(searchStartLine - 1, 0)
+  const endExclusive = searchEndLine
+  const maxStartIndex = endExclusive - searchLines.length
+
+  let bestPartialMatchLine: number | null = null
+  let bestPartialMatchPrefixLength = 0
+  let firstContextLineMatchCount = 0
+  const firstContextLine = searchLines[0] ?? ''
+
+  for (let index = startIndex; index < endExclusive; index += 1) {
+    if (compareLines(contentLines[index] ?? '', firstContextLine)) {
+      firstContextLineMatchCount += 1
+    }
+  }
+
+  if (maxStartIndex >= startIndex) {
+    for (let index = startIndex; index <= maxStartIndex; index += 1) {
+      let matchedPrefixLength = 0
+      for (let offset = 0; offset < searchLines.length; offset += 1) {
+        if (!compareLines(contentLines[index + offset], searchLines[offset])) {
+          break
+        }
+        matchedPrefixLength += 1
+      }
+
+      if (matchedPrefixLength > bestPartialMatchPrefixLength) {
+        bestPartialMatchPrefixLength = matchedPrefixLength
+        bestPartialMatchLine = index + 1
+      }
+    }
+  }
+
+  const previewCenterIndex = bestPartialMatchLine === null ? startIndex : bestPartialMatchLine - 1
+  return {
+    bestPartialMatchLine,
+    bestPartialMatchPrefixLength,
+    bestPartialMatchPreview: formatLinePreview(contentLines, previewCenterIndex, Math.max(2, searchLines.length + 1)),
+    fileLineCount: contentLines.length,
+    firstContextLine,
+    firstContextLineMatchCount,
+    hunkContext: searchLines.join('\n'),
+    hunkLineCount: searchLines.length,
+    searchEndLine,
+    searchStartLine,
+  }
+}
+
+function countLogicalLines(text: string) {
+  const lines = text.split('\n')
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    return lines.length - 1
+  }
+
+  return lines.length
 }
 
 function levenshtein(a: string, b: string) {
@@ -488,11 +639,30 @@ function normalizeEditOperation(input: Record<string, unknown>): EditOperation {
   const replaceAll = readOptionalBoolean(input, 'replace_all', false)
   const oldString = readRequiredText(input, 'old_string', true)
   const newString = readRequiredText(input, 'new_string', true)
+  const startLine = readOptionalLineNumber(input, 'start_line')
+  const endLine = readOptionalLineNumber(input, 'end_line')
+
+  if ((startLine === undefined) !== (endLine === undefined)) {
+    throw new OpenAICompatibleToolError('start_line and end_line must be provided together.', {
+      fieldName: startLine === undefined ? 'start_line' : 'end_line',
+    })
+  }
+
+  if (startLine !== undefined && endLine !== undefined && endLine < startLine) {
+    throw new OpenAICompatibleToolError('end_line must be greater than or equal to start_line.', {
+      endLine,
+      fieldName: 'end_line',
+      startLine,
+    })
+  }
+
   return {
     absolute_path: absolutePath,
+    ...(endLine === undefined ? {} : { end_line: endLine }),
     new_string: newString,
     old_string: oldString,
     replace_all: replaceAll,
+    ...(startLine === undefined ? {} : { start_line: startLine }),
   }
 }
 
@@ -559,6 +729,10 @@ export const editTool: OpenAICompatibleToolDefinition = {
     const existingFile = await readExistingFile(normalizedTargetPath)
     const oldString = edit.old_string ?? ''
     const newString = edit.new_string ?? ''
+    const lineRange =
+      edit.start_line !== undefined && edit.end_line !== undefined
+        ? { endLine: edit.end_line, startLine: edit.start_line }
+        : null
     let nextContent: string
 
     if (!existingFile.exists && oldString.length > 0) {
@@ -574,94 +748,140 @@ export const editTool: OpenAICompatibleToolDefinition = {
       const normalizedOldString = convertToLineEnding(normalizeLineEndings(oldString), lineEnding)
       const normalizedNewString = convertToLineEnding(normalizeLineEndings(newString), lineEnding)
       const normalizedOldStringWithoutLineNumbers = stripCommonLineNumberPrefixes(normalizedOldString)
+      const applyReplacement = (searchText: string, ignoreLineRange = false) => {
+        if (!lineRange) {
+          return replaceWithAnchors(existingFile.content, searchText, normalizedNewString, edit.replace_all)
+        }
+
+        if (ignoreLineRange) {
+          return replaceWithAnchors(existingFile.content, searchText, normalizedNewString, edit.replace_all)
+        }
+
+        const requestedRangeLength = lineRange.endLine - lineRange.startLine + 1
+        const requiredRangeLength = Math.max(1, countLogicalLines(searchText))
+        const effectiveEndLine =
+          requiredRangeLength > requestedRangeLength
+            ? lineRange.startLine + requiredRangeLength - 1
+            : lineRange.endLine
+        const offsets = locateLineRangeOffsets(existingFile.content, lineRange.startLine, effectiveEndLine)
+        const segment = existingFile.content.slice(offsets.startOffset, offsets.endOffsetExclusive)
+        const replacedSegment = replaceWithAnchors(segment, searchText, normalizedNewString, edit.replace_all)
+        return `${existingFile.content.slice(0, offsets.startOffset)}${replacedSegment}${existingFile.content.slice(offsets.endOffsetExclusive)}`
+      }
 
       try {
-        nextContent = replaceWithAnchors(existingFile.content, normalizedOldString, normalizedNewString, edit.replace_all)
+        nextContent = applyReplacement(normalizedOldString)
       } catch (error) {
+        const buildFailureError = (cause: unknown, searchTextForDiagnostics: string) => {
+          const baseDetails =
+            cause instanceof OpenAICompatibleToolError && cause.details && typeof cause.details === 'object'
+              ? cause.details
+              : {}
+          const failureReason = cause instanceof OpenAICompatibleToolError && cause.message.includes('multiple matches')
+            ? 'old_string_ambiguous'
+            : 'old_string_not_found'
+          const diagnostics = collectEditSearchDiagnostics(existingFile.content, searchTextForDiagnostics, lineRange)
+          return new OpenAICompatibleToolError(cause instanceof Error ? cause.message : 'Edit failed.', {
+            ...baseDetails,
+            ...diagnostics,
+            failureReason,
+            filePath: toDisplayPath(relativePath),
+            ...(lineRange
+              ? {
+                  lineRangeEndLine: lineRange.endLine,
+                  lineRangeStartLine: lineRange.startLine,
+                }
+              : {}),
+          })
+        }
+
         const shouldRetryWithStrippedLineNumbers =
           error instanceof OpenAICompatibleToolError &&
           error.message.includes('Could not find old_string in file content') &&
           normalizedOldStringWithoutLineNumbers !== normalizedOldString
 
         if (!shouldRetryWithStrippedLineNumbers) {
-          throw error
+          throw buildFailureError(error, normalizedOldString)
         }
 
-        nextContent = replaceWithAnchors(
-          existingFile.content,
-          normalizedOldStringWithoutLineNumbers,
-          normalizedNewString,
-          edit.replace_all,
-        )
+        try {
+          nextContent = applyReplacement(normalizedOldStringWithoutLineNumbers)
+        } catch (retryError) {
+          throw buildFailureError(retryError, normalizedOldStringWithoutLineNumbers)
+        }
       }
     }
 
-    if (context.workspaceCheckpointId && !trackedCheckpointPaths.has(normalizedTargetPath)) {
-      await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
-      trackedCheckpointPaths.add(normalizedTargetPath)
-    }
+    return finalizeEditResult(nextContent)
 
-    const formattedNextContent = await formatWorkspaceFileContent(
-      normalizedTargetPath,
-      nextContent,
-      existingFile.content.includes('\r\n') ? '\r\n' : '\n',
-    )
-    const contentChanged = existingFile.content !== formattedNextContent
-    if (existingFile.exists && !contentChanged) {
+    async function finalizeEditResult(unformattedNextContent: string) {
+      if (context.workspaceCheckpointId && !trackedCheckpointPaths.has(normalizedTargetPath)) {
+        await captureWorkspaceCheckpointFileState(context.workspaceCheckpointId, normalizedTargetPath)
+        trackedCheckpointPaths.add(normalizedTargetPath)
+      }
+
+      const formattedNextContent = await formatWorkspaceFileContent(
+        normalizedTargetPath,
+        unformattedNextContent,
+        existingFile.content.includes('\r\n') ? '\r\n' : '\n',
+      )
+      const contentChanged = existingFile.content !== formattedNextContent
+      if (existingFile.exists && !contentChanged) {
+        const displayPath = toDisplayPath(relativePath)
+
+        return {
+          addedPaths: [],
+          changeCount: 0,
+          contentChanged: false,
+          deletedPaths: [],
+          endLineNumber: undefined,
+          message: `Edit completed with no content change for ${displayPath}.`,
+          modifiedPaths: [],
+          ok: true,
+          operation: 'noop',
+          path: displayPath,
+          startLineNumber: undefined,
+          targetKind: 'file',
+        }
+      }
+
+      await fs.mkdir(path.dirname(normalizedTargetPath), { recursive: true })
+      await fs.writeFile(normalizedTargetPath, formattedNextContent, 'utf8')
+
       const displayPath = toDisplayPath(relativePath)
+      const addedPathList = existingFile.exists ? [] : [displayPath]
+      const modifiedPathList = existingFile.exists ? [displayPath] : []
+      const deletedPathList: string[] = []
+      const changedPathList = Array.from(new Set([...addedPathList, ...modifiedPathList]))
+      const singleChangedPath = changedPathList.length === 1 ? changedPathList[0] : null
+
+      const message =
+        changedPathList.length === 0
+          ? 'Edit completed with no file changes.'
+          : singleChangedPath
+            ? `Edited ${singleChangedPath} successfully.`
+            : `Edited ${changedPathList.length} files successfully.`
 
       return {
-        addedPaths: [],
-        changeCount: 0,
-        contentChanged: false,
-        deletedPaths: [],
+        addedPaths: addedPathList,
+        changeCount: 1,
+        contentChanged,
+        deletedPaths: deletedPathList,
         endLineNumber: undefined,
-        message: `Edit completed with no content change for ${displayPath}.`,
-        modifiedPaths: [],
+        message,
+        modifiedPaths: modifiedPathList,
+        ...(singleChangedPath
+          ? {
+              newContent: formattedNextContent,
+              oldContent: existingFile.exists ? existingFile.content : null,
+            }
+          : {}),
         ok: true,
-        operation: 'noop',
-        path: displayPath,
+        operation: changedPathList.length === 0 ? 'noop' : 'edit',
+        path: singleChangedPath ?? '.',
         startLineNumber: undefined,
-        targetKind: 'file',
+        targetKind: changedPathList.length <= 1 ? 'file' : 'workspace',
       }
-    }
-
-    await fs.mkdir(path.dirname(normalizedTargetPath), { recursive: true })
-    await fs.writeFile(normalizedTargetPath, formattedNextContent, 'utf8')
-
-    const displayPath = toDisplayPath(relativePath)
-    const addedPathList = existingFile.exists ? [] : [displayPath]
-    const modifiedPathList = existingFile.exists ? [displayPath] : []
-    const deletedPathList: string[] = []
-    const changedPathList = Array.from(new Set([...addedPathList, ...modifiedPathList]))
-    const singleChangedPath = changedPathList.length === 1 ? changedPathList[0] : null
-
-    const message =
-      changedPathList.length === 0
-        ? 'Edit completed with no file changes.'
-        : singleChangedPath
-          ? `Edited ${singleChangedPath} successfully.`
-          : `Edited ${changedPathList.length} files successfully.`
-
-    return {
-      addedPaths: addedPathList,
-      changeCount: 1,
-      contentChanged,
-      deletedPaths: deletedPathList,
-      endLineNumber: undefined,
-      message,
-      modifiedPaths: modifiedPathList,
-      ...(singleChangedPath
-        ? {
-            newContent: formattedNextContent,
-            oldContent: existingFile.exists ? existingFile.content : null,
-          }
-        : {}),
-      ok: true,
-      operation: changedPathList.length === 0 ? 'noop' : 'edit',
-      path: singleChangedPath ?? '.',
-      startLineNumber: undefined,
-      targetKind: changedPathList.length <= 1 ? 'file' : 'workspace',
     }
   },
   tool: {
@@ -680,9 +900,19 @@ export const editTool: OpenAICompatibleToolDefinition = {
               'Exact text to replace from the latest read of the file. Include enough surrounding lines to make the target unique.',
             type: 'string',
           },
+          end_line: {
+            description: 'Optional 1-based inclusive end line. Must be provided together with start_line.',
+            minimum: 1,
+            type: 'integer',
+          },
           replace_all: {
             description: 'Set true only when every match of old_string should be replaced.',
             type: 'boolean',
+          },
+          start_line: {
+            description: 'Optional 1-based inclusive start line. Must be provided together with end_line.',
+            minimum: 1,
+            type: 'integer',
           },
           new_string: {
             description: 'Replacement text that will become the file content at the matched location.',

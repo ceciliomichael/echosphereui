@@ -22,6 +22,10 @@ interface ReadSliceResult {
   selectedLines: string[]
 }
 
+function withLineNumberPrefix(lines: string[], startLine: number) {
+  return lines.map((line, index) => `${startLine + index}|${line}`)
+}
+
 async function readFileSliceByLine(absolutePath: string, startLine: number, lineLimit: number): Promise<ReadSliceResult> {
   const selectedLines: string[] = []
   let lineCount = 0
@@ -129,7 +133,7 @@ export const readTool: OpenAICompatibleToolDefinition = {
     const nextEndLine = hasMoreLines ? Math.min(totalLineCount, safeEndLine + maxLines) : null
 
     return {
-      content: selectedLines.join('\n'),
+      content: withLineNumberPrefix(selectedLines, safeStartLine).join('\n'),
       endLine: safeEndLine,
       hasMoreLines,
       lineCount: selectedLines.length,

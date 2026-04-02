@@ -60,3 +60,32 @@ test('Responses loop state converts tool completion events into function_call_ou
     previousResponseId: 'resp_1',
   })
 })
+
+test('Responses loop state rebuilds from full message history after file-state tool results', () => {
+  const loopState = createOpenAICompatibleResponsesLoopState()
+  loopState.setPreviousResponseId('resp_1')
+  loopState.recordStreamEvent(
+    createToolOutputEvent(
+      'tool_invocation_completed',
+      'call_read_1',
+      JSON.stringify({
+        body: 'File src/app.ts (lines 1-2 of 2, complete)',
+        metadata: {
+          schema: 'echosphere.tool_result/v1',
+          status: 'success',
+          subject: { kind: 'file', path: 'src/app.ts' },
+          summary: 'Read src/app.ts lines 1-2 of 2 (complete).',
+          toolCallId: 'call_read_1',
+          toolName: 'read',
+        },
+        schema: 'echosphere.tool_result/v2',
+      }),
+    ),
+  )
+
+  assert.deepEqual(loopState.buildRequestOverrides(), {})
+  assert.deepEqual(loopState.buildRequestOverrides(), {
+    input: [],
+    previousResponseId: 'resp_1',
+  })
+})

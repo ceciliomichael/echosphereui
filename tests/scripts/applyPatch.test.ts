@@ -163,3 +163,49 @@ test('apply_patch exposes diagnostics when a hunk cannot be matched', async () =
     )
   })
 })
+
+test('apply_patch supports lineRanges to constrain matching windows', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'duplicate.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\nalpha\nbeta\n', 'utf8')
+
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/duplicate.txt',
+      '@@',
+      ' alpha',
+      '-beta',
+      '+gamma',
+      '*** End Patch',
+    ].join('\n')
+
+    await applyPatchText(patch, workspacePath, {
+      lineRanges: [{ endLine: 4, path: 'src/duplicate.txt', startLine: 3 }],
+    })
+
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\nbeta\nalpha\ngamma\n')
+  })
+})
+
+test('apply_patch strips read-style line prefixes from hunk lines', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'numbered.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\n', 'utf8')
+
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/numbered.txt',
+      '@@',
+      ' 1|alpha',
+      '-2|beta',
+      '+2|gamma',
+      '*** End Patch',
+    ].join('\n')
+
+    await applyPatchText(patch, workspacePath)
+
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\ngamma\n')
+  })
+})

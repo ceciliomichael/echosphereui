@@ -38,7 +38,7 @@ test('read tool returns only focused file context fields', async () => {
     )
 
     assert.deepEqual(result, {
-      content: 'one\ntwo',
+      content: '1|one\n2|two',
       endLine: 2,
       hasMoreLines: true,
       lineCount: 2,
@@ -82,8 +82,8 @@ test('read tool supports start_line continuation with max_lines up to 500 lines'
     assert.equal(result.nextStartLine, 501)
     assert.equal(result.nextEndLine, 600)
     assert.equal(result.truncated, true)
-    assert.equal(result.content.split('\n')[0], 'line-1')
-    assert.equal(result.content.split('\n').at(-1), 'line-500')
+    assert.equal(result.content.split('\n')[0], '1|line-1')
+    assert.equal(result.content.split('\n').at(-1), '500|line-500')
   })
 })
 
@@ -180,5 +180,79 @@ test('read tool returns empty content when start_line exceeds file length', asyn
     assert.equal(result.truncated, false)
     assert.equal(result.nextStartLine, null)
     assert.equal(result.nextEndLine, null)
+  })
+})
+
+test('read tool prefixes returned lines with 1-based line numbers', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'numbered.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['alpha', 'beta', 'gamma'].join('\n'), 'utf8')
+
+    const result = await readTool.execute(
+      {
+        absolute_path: filePath,
+        max_lines: 2,
+        start_line: 2,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.content, '2|beta\n3|gamma')
+  })
+})
+
+test('read tool keeps correct line numbering for CRLF files', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'windows-lines.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, 'line-1\r\nline-2\r\nline-3\r\n', 'utf8')
+
+    const result = await readTool.execute(
+      {
+        absolute_path: filePath,
+        max_lines: 2,
+        start_line: 2,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.startLine, 2)
+    assert.equal(result.endLine, 3)
+    assert.equal(result.totalLineCount, 3)
+    assert.equal(result.content, '2|line-2\n3|line-3')
+  })
+})
+
+test('read tool continuation nextStartLine matches numbered output boundaries', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'continuation.ts')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['L1', 'L2', 'L3', 'L4', 'L5'].join('\n'), 'utf8')
+
+    const firstPage = await readTool.execute(
+      {
+        absolute_path: filePath,
+        max_lines: 3,
+        start_line: 1,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(firstPage.content, '1|L1\n2|L2\n3|L3')
+    assert.equal(firstPage.nextStartLine, 4)
+
+    const secondPage = await readTool.execute(
+      {
+        absolute_path: filePath,
+        max_lines: 3,
+        start_line: firstPage.nextStartLine ?? 1,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(secondPage.content, '4|L4\n5|L5')
+    assert.equal(secondPage.startLine, 4)
+    assert.equal(secondPage.endLine, 5)
   })
 })

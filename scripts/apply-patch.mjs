@@ -27,6 +27,26 @@ function normalizePatchText(text) {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
 }
 
+function stripReadLineNumberPrefixesFromPatch(patchText) {
+  return patchText
+    .split('\n')
+    .map((line) => {
+      const diffPrefix = line[0]
+      if (diffPrefix !== ' ' && diffPrefix !== '+' && diffPrefix !== '-') {
+        return line
+      }
+
+      const withoutDiffPrefix = line.slice(1)
+      const prefixedLineMatch = withoutDiffPrefix.match(/^\s*\d+\s*\|\s?(.*)$/u)
+      if (!prefixedLineMatch) {
+        return line
+      }
+
+      return `${diffPrefix}${prefixedLineMatch[1]}`
+    })
+    .join('\n')
+}
+
 function isTopLevelMarkerLine(line) {
   const trimmed = line.trim()
   return (
@@ -57,6 +77,44 @@ function ensureWorkspacePath(rawPath, kind, cwd) {
   }
 
   return relativePath.replace(/\\/g, '/')
+}
+
+function normalizeLineRanges(lineRanges, cwd) {
+  if (!Array.isArray(lineRanges) || lineRanges.length === 0) {
+    return new Map()
+  }
+
+  const normalized = new Map()
+  for (const lineRange of lineRanges) {
+    if (!lineRange || typeof lineRange !== 'object' || Array.isArray(lineRange)) {
+      fail('line_ranges entries must be objects with path, startLine, and endLine.')
+    }
+
+    const pathValue = typeof lineRange.path === 'string' ? lineRange.path : null
+    const startLine = lineRange.startLine
+    const endLine = lineRange.endLine
+
+    if (!pathValue || pathValue.trim().length === 0) {
+      fail('line_ranges path must be a non-empty string.')
+    }
+
+    if (!Number.isInteger(startLine) || startLine < 1) {
+      fail('line_ranges startLine must be a positive integer.')
+    }
+
+    if (!Number.isInteger(endLine) || endLine < 1 || endLine < startLine) {
+      fail('line_ranges endLine must be a positive integer greater than or equal to startLine.')
+    }
+
+    const normalizedPath = ensureWorkspacePath(pathValue, 'line_ranges path', cwd)
+    if (normalized.has(normalizedPath)) {
+      fail(`Duplicate line_ranges entry for ${normalizedPath}.`)
+    }
+
+    normalized.set(normalizedPath, { endLine, path: normalizedPath, startLine })
+  }
+
+  return normalized
 }
 
 function splitContent(text) {
@@ -274,8 +332,8 @@ function collectBlockSearchDiagnostics(lines, needleLines, startIndex, endIndex)
   }
 }
 
-function parsePatch(patchText) {
-  const normalizedPatch = normalizePatchText(patchText)
+function parsePatch(patchText, cwd) {
+  const normalizedPatch = stripReadLineNumberPrefixesFromPatch(normalizePatchText(patchText))
   if (normalizedPatch.length === 0) {
     fail('apply_patch requires a non-empty patch.')
   }
@@ -310,7 +368,7 @@ function parsePatch(patchText) {
 
     if (trimmed.startsWith(UPDATE_FILE_MARKER)) {
       const rawPath = trimmed.slice(UPDATE_FILE_MARKER.length)
-      const filePath = ensureWorkspacePath(rawPath, 'Update File', process.cwd())
+      const filePath = ensureWorkspacePath(rawPath, 'Update File', cwd)
       index += 1
 
       let movePath = null
@@ -518,7 +576,7 @@ async function applyDeleteFile(operation, cwd, virtualContents) {
   }
 }
 
-async function applyUpdateFile(operation, cwd, virtualContents) {
+async function applyUpdateFileWithLineRanges(operation, cwd, virtualContents, lineRanges) {
   const sourcePath = path.resolve(cwd, operation.path)
   const existing = await readVirtualContent(operation.path, cwd, virtualContents)
 
@@ -528,44 +586,62 @@ async function applyUpdateFile(operation, cwd, virtualContents) {
 
   const lineEnding = readLineEnding(existing.content)
   let contentLines = splitContent(existing.content.replace(/\r\n/g, '\n'))
-  let searchStart = 0
+  const lineRange = lineRanges.get(operation.path)
+  const rangeStartIndex = lineRange ? lineRange.startLine - 1 : 0
+  let rangeEndLine = lineRange ? lineRange.endLine : Number.MAX_SAFE_INTEGER
+  let searchStart = rangeStartIndex
   let mustRemoveTrailingNewline = false
 
   for (const hunk of operation.hunks) {
     const logicalLength = effectiveLineCount(contentLines)
+    const searchEnd = Math.min(logicalLength, rangeEndLine)
     let { oldLines, newLines, endOfFile } = hunkToReplacement(hunk)
-    let matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, logicalLength, operation.path, sourcePath, endOfFile)
+    let matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, searchEnd, operation.path, sourcePath, endOfFile)
 
     if (matchIndex === null && oldLines.length > 0 && oldLines.at(-1) === '') {
       oldLines = oldLines.slice(0, -1)
       if (newLines.length > 0 && newLines.at(-1) === '') {
         newLines = newLines.slice(0, -1)
       }
-      matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, logicalLength, operation.path, sourcePath, endOfFile)
+      matchIndex = findUniqueBlock(contentLines, oldLines, searchStart, searchEnd, operation.path, sourcePath, endOfFile)
     }
 
     if (matchIndex === null) {
       fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`, {
-        ...collectBlockSearchDiagnostics(contentLines, oldLines, searchStart, logicalLength),
+        ...collectBlockSearchDiagnostics(contentLines, oldLines, searchStart, searchEnd),
+        failureReason: 'hunk_context_mismatch',
+        ...(lineRange
+          ? {
+              lineRangeEndLine: lineRange.endLine,
+              lineRangeStartLine: lineRange.startLine,
+            }
+          : {}),
         filePath: operation.path,
         resolvedPath: sourcePath,
       })
     }
 
+    const matchEnd = matchIndex + oldLines.length
+    if (endOfFile && matchEnd !== logicalLength) {
+      fail(`The end-of-file hunk for ${operation.path} must match the end of the file.`)
+    }
+
     contentLines = [
       ...contentLines.slice(0, matchIndex),
       ...newLines,
-      ...contentLines.slice(matchIndex + oldLines.length),
+      ...contentLines.slice(matchEnd),
     ]
+    if (lineRange) {
+      const lineDelta = newLines.length - oldLines.length
+      rangeEndLine += lineDelta
+    }
     searchStart = matchIndex + newLines.length
     mustRemoveTrailingNewline ||= endOfFile
   }
 
   let nextContent = joinContent(contentLines, lineEnding)
-  if (mustRemoveTrailingNewline) {
-    if (nextContent.endsWith(lineEnding)) {
-      nextContent = nextContent.slice(0, -lineEnding.length)
-    }
+  if (mustRemoveTrailingNewline && nextContent.endsWith(lineEnding)) {
+    nextContent = nextContent.slice(0, -lineEnding.length)
   }
 
   const destinationPath = operation.movePath ? path.resolve(cwd, operation.movePath) : sourcePath
@@ -593,8 +669,15 @@ async function applyUpdateFile(operation, cwd, virtualContents) {
   }
 }
 
-export async function applyPatchText(patchText, cwd = process.cwd()) {
-  const operations = parsePatch(patchText)
+export async function applyPatchText(patchText, cwd = process.cwd(), options = {}) {
+  const operations = parsePatch(patchText, cwd)
+  const lineRanges = normalizeLineRanges(options.lineRanges, cwd)
+  const updateOperationPaths = new Set(operations.filter((operation) => operation.kind === 'update').map((operation) => operation.path))
+  for (const lineRangePath of lineRanges.keys()) {
+    if (!updateOperationPaths.has(lineRangePath)) {
+      fail(`line_ranges path is not present in the patch: ${lineRangePath}`)
+    }
+  }
   const changedPaths = []
   const plannedOperations = []
   const virtualContents = new Map()
@@ -614,7 +697,7 @@ export async function applyPatchText(patchText, cwd = process.cwd()) {
       continue
     }
 
-    const planned = await applyUpdateFile(operation, cwd, virtualContents)
+    const planned = await applyUpdateFileWithLineRanges(operation, cwd, virtualContents, lineRanges)
     plannedOperations.push(planned)
     changedPaths.push(planned.change.fileName)
   }

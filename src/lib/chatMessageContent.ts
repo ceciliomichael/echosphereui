@@ -12,8 +12,67 @@ interface AssistantMessageContentSplit extends AssistantMessageContentParts {
 const THINK_OPEN_TAG = '<think>'
 const THINK_CLOSE_TAG = '</think>'
 
+function shouldStripInternalToolLeakLine(line: string) {
+  const normalizedLine = line.trim()
+  if (normalizedLine.length === 0) {
+    return false
+  }
+
+  const hasToolRoutingMarker = /\bto=(?:functions|multi_tool_use)\.[^\s]+/iu.test(normalizedLine)
+  if (
+    hasToolRoutingMarker &&
+    (normalizedLine.includes('{') ||
+      /\bassistant\b/iu.test(normalizedLine) ||
+      /\bin commentary\b/iu.test(normalizedLine) ||
+      normalizedLine.includes('recipient_name'))
+  ) {
+    return true
+  }
+
+  return /recipient_name"\s*:\s*"(?:functions|multi_tool_use)\.[^"]+"/u.test(normalizedLine)
+}
+
+function looksLikeRawToolArgumentFragment(line: string) {
+  const normalizedLine = line.trim()
+  if (normalizedLine.length === 0) {
+    return false
+  }
+
+  if (!/^[{["]/u.test(normalizedLine)) {
+    return false
+  }
+
+  return /"(?:absolute_path|start_line|end_line|max_lines|old_string|new_string|recipient_name|tool_name)"/u.test(
+    normalizedLine,
+  )
+}
+
+export function stripInternalToolCallLeakage(input: string) {
+  const normalizedInput = input.replace(/\r\n/g, '\n')
+  const lines = normalizedInput.split('\n')
+  const keepLine = lines.map(() => true)
+
+  for (const [index, line] of lines.entries()) {
+    if (!shouldStripInternalToolLeakLine(line)) {
+      continue
+    }
+
+    keepLine[index] = false
+
+    if (index > 0 && looksLikeRawToolArgumentFragment(lines[index - 1])) {
+      keepLine[index - 1] = false
+    }
+
+    if (index + 1 < lines.length && looksLikeRawToolArgumentFragment(lines[index + 1])) {
+      keepLine[index + 1] = false
+    }
+  }
+
+  return lines.filter((_line, index) => keepLine[index]).join('\n')
+}
+
 export function normalizeMarkdownText(input: string) {
-  return input
+  return stripInternalToolCallLeakage(input)
     .replace(/\r\n/g, '\n')
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
 }
@@ -80,12 +139,14 @@ function joinTextParts(parts: readonly string[]) {
 }
 
 export function normalizeAssistantMessageContent(message: Pick<Message, 'content' | 'reasoningContent'>): AssistantMessageContentParts {
-  const splitContent = splitThinkingContent(message.content)
+  const sanitizedContent = stripInternalToolCallLeakage(message.content)
+  const splitContent = splitThinkingContent(sanitizedContent)
   const normalizedReasoningContent = joinTextParts([
-    removeThinkingTags(message.reasoningContent ?? ''),
+    removeThinkingTags(stripInternalToolCallLeakage(message.reasoningContent ?? '')),
     splitContent.reasoningContent,
   ])
-  const shouldTrimEdgeBlankLines = splitContent.hasThinkingTags || hasThinkingMarkup(message.reasoningContent ?? '')
+  const sanitizedReasoningContent = stripInternalToolCallLeakage(message.reasoningContent ?? '')
+  const shouldTrimEdgeBlankLines = splitContent.hasThinkingTags || hasThinkingMarkup(sanitizedReasoningContent)
   const normalizedContent = normalizeMarkdownText(splitContent.content)
   const normalizedReasoning = normalizeMarkdownText(normalizedReasoningContent)
 

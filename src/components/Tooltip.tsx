@@ -23,6 +23,7 @@ interface TooltipProps {
   align?: 'center' | 'left'
   children: ReactElement<TooltipChildProps>
   content: string | ReactNode
+  broadcastShowEvent?: boolean
   fullWidthTrigger?: boolean
   hideDelayMs?: number
   panelClassName?: string
@@ -56,6 +57,7 @@ export function Tooltip({
   align = 'left',
   children,
   content,
+  broadcastShowEvent = true,
   fullWidthTrigger = false,
   hideDelayMs = 0,
   panelClassName,
@@ -141,9 +143,11 @@ export function Tooltip({
     }
 
     clearHideTimeout()
-    window.dispatchEvent(new CustomEvent<string>(TOOLTIP_SHOW_EVENT, { detail: tooltipId }))
+    if (broadcastShowEvent) {
+      window.dispatchEvent(new CustomEvent<string>(TOOLTIP_SHOW_EVENT, { detail: tooltipId }))
+    }
     setIsVisible(true)
-  }, [clearHideTimeout, shouldSuppressTooltip, tooltipId])
+  }, [broadcastShowEvent, clearHideTimeout, shouldSuppressTooltip, tooltipId])
 
   const hideTooltip = useCallback(() => {
     clearHideTimeout()
@@ -159,6 +163,10 @@ export function Tooltip({
   }, [clearHideTimeout, hideDelayMs, hideTooltipImmediate])
 
   useEffect(() => {
+    if (!broadcastShowEvent) {
+      return
+    }
+
     function handleTooltipShow(event: Event) {
       const customEvent = event as CustomEvent<string>
       if (customEvent.detail !== tooltipId) {
@@ -170,7 +178,7 @@ export function Tooltip({
     return () => {
       window.removeEventListener(TOOLTIP_SHOW_EVENT, handleTooltipShow as EventListener)
     }
-  }, [hideTooltipImmediate, tooltipId])
+  }, [broadcastShowEvent, hideTooltipImmediate, tooltipId])
 
   useLayoutEffect(() => {
     if (!isVisible || shouldSuppressTooltip || !triggerRef.current || !tooltipRef.current) {

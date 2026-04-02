@@ -41,6 +41,8 @@ test('buildSystemPrompt keeps built-in policy and preserves AGENTS design guidel
 
   assert.match(prompt, /<identity>/u)
   assert.match(prompt, /Act as a senior production-grade software engineering agent|You are Echo, a senior production-grade software engineering agent/u)
+  assert.match(prompt, /Never expose raw tool-call JSON, call ids, channel names, recipient names, or tool routing syntax in assistant-visible text\./u)
+  assert.match(prompt, /Use tools silently and summarize their purpose or result in plain English instead of printing the underlying invocation payload\./u)
   assert.match(prompt, /<repository_instructions>/u)
   assert.match(prompt, /Local override: prefer the repository changelog template for release notes\./u)
   assert.match(prompt, /<preferred_design_guidelines>/u)

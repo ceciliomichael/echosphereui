@@ -59,14 +59,22 @@ function buildArgumentsSummary(toolName: string, argumentsText: string) {
 
   if (toolName === 'edit') {
     const edits = Array.isArray(argumentsValue.edits) ? argumentsValue.edits : []
+    const singleEdit =
+      edits.length === 1 && typeof edits[0] === 'object' && edits[0] !== null && !Array.isArray(edits[0])
+        ? (edits[0] as Record<string, unknown>)
+        : argumentsValue
     return {
       edit_count: edits.length || undefined,
+      end_line: readNumber(singleEdit.end_line) ?? undefined,
+      start_line: readNumber(singleEdit.start_line) ?? undefined,
     }
   }
 
   if (toolName === 'apply_patch') {
     const patch = readString(argumentsValue.patch) ?? readString(argumentsValue.input)
+    const lineRanges = Array.isArray(argumentsValue.line_ranges) ? argumentsValue.line_ranges : []
     return {
+      line_range_count: lineRanges.length || undefined,
       patch_length: patch?.length ?? undefined,
     }
   }
@@ -401,6 +409,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     return filterUndefinedEntries({
       ...sharedSemantics,
       added_path_count: addedPaths.length,
+      changed_paths: [...addedPaths, ...modifiedPaths, ...deletedPaths],
       content_changed: readBoolean(semanticResult.contentChanged),
       deleted_path_count: deletedPaths.length,
       mutation_applied: totalChangedPaths > 0 || readBoolean(semanticResult.contentChanged),
@@ -427,6 +436,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     return filterUndefinedEntries({
       ...sharedSemantics,
       added_path_count: addedPaths.length,
+      changed_paths: [...addedPaths, ...modifiedPaths, ...deletedPaths],
       content_changed: contentChanged,
       deleted_path_count: deletedPaths.length,
       mutation_applied: totalChangedPaths > 0 || contentChanged,
@@ -457,6 +467,7 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     return filterUndefinedEntries({
       ...sharedSemantics,
       added_path_count: addedPaths.length,
+      changed_paths: [...addedPaths, ...modifiedPaths, ...deletedPaths],
       content_changed: totalChangedPaths > 0,
       deleted_path_count: deletedPaths.length,
       mutation_applied: totalChangedPaths > 0,
@@ -471,10 +482,14 @@ function buildSuccessSemantics(toolName: string, semanticResult: Record<string, 
     const changes = Array.isArray(semanticResult.changes)
       ? semanticResult.changes.filter((change): change is Record<string, unknown> => typeof change === 'object' && change !== null)
       : []
+    const changedPaths = changes
+      .map((change) => readString(change.fileName) ?? readString(change.path))
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
     const totalChangedPaths = changes.length
     return filterUndefinedEntries({
       ...sharedSemantics,
       change_count: totalChangedPaths,
+      changed_paths: changedPaths,
       content_changed: totalChangedPaths > 0,
       mutation_applied: totalChangedPaths > 0,
       operation: 'apply_patch',
@@ -574,9 +589,50 @@ export function buildFailureMetadata(
   details?: Record<string, unknown>,
 ): StructuredToolResultMetadata {
   const argumentsSummary = buildArgumentsSummary(toolCall.name, toolCall.argumentsText)
+  const sanitizedDetails = (() => {
+    if (!details) {
+      return undefined
+    }
+
+    if (toolCall.name === 'apply_patch' && readString(details.failureReason) === 'hunk_context_mismatch') {
+      return filterUndefinedEntries({
+        bestPartialMatchLine: readNumber(details.bestPartialMatchLine) ?? undefined,
+        bestPartialMatchPrefixLength: readNumber(details.bestPartialMatchPrefixLength) ?? undefined,
+        failureReason: readString(details.failureReason) ?? undefined,
+        filePath: readString(details.filePath) ?? undefined,
+        firstContextLineMatchCount: readNumber(details.firstContextLineMatchCount) ?? undefined,
+        hunkLineCount: readNumber(details.hunkLineCount) ?? undefined,
+      })
+    }
+
+    if (
+      toolCall.name === 'edit' &&
+      (readString(details.failureReason) === 'old_string_not_found' ||
+        readString(details.failureReason) === 'old_string_ambiguous')
+    ) {
+      return filterUndefinedEntries({
+        bestPartialMatchLine: readNumber(details.bestPartialMatchLine) ?? undefined,
+        bestPartialMatchPrefixLength: readNumber(details.bestPartialMatchPrefixLength) ?? undefined,
+        failureReason: readString(details.failureReason) ?? undefined,
+        filePath: readString(details.filePath) ?? undefined,
+        firstContextLineMatchCount: readNumber(details.firstContextLineMatchCount) ?? undefined,
+        hunkLineCount: readNumber(details.hunkLineCount) ?? undefined,
+        lineRangeEndLine: readNumber(details.lineRangeEndLine) ?? undefined,
+        lineRangeStartLine: readNumber(details.lineRangeStartLine) ?? undefined,
+      })
+    }
+
+    return filterUndefinedEntries(
+      Object.fromEntries(
+        Object.entries(details)
+          .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+          .slice(0, 12),
+      ),
+    )
+  })()
   const semantics = filterUndefinedEntries({
     authoritative: true,
-    ...(details ? { details } : {}),
+    ...(sanitizedDetails ? { details: sanitizedDetails } : {}),
     error_message: errorMessage,
   })
 

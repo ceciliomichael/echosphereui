@@ -1,6 +1,6 @@
 import type { ChatMode } from '../../../src/types/chat'
-import { applyPatchTool } from './tools/apply-patch/index'
 import { askQuestionTool } from './tools/ask-question/index'
+import { editTool } from './tools/edit/index'
 import { execCommandTool } from './tools/exec-command/index'
 import { globTool } from './tools/glob/index'
 import { grepTool } from './tools/grep/index'
@@ -15,7 +15,7 @@ const agentToolRegistry = [
   readTool,
   globTool,
   grepTool,
-  applyPatchTool,
+  editTool,
   writeTool,
   execCommandTool,
   writeStdinTool,

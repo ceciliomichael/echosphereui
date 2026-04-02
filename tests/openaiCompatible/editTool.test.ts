@@ -283,3 +283,106 @@ test('edit tool matches old_string copied from numbered read output', async () =
     assert.equal(await fs.readFile(filePath, 'utf8'), 'import x from "x";\nexport default y;\n')
   })
 })
+
+test('edit tool constrains matching with start_line and end_line', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'ranged.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['alpha', 'beta', 'alpha', 'beta'].join('\n'), 'utf8')
+
+    await editTool.execute(
+      {
+        absolute_path: filePath,
+        end_line: 4,
+        new_string: 'gamma',
+        old_string: 'beta',
+        start_line: 3,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(await fs.readFile(filePath, 'utf8'), ['alpha', 'beta', 'alpha', 'gamma'].join('\n'))
+  })
+})
+
+test('edit tool emits compact diagnostics when old_string is missing inside a constrained range', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'ranged-miss.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['alpha', 'beta', 'alpha', 'beta'].join('\n'), 'utf8')
+
+    await assert.rejects(
+      () =>
+        editTool.execute(
+          {
+            absolute_path: filePath,
+            end_line: 2,
+            new_string: 'gamma',
+            old_string: 'alpha\nbeta\nalpha',
+            start_line: 1,
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.equal(error.details?.failureReason, 'old_string_not_found')
+        assert.equal(error.details?.filePath, 'src/ranged-miss.txt')
+        assert.equal(error.details?.lineRangeStartLine, 1)
+        assert.equal(error.details?.lineRangeEndLine, 2)
+        assert.equal(typeof error.details?.bestPartialMatchLine, 'number')
+        assert.equal(typeof error.details?.bestPartialMatchPrefixLength, 'number')
+        return true
+      },
+    )
+  })
+})
+
+test('edit tool auto-expands too-small line ranges to fit the requested old_string block', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'range-expand.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['a', 'b', 'c', 'd'].join('\n'), 'utf8')
+
+    await editTool.execute(
+      {
+        absolute_path: filePath,
+        end_line: 3,
+        new_string: 'x\ny\nz',
+        old_string: 'b\nc\nd\n',
+        start_line: 2,
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(await fs.readFile(filePath, 'utf8'), ['a', 'x', 'y', 'z'].join('\n'))
+  })
+})
+
+test('edit tool fails when constrained range misses the target block location', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const filePath = path.join(workspacePath, 'src', 'range-fallback.txt')
+    await fs.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.writeFile(filePath, ['alpha', 'beta', 'gamma'].join('\n'), 'utf8')
+
+    await assert.rejects(
+      () =>
+        editTool.execute(
+          {
+            absolute_path: filePath,
+            end_line: 1,
+            new_string: 'delta',
+            old_string: 'gamma',
+            start_line: 1,
+          },
+          buildExecutionContext(workspacePath),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof OpenAICompatibleToolError)
+        assert.equal(error.details?.failureReason, 'old_string_not_found')
+        assert.equal(error.details?.lineRangeStartLine, 1)
+        assert.equal(error.details?.lineRangeEndLine, 1)
+        return true
+      },
+    )
+  })
+})

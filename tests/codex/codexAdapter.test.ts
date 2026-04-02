@@ -209,6 +209,126 @@ test('buildCodexInputMessages keeps tool-only assistant turns as function_call i
   ])
 })
 
+test('buildCodexInputMessages drops assistant function_call items without matching tool outputs', () => {
+  const messages: Message[] = [
+    {
+      content: '',
+      id: 'assistant-message-1',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+      toolInvocations: [
+        {
+          argumentsText: '{"absolute_path":"C:/workspace"}',
+          id: 'call-orphan',
+          startedAt: 1_700_000_000_005,
+          state: 'completed',
+          toolName: 'list',
+        },
+      ],
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [])
+})
+
+test('buildCodexInputMessages synthesizes missing function_call items for orphan tool outputs', () => {
+  const messages: Message[] = [
+    {
+      content: JSON.stringify({
+        body: 'Listed C:/workspace.',
+        metadata: {
+          arguments: { absolute_path: 'C:/workspace' },
+          schema: 'echosphere.tool_result/v1',
+          status: 'success',
+          summary: 'Listed C:/workspace.',
+          toolCallId: 'call-1',
+          toolName: 'list',
+        },
+        schema: 'echosphere.tool_result/v2',
+      }),
+      id: 'tool-message-1',
+      role: 'tool',
+      timestamp: 1_700_000_000_015,
+      toolCallId: 'call-1',
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      arguments: '{"absolute_path":"C:/workspace"}',
+      call_id: 'call-1',
+      name: 'list',
+      status: 'completed',
+      type: 'function_call',
+    },
+    {
+      call_id: 'call-1',
+      output: 'Listed C:/workspace.',
+      type: 'function_call_output',
+    },
+  ])
+})
+
+test('buildCodexInputMessages does not duplicate synthesized function calls when assistant call already exists earlier', () => {
+  const messages: Message[] = [
+    {
+      content: 'I will inspect the workspace.',
+      id: 'assistant-message-1',
+      role: 'assistant',
+      timestamp: 1_700_000_000_000,
+      toolInvocations: [
+        {
+          argumentsText: '{"absolute_path":"C:/workspace"}',
+          id: 'call-1',
+          startedAt: 1_700_000_000_005,
+          state: 'completed',
+          toolName: 'list',
+        },
+      ],
+    },
+    {
+      content: JSON.stringify({
+        body: 'Listed C:/workspace.',
+        metadata: {
+          arguments: { absolute_path: 'C:/workspace' },
+          schema: 'echosphere.tool_result/v1',
+          status: 'success',
+          summary: 'Listed C:/workspace.',
+          toolCallId: 'call-1',
+          toolName: 'list',
+        },
+        schema: 'echosphere.tool_result/v2',
+      }),
+      id: 'tool-message-1',
+      role: 'tool',
+      timestamp: 1_700_000_000_015,
+      toolCallId: 'call-1',
+    },
+  ]
+
+  assert.deepEqual(buildCodexInputMessages(messages), [
+    {
+      content: [{
+        text: 'I will inspect the workspace.',
+        type: 'output_text',
+      }],
+      role: 'assistant',
+    },
+    {
+      arguments: '{"absolute_path":"C:/workspace"}',
+      call_id: 'call-1',
+      name: 'list',
+      status: 'completed',
+      type: 'function_call',
+    },
+    {
+      call_id: 'call-1',
+      output: 'Listed C:/workspace.',
+      type: 'function_call_output',
+    },
+  ])
+})
+
 test('buildCodexPayload keeps parallel tool call batching enabled', async () => {
   const payload = await buildCodexPayload(
     {

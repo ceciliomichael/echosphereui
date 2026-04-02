@@ -13,9 +13,11 @@ import type {
   ContextUsageEstimate,
   GitBranchState,
   ReasoningEffort,
+  WorkspaceRefactorCandidate,
 } from '../types/chat'
 import { Tooltip } from './Tooltip'
 import { ContextIndicator } from './chat/ContextIndicator'
+import { RefactorCandidatesIndicator } from './chat/RefactorCandidatesIndicator'
 import { ChatModeSelectorField, type ChatModeOption } from './chat/ChatModeSelectorField'
 import { GitBranchSelectorField } from './chat/GitBranchSelectorField'
 import { ModelSelectorField, type ModelSelectorOption } from './chat/ModelSelectorField'
@@ -49,9 +51,12 @@ interface ChatInputProps {
   onGitBranchRefresh?: () => void
   onModelChange?: (modelId: string) => void
   onReasoningEffortChange?: (effort: ReasoningEffort) => void
+  onRefactorCandidateSelect?: (relativePath: string) => void
   onTerminalExecutionModeChange?: (mode: AppTerminalExecutionMode) => void
   onQueue?: (value: string, attachments: ChatAttachment[]) => void
   onSend: (value: string, attachments: ChatAttachment[]) => void
+  refactorCandidates?: readonly WorkspaceRefactorCandidate[]
+  refactorCandidatesLoading?: boolean
   selectedChatMode?: ChatMode
   initialMentionPathMap?: ReadonlyMap<string, string> | null
   reasoningEffort?: ReasoningEffort
@@ -83,6 +88,7 @@ export function ChatInput({
   onChatModeChange,
   onModelChange,
   onReasoningEffortChange,
+  onRefactorCandidateSelect,
   onTerminalExecutionModeChange,
   isEditing = false,
   isStreaming = false,
@@ -101,6 +107,8 @@ export function ChatInput({
   onAttachmentsChange,
   onQueue,
   contextUsage,
+  refactorCandidates = [],
+  refactorCandidatesLoading = false,
   gitBranchError = null,
   gitBranchLoading = false,
   gitBranchState,
@@ -465,6 +473,14 @@ export function ChatInput({
           ) : null}
 
           <div className="flex shrink-0 items-center justify-end gap-2 self-end">
+            {workspaceRootPath ? (
+              <RefactorCandidatesIndicator
+                candidates={refactorCandidates}
+                disabled={disabled && !canAbort}
+                isLoading={refactorCandidatesLoading}
+                onSelectCandidate={onRefactorCandidateSelect}
+              />
+            ) : null}
             {contextUsage ? <ContextIndicator disabled={disabled && !canAbort} usage={contextUsage} /> : null}
 
             <Tooltip

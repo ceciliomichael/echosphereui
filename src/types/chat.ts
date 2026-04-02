@@ -385,6 +385,15 @@ export interface WorkspaceExplorerReadFileResult {
   sizeBytes: number
 }
 
+export interface WorkspaceRefactorCandidatesInput {
+  workspaceRootPath: string
+}
+
+export interface WorkspaceRefactorCandidate {
+  lineCount: number
+  relativePath: string
+}
+
 export interface WorkspaceExplorerWriteFileInput {
   content: string
   relativePath: string
@@ -778,6 +787,7 @@ export interface EchosphereWorkspaceApi {
   createEntry: (input: WorkspaceExplorerCreateEntryInput) => Promise<WorkspaceExplorerCreateEntryResult>
   deleteEntry: (input: WorkspaceExplorerDeleteEntryInput) => Promise<WorkspaceExplorerDeleteEntryResult>
   importEntry: (input: WorkspaceExplorerImportEntryInput) => Promise<WorkspaceExplorerImportEntryResult>
+  listRefactorCandidates: (input: WorkspaceRefactorCandidatesInput) => Promise<WorkspaceRefactorCandidate[]>
   onExplorerChange: (listener: (event: WorkspaceExplorerChangeEvent) => void) => () => void
   listDirectory: (input: WorkspaceExplorerListDirectoryInput) => Promise<WorkspaceExplorerEntry[]>
   readFile: (input: WorkspaceExplorerReadFileInput) => Promise<WorkspaceExplorerReadFileResult>

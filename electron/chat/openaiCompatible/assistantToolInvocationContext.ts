@@ -1,23 +1,28 @@
 import type { Message } from '../../../src/types/chat'
+import { normalizeAssistantMessageContent } from '../../../src/lib/chatMessageContent'
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-export function buildSerializedAssistantTurnReasoningContent(message: Pick<Message, 'reasoningContent' | 'role'>) {
+export function buildSerializedAssistantTurnReasoningContent(
+  message: Pick<Message, 'content' | 'reasoningContent' | 'role'>,
+) {
   if (message.role !== 'assistant') {
     return null
   }
 
-  return hasText(message.reasoningContent) ? message.reasoningContent.trim() : null
+  const normalizedContent = normalizeAssistantMessageContent(message)
+  return hasText(normalizedContent.reasoningContent) ? normalizedContent.reasoningContent.trim() : null
 }
 
-export function buildSerializedAssistantTurnContent(message: Pick<Message, 'content' | 'role'>) {
+export function buildSerializedAssistantTurnContent(message: Pick<Message, 'content' | 'reasoningContent' | 'role'>) {
   if (message.role !== 'assistant') {
     return null
   }
 
-  const content = hasText(message.content) ? message.content.trim() : null
+  const normalizedContent = normalizeAssistantMessageContent(message)
+  const content = hasText(normalizedContent.content) ? normalizedContent.content.trim() : null
   return content
 }
 

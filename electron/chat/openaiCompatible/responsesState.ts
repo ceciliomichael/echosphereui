@@ -1,5 +1,6 @@
 import type { StreamDeltaEvent } from '../providerTypes'
 import { getToolResultModelContent } from '../../../src/lib/toolResultContent'
+import { parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
 
 export interface OpenAICompatibleResponsesFunctionCallOutputInput {
   call_id: string
@@ -18,6 +19,17 @@ function isToolOutputEvent(
   return event.type === 'tool_invocation_completed' || event.type === 'tool_invocation_failed'
 }
 
+function shouldResetResponsesChainForResult(resultContent: string) {
+  const toolName = parseStructuredToolResultContent(resultContent).metadata?.toolName ?? null
+  return (
+    toolName === 'read' ||
+    toolName === 'write' ||
+    toolName === 'edit' ||
+    toolName === 'apply_patch' ||
+    toolName === 'file_change'
+  )
+}
+
 export function buildResponsesFunctionCallOutputItems(
   toolOutputs: OpenAICompatibleResponsesFunctionCallOutputInput[],
 ) {
@@ -31,10 +43,17 @@ export function buildResponsesFunctionCallOutputItems(
 export function createOpenAICompatibleResponsesLoopState() {
   const pendingToolOutputs: OpenAICompatibleResponsesFunctionCallOutputInput[] = []
   let previousResponseId: string | null = null
+  let shouldRebuildFromMessageHistory = false
 
   return {
     buildRequestOverrides(): OpenAICompatibleResponsesRequestOverrides {
       if (previousResponseId === null) {
+        return {}
+      }
+
+      if (shouldRebuildFromMessageHistory) {
+        pendingToolOutputs.length = 0
+        shouldRebuildFromMessageHistory = false
         return {}
       }
 
@@ -51,6 +70,10 @@ export function createOpenAICompatibleResponsesLoopState() {
     recordStreamEvent(event: StreamDeltaEvent) {
       if (!isToolOutputEvent(event)) {
         return
+      }
+
+      if (shouldResetResponsesChainForResult(event.resultContent)) {
+        shouldRebuildFromMessageHistory = true
       }
 
       pendingToolOutputs.push({

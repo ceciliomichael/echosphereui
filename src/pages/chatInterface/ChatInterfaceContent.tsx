@@ -26,6 +26,7 @@ import type { ChatInterfaceControllerState } from '../../hooks/useChatInterfaceC
 import type { GitBranchStateController } from '../../hooks/useGitBranchState'
 import type { GitCommitController } from '../../hooks/useGitCommit'
 import type { GitDiffSnapshotController } from '../../hooks/useGitDiffSnapshot'
+import { useWorkspaceRefactorCandidates } from '../../hooks/useWorkspaceRefactorCandidates'
 import { useChatMessageQueue } from './useChatMessageQueue'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
 import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
@@ -108,6 +109,8 @@ export function ChatInterfaceContent({
     messages: chatMessages.messages,
     providerId: runtimeSelection.providerId,
   })
+  const { candidates: refactorCandidates, isLoading: refactorCandidatesLoading } =
+    useWorkspaceRefactorCandidates(activeWorkspacePath)
   const sendQueuedMessage = useCallback(
     (queuedMessage: { content: string; attachments?: ChatAttachment[] }) => {
       return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments)
@@ -440,6 +443,8 @@ export function ChatInterfaceContent({
                 <ChatInput
                   attachments={chatMessages.mainComposerAttachments}
                   contextUsage={contextUsage}
+                  refactorCandidates={refactorCandidates}
+                  refactorCandidatesLoading={refactorCandidatesLoading}
                   value={chatMessages.mainComposerValue}
                   onAttachmentsChange={chatMessages.setMainComposerAttachments}
                   onValueChange={chatMessages.setMainComposerValue}
@@ -463,6 +468,7 @@ export function ChatInterfaceContent({
                   selectedChatMode={chatMessages.selectedChatMode}
                   selectedModelId={chatRuntimeConfig.selectedModelId}
                   onModelChange={chatRuntimeConfig.setSelectedModelId}
+                  onRefactorCandidateSelect={workspaceState.handleOpenWorkspaceFile}
                   reasoningEffort={chatRuntimeConfig.reasoningEffort}
                   reasoningEffortOptions={chatRuntimeConfig.availableReasoningEfforts}
                   onReasoningEffortChange={chatRuntimeConfig.setReasoningEffort}

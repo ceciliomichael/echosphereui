@@ -59,7 +59,7 @@ export function buildFailedToolArtifacts(
   completedAt: number,
   details?: Record<string, unknown>,
 ) {
-  const resultBody = formatFailureResultBody(errorMessage, details)
+  const resultBody = formatFailureResultBody(toolCall.name, errorMessage, details)
   const resultContent = formatStructuredToolResultContent(buildFailureMetadata(toolCall, errorMessage, details), resultBody)
   const syntheticMessage: Message = {
     content: resultContent,

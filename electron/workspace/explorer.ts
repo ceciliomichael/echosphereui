@@ -7,6 +7,8 @@ import {
   shouldIgnoreWorkspaceEntry,
 } from '../chat/openaiCompatible/tools/gitignoreMatcher'
 import type {
+  WorkspaceRefactorCandidate,
+  WorkspaceRefactorCandidatesInput,
   WorkspaceExplorerCreateEntryInput,
   WorkspaceExplorerCreateEntryResult,
   WorkspaceExplorerDeleteEntryInput,
@@ -25,6 +27,43 @@ import type {
 
 const DEFAULT_RELATIVE_PATH = '.'
 const MAX_TEXT_FILE_BYTES = 256 * 1024
+const REFACTOR_CANDIDATE_LINE_THRESHOLD = 300
+const REFACTOR_CODE_EXTENSIONS = new Set([
+  '.astro',
+  '.c',
+  '.cc',
+  '.cjs',
+  '.cpp',
+  '.cs',
+  '.cxx',
+  '.dart',
+  '.erb',
+  '.ex',
+  '.exs',
+  '.fs',
+  '.go',
+  '.h',
+  '.hpp',
+  '.java',
+  '.js',
+  '.jsx',
+  '.kt',
+  '.kts',
+  '.lua',
+  '.mjs',
+  '.php',
+  '.py',
+  '.pyw',
+  '.rb',
+  '.rs',
+  '.scala',
+  '.svelte',
+  '.swift',
+  '.ts',
+  '.tsx',
+  '.vb',
+  '.vue',
+])
 
 function normalizeWorkspacePath(workspaceRootPath: string) {
   return path.resolve(workspaceRootPath.trim())
@@ -80,6 +119,47 @@ function hasBinaryContent(buffer: Buffer) {
     }
   }
   return false
+}
+
+function isRefactorCandidateFile(fileName: string) {
+  return REFACTOR_CODE_EXTENSIONS.has(path.extname(fileName).toLowerCase())
+}
+
+async function countCandidateFileLines(targetPath: string, threshold: number) {
+  const targetStats = await fs.stat(targetPath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
+  })
+
+  if (!targetStats?.isFile()) {
+    return 0
+  }
+
+  const minimumBytes = threshold * 20
+  if (targetStats.size < minimumBytes) {
+    return 0
+  }
+
+  const fileBuffer = await fs.readFile(targetPath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+    throw error
+  })
+  if (!fileBuffer || hasBinaryContent(fileBuffer)) {
+    return 0
+  }
+
+  let lineCount = fileBuffer.length === 0 ? 0 : 1
+  for (let index = 0; index < fileBuffer.length; index += 1) {
+    if (fileBuffer[index] === 10) {
+      lineCount += 1
+    }
+  }
+
+  return lineCount > threshold ? lineCount : 0
 }
 
 async function statIfExists(targetPath: string) {
@@ -208,6 +288,86 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
   }
 
   return sortWorkspaceEntries(explorerEntries)
+}
+
+export async function listWorkspaceRefactorCandidates(
+  input: WorkspaceRefactorCandidatesInput,
+): Promise<WorkspaceRefactorCandidate[]> {
+  const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  await assertWorkspaceDirectory(workspaceRootPath)
+  const candidates: WorkspaceRefactorCandidate[] = []
+
+  async function visitDirectory(directoryAbsolutePath: string, directoryRelativePath: string = DEFAULT_RELATIVE_PATH) {
+    const directoryEntries = await fs.readdir(directoryAbsolutePath, { withFileTypes: true }).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null
+      }
+      throw error
+    })
+    if (!directoryEntries) {
+      return
+    }
+
+    const gitignoreMatchers = await loadGitignoreMatchers(workspaceRootPath, directoryAbsolutePath)
+
+    for (const directoryEntry of directoryEntries) {
+      if (directoryEntry.isSymbolicLink()) {
+        continue
+      }
+
+      const isDirectory = directoryEntry.isDirectory()
+      if (!isDirectory && !directoryEntry.isFile()) {
+        continue
+      }
+
+      if (shouldIgnoreWorkspaceEntry(directoryEntry.name)) {
+        continue
+      }
+
+      const entryAbsolutePath = path.join(directoryAbsolutePath, directoryEntry.name)
+      if (
+        !shouldAlwaysShowEntry(directoryEntry.name) &&
+        isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)
+      ) {
+        continue
+      }
+
+      const entryRelativePath =
+        directoryRelativePath === DEFAULT_RELATIVE_PATH
+          ? directoryEntry.name
+          : path.join(directoryRelativePath, directoryEntry.name)
+
+      if (isDirectory) {
+        await visitDirectory(entryAbsolutePath, entryRelativePath)
+        continue
+      }
+
+      if (!isRefactorCandidateFile(directoryEntry.name)) {
+        continue
+      }
+
+      const lineCount = await countCandidateFileLines(entryAbsolutePath, REFACTOR_CANDIDATE_LINE_THRESHOLD)
+      if (lineCount === 0) {
+        continue
+      }
+
+      candidates.push({
+        lineCount,
+        relativePath: entryRelativePath,
+      })
+    }
+  }
+
+  await visitDirectory(workspaceRootPath)
+
+  return candidates
+    .sort((left, right) => {
+      if (right.lineCount !== left.lineCount) {
+        return right.lineCount - left.lineCount
+      }
+
+      return left.relativePath.localeCompare(right.relativePath, undefined, { sensitivity: 'base' })
+    })
 }
 
 export async function readWorkspaceFile(input: WorkspaceExplorerReadFileInput): Promise<WorkspaceExplorerReadFileResult> {

@@ -155,12 +155,84 @@ test('buildFailedToolArtifacts returns a native tool-role synthetic message', ()
   assert.match(parsedContent.body ?? '', /code: E_FAIL/u)
 })
 
+test('buildFailedToolArtifacts keeps apply_patch failures concise while retaining compact diagnostics', () => {
+  const completedAt = 1_700_000_000_210
+  const artifacts = buildFailedToolArtifacts(
+    sampleApplyPatchToolCall,
+    'Could not find the hunk context in src/app.ts. Add more surrounding lines.',
+    sampleApplyPatchToolCall.startedAt,
+    completedAt,
+    {
+      bestPartialMatchLine: 126,
+      bestPartialMatchPrefixLength: 3,
+      failureReason: 'hunk_context_mismatch',
+      filePath: 'src/app.ts',
+      firstContextLineMatchCount: 1,
+      hunkContext: 'line one\nline two\nline three',
+      hunkLineCount: 5,
+      searchWindowPreview: 'very long debug dump here',
+    },
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+  assert.match(parsedContent.body ?? '', /Patch context did not match the current file contents\./u)
+  assert.match(parsedContent.body ?? '', /File: src\/app\.ts/u)
+  assert.match(parsedContent.body ?? '', /Closest match line: 126/u)
+  assert.match(parsedContent.body ?? '', /Matched context lines before mismatch: 3\/5/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /searchWindowPreview/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /hunkContext/u)
+
+  const details = (parsedContent.metadata?.semantics?.details ?? null) as Record<string, unknown> | null
+  assert.ok(details)
+  assert.equal(details?.failureReason, 'hunk_context_mismatch')
+  assert.equal(details?.filePath, 'src/app.ts')
+  assert.equal(details?.bestPartialMatchLine, 126)
+  assert.equal(typeof details?.hunkContext, 'undefined')
+  assert.equal(typeof details?.searchWindowPreview, 'undefined')
+})
+
+test('buildFailedToolArtifacts keeps edit failures concise while retaining compact diagnostics', () => {
+  const completedAt = 1_700_000_000_211
+  const artifacts = buildFailedToolArtifacts(
+    sampleEditToolCall,
+    'Could not find old_string in file content. Provide more exact context or include surrounding lines.',
+    sampleEditToolCall.startedAt,
+    completedAt,
+    {
+      bestPartialMatchLine: 14,
+      bestPartialMatchPrefixLength: 2,
+      failureReason: 'old_string_not_found',
+      filePath: 'src/file.ts',
+      hunkContext: 'a very long block',
+      lineRangeEndLine: 20,
+      lineRangeStartLine: 10,
+      searchWindowPreview: 'very long diagnostics',
+    },
+  )
+
+  const parsedContent = parseStructuredToolResultContent(artifacts.syntheticMessage.content)
+  assert.match(parsedContent.body ?? '', /Edit target was not found in the current file content\./u)
+  assert.match(parsedContent.body ?? '', /File: src\/file\.ts/u)
+  assert.match(parsedContent.body ?? '', /Search range: lines 10-20/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /searchWindowPreview/u)
+  assert.doesNotMatch(parsedContent.body ?? '', /hunkContext/u)
+
+  const details = (parsedContent.metadata?.semantics?.details ?? null) as Record<string, unknown> | null
+  assert.ok(details)
+  assert.equal(details?.failureReason, 'old_string_not_found')
+  assert.equal(details?.filePath, 'src/file.ts')
+  assert.equal(details?.lineRangeStartLine, 10)
+  assert.equal(details?.lineRangeEndLine, 20)
+  assert.equal(typeof details?.hunkContext, 'undefined')
+  assert.equal(typeof details?.searchWindowPreview, 'undefined')
+})
+
 test('buildSuccessfulToolArtifacts annotates read results with a fenced language from the file path', () => {
   const completedAt = 1_700_000_000_150
   const artifacts = buildSuccessfulToolArtifacts(
     sampleReadToolCall,
     {
-      content: 'module.exports = {}',
+      content: '1|module.exports = {}',
       endLine: 1,
       maxReadLineCount: 500,
       path: 'tailwind.config.js',
@@ -179,9 +251,7 @@ test('buildSuccessfulToolArtifacts annotates read results with a fenced language
   )
   assert.match(parsedContent.body ?? '', /File tailwind\.config\.js \(lines 1-1 of 1, complete\)/u)
   assert.match(parsedContent.body ?? '', /```js/u)
-  assert.match(parsedContent.body ?? '', /module\.exports = \{\}/u)
-  assert.doesNotMatch(parsedContent.body ?? '', /line_number \| text/u)
-  assert.doesNotMatch(parsedContent.body ?? '', /^\s*\d+\s*\|/m)
+  assert.match(parsedContent.body ?? '', /1\|module\.exports = \{\}/u)
   assert.equal(parsedContent.metadata?.semantics?.fully_read, true)
   assert.equal(parsedContent.metadata?.semantics?.start_line, 1)
   assert.equal(parsedContent.metadata?.semantics?.end_line, 1)

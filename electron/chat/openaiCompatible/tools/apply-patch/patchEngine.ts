@@ -57,6 +57,17 @@ export interface ApplyPatchResult {
   changes: ApplyPatchChange[]
 }
 
+export interface ApplyPatchLineRange {
+  endLine: number
+  path: string
+  startLine: number
+}
+
+export interface ApplyPatchOptions {
+  beforeCommit?: (changes: readonly ApplyPatchChange[]) => Promise<void> | void
+  lineRanges?: ApplyPatchLineRange[]
+}
+
 interface BlockSearchDiagnostics {
   bestPartialMatchLine: number | null
   bestPartialMatchPreview: string
@@ -81,12 +92,38 @@ interface PlannedOperation {
   commit: () => Promise<void>
 }
 
+interface NormalizedLineRange {
+  endLine: number
+  path: string
+  startLine: number
+}
+
 function fail(message: string, details?: Record<string, unknown>): never {
   throw new PatchApplicationError(message, details)
 }
 
 function normalizePatchText(text: string) {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+}
+
+function stripReadLineNumberPrefixesFromPatch(patchText: string) {
+  return patchText
+    .split('\n')
+    .map((line) => {
+      const diffPrefix = line[0]
+      if (diffPrefix !== ' ' && diffPrefix !== '+' && diffPrefix !== '-') {
+        return line
+      }
+
+      const withoutDiffPrefix = line.slice(1)
+      const prefixedLineMatch = withoutDiffPrefix.match(/^\s*\d+\s*\|\s?(.*)$/u)
+      if (!prefixedLineMatch) {
+        return line
+      }
+
+      return `${diffPrefix}${prefixedLineMatch[1]}`
+    })
+    .join('\n')
 }
 
 function hasTopLevelMarker(line: string) {
@@ -118,6 +155,28 @@ function ensureWorkspacePath(rawPath: string, kind: string, cwd: string) {
   }
 
   return relativePath.replace(/\\/g, '/')
+}
+
+function normalizeLineRanges(lineRanges: ApplyPatchLineRange[] | undefined, cwd: string) {
+  if (!lineRanges || lineRanges.length === 0) {
+    return new Map<string, NormalizedLineRange>()
+  }
+
+  const normalized = new Map<string, NormalizedLineRange>()
+  for (const lineRange of lineRanges) {
+    const normalizedPath = ensureWorkspacePath(lineRange.path, 'line_ranges path', cwd)
+    if (normalized.has(normalizedPath)) {
+      fail(`Duplicate line_ranges entry for ${normalizedPath}.`)
+    }
+
+    normalized.set(normalizedPath, {
+      endLine: lineRange.endLine,
+      path: normalizedPath,
+      startLine: lineRange.startLine,
+    })
+  }
+
+  return normalized
 }
 
 function splitContent(text: string) {
@@ -349,7 +408,7 @@ function collectBlockSearchDiagnostics(
 }
 
 function parsePatchText(patchText: string, cwd: string) {
-  const normalizedPatch = normalizePatchText(patchText)
+  const normalizedPatch = stripReadLineNumberPrefixesFromPatch(normalizePatchText(patchText))
   if (normalizedPatch.length === 0) {
     fail('apply_patch requires a non-empty patch.')
   }
@@ -615,6 +674,7 @@ async function applyUpdateOperation(
   operation: ParsedUpdateOperation,
   cwd: string,
   virtualContents: Map<string, string | null>,
+  lineRanges: Map<string, NormalizedLineRange>,
 ) {
   const sourcePath = path.resolve(cwd, operation.path)
   const existing = await readVirtualContent(operation.path, cwd, virtualContents)
@@ -625,28 +685,39 @@ async function applyUpdateOperation(
 
   const lineEnding = detectLineEnding(existing.content)
   let lines = splitContent(existing.content.replace(/\r\n/g, '\n'))
-  let searchStart = 0
+  const lineRange = lineRanges.get(operation.path)
+  const rangeStartIndex = lineRange ? lineRange.startLine - 1 : 0
+  let rangeEndLine = lineRange ? lineRange.endLine : Number.MAX_SAFE_INTEGER
+  let searchStart = rangeStartIndex
   let mustRemoveTrailingNewline = false
 
   for (const hunk of operation.hunks) {
     const logicalLength = effectiveLineCount(lines)
+    const searchEnd = Math.min(logicalLength, rangeEndLine)
     const { endOfFile } = hunkToReplacement(hunk)
     let { newLines, oldLines } = hunkToReplacement(hunk)
-    let matchIndex = findUniqueBlock(lines, oldLines, searchStart, logicalLength, endOfFile)
+    let matchIndex = findUniqueBlock(lines, oldLines, searchStart, searchEnd, endOfFile)
 
     if (matchIndex === null && oldLines.length > 0 && oldLines.at(-1) === '') {
       oldLines = oldLines.slice(0, -1)
       if (newLines.length > 0 && newLines.at(-1) === '') {
         newLines = newLines.slice(0, -1)
       }
-      matchIndex = findUniqueBlock(lines, oldLines, searchStart, logicalLength, endOfFile)
+      matchIndex = findUniqueBlock(lines, oldLines, searchStart, searchEnd, endOfFile)
     }
 
     if (matchIndex === null) {
-      const diagnostics = collectBlockSearchDiagnostics(lines, oldLines, searchStart, logicalLength)
+      const diagnostics = collectBlockSearchDiagnostics(lines, oldLines, searchStart, searchEnd)
       fail(`Could not find the hunk context in ${operation.path}. Add more surrounding lines.`, {
         ...diagnostics,
+        failureReason: 'hunk_context_mismatch',
         filePath: operation.path,
+        ...(lineRange
+          ? {
+              lineRangeEndLine: lineRange.endLine,
+              lineRangeStartLine: lineRange.startLine,
+            }
+          : {}),
         resolvedPath: sourcePath,
       })
     }
@@ -657,6 +728,10 @@ async function applyUpdateOperation(
     }
 
     lines = [...lines.slice(0, matchIndex), ...newLines, ...lines.slice(matchEnd)]
+    if (lineRange) {
+      const lineDelta = newLines.length - oldLines.length
+      rangeEndLine += lineDelta
+    }
     searchStart = matchIndex + newLines.length
     mustRemoveTrailingNewline ||= endOfFile
   }
@@ -691,8 +766,21 @@ async function applyUpdateOperation(
   } satisfies PlannedOperation
 }
 
-export async function applyPatchText(patchText: string, cwd = process.cwd()): Promise<ApplyPatchResult> {
+export async function applyPatchText(
+  patchText: string,
+  cwd = process.cwd(),
+  options: ApplyPatchOptions = {},
+): Promise<ApplyPatchResult> {
   const operations = parsePatchText(patchText, cwd)
+  const lineRanges = normalizeLineRanges(options.lineRanges, cwd)
+  const updateOperationPaths = new Set(
+    operations.filter((operation): operation is ParsedUpdateOperation => operation.kind === 'update').map((operation) => operation.path),
+  )
+  for (const lineRangePath of lineRanges.keys()) {
+    if (!updateOperationPaths.has(lineRangePath)) {
+      fail(`line_ranges path is not present in the patch: ${lineRangePath}`)
+    }
+  }
   const changes: ApplyPatchChange[] = []
   const plannedOperations: PlannedOperation[] = []
   const virtualContents = new Map<string, string | null>()
@@ -712,10 +800,12 @@ export async function applyPatchText(patchText: string, cwd = process.cwd()): Pr
       continue
     }
 
-    const planned = await applyUpdateOperation(operation, cwd, virtualContents)
+    const planned = await applyUpdateOperation(operation, cwd, virtualContents, lineRanges)
     plannedOperations.push(planned)
     changes.push(planned.change)
   }
+
+  await options.beforeCommit?.(changes)
 
   for (const planned of plannedOperations) {
     await planned.commit()

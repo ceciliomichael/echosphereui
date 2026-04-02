@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { applyPatchTool } from '../../electron/chat/openaiCompatible/tools/apply-patch/index'
+import { applyPatchText } from '../../electron/chat/openaiCompatible/tools/apply-patch/patchEngine'
 import { OpenAICompatibleToolError } from '../../electron/chat/openaiCompatible/toolTypes'
 
 function buildExecutionContext(agentContextRootPath: string) {
@@ -303,5 +304,99 @@ test('apply_patch tool does not write partial changes when a later hunk fails', 
     )
 
     assert.equal(await fs.readFile(keepPath, 'utf8'), 'original\n')
+  })
+})
+
+test('apply_patch tool constrains hunk matching with line_ranges', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'duplicate.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\nalpha\nbeta\n', 'utf8')
+
+    const result = await applyPatchTool.execute(
+      {
+        line_ranges: [
+          {
+            end_line: 4,
+            path: 'src/duplicate.txt',
+            start_line: 3,
+          },
+        ],
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: src/duplicate.txt',
+          '@@',
+          ' alpha',
+          '-beta',
+          '+gamma',
+          '*** End Patch',
+        ].join('\n'),
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.ok, true)
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\nbeta\nalpha\ngamma\n')
+  })
+})
+
+test('applyPatchText runs beforeCommit before any file writes', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'pre-commit.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'before\n', 'utf8')
+
+    await assert.rejects(
+      () =>
+        applyPatchText(
+          [
+            '*** Begin Patch',
+            '*** Update File: src/pre-commit.txt',
+            '@@',
+            '-before',
+            '+after',
+            '*** End Patch',
+          ].join('\n'),
+          workspacePath,
+          {
+            beforeCommit: () => {
+              throw new Error('stop-before-commit')
+            },
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof Error)
+        assert.match(error.message, /stop-before-commit/u)
+        return true
+      },
+    )
+
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'before\n')
+  })
+})
+
+test('apply_patch tool strips read-style line prefixes from patch hunks', async () => {
+  await withTemporaryDirectory(async (workspacePath) => {
+    const targetPath = path.join(workspacePath, 'src', 'numbered.txt')
+    await fs.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.writeFile(targetPath, 'alpha\nbeta\n', 'utf8')
+
+    const result = await applyPatchTool.execute(
+      {
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: src/numbered.txt',
+          '@@',
+          ' 1|alpha',
+          '-2|beta',
+          '+2|gamma',
+          '*** End Patch',
+        ].join('\n'),
+      },
+      buildExecutionContext(workspacePath),
+    )
+
+    assert.equal(result.ok, true)
+    assert.equal(await fs.readFile(targetPath, 'utf8'), 'alpha\ngamma\n')
   })
 })

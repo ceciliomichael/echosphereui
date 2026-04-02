@@ -4,10 +4,12 @@ import { getToolDescription } from '../../electron/chat/openaiCompatible/tools/d
 
 test('tool descriptions stay literal and compact', () => {
   const description = getToolDescription('apply_patch')
-  assert.equal(description, 'Apply a patch to an existing workspace file.')
+  assert.match(description, /^Use this/u)
+  assert.match(description, /legacy patch-style updates/u)
 })
 
 test('tool descriptions stay short for each tool', () => {
   const description = getToolDescription('run_terminal')
-  assert.equal(description, 'Run a shell command in a managed terminal session.')
+  assert.match(description, /^Use this when/u)
+  assert.match(description, /managed terminal session/u)
 })
