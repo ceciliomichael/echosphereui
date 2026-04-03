@@ -29,6 +29,21 @@ export function joinRelativePath(parentPath: string, childName: string) {
   return `${normalizedParentPath}/${normalizedChildName}`
 }
 
+export function getAncestorDirectoryPaths(relativePath: string) {
+  const normalizedPath = normalizeEntryPath(relativePath).replace(/^\.\/+/u, '').replace(/\/+$/u, '')
+  const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0)
+  if (pathSegments.length <= 1) {
+    return []
+  }
+
+  const ancestorPaths: string[] = []
+  for (let index = 0; index < pathSegments.length - 1; index += 1) {
+    ancestorPaths.push(pathSegments.slice(0, index + 1).join('/'))
+  }
+
+  return ancestorPaths
+}
+
 export function getWorkspaceExplorerContextMenuStyle(
   contextMenuState: WorkspaceExplorerContextMenuState | null,
   viewportSize: {

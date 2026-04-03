@@ -177,7 +177,15 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Search failed'
   }
 
-  if (invocation.toolName === 'file_change') {
+  if (invocation.toolName === 'read') {
+    return invocation.state === 'running'
+      ? 'Reading'
+      : invocation.state === 'completed'
+        ? 'Read'
+        : 'Read failed'
+  }
+
+  if (invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
       return 'Editing'
     }
@@ -256,12 +264,12 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if (invocation.toolName === 'file_change' && normalizedStructuredPath === '.') {
+    if ((invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }
 
-    if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
+    if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
       return normalizedStructuredPath
     }
 
@@ -278,7 +286,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     return null
   }
 
-  if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep') {
+  if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
     return workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, absolutePath) : absolutePath
   }
 

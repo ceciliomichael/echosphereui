@@ -15,6 +15,7 @@ import { getPathBasename, getPathDirname } from '../../../lib/pathPresentation'
 import type { WorkspaceExplorerPanelProps } from './workspaceExplorerPanelTypes'
 import {
   ROOT_DIRECTORY_KEY,
+  getAncestorDirectoryPaths,
   getWorkspaceExplorerContextMenuStyle,
   joinRelativePath,
   normalizeEntryPath,
@@ -47,6 +48,7 @@ function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
 }
 
 export function useWorkspaceExplorerPanelState({
+  activeFilePath,
   clipboardEntry,
   isOpen,
   onCopyEntry,
@@ -77,6 +79,7 @@ export function useWorkspaceExplorerPanelState({
   const draggedEntryRef = useRef<WorkspaceExplorerEntry | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const creationInputRef = useRef<HTMLInputElement | null>(null)
+  const treeContainerRef = useRef<HTMLDivElement | null>(null)
   const isSubmittingCreationRef = useRef(false)
   const isWorkspaceConfigured = typeof workspaceRootPath === 'string' && workspaceRootPath.trim().length > 0
 
@@ -303,6 +306,61 @@ export function useWorkspaceExplorerPanelState({
       })
     }
   }, [isOpen, loadDirectory, workspaceRootPath])
+
+  useEffect(() => {
+    if (!isOpen || !workspaceRootPath || !activeFilePath) {
+      return
+    }
+
+    const ancestorDirectoryPaths = getAncestorDirectoryPaths(activeFilePath)
+    if (ancestorDirectoryPaths.length === 0) {
+      return
+    }
+
+    setExpandedDirectories((current) => {
+      let hasChanges = false
+      const nextState = new Set(current)
+      for (const directoryPath of ancestorDirectoryPaths) {
+        if (nextState.has(directoryPath)) {
+          continue
+        }
+        nextState.add(directoryPath)
+        hasChanges = true
+      }
+
+      return hasChanges ? nextState : current
+    })
+
+    const missingDirectoryPaths = ancestorDirectoryPaths.filter((directoryPath) => !directoryEntriesByPath[directoryPath])
+    if (missingDirectoryPaths.length > 0) {
+      void Promise.all(missingDirectoryPaths.map((directoryPath) => loadDirectory(directoryPath)))
+    }
+  }, [activeFilePath, directoryEntriesByPath, isOpen, loadDirectory, workspaceRootPath])
+
+  useEffect(() => {
+    if (!isOpen || !activeFilePath) {
+      return
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      const containerElement = treeContainerRef.current
+      if (!containerElement) {
+        return
+      }
+
+      const entryButtons = Array.from(containerElement.querySelectorAll<HTMLButtonElement>('[data-workspace-entry-path]'))
+      const activeEntryButton = entryButtons.find(
+        (entryButton) => entryButton.dataset.workspaceEntryPath === activeFilePath,
+      )
+      activeEntryButton?.scrollIntoView({
+        block: 'nearest',
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+    }
+  }, [activeFilePath, directoryEntriesByPath, expandedDirectories, isOpen])
 
   useEffect(() => {
     if (!contextMenuState) {
@@ -752,6 +810,7 @@ export function useWorkspaceExplorerPanelState({
     submitCreateEntry,
     submitMoveEntry,
     submitPasteEntry,
+    treeContainerRef,
     toggleDirectory,
   }
 }

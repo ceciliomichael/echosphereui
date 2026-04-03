@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ConversationGroupPreview } from '../../types/chat'
+import { FolderOpen } from 'lucide-react'
 import { ConversationFolderSection } from './ConversationFolderSection'
 
 interface ConversationHistoryListProps {
@@ -59,6 +60,7 @@ export function ConversationHistoryList({
   const [collapsedFolderState, setCollapsedFolderState] = useState<Record<string, boolean>>(() =>
     readCollapsedFolderState(),
   )
+  const hasAnyConversations = conversationGroups.some((group) => group.conversations.length > 0)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -81,25 +83,43 @@ export function ConversationHistoryList({
   }
 
   return (
-    <div className="space-y-2.5 pb-1">
-      {conversationGroups.map((group) => {
-        const stateKey = group.folder.id ?? 'unfiled'
+    <div className="flex min-h-full flex-col pb-1">
+      {!hasAnyConversations ? (
+        <div className="flex min-h-full flex-1 items-center justify-center px-4 py-6 text-center">
+          <div className="flex max-w-[240px] flex-col items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
+              <FolderOpen size={22} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">No threads here</p>
+              <p className="text-sm leading-6 text-subtle-foreground">
+                Start a new thread to keep conversations organized.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {conversationGroups.map((group) => {
+            const stateKey = group.folder.id ?? 'unfiled'
 
-        return (
-          <ConversationFolderSection
-            key={stateKey}
-            group={group}
-            isCollapsed={Boolean(collapsedFolderState[stateKey])}
-            onCreateConversation={onCreateConversation}
-            onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
-            onDeleteFolder={onDeleteFolder}
-            onRenameFolder={onRenameFolder}
-            onSelectFolder={onSelectFolder}
-            onSelectConversation={onSelectConversation}
-            onDeleteConversation={onDeleteConversation}
-          />
-        )
-      })}
+            return (
+              <ConversationFolderSection
+                key={stateKey}
+                group={group}
+                isCollapsed={Boolean(collapsedFolderState[stateKey])}
+                onCreateConversation={onCreateConversation}
+                onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
+                onDeleteFolder={onDeleteFolder}
+                onRenameFolder={onRenameFolder}
+                onSelectFolder={onSelectFolder}
+                onSelectConversation={onSelectConversation}
+                onDeleteConversation={onDeleteConversation}
+              />
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

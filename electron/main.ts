@@ -66,17 +66,23 @@ import { flushStoredSettingsUpdates, getStoredSettings, updateStoredSettings } f
 import { serializeInitialSettingsArg } from './settings/bootstrap'
 import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
 import {
-  addCodexAccountWithOAuth,
-  connectCodexWithOAuth,
-  disconnectCodex,
-  getProvidersState,
-  initializeProvidersState,
-  removeApiKeyProvider,
-  saveApiKeyProvider,
-  switchCodexAccount,
-} from './providers/service'
-import { estimateChatContextUsage } from './chat/contextUsage'
-import { cancelChatStream, startChatStream, submitToolDecision } from './chat/service'
+  addResetCodexAccountWithOAuth,
+  cancelResetChatStream,
+  connectResetCodexWithOAuth,
+  disconnectResetCodex,
+  estimateResetChatContextUsage,
+  getResetProvidersState,
+  initializeBackendResetState,
+  listResetCustomModels,
+  listResetProviderModels,
+  removeResetApiKeyProvider,
+  removeResetCustomModel,
+  saveResetApiKeyProvider,
+  saveResetCustomModel,
+  startResetChatStream,
+  submitResetToolDecision,
+  switchResetCodexAccount,
+} from './backendReset'
 import {
   checkoutGitBranch,
   createAndCheckoutGitBranch,
@@ -91,7 +97,6 @@ import {
   stageGitFile,
   unstageGitFile,
 } from './git/service'
-import { listCustomModels, listProviderModels, removeCustomModel, saveCustomModel } from './models/service'
 import {
   closeAllTerminalSessions,
   closeTerminalSession,
@@ -335,28 +340,28 @@ function registerHistoryHandlers() {
 
     return nextSettings
   })
-  ipcMain.handle('providers:state', async () => getProvidersState())
-  ipcMain.handle('providers:codex:addAccountOauth', async () => addCodexAccountWithOAuth(shell.openExternal))
-  ipcMain.handle('providers:codex:connectOauth', async () => connectCodexWithOAuth(shell.openExternal))
-  ipcMain.handle('providers:codex:disconnect', async () => disconnectCodex())
-  ipcMain.handle('providers:codex:switchAccount', async (_event, accountId: string) => switchCodexAccount(accountId))
-  ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveApiKeyProvider(input))
+  ipcMain.handle('providers:state', async () => getResetProvidersState())
+  ipcMain.handle('providers:codex:addAccountOauth', async () => addResetCodexAccountWithOAuth())
+  ipcMain.handle('providers:codex:connectOauth', async () => connectResetCodexWithOAuth())
+  ipcMain.handle('providers:codex:disconnect', async () => disconnectResetCodex())
+  ipcMain.handle('providers:codex:switchAccount', async (_event, accountId: string) => switchResetCodexAccount(accountId))
+  ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveResetApiKeyProvider(input))
   ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
-    removeApiKeyProvider(providerId),
+    removeResetApiKeyProvider(providerId),
   )
-  ipcMain.handle('models:custom:list', async () => listCustomModels())
-  ipcMain.handle('models:provider:list', async (_event, providerId: ApiKeyProviderId) => listProviderModels(providerId))
-  ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveCustomModel(input))
-  ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeCustomModel(modelId))
-  ipcMain.handle('chat:stream:start', async (event, input: StartChatStreamInput) =>
-    startChatStream(event.sender, input),
+  ipcMain.handle('models:custom:list', async () => listResetCustomModels())
+  ipcMain.handle('models:provider:list', async (_event, providerId: ApiKeyProviderId) => listResetProviderModels(providerId))
+  ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveResetCustomModel(input))
+  ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeResetCustomModel(modelId))
+  ipcMain.handle('chat:stream:start', async (_event, input: StartChatStreamInput) =>
+    startResetChatStream(input),
   )
-  ipcMain.handle('chat:stream:cancel', async (event, streamId: string) => cancelChatStream(event.sender, streamId))
-  ipcMain.handle('chat:stream:submitToolDecision', async (event, input: SubmitToolDecisionInput) =>
-    submitToolDecision(event.sender, input),
+  ipcMain.handle('chat:stream:cancel', async (_event, streamId: string) => cancelResetChatStream(streamId))
+  ipcMain.handle('chat:stream:submitToolDecision', async (_event, input: SubmitToolDecisionInput) =>
+    submitResetToolDecision(input),
   )
-  ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) =>
-    estimateChatContextUsage(input),
+  ipcMain.handle('chat:context-usage:estimate', async (_event, _input: EstimateContextUsageInput) =>
+    estimateResetChatContextUsage(),
   )
   ipcMain.handle('terminal:createSession', async (event, input: CreateTerminalSessionInput) =>
     createTerminalSession(event, input),
@@ -475,7 +480,7 @@ app.on('activate', () => {
 app.whenReady().then(() => {
   registerHistoryHandlers()
 
-  void initializeProvidersState().catch((error) => {
+  void initializeBackendResetState().catch((error) => {
     console.error('Failed to preload providers state', error)
   })
 

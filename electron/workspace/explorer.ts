@@ -5,7 +5,7 @@ import {
   loadGitignoreMatchers,
   shouldAlwaysShowEntry,
   shouldIgnoreWorkspaceEntry,
-} from '../chat/openaiCompatible/tools/gitignoreMatcher'
+} from './gitignoreMatcher'
 import type {
   WorkspaceRefactorCandidate,
   WorkspaceRefactorCandidatesInput,

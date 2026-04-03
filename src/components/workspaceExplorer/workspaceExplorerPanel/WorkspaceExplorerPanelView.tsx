@@ -133,6 +133,7 @@ export function WorkspaceExplorerPanelView({
                 ? 'bg-surface-muted text-foreground'
                 : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground',
             ].join(' ')}
+            data-workspace-entry-path={entry.relativePath}
             style={{ paddingLeft: `${Math.max(8, depth * 12 + 8)}px` }}
           >
             {isDirectory ? (
@@ -183,6 +184,7 @@ export function WorkspaceExplorerPanelView({
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle-foreground">Explorer</p>
       </div>
       <div
+        ref={panelState.treeContainerRef}
         className={[
           'min-h-0 flex flex-1 flex-col overflow-y-auto',
           panelState.dropTargetDirectoryPath === ROOT_DIRECTORY_KEY ? 'bg-surface/60' : '',
