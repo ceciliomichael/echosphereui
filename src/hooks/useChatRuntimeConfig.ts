@@ -85,7 +85,7 @@ export function useChatRuntimeConfig({
   const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
   const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
   const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
-  const [hasLoadedMistralModels, setHasLoadedMistralModels] = useState(false)
+  const [hasLoadedOpenAICompatibleModels, setHasLoadedOpenAICompatibleModels] = useState(false)
   const modelOptions = useMemo(
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
@@ -106,7 +106,8 @@ export function useChatRuntimeConfig({
     () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),
     [availableReasoningEfforts, settings.chatReasoningEffort],
   )
-  const isModelOptionsLoading = isActiveScreen && (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedMistralModels)
+  const isModelOptionsLoading =
+    isActiveScreen && (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedOpenAICompatibleModels)
 
   useEffect(() => {
     if (!isActiveScreen) {
@@ -141,36 +142,38 @@ export function useChatRuntimeConfig({
   }, [isActiveScreen])
 
   useEffect(() => {
-    if (!isActiveScreen || !isProviderConfigured('mistral', providersState)) {
-      setHasLoadedMistralModels(true)
-      setProviderModels((currentValue) => currentValue.filter((model) => model.providerId !== 'mistral'))
+    if (!isActiveScreen || !isProviderConfigured('openai-compatible', providersState)) {
+      setHasLoadedOpenAICompatibleModels(true)
+      setProviderModels((currentValue) =>
+        currentValue.filter((model) => model.providerId !== 'openai-compatible'),
+      )
       return
     }
 
     let isMounted = true
-    setHasLoadedMistralModels(false)
+    setHasLoadedOpenAICompatibleModels(false)
 
     void window.echosphereModels
-      .listProviderModels('mistral')
+      .listProviderModels('openai-compatible')
       .then((fetchedModels) => {
         if (!isMounted) {
           return
         }
 
         setProviderModels((currentValue) => {
-          const nonMistralModels = currentValue.filter((model) => model.providerId !== 'mistral')
-          return [...nonMistralModels, ...fetchedModels]
+          const remainingModels = currentValue.filter((model) => model.providerId !== 'openai-compatible')
+          return [...remainingModels, ...fetchedModels]
         })
       })
       .catch((error) => {
-        console.error('Failed to load Mistral models for chat runtime', error)
+        console.error('Failed to load OpenAI-compatible models for chat runtime', error)
       })
       .finally(() => {
         if (!isMounted) {
           return
         }
 
-        setHasLoadedMistralModels(true)
+        setHasLoadedOpenAICompatibleModels(true)
       })
 
     return () => {
@@ -179,7 +182,7 @@ export function useChatRuntimeConfig({
   }, [isActiveScreen, providersState])
 
   useEffect(() => {
-    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedMistralModels
+    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
     if (!hasLoadedRuntimeModelSources) {
       return
     }
@@ -192,7 +195,7 @@ export function useChatRuntimeConfig({
     void updateSettings({ chatModelId: nextModelId })
   }, [
     hasLoadedCustomModels,
-    hasLoadedMistralModels,
+    hasLoadedOpenAICompatibleModels,
     modelOptions.length,
     selectedModel?.id,
     settings.chatModelId,
@@ -200,7 +203,7 @@ export function useChatRuntimeConfig({
   ])
 
   useEffect(() => {
-    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedMistralModels
+    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
     if (!hasLoadedRuntimeModelSources) {
       return
     }
@@ -213,7 +216,7 @@ export function useChatRuntimeConfig({
   }, [
     availableReasoningEfforts.length,
     hasLoadedCustomModels,
-    hasLoadedMistralModels,
+    hasLoadedOpenAICompatibleModels,
     reasoningEffort,
     settings.chatReasoningEffort,
     updateSettings,

@@ -1,13 +1,14 @@
 import { ChevronDown } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
+import type { DiffPanelScope } from '../chat/ConversationDiffFileItem'
+import { Tooltip } from '../Tooltip'
 import { Switch } from '../ui/Switch'
 import { SourceControlDiffSection } from './SourceControlDiffSection'
 
 interface SourceControlChangesSectionProps {
   commitActionControlsRef: RefObject<HTMLDivElement>
   commitMessage: string
-  expandedChangeFilePaths: readonly string[]
   includeUnstaged: boolean
   isChangesSectionOpen: boolean
   isCommitActionDisabled: boolean
@@ -27,13 +28,15 @@ interface SourceControlChangesSectionProps {
   onCommitActionMenuOpenChange: (nextValue: boolean) => void
   onCommitMessageChange: (nextValue: string) => void
   onDiscardFile: (filePath: string) => Promise<void>
-  onExpandedChange: (filePath: string, nextValue: boolean) => void
   onIncludeUnstagedChange: (nextValue: boolean) => void
   onOpenCommitModal: () => void
+  onOpenDiffPanelForFile: (filePath: string, scope: DiffPanelScope) => void
   onQuickCommitSubmit: (action?: 'commit' | 'commit-and-push') => Promise<void>
+  onStageFiles: (filePaths: string[]) => Promise<void>
   onStageFile: (filePath: string) => Promise<void>
   onStagedSectionOpenChange: (nextValue: boolean) => void
   onToggleChangesSection: () => void
+  onUnstageFiles: (filePaths: string[]) => Promise<void>
   onUnstageFile: (filePath: string) => Promise<void>
   onUnstagedSectionOpenChange: (nextValue: boolean) => void
 }
@@ -41,7 +44,6 @@ interface SourceControlChangesSectionProps {
 export function SourceControlChangesSection({
   commitActionControlsRef,
   commitMessage,
-  expandedChangeFilePaths,
   includeUnstaged,
   isChangesSectionOpen,
   isCommitActionDisabled,
@@ -61,13 +63,15 @@ export function SourceControlChangesSection({
   onCommitActionMenuOpenChange,
   onCommitMessageChange,
   onDiscardFile,
-  onExpandedChange,
   onIncludeUnstagedChange,
   onOpenCommitModal,
+  onOpenDiffPanelForFile,
   onQuickCommitSubmit,
+  onStageFiles,
   onStageFile,
   onStagedSectionOpenChange,
   onToggleChangesSection,
+  onUnstageFiles,
   onUnstageFile,
   onUnstagedSectionOpenChange,
 }: SourceControlChangesSectionProps) {
@@ -76,6 +80,35 @@ export function SourceControlChangesSection({
   const hasStagedSection = stagedFileDiffs.length > 0
   const shouldShowUnstagedSectionTopBorder = hasStagedSection && isStagedSectionOpen
   const shouldShowUnstagedSectionBottomBorder = isUnstagedSectionOpen || !isStagedSectionOpen
+  const stagedBadgeClassName =
+    stagedFileCount < 10
+      ? 'grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground'
+      : 'inline-flex h-5 min-w-5 flex-none items-center justify-center rounded-full bg-border-muted px-1.5 text-[10px] font-medium leading-none text-foreground'
+  const unstagedBadgeClassName =
+    unstagedFileCount < 10
+      ? 'grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground'
+      : 'inline-flex h-5 min-w-5 flex-none items-center justify-center rounded-full bg-border-muted px-1.5 text-[10px] font-medium leading-none text-foreground'
+  const singleDigitBadgeValueClassName = 'tabular-nums translate-x-[1px]'
+  const stagedFilePaths = Array.from(new Set(stagedFileDiffs.map((fileDiff) => fileDiff.fileName)))
+  const unstagedFilePaths = Array.from(new Set(unstagedFileDiffs.map((fileDiff) => fileDiff.fileName)))
+  const isBulkStageActionDisabled = isQuickCommitting || unstagedFilePaths.length === 0
+  const isBulkUnstageActionDisabled = isQuickCommitting || stagedFilePaths.length === 0
+
+  async function handleStageAllUnstagedFiles() {
+    if (unstagedFilePaths.length === 0) {
+      return
+    }
+
+    await onStageFiles(unstagedFilePaths)
+  }
+
+  async function handleUnstageAllStagedFiles() {
+    if (stagedFilePaths.length === 0) {
+      return
+    }
+
+    await onUnstageFiles(stagedFilePaths)
+  }
 
   return (
     <section
@@ -87,184 +120,226 @@ export function SourceControlChangesSection({
         <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Changes</span>
         <ChevronDown size={13} className={['text-muted-foreground transition-transform', isChangesSectionOpen ? '' : '-rotate-90'].join(' ')} />
       </button>
-      <div className={['min-h-0 border-t border-border transition-[opacity] duration-200', isChangesSectionOpen ? 'flex flex-1 flex-col overflow-hidden opacity-100' : 'hidden opacity-0'].join(' ')}>
-        <div className="shrink-0 border-b border-border px-4 py-3">
-          <textarea
-            value={commitMessage}
-            onChange={(event) => onCommitMessageChange(event.target.value)}
-            rows={3}
-            placeholder="Commit message (leave empty to auto-generate with AI)"
-            className="w-full resize-none rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-subtle-foreground"
-          />
+      {isChangesSectionOpen ? (
+        <div className={[sectionBodyClassName, 'border-t border-border'].join(' ')}>
+          <div className="shrink-0 border-b border-border px-4 py-3">
+            <textarea
+              value={commitMessage}
+              onChange={(event) => onCommitMessageChange(event.target.value)}
+              rows={3}
+              placeholder="Commit message (leave empty to auto-generate with AI)"
+              className="w-full resize-none rounded-xl border border-border bg-surface-muted px-3 py-2 text-sm text-foreground outline-none placeholder:text-subtle-foreground"
+            />
 
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-              <Switch checked={includeUnstaged} onChange={onIncludeUnstagedChange} disabled={isQuickCommitting} />
-              Include unstaged
-            </label>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <Switch checked={includeUnstaged} onChange={onIncludeUnstagedChange} disabled={isQuickCommitting} />
+                Include unstaged
+              </label>
 
-            <div className="inline-flex items-center gap-1.5">
-              <div ref={commitActionControlsRef} className="relative inline-flex items-center">
-                <button
-                  type="button"
-                  disabled={isCommitActionDisabled}
-                  onClick={() => void onQuickCommitSubmit('commit')}
-                  className={[
-                    'inline-flex h-8 min-w-[66px] items-center justify-center rounded-l-lg rounded-r-none pl-2 text-xs font-medium transition-colors',
-                    isCommitPrimaryBusy ? 'pr-2' : 'pr-1',
-                    isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
-                  ].join(' ')}
-                >
-                  {isQuickCommitting ? 'Committing' : isCommitPrimaryBusy ? 'Pushing' : 'Commit'}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Commit actions"
-                  aria-haspopup="menu"
-                  aria-expanded={isCommitActionMenuOpen}
-                  disabled={isCommitActionDisabled}
-                  onClick={() => {
-                    onCommitActionMenuOpenChange(!isCommitActionMenuOpen)
-                  }}
-                  className={[
-                    'inline-flex h-8 w-8 items-center justify-center rounded-l-none rounded-r-lg border-l border-white/15 text-xs transition-colors',
-                    isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
-                  ].join(' ')}
-                >
-                  <ChevronDown size={13} />
-                </button>
-                {isCommitActionMenuOpen ? (
-                  <div
-                    role="menu"
-                    aria-label="Commit actions"
-                    className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[160px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
+              <div className="inline-flex items-center gap-1.5">
+                <div ref={commitActionControlsRef} className="relative inline-flex items-center">
+                  <button
+                    type="button"
+                    disabled={isCommitActionDisabled}
+                    onClick={() => void onQuickCommitSubmit('commit')}
+                    className={[
+                      'inline-flex h-8 min-w-[66px] items-center justify-center rounded-l-lg rounded-r-none pl-2 text-xs font-medium transition-colors',
+                      isCommitPrimaryBusy ? 'pr-2' : 'pr-1',
+                      isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
+                    ].join(' ')}
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => void onQuickCommitSubmit('commit')}
-                      className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
+                    {isQuickCommitting ? 'Committing' : isCommitPrimaryBusy ? 'Pushing' : 'Commit'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Commit actions"
+                    aria-haspopup="menu"
+                    aria-expanded={isCommitActionMenuOpen}
+                    disabled={isCommitActionDisabled}
+                    onClick={() => {
+                      onCommitActionMenuOpenChange(!isCommitActionMenuOpen)
+                    }}
+                    className={[
+                      'inline-flex h-8 w-8 items-center justify-center rounded-l-none rounded-r-lg border-l border-white/15 text-xs transition-colors',
+                      isCommitActionDisabled ? 'chat-send-button-disabled cursor-not-allowed' : 'chat-send-button-enabled',
+                    ].join(' ')}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                  {isCommitActionMenuOpen ? (
+                    <div
+                      role="menu"
+                      aria-label="Commit actions"
+                      className="absolute right-0 top-[calc(100%+6px)] z-40 min-w-[160px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
                     >
-                      Commit
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => void onQuickCommitSubmit('commit-and-push')}
-                      className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
-                    >
-                      Commit and push
-                    </button>
-                  </div>
-                ) : null}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void onQuickCommitSubmit('commit')}
+                        className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
+                      >
+                        Commit
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => void onQuickCommitSubmit('commit-and-push')}
+                        className="flex h-9 w-full items-center rounded-lg px-2.5 text-left text-xs text-foreground transition-colors hover:bg-surface-muted"
+                      >
+                        Commit and push
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenCommitModal}
+                  className={[
+                    'inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-medium transition-colors',
+                    'chat-send-button-enabled',
+                  ].join(' ')}
+                >
+                  Advanced
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={onOpenCommitModal}
-                className={[
-                  'inline-flex h-8 items-center justify-center rounded-lg px-3 text-xs font-medium transition-colors',
-                  'chat-send-button-enabled',
-                ].join(' ')}
-              >
-                Advanced
-              </button>
             </div>
+
+            {quickCommitError ? <p className="mt-2 text-xs text-danger-foreground">{quickCommitError}</p> : null}
+            {syncError ? <p className="mt-2 text-xs text-danger-foreground">{syncError}</p> : null}
+            {!syncError && syncMessage ? <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p> : null}
           </div>
 
-          {quickCommitError ? <p className="mt-2 text-xs text-danger-foreground">{quickCommitError}</p> : null}
-          {syncError ? <p className="mt-2 text-xs text-danger-foreground">{syncError}</p> : null}
-          {!syncError && syncMessage ? <p className="mt-2 text-xs text-muted-foreground">{syncMessage}</p> : null}
-        </div>
+          <div className={sectionBodyClassName}>
+            {stagedFileDiffs.length > 0 ? (
+              <section className={['min-h-0 flex flex-col', isStagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
+                <div className="flex h-10 w-full items-center border-b border-border">
+                  <button
+                    type="button"
+                    onClick={() => onStagedSectionOpenChange(!isStagedSectionOpen)}
+                    className="flex flex-1 items-center justify-between px-4 text-left"
+                  >
+                    <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      <span>Staged Changes</span>
+                      <span className={stagedBadgeClassName}>
+                        <span className={singleDigitBadgeValueClassName}>{stagedFileCount}</span>
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2 pr-3">
+                    <Tooltip content="Unstage all staged files" side="left">
+                      <button
+                        type="button"
+                        aria-label="Unstage all staged files"
+                        disabled={isBulkUnstageActionDisabled}
+                        onClick={() => void handleUnstageAllStagedFiles()}
+                        className={[
+                          'inline-flex h-7 items-center justify-center px-2 text-xs font-medium',
+                          isBulkUnstageActionDisabled
+                            ? 'cursor-not-allowed text-muted-foreground/60'
+                            : 'text-muted-foreground hover:text-foreground',
+                        ].join(' ')}
+                      >
+                        <span>
+                          Unstage all
+                        </span>
+                      </button>
+                    </Tooltip>
+                    <ChevronDown
+                      size={13}
+                      className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')}
+                    />
+                  </div>
+                </div>
+                {isStagedSectionOpen ? (
+                  <SourceControlDiffSection
+                    bodyClassName={diffViewportClassName}
+                    sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
+                    title=""
+                    scope="staged"
+                    diffs={stagedFileDiffs}
+                    emptyLabel="No staged files."
+                    pendingFileActionPath={pendingFileActionPath}
+                    onDiscardFile={onDiscardFile}
+                    onOpenDiffPanelForFile={onOpenDiffPanelForFile}
+                    onStageFile={onStageFile}
+                    onUnstageFile={onUnstageFile}
+                  />
+                ) : null}
+              </section>
+            ) : null}
 
-        <div className={sectionBodyClassName}>
-          {stagedFileDiffs.length > 0 ? (
-            <section className={['min-h-0 flex flex-col', isStagedSectionOpen ? 'flex-1' : 'shrink-0'].join(' ')}>
-              <button
-                type="button"
-                onClick={() => onStagedSectionOpenChange(!isStagedSectionOpen)}
-                className="flex h-10 w-full items-center justify-between border-b border-border px-4 text-left"
-              >
-                <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  <span>Staged Changes</span>
-                  <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
-                    <span className="translate-x-px tabular-nums">{stagedFileCount}</span>
-                  </span>
-                </span>
-                <ChevronDown size={13} className={['text-muted-foreground transition-transform', isStagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-              </button>
-              <div
+            {unstagedFileDiffs.length > 0 ? (
+              <section
                 className={[
-                  'min-h-0 transition-[opacity] duration-200',
-                  isStagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
+                  'min-h-0 flex flex-col',
+                  isUnstagedSectionOpen ? 'flex-1' : 'shrink-0',
+                  shouldShowUnstagedSectionTopBorder ? 'border-t border-border' : '',
                 ].join(' ')}
               >
-                <SourceControlDiffSection
-                  bodyClassName={diffViewportClassName}
-                  sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
-                  title=""
-                  scope="staged"
-                  diffs={stagedFileDiffs}
-                  emptyLabel="No staged files."
-                  expandedFilePaths={expandedChangeFilePaths}
-                  pendingFileActionPath={pendingFileActionPath}
-                  onDiscardFile={onDiscardFile}
-                  onExpandedChange={onExpandedChange}
-                  onStageFile={onStageFile}
-                  onUnstageFile={onUnstageFile}
-                />
-              </div>
-            </section>
-          ) : null}
-
-          {unstagedFileDiffs.length > 0 ? (
-            <section
-              className={[
-                'min-h-0 flex flex-col',
-                isUnstagedSectionOpen ? 'flex-1' : 'shrink-0',
-                shouldShowUnstagedSectionTopBorder ? 'border-t border-border' : '',
-              ].join(' ')}
-            >
-              <button
-                type="button"
-                onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
-                className={[
-                  'flex h-10 w-full items-center justify-between px-4 text-left',
-                  shouldShowUnstagedSectionBottomBorder ? 'border-b border-border' : '',
-                ].join(' ')}
-              >
-                <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  <span>Changes</span>
-                  <span className="grid h-5 w-5 flex-none place-items-center rounded-full bg-border-muted text-[10px] font-medium leading-none text-foreground">
-                    <span className="translate-x-px tabular-nums">{unstagedFileCount}</span>
-                  </span>
-                </span>
-                <ChevronDown size={13} className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')} />
-              </button>
-              <div
-                className={[
-                  'min-h-0 transition-[opacity] duration-200',
-                  isUnstagedSectionOpen ? 'flex flex-1 flex-col opacity-100' : 'hidden opacity-0',
-                ].join(' ')}
-              >
-                <SourceControlDiffSection
-                  bodyClassName={diffViewportClassName}
-                  sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
-                  title=""
-                  scope="unstaged"
-                  diffs={unstagedFileDiffs}
-                  emptyLabel="No unstaged files."
-                  expandedFilePaths={expandedChangeFilePaths}
-                  pendingFileActionPath={pendingFileActionPath}
-                  onDiscardFile={onDiscardFile}
-                  onExpandedChange={onExpandedChange}
-                  onStageFile={onStageFile}
-                  onUnstageFile={onUnstageFile}
-                />
-              </div>
-            </section>
-          ) : null}
+                <div
+                  className={[
+                    'flex h-10 w-full items-center',
+                    shouldShowUnstagedSectionBottomBorder ? 'border-b border-border' : '',
+                  ].join(' ')}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onUnstagedSectionOpenChange(!isUnstagedSectionOpen)}
+                    className="flex flex-1 items-center justify-between px-4 text-left"
+                  >
+                    <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      <span>Changes</span>
+                      <span className={unstagedBadgeClassName}>
+                        <span className={singleDigitBadgeValueClassName}>{unstagedFileCount}</span>
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2 pr-3">
+                    <Tooltip content="Stage all unstaged files" side="left">
+                      <button
+                        type="button"
+                        aria-label="Stage all unstaged files"
+                        disabled={isBulkStageActionDisabled}
+                        onClick={() => void handleStageAllUnstagedFiles()}
+                        className={[
+                          'inline-flex h-7 items-center justify-center px-2 text-xs font-medium',
+                          isBulkStageActionDisabled
+                            ? 'cursor-not-allowed text-muted-foreground/60'
+                            : 'text-muted-foreground hover:text-foreground',
+                        ].join(' ')}
+                      >
+                        <span>
+                          Stage all
+                        </span>
+                      </button>
+                    </Tooltip>
+                    <ChevronDown
+                      size={13}
+                      className={['text-muted-foreground transition-transform', isUnstagedSectionOpen ? '' : '-rotate-90'].join(' ')}
+                    />
+                  </div>
+                </div>
+                {isUnstagedSectionOpen ? (
+                  <SourceControlDiffSection
+                    bodyClassName={diffViewportClassName}
+                    sectionClassName="border-b-0 min-h-0 flex flex-1 flex-col"
+                    title=""
+                    scope="unstaged"
+                    diffs={unstagedFileDiffs}
+                    emptyLabel="No unstaged files."
+                    pendingFileActionPath={pendingFileActionPath}
+                    onDiscardFile={onDiscardFile}
+                    onOpenDiffPanelForFile={onOpenDiffPanelForFile}
+                    onStageFile={onStageFile}
+                    onUnstageFile={onUnstageFile}
+                  />
+                ) : null}
+              </section>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   )
 }

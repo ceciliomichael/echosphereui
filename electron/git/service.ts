@@ -12,7 +12,9 @@ export {
 export { gitSync } from './serviceSync'
 export {
   discardGitFileChanges,
+  stageGitFiles,
   stageGitFile,
+  unstageGitFiles,
   unstageGitFile,
 } from './serviceStage'
 export { gitCommit } from './serviceCommit'

@@ -1,0 +1,95 @@
+import { randomUUID } from 'node:crypto'
+import type { WebContents } from 'electron'
+import type {
+  EstimateContextUsageInput,
+  ContextUsageEstimate,
+  StartChatStreamInput,
+  StartChatStreamResult,
+  SubmitToolDecisionInput,
+  SubmitToolDecisionResult,
+} from '../../../src/types/chat'
+import { estimateToolEnabledContextUsage, runToolEnabledChatStream } from '../shared/runtime'
+import { createCodexClient } from './client'
+
+const activeStreams = new Map<string, AbortController>()
+
+export async function estimateCodexContextUsage(input: EstimateContextUsageInput): Promise<ContextUsageEstimate> {
+  return estimateToolEnabledContextUsage({
+    agentContextRootPath: input.agentContextRootPath,
+    chatMode: input.chatMode,
+    messages: input.messages,
+  })
+}
+
+export async function startCodexChatStream(
+  webContents: WebContents,
+  input: StartChatStreamInput,
+  onSettled?: () => void,
+): Promise<StartChatStreamResult> {
+  if (input.providerId !== 'codex') {
+    throw new Error('The Codex chat runtime only supports the Codex provider.')
+  }
+
+  const modelId = input.modelId.trim()
+  if (!modelId) {
+    throw new Error('Select a model before starting a chat.')
+  }
+
+  const streamId = randomUUID()
+  const abortController = new AbortController()
+  activeStreams.set(streamId, abortController)
+
+  queueMicrotask(() => {
+    void runCodexChatStream(webContents, streamId, input, abortController, onSettled)
+  })
+
+  return { streamId }
+}
+
+async function runCodexChatStream(
+  webContents: WebContents,
+  streamId: string,
+  input: StartChatStreamInput,
+  abortController: AbortController,
+  onSettled?: () => void,
+) {
+  try {
+    const client = createCodexClient()
+    await runToolEnabledChatStream({
+      abortController,
+      createStream: (streamInput) =>
+        client.chat.completions.create({
+          messages: streamInput.messages,
+          model: streamInput.model,
+          reasoningEffort: streamInput.reasoningEffort,
+          signal: streamInput.signal,
+          stopWhen: streamInput.stopWhen,
+          system: streamInput.system,
+          tools: streamInput.tools,
+        }),
+      onSettled,
+      startInput: input,
+      streamId,
+      webContents,
+    })
+  } catch (error) {
+    if (!abortController.signal.aborted) {
+      throw error
+    }
+  } finally {
+    activeStreams.delete(streamId)
+  }
+}
+
+export async function cancelCodexChatStream(streamId: string) {
+  const abortController = activeStreams.get(streamId)
+  if (!abortController) {
+    return
+  }
+
+  abortController.abort()
+}
+
+export async function submitCodexToolDecision(_input: SubmitToolDecisionInput): Promise<SubmitToolDecisionResult> {
+  throw new Error('Tool decisions are not implemented for the Codex backend yet.')
+}

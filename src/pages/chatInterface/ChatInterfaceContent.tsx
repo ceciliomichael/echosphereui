@@ -538,14 +538,19 @@ export function ChatInterfaceContent({
 
           {interfaceController.isSourceControlPanelOpen ? (
             <SourceControlPanel
+              onDiffPanelExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
+              onDiffPanelSelectedScopeChange={onDiffPanelSelectedScopeChange}
               fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}
               isOpen={interfaceController.isSourceControlPanelOpen}
               onDiscardFile={interfaceController.handleDiscardDiffFile}
               onOpenCommitModal={interfaceController.handleOpenCommitModal}
+              onOpenDiffPanel={workspaceState.handleOpenDiffPanel}
               onQuickCommit={interfaceController.handleQuickCommit}
               onRefreshAll={interfaceController.handleRefreshGitUi}
               onSectionOpenChange={interfaceController.handleSourceControlSectionOpenChange}
+              onStageFiles={interfaceController.handleStageDiffFiles}
               onStageFile={interfaceController.handleStageDiffFile}
+              onUnstageFiles={interfaceController.handleUnstageDiffFiles}
               onUnstageFile={interfaceController.handleUnstageDiffFile}
               pendingFileActionPath={interfaceController.pendingFileActionPath}
               onWidthCommit={workspaceState.handleSourceControlPanelWidthCommit}

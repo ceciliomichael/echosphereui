@@ -17,6 +17,8 @@ interface ComputeDiffOptions {
   startLineNumber?: number
 }
 
+const DIFF_LOOKAHEAD_LIMIT = 48
+
 export function normalizeEscapedSequences(content: string) {
   if (!content) {
     return content
@@ -53,6 +55,19 @@ export function computeDiffLines(
   const oldLines = normalizedOldContent.split('\n')
   const newLines = normalizedNewContent.split('\n')
   const diff: DiffLine[] = []
+  const maxOldIndex = oldLines.length - 1
+  const maxNewIndex = newLines.length - 1
+
+  function findLookaheadIndex(lines: string[], startIndex: number, targetLine: string) {
+    const endIndex = Math.min(lines.length, startIndex + DIFF_LOOKAHEAD_LIMIT)
+    for (let index = startIndex; index < endIndex; index += 1) {
+      if (lines[index] === targetLine) {
+        return index - startIndex
+      }
+    }
+
+    return -1
+  }
 
   let oldIndex = 0
   let newIndex = 0
@@ -100,8 +115,8 @@ export function computeDiffLines(
       continue
     }
 
-    const foundInOld = oldLines.slice(oldIndex + 1).indexOf(newLine)
-    const foundInNew = newLines.slice(newIndex + 1).indexOf(oldLine)
+    const foundInOld = oldIndex < maxOldIndex ? findLookaheadIndex(oldLines, oldIndex + 1, newLine) : -1
+    const foundInNew = newIndex < maxNewIndex ? findLookaheadIndex(newLines, newIndex + 1, oldLine) : -1
 
     if (foundInOld !== -1 && (foundInNew === -1 || foundInOld <= foundInNew)) {
       diff.push({

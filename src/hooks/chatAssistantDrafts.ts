@@ -131,6 +131,23 @@ function mergeStreamingDelta(existingValue: string, nextDelta: string) {
   return existingValue + nextDelta.slice(overlapLength)
 }
 
+function mergeReasoningDelta(
+  currentReasoningContent: string,
+  nextDelta: string,
+  reasoningCompletedAt: number | undefined,
+) {
+  if (
+    reasoningCompletedAt !== undefined &&
+    currentReasoningContent.trim().length > 0 &&
+    nextDelta.trim().length > 0 &&
+    !/^\s/u.test(nextDelta)
+  ) {
+    return `${currentReasoningContent}\n\n${nextDelta}`
+  }
+
+  return mergeStreamingDelta(currentReasoningContent, nextDelta)
+}
+
 export function createChatAssistantDraftManager(input: CreateChatAssistantDraftManagerInput) {
   const insertedMessageIds: string[] = []
   const streamedMessageOrder: StreamedMessageOrderEntry[] = []
@@ -333,19 +350,14 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
   }
 
   const ensureReasoningDraft = () => {
-    const draftAssistantId = ensureAssistantDraft('content')
-    const draftAssistantMessage = getDraftAssistantMessage(draftAssistantId)
-    const normalizedContent = normalizeAssistantMessageContent(draftAssistantMessage)
-    const hasVisibleContent = normalizedContent.content.trim().length > 0
-    const hasToolInvocations = (draftAssistantMessage.toolInvocations?.length ?? 0) > 0
-    const reasoningAlreadyCompleted = draftAssistantMessage.reasoningCompletedAt !== undefined
-
-    if (!hasVisibleContent && !hasToolInvocations && !reasoningAlreadyCompleted) {
-      return draftAssistantId
+    if (activeAssistantDraftId && activeAssistantDraftKind === 'content') {
+      const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
+      if ((activeDraftMessage.toolInvocations?.length ?? 0) === 0) {
+        return activeAssistantDraftId
+      }
     }
 
-    completeReasoningDraft()
-    return appendAssistantDraft('content')
+    return ensureAssistantDraft('content')
   }
 
   const promoteWaitingIndicatorToSplash = (draftAssistantId: string) => {
@@ -418,7 +430,11 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       input.markTextStreamingPulse(input.conversationId)
       updateDraftAssistantMessage(draftAssistantId, (message) => {
         const currentReasoningContent = message.reasoningContent ?? ''
-        const nextReasoningContent = mergeStreamingDelta(message.reasoningContent ?? '', delta)
+        const nextReasoningContent = mergeReasoningDelta(
+          currentReasoningContent,
+          delta,
+          message.reasoningCompletedAt,
+        )
         appendedCharCount = Math.max(0, nextReasoningContent.length - currentReasoningContent.length)
         shouldCompleteReasoning = splitThinkingContent(nextReasoningContent).hasThinkingTags && nextReasoningContent.includes('</think>')
         if (nextReasoningContent === currentReasoningContent) {
@@ -427,6 +443,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
 
         return {
           ...message,
+          reasoningCompletedAt: undefined,
           reasoningContent: nextReasoningContent,
         }
       }, undefined, { deltaCharCount: appendedCharCount })
@@ -434,7 +451,10 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       if (shouldCompleteReasoning) {
         completeReasoningDraft()
       }
-    }, 
+    },
+    handleReasoningCompleted() {
+      completeReasoningDraft()
+    },
     handleSyntheticToolMessage(syntheticMessage: Message) {
       input.appendLocalMessage(input.conversationId, syntheticMessage)
       insertedMessageIds.push(syntheticMessage.id)

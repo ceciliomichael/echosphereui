@@ -28,6 +28,7 @@ interface StreamAssistantResponseInput {
   messages: Message[]
   modelId: string
   onContentDelta: (delta: string) => void
+  onReasoningCompleted: () => void
   onReasoningDelta: (delta: string) => void
   onStreamStarted: (streamId: string) => void
   onSyntheticToolMessage: (message: Message) => void
@@ -119,6 +120,11 @@ export async function streamAssistantResponse(
 
       if (event.type === 'reasoning_delta') {
         input.onReasoningDelta(event.delta)
+        return
+      }
+
+      if (event.type === 'reasoning_completed') {
+        input.onReasoningCompleted()
         return
       }
 

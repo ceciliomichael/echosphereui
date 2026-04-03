@@ -34,6 +34,7 @@ import type {
   GitHistoryCommitDetailsInput,
   GitHistoryPageInput,
   GitFileStageInput,
+  GitFileStageBatchInput,
   GitSyncInput,
   OpenExternalTerminalLinkInput,
   ResizeTerminalSessionInput,
@@ -66,23 +67,17 @@ import { flushStoredSettingsUpdates, getStoredSettings, updateStoredSettings } f
 import { serializeInitialSettingsArg } from './settings/bootstrap'
 import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
 import {
-  addResetCodexAccountWithOAuth,
-  cancelResetChatStream,
-  connectResetCodexWithOAuth,
-  disconnectResetCodex,
-  estimateResetChatContextUsage,
-  getResetProvidersState,
-  initializeBackendResetState,
-  listResetCustomModels,
-  listResetProviderModels,
-  removeResetApiKeyProvider,
-  removeResetCustomModel,
-  saveResetApiKeyProvider,
-  saveResetCustomModel,
-  startResetChatStream,
-  submitResetToolDecision,
-  switchResetCodexAccount,
-} from './backendReset'
+  cancelCodexChatStream,
+  estimateCodexContextUsage,
+  startCodexChatStream,
+  submitCodexToolDecision,
+} from './chat/codex/runtime'
+import {
+  cancelOpenAICompatibleChatStream,
+  estimateOpenAICompatibleContextUsage,
+  startOpenAICompatibleChatStream,
+  submitOpenAICompatibleToolDecision,
+} from './chat/openaiCompatible/runtime'
 import {
   checkoutGitBranch,
   createAndCheckoutGitBranch,
@@ -94,7 +89,9 @@ import {
   getGitStatus,
   gitSync,
   gitCommit,
+  stageGitFiles,
   stageGitFile,
+  unstageGitFiles,
   unstageGitFile,
 } from './git/service'
 import {
@@ -105,6 +102,22 @@ import {
   resizeTerminalSession,
   writeToTerminalSession,
 } from './terminal/service'
+import {
+  addCodexAccountWithOAuth,
+  connectCodexWithOAuth,
+  disconnectCodex,
+  getProvidersState,
+  initializeProvidersState,
+  removeApiKeyProvider,
+  saveApiKeyProvider,
+  switchCodexAccount,
+} from './providers/service'
+import {
+  listCustomModels,
+  listProviderModels,
+  removeCustomModel,
+  saveCustomModel,
+} from './models/service'
 import {
   createWorkspaceCheckpoint,
   createWorkspaceRedoCheckpointFromSource,
@@ -152,6 +165,7 @@ app.commandLine.appendSwitch(
 )
 
 let win: BrowserWindow | null
+const activeChatStreamProviders = new Map<string, StartChatStreamInput['providerId']>()
 
 // --- Instance / profile isolation ---
 //
@@ -340,29 +354,78 @@ function registerHistoryHandlers() {
 
     return nextSettings
   })
-  ipcMain.handle('providers:state', async () => getResetProvidersState())
-  ipcMain.handle('providers:codex:addAccountOauth', async () => addResetCodexAccountWithOAuth())
-  ipcMain.handle('providers:codex:connectOauth', async () => connectResetCodexWithOAuth())
-  ipcMain.handle('providers:codex:disconnect', async () => disconnectResetCodex())
-  ipcMain.handle('providers:codex:switchAccount', async (_event, accountId: string) => switchResetCodexAccount(accountId))
-  ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveResetApiKeyProvider(input))
+  ipcMain.handle('providers:state', async () => getProvidersState())
+  ipcMain.handle('providers:codex:addAccountOauth', async () => addCodexAccountWithOAuth((url) => shell.openExternal(url)))
+  ipcMain.handle('providers:codex:connectOauth', async () => connectCodexWithOAuth((url) => shell.openExternal(url)))
+  ipcMain.handle('providers:codex:disconnect', async () => disconnectCodex())
+  ipcMain.handle('providers:codex:switchAccount', async (_event, accountId: string) => switchCodexAccount(accountId))
+  ipcMain.handle('providers:apikey:save', async (_event, input: SaveApiKeyProviderInput) => saveApiKeyProvider(input))
   ipcMain.handle('providers:apikey:remove', async (_event, providerId: ApiKeyProviderId) =>
-    removeResetApiKeyProvider(providerId),
+    removeApiKeyProvider(providerId),
   )
-  ipcMain.handle('models:custom:list', async () => listResetCustomModels())
-  ipcMain.handle('models:provider:list', async (_event, providerId: ApiKeyProviderId) => listResetProviderModels(providerId))
-  ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveResetCustomModel(input))
-  ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeResetCustomModel(modelId))
-  ipcMain.handle('chat:stream:start', async (_event, input: StartChatStreamInput) =>
-    startResetChatStream(input),
-  )
-  ipcMain.handle('chat:stream:cancel', async (_event, streamId: string) => cancelResetChatStream(streamId))
-  ipcMain.handle('chat:stream:submitToolDecision', async (_event, input: SubmitToolDecisionInput) =>
-    submitResetToolDecision(input),
-  )
-  ipcMain.handle('chat:context-usage:estimate', async (_event, _input: EstimateContextUsageInput) =>
-    estimateResetChatContextUsage(),
-  )
+  ipcMain.handle('models:custom:list', async () => listCustomModels())
+  ipcMain.handle('models:provider:list', async (_event, providerId: ApiKeyProviderId) => listProviderModels(providerId))
+  ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveCustomModel(input))
+  ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeCustomModel(modelId))
+  ipcMain.handle('chat:stream:start', async (event, input: StartChatStreamInput) => {
+    if (input.providerId === 'codex') {
+      const result = await startCodexChatStream(event.sender, input, () => {
+        activeChatStreamProviders.delete(result.streamId)
+      })
+      activeChatStreamProviders.set(result.streamId, input.providerId)
+      return result
+    }
+
+    if (input.providerId === 'openai-compatible') {
+      const result = await startOpenAICompatibleChatStream(event.sender, input, () => {
+        activeChatStreamProviders.delete(result.streamId)
+      })
+      activeChatStreamProviders.set(result.streamId, input.providerId)
+      return result
+    }
+
+    throw new Error(`Chat backend is not implemented for provider "${input.providerId}".`)
+  })
+  ipcMain.handle('chat:stream:cancel', async (_event, streamId: string) => {
+    const providerId = activeChatStreamProviders.get(streamId)
+    activeChatStreamProviders.delete(streamId)
+
+    if (providerId === 'codex') {
+      await cancelCodexChatStream(streamId)
+      return
+    }
+
+    if (providerId === 'openai-compatible') {
+      await cancelOpenAICompatibleChatStream(streamId)
+      return
+    }
+
+    await Promise.all([cancelCodexChatStream(streamId), cancelOpenAICompatibleChatStream(streamId)])
+  })
+  ipcMain.handle('chat:stream:submitToolDecision', async (_event, input: SubmitToolDecisionInput) => {
+    const providerId = activeChatStreamProviders.get(input.streamId)
+
+    if (providerId === 'codex') {
+      return submitCodexToolDecision(input)
+    }
+
+    if (providerId === 'openai-compatible') {
+      return submitOpenAICompatibleToolDecision(input)
+    }
+
+    throw new Error('Unable to determine which provider owns this tool decision stream.')
+  })
+  ipcMain.handle('chat:context-usage:estimate', async (_event, input: EstimateContextUsageInput) => {
+    if (input.providerId === 'codex') {
+      return estimateCodexContextUsage(input)
+    }
+
+    if (input.providerId === 'openai-compatible') {
+      return estimateOpenAICompatibleContextUsage(input)
+    }
+
+    throw new Error(`Context estimation is not implemented for provider "${input.providerId}".`)
+  })
   ipcMain.handle('terminal:createSession', async (event, input: CreateTerminalSessionInput) =>
     createTerminalSession(event, input),
   )
@@ -393,7 +456,9 @@ function registerHistoryHandlers() {
   ipcMain.handle('git:sync', async (_event, input: GitSyncInput) => gitSync(input))
   ipcMain.handle('git:getStatus', async (_event, workspacePath: string) => getGitStatus(workspacePath))
   ipcMain.handle('git:stageFile', async (_event, input: GitFileStageInput) => stageGitFile(input))
+  ipcMain.handle('git:stageFiles', async (_event, input: GitFileStageBatchInput) => stageGitFiles(input))
   ipcMain.handle('git:unstageFile', async (_event, input: GitFileStageInput) => unstageGitFile(input))
+  ipcMain.handle('git:unstageFiles', async (_event, input: GitFileStageBatchInput) => unstageGitFiles(input))
   ipcMain.handle('workspace:checkpoint:create', async (_event, input: CreateWorkspaceCheckpointInput) =>
     createWorkspaceCheckpoint(input),
   )
@@ -480,7 +545,7 @@ app.on('activate', () => {
 app.whenReady().then(() => {
   registerHistoryHandlers()
 
-  void initializeBackendResetState().catch((error) => {
+  void initializeProvidersState().catch((error) => {
     console.error('Failed to preload providers state', error)
   })
 

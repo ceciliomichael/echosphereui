@@ -8,6 +8,7 @@ import {
 
 interface UseGitDiffSnapshotInput {
   hasRepository: boolean
+  pollingEnabled?: boolean
   workspacePath: string | null | undefined
 }
 
@@ -17,6 +18,8 @@ interface UseGitDiffSnapshotResult {
   refresh: (options?: { forceRefresh?: boolean; silent?: boolean }) => Promise<void>
   snapshot: ConversationDiffSnapshot
 }
+
+const GIT_DIFF_POLL_INTERVAL_MS = 5000
 
 function areDiffSnapshotsEqual(left: ConversationDiffSnapshot, right: ConversationDiffSnapshot) {
   if (
@@ -33,12 +36,12 @@ function areDiffSnapshotsEqual(left: ConversationDiffSnapshot, right: Conversati
     if (
       leftFileDiff.fileName !== rightFileDiff.fileName ||
       leftFileDiff.addedLineCount !== rightFileDiff.addedLineCount ||
+      leftFileDiff.contentSignature !== rightFileDiff.contentSignature ||
+      leftFileDiff.isDeleted !== rightFileDiff.isDeleted ||
       leftFileDiff.removedLineCount !== rightFileDiff.removedLineCount ||
       leftFileDiff.isStaged !== rightFileDiff.isStaged ||
       leftFileDiff.isUnstaged !== rightFileDiff.isUnstaged ||
-      leftFileDiff.isUntracked !== rightFileDiff.isUntracked ||
-      leftFileDiff.oldContent !== rightFileDiff.oldContent ||
-      leftFileDiff.newContent !== rightFileDiff.newContent
+      leftFileDiff.isUntracked !== rightFileDiff.isUntracked
     ) {
       return false
     }
@@ -47,7 +50,11 @@ function areDiffSnapshotsEqual(left: ConversationDiffSnapshot, right: Conversati
   return true
 }
 
-export function useGitDiffSnapshot({ hasRepository, workspacePath }: UseGitDiffSnapshotInput): UseGitDiffSnapshotResult {
+export function useGitDiffSnapshot({
+  hasRepository,
+  pollingEnabled = true,
+  workspacePath,
+}: UseGitDiffSnapshotInput): UseGitDiffSnapshotResult {
   const [snapshot, setSnapshot] = useState<ConversationDiffSnapshot>(
     () => getCachedGitDiffSnapshot(workspacePath) ?? getEmptyGitDiffSnapshot(),
   )
@@ -108,18 +115,30 @@ export function useGitDiffSnapshot({ hasRepository, workspacePath }: UseGitDiffS
   }, [refresh, workspacePath])
 
   useEffect(() => {
-    if (!hasRepository || !workspacePath) {
+    if (!pollingEnabled || !hasRepository || !workspacePath) {
+      return
+    }
+
+    void refresh({ forceRefresh: true, silent: true })
+  }, [hasRepository, pollingEnabled, refresh, workspacePath])
+
+  useEffect(() => {
+    if (!pollingEnabled || !hasRepository || !workspacePath) {
       return
     }
 
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') {
+        return
+      }
+
       void refresh({ forceRefresh: true, silent: true })
-    }, 1500)
+    }, GIT_DIFF_POLL_INTERVAL_MS)
 
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [hasRepository, refresh, workspacePath])
+  }, [hasRepository, pollingEnabled, refresh, workspacePath])
 
   return {
     errorMessage,

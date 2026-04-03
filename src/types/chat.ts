@@ -273,6 +273,7 @@ export type CustomModelProviderId = 'openai' | 'openai-compatible'
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface ApiKeyProviderStatus {
+  apiKey: string | null
   baseUrl: string | null
   configured: boolean
   hasApiKey: boolean
@@ -597,6 +598,16 @@ export interface GitFileStageResult {
   success: boolean
 }
 
+export interface GitFileStageBatchInput {
+  filePaths: string[]
+  workspacePath: string
+}
+
+export interface GitFileStageBatchResult {
+  filePaths: string[]
+  success: boolean
+}
+
 export type GitSyncAction = 'fetch-all' | 'pull' | 'push'
 
 export interface GitSyncInput {
@@ -671,6 +682,10 @@ export type ChatStreamEvent =
       delta: string
       streamId: string
       type: 'reasoning_delta'
+    }
+  | {
+      streamId: string
+      type: 'reasoning_completed'
     }
   | {
       allowCustomAnswer: boolean
@@ -820,6 +835,8 @@ export interface EchosphereGitApi {
   getHistoryPage: (input: GitHistoryPageInput) => Promise<GitHistoryPageResult>
   getStatus: (workspacePath: string) => Promise<GitStatusResult>
   sync: (input: GitSyncInput) => Promise<GitSyncResult>
+  stageFiles: (input: GitFileStageBatchInput) => Promise<GitFileStageBatchResult>
   stageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
+  unstageFiles: (input: GitFileStageBatchInput) => Promise<GitFileStageBatchResult>
   unstageFile: (input: GitFileStageInput) => Promise<GitFileStageResult>
 }

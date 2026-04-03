@@ -28,8 +28,17 @@ function getUsageColor(usageRatio: number) {
   return 'var(--color-action)'
 }
 
+function getEstimatedContextTokens(usage: ContextUsageEstimate) {
+  return usage.systemPromptTokens + usage.historyTokens + usage.toolResultsTokens
+}
+
+function getEffectiveMaxTokens(usage: ContextUsageEstimate) {
+  return usage.maxTokens > 0 ? usage.maxTokens : 200_000
+}
+
 function DashedUsageCircle({ usage }: { usage: ContextUsageEstimate }) {
-  const usageRatio = usage.maxTokens > 0 ? Math.min(usage.totalTokens / usage.maxTokens, 1) : 0
+  const estimatedTotalTokens = getEstimatedContextTokens(usage)
+  const usageRatio = Math.min(estimatedTotalTokens / getEffectiveMaxTokens(usage), 1)
   const activeColor = getUsageColor(usageRatio)
 
   return (
@@ -45,7 +54,9 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
       hoverKey: 'context',
       minimumTopSpace: 220,
     })
-  const usageRatio = usage.maxTokens > 0 ? usage.totalTokens / usage.maxTokens : 0
+  const estimatedTotalTokens = getEstimatedContextTokens(usage)
+  const effectiveMaxTokens = getEffectiveMaxTokens(usage)
+  const usageRatio = Math.min(estimatedTotalTokens / effectiveMaxTokens, 1)
   const usagePercent = Math.min(usageRatio, 1) * 100
 
   return (
@@ -60,7 +71,7 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
         ref={buttonRef}
         type="button"
         aria-describedby={isOpen ? tooltipId : undefined}
-        aria-label={`Estimated context usage ${formatTokenCount(usage.totalTokens)} of ${formatTokenCount(usage.maxTokens)} tokens`}
+        aria-label={`Estimated context usage ${formatTokenCount(estimatedTotalTokens)} of ${formatTokenCount(effectiveMaxTokens)} tokens`}
         className="flex items-center justify-center bg-transparent p-0 text-muted-foreground transition-colors duration-150 hover:text-foreground disabled:cursor-default disabled:opacity-80"
         disabled={disabled}
         onFocus={openTooltip}
@@ -99,9 +110,9 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
               <span className="text-foreground">{formatTokenCount(usage.toolResultsTokens)}</span>
             </div>
             <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2 text-foreground">
-              <span className="font-medium">Total / 200k</span>
+              <span className="font-medium">Total / {formatTokenCount(effectiveMaxTokens)}</span>
               <span className="font-medium">
-                {formatTokenCount(usage.totalTokens)} / {formatTokenCount(usage.maxTokens)}
+                {formatTokenCount(estimatedTotalTokens)} / {formatTokenCount(effectiveMaxTokens)}
               </span>
             </div>
           </div>

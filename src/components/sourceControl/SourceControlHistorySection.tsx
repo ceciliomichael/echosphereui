@@ -2,7 +2,6 @@ import {
   ArrowDownToLine,
   ArrowUpToLine,
   ChevronDown,
-  ChevronRight,
   Loader2,
   LocateFixed,
   RefreshCw,
@@ -10,12 +9,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { MutableRefObject, PointerEvent as ReactPointerEvent } from 'react'
-import type { GitHistoryCommitDetailsResult, GitHistoryCommitFile, GitSyncAction } from '../../types/chat'
+import type { GitHistoryCommitDetailsResult, GitSyncAction } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
-import { CommitFileRow } from './CommitFileRow'
-import { CommitHistoryTooltipContent } from './CommitHistoryTooltipContent'
-import { GitGraphLane, GitGraphPlaceholder } from './historyGraph'
-import { getSwimlaneIndentPx, type HistoryItemViewModel } from './historyGraphLayout'
+import type { HistoryItemViewModel } from './historyGraphLayout'
+import { VirtualizedSourceControlHistoryList } from './VirtualizedSourceControlHistoryList'
 
 interface SyncActionConfig {
   action: GitSyncAction
@@ -67,42 +64,6 @@ interface SourceControlHistorySectionProps {
   onSyncAction: (action: GitSyncAction) => Promise<void>
   onToggleCommitExpanded: (commitHash: string) => void
   onToggleHistorySection: () => void
-}
-
-function renderCommitDetails(input: {
-  commitHash: string
-  files: readonly GitHistoryCommitFile[]
-  laneColumnCount: number
-  loadingCommitHashes: readonly string[]
-}) {
-  const { commitHash, files, laneColumnCount, loadingCommitHashes } = input
-  const isLoadingCommitDetails = loadingCommitHashes.includes(commitHash)
-  const indentPx = getSwimlaneIndentPx(laneColumnCount)
-
-  if (isLoadingCommitDetails) {
-    return (
-      <div className="flex items-center gap-2 py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-        <Loader2 size={13} className="animate-spin" />
-        Loading files...
-      </div>
-    )
-  }
-
-  if (files.length === 0) {
-    return (
-      <div className="py-2 pr-3 text-[12px] text-muted-foreground" style={{ paddingLeft: `${indentPx + 12}px` }}>
-        No changed files.
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col">
-      {files.map((file) => (
-        <CommitFileRow key={`${commitHash}-${file.path}`} file={file} indentPx={indentPx} />
-      ))}
-    </div>
-  )
 }
 
 export function SourceControlHistorySection({
@@ -226,117 +187,34 @@ export function SourceControlHistorySection({
         </div>
       </div>
 
-      <div className={['min-h-0 flex-1 overflow-y-auto border-t border-border transition-[opacity] duration-200', isHistorySectionOpen ? 'opacity-100' : 'hidden opacity-0'].join(' ')}>
-        {isLoadingHistory ? (
-          <div className="flex h-32 items-center justify-center text-[12px] text-muted-foreground">
+      {isHistorySectionOpen ? (
+        isLoadingHistory ? (
+          <div className="flex flex-1 items-center justify-center border-t border-border text-[12px] text-muted-foreground">
             <Loader2 size={14} className="mr-2 animate-spin" />
             Loading history...
           </div>
         ) : historyEntries.length === 0 ? (
-          <div className="px-4 py-3">
+          <div className="flex flex-1 flex-col border-t border-border px-4 py-3">
             <div className="flex min-h-16 items-center text-[12px] text-muted-foreground">No commits yet.</div>
           </div>
         ) : (
-          <div>
-            {historyViewModels.map((viewModel) => {
-              const { entry } = viewModel
-              const isExpanded = expandedCommitHashes.includes(entry.hash)
-              const isSelected = selectedCommitHash === entry.hash
-              const commitDetails = commitDetailsByHash[entry.hash]
-              const isLoadingDetails = loadingCommitHashes.includes(entry.hash)
-              const continuationColumns =
-                viewModel.outputSwimlanes.length > 0 ? viewModel.outputSwimlanes : viewModel.inputSwimlanes
-
-              return (
-                <div key={entry.hash}>
-                  <Tooltip
-                    content={
-                      <CommitHistoryTooltipContent
-                        entry={entry}
-                        details={commitDetails}
-                        isLoadingDetails={isLoadingDetails}
-                      />
-                    }
-                    side="right"
-                    fullWidthTrigger
-                    interactive
-                    panelClassName="!max-w-[min(42rem,calc(100vw-24px))] !border-0 !bg-transparent !p-0 !text-left !shadow-none"
-                  >
-                    <button
-                      type="button"
-                      ref={(node) => {
-                        historyRowRefMap.current.set(entry.hash, node)
-                      }}
-                      onClick={() => onToggleCommitExpanded(entry.hash)}
-                      onMouseEnter={() => {
-                        void onLoadCommitDetails(entry.hash)
-                      }}
-                      onFocus={() => {
-                        void onLoadCommitDetails(entry.hash)
-                      }}
-                      className={[
-                        'flex h-[50px] w-full items-center gap-0 text-left transition-colors',
-                        isSelected ? 'bg-surface-muted' : 'hover:bg-surface-muted/50',
-                      ].join(' ')}
-                    >
-                      <GitGraphLane viewModel={viewModel} />
-
-                      <span className="min-w-0 flex-1 py-1.5 pr-2">
-                        <span className="flex items-center gap-1.5">
-                          <span className="min-w-0 shrink truncate text-[13px] font-medium leading-5 text-foreground">
-                            {entry.subject.length > 0 ? entry.subject : '(no subject)'}
-                          </span>
-                          <span className="ml-auto shrink-0 pl-2 text-subtle-foreground">
-                            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  </Tooltip>
-
-                  {isExpanded ? (
-                    <div className="relative flex bg-surface-muted/10">
-                      <div className="z-10 min-w-0 flex-1">
-                        {renderCommitDetails({
-                          commitHash: entry.hash,
-                          files: commitDetails?.files ?? [],
-                          laneColumnCount: continuationColumns.length,
-                          loadingCommitHashes,
-                        })}
-                      </div>
-                      <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-fit">
-                        <GitGraphPlaceholder columns={continuationColumns} />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })}
-
-            {historyError ? <p className="px-4 py-2 text-xs text-danger-foreground">{historyError}</p> : null}
-
-            {hasMoreHistory ? (
-              <div className="px-4 py-3">
-                <button
-                  type="button"
-                  disabled={isLoadingMoreHistory}
-                  onClick={() => void onLoadMoreHistory()}
-                  className="inline-flex h-8 w-full items-center justify-center rounded-xl border border-border bg-surface-muted/50 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isLoadingMoreHistory ? (
-                    <>
-                      <Loader2 size={13} className="mr-1.5 animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load more commits'
-                  )}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
+          <VirtualizedSourceControlHistoryList
+            bodyClassName="min-h-0 flex-1 overflow-y-auto border-t border-border"
+            commitDetailsByHash={commitDetailsByHash}
+            expandedCommitHashes={expandedCommitHashes}
+            hasMoreHistory={hasMoreHistory}
+            historyError={historyError}
+            historyRowRefMap={historyRowRefMap}
+            historyViewModels={historyViewModels}
+            isLoadingMoreHistory={isLoadingMoreHistory}
+            loadingCommitHashes={loadingCommitHashes}
+            selectedCommitHash={selectedCommitHash}
+            onLoadCommitDetails={onLoadCommitDetails}
+            onLoadMoreHistory={onLoadMoreHistory}
+            onToggleCommitExpanded={onToggleCommitExpanded}
+          />
+        )
+      ) : null}
     </section>
   )
 }

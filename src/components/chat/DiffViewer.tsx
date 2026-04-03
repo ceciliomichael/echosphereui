@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useHighlightedCodeLines } from '../../hooks/useHighlightedCodeLines'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
@@ -12,6 +12,7 @@ interface DiffViewerProps {
   collapsible?: boolean
   contextLines?: number
   defaultExpanded?: boolean
+  diffCacheKey?: string
   filePath: string
   headerClassName?: string
   headerInlineContent?: ReactNode
@@ -28,27 +29,102 @@ interface DiffViewerProps {
   viewOnly?: boolean
 }
 
-const DEFAULT_DIFF_CONTEXT_LINES = 5
-const DIFF_LINE_HEIGHT_PX = 20
-const DIFF_LINE_OVERSCAN_COUNT = 40
-const DIFF_VIRTUALIZATION_THRESHOLD = 800
+function areDiffViewerPropsEqual(left: DiffViewerProps, right: DiffViewerProps) {
+  return (
+    left.className === right.className &&
+    left.collapsible === right.collapsible &&
+    left.contextLines === right.contextLines &&
+    left.defaultExpanded === right.defaultExpanded &&
+    left.diffCacheKey === right.diffCacheKey &&
+    left.filePath === right.filePath &&
+    left.headerClassName === right.headerClassName &&
+    left.headerInlineContent === right.headerInlineContent &&
+    left.headerRightContent === right.headerRightContent &&
+    left.headerTrailingContent === right.headerTrailingContent &&
+    left.isExpanded === right.isExpanded &&
+    left.isStreaming === right.isStreaming &&
+    left.layout === right.layout &&
+    left.maxBodyHeightClassName === right.maxBodyHeightClassName &&
+    left.newContent === right.newContent &&
+    left.onExpandedChange === right.onExpandedChange &&
+    left.oldContent === right.oldContent &&
+    left.startLineNumber === right.startLineNumber &&
+    left.viewOnly === right.viewOnly
+  )
+}
 
-function getScrollContainer(element: HTMLElement | null): HTMLElement | Window {
-  if (!element) {
-    return window
+interface DiffViewerBodyProps {
+  contextLines: number
+  diffCacheKey?: string
+  filePath: string
+  hasOldSide: boolean
+  isStreaming: boolean
+  isStackedLayout: boolean
+  newContent: string
+  oldContent: string | null | undefined
+  maxBodyHeightClassName?: string
+  shouldRenderDiffContent: boolean
+  startLineNumber: number
+  viewOnly: boolean
+}
+
+const DEFAULT_DIFF_CONTEXT_LINES = 5
+const DIFF_PLAIN_TEXT_RENDER_THRESHOLD = 240
+const DIFF_PLAIN_TEXT_CHAR_THRESHOLD = 18000
+const DIFF_CONTENT_VISIBILITY_THRESHOLD = 120
+
+interface VisibleDiffLineItem {
+  key: string
+  line: DiffLine
+  tokens: HighlightedCodeLineData['tokens']
+}
+
+interface DiffRowRenderProps {
+  className?: string
+  lineContent: ReactNode
+  shouldUseContentVisibility: boolean
+}
+
+function DiffRowRender({ className, lineContent, shouldUseContentVisibility }: DiffRowRenderProps) {
+  return (
+    <div
+      className={className}
+      style={
+        shouldUseContentVisibility
+          ? {
+              contain: 'layout paint style',
+              contentVisibility: 'auto',
+              containIntrinsicSize: '20px',
+            }
+          : undefined
+      }
+    >
+      {lineContent}
+    </div>
+  )
+}
+
+const diffLinesCache = new Map<string, DiffLine[]>()
+const MAX_DIFF_LINES_CACHE_ENTRIES = 24
+
+function getCachedDiffLines(cacheKey: string) {
+  return diffLinesCache.get(cacheKey)
+}
+
+function setCachedDiffLines(cacheKey: string, diffLines: DiffLine[]) {
+  if (diffLinesCache.has(cacheKey)) {
+    diffLinesCache.delete(cacheKey)
   }
 
-  let currentElement: HTMLElement | null = element
-  while (currentElement) {
-    const computedStyle = window.getComputedStyle(currentElement)
-    if (/(auto|scroll|overlay)/.test(computedStyle.overflowY)) {
-      return currentElement
+  diffLinesCache.set(cacheKey, diffLines)
+  while (diffLinesCache.size > MAX_DIFF_LINES_CACHE_ENTRIES) {
+    const oldestKey = diffLinesCache.keys().next().value as string | undefined
+    if (!oldestKey) {
+      break
     }
 
-    currentElement = currentElement.parentElement
+    diffLinesCache.delete(oldestKey)
   }
-
-  return window
 }
 
 export function calculateVisibleDiffRange(input: {
@@ -169,11 +245,233 @@ function getLineTokens(
   return newLines[lineIndex]?.tokens ?? oldLines[lineIndex]?.tokens ?? []
 }
 
+function HighlightedDiffRows({
+  highlightedOldLines,
+  highlightedNewLines,
+  renderedLines,
+  shouldUseContentVisibility,
+  shouldUsePlainTextRendering,
+  showsSingleLineNumberColumn,
+  startLineNumber,
+  viewOnly,
+}: {
+  highlightedOldLines: readonly HighlightedCodeLineData[]
+  highlightedNewLines: readonly HighlightedCodeLineData[]
+  renderedLines: readonly DiffLine[]
+  shouldUseContentVisibility: boolean
+  shouldUsePlainTextRendering: boolean
+  showsSingleLineNumberColumn: boolean
+  startLineNumber: number
+  viewOnly: boolean
+}) {
+  const visibleLineItems = useMemo<VisibleDiffLineItem[]>(
+    () =>
+      renderedLines.map((line, index) => ({
+        key: `${line.type}-${index}`,
+        line,
+        tokens: shouldUsePlainTextRendering ? [] : getLineTokens(line, highlightedOldLines, highlightedNewLines, startLineNumber),
+      })),
+    [highlightedNewLines, highlightedOldLines, renderedLines, shouldUsePlainTextRendering, startLineNumber],
+  )
+
+  return (
+    <>
+      <div className={`sticky left-0 z-10 shrink-0 border-r border-border ${getLineGutterClassName()}`}>
+        {visibleLineItems.map(({ key, line }) => (
+          <DiffRowRender
+            key={`gutter-${key}`}
+            className="flex h-5 items-stretch px-2 text-right"
+            shouldUseContentVisibility={shouldUseContentVisibility}
+            lineContent={
+              showsSingleLineNumberColumn ? (
+                <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
+              ) : (
+                <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
+                  <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
+                  <span className="flex h-full items-stretch justify-center" aria-hidden="true">
+                    <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
+                  </span>
+                  <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
+                </span>
+              )
+            }
+          />
+        ))}
+      </div>
+
+      <div className="min-w-0 flex-1 bg-surface">
+        <div className="min-w-full w-fit">
+          {visibleLineItems.map(({ key, line, tokens }) => (
+            <DiffRowRender
+              key={`content-${key}`}
+              className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}
+              shouldUseContentVisibility={shouldUseContentVisibility}
+              lineContent={
+                tokens.length > 0 ? (
+                  <HighlightedCodeTokens tokens={tokens} />
+                ) : (
+                  line.content.length > 0 ? line.content : ' '
+                )
+              }
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function PlainDiffRows({
+  renderedLines,
+  shouldUseContentVisibility,
+  showsSingleLineNumberColumn,
+  viewOnly,
+}: {
+  renderedLines: readonly DiffLine[]
+  shouldUseContentVisibility: boolean
+  showsSingleLineNumberColumn: boolean
+  viewOnly: boolean
+}) {
+  return (
+    <>
+      <div className={`sticky left-0 z-10 shrink-0 border-r border-border ${getLineGutterClassName()}`}>
+        {renderedLines.map((line, index) => (
+          <DiffRowRender
+            key={`gutter-${line.type}-${index}`}
+            className="flex h-5 items-stretch px-2 text-right"
+            shouldUseContentVisibility={shouldUseContentVisibility}
+            lineContent={
+              showsSingleLineNumberColumn ? (
+                <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
+              ) : (
+                <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
+                  <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
+                  <span className="flex h-full items-stretch justify-center" aria-hidden="true">
+                    <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
+                  </span>
+                  <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
+                </span>
+              )
+            }
+          />
+        ))}
+      </div>
+
+      <div className="min-w-0 flex-1 bg-surface">
+        <div className="min-w-full w-fit">
+          {renderedLines.map((line, index) => (
+            <DiffRowRender
+              key={`content-${line.type}-${index}`}
+              className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}
+              shouldUseContentVisibility={shouldUseContentVisibility}
+              lineContent={line.content.length > 0 ? line.content : ' '}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function DiffViewerBody({
+  contextLines,
+  diffCacheKey,
+  filePath,
+  hasOldSide,
+  isStreaming,
+  isStackedLayout,
+  newContent,
+  oldContent,
+  maxBodyHeightClassName,
+  shouldRenderDiffContent,
+  startLineNumber,
+  viewOnly,
+}: DiffViewerBodyProps) {
+  const diffLinesCacheKey = diffCacheKey
+    ? `${diffCacheKey}:${contextLines}:${isStreaming ? '1' : '0'}:${startLineNumber}`
+    : null
+  const diffLines = useMemo(() => {
+    if (diffLinesCacheKey) {
+      const cachedDiffLines = getCachedDiffLines(diffLinesCacheKey)
+      if (cachedDiffLines) {
+        return cachedDiffLines
+      }
+    }
+
+    const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
+    const filteredDiffLines = filterDiffWithContext(diff, contextLines)
+    if (diffLinesCacheKey) {
+      setCachedDiffLines(diffLinesCacheKey, filteredDiffLines)
+    }
+    return filteredDiffLines
+  }, [contextLines, diffLinesCacheKey, isStreaming, newContent, oldContent, startLineNumber])
+
+  const renderedLines = useMemo(() => diffLines.filter((line) => line.type !== 'collapsed'), [diffLines])
+  const plainTextLineCount = renderedLines.length
+  const plainTextCharCount = useMemo(
+    () => renderedLines.reduce((total, line) => total + line.content.length, 0),
+    [renderedLines],
+  )
+  const shouldUsePlainTextRendering =
+    plainTextLineCount >= DIFF_PLAIN_TEXT_RENDER_THRESHOLD || plainTextCharCount >= DIFF_PLAIN_TEXT_CHAR_THRESHOLD
+  const highlightedOldLines = useHighlightedCodeLines(shouldUsePlainTextRendering ? '' : oldContent ?? '', {
+    fileName: shouldUsePlainTextRendering ? 'text' : filePath,
+    stripTrailingNewline: false,
+  })
+  const highlightedNewLines = useHighlightedCodeLines(shouldUsePlainTextRendering ? '' : newContent, {
+    fileName: shouldUsePlainTextRendering ? 'text' : filePath,
+    stripTrailingNewline: false,
+  })
+  const bodyHeightClassName = maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : ''
+  const showsSingleLineNumberColumn = viewOnly || !hasOldSide
+  const shouldUseContentVisibility = renderedLines.length >= DIFF_CONTENT_VISIBILITY_THRESHOLD
+  if (!shouldRenderDiffContent) {
+    return null
+  }
+
+  return (
+    <div
+      className={[
+        isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
+        bodyHeightClassName,
+        'overflow-x-auto',
+      ]
+        .filter((value) => value.length > 0)
+        .join(' ')}
+    >
+      <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
+        <div className="flex min-w-0 items-stretch">
+          {shouldUsePlainTextRendering ? (
+            <PlainDiffRows
+              renderedLines={renderedLines}
+              shouldUseContentVisibility={shouldUseContentVisibility}
+              showsSingleLineNumberColumn={showsSingleLineNumberColumn}
+              viewOnly={viewOnly}
+            />
+          ) : (
+          <HighlightedDiffRows
+              highlightedOldLines={highlightedOldLines}
+              highlightedNewLines={highlightedNewLines}
+              renderedLines={renderedLines}
+              shouldUseContentVisibility={shouldUseContentVisibility}
+              shouldUsePlainTextRendering={shouldUsePlainTextRendering}
+              showsSingleLineNumberColumn={showsSingleLineNumberColumn}
+              startLineNumber={startLineNumber}
+              viewOnly={viewOnly}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const DiffViewerComponent = ({
   className,
   collapsible = false,
   contextLines = DEFAULT_DIFF_CONTEXT_LINES,
   defaultExpanded = true,
+  diffCacheKey,
   filePath,
   headerClassName,
   headerInlineContent,
@@ -190,145 +488,82 @@ const DiffViewerComponent = ({
   viewOnly = false,
 }: DiffViewerProps) => {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded)
-  const [virtualRange, setVirtualRange] = useState<{ startIndex: number; endIndex: number }>({
-    endIndex: DIFF_VIRTUALIZATION_THRESHOLD,
-    startIndex: 0,
-  })
-  const virtualRootRef = useRef<HTMLDivElement | null>(null)
+  const shouldDeferBodyRender = collapsible
+  const [isBodyReady, setIsBodyReady] = useState(!shouldDeferBodyRender || defaultExpanded)
   const isExpanded = expandedProp ?? internalExpanded
   const shouldRenderDiffContent = !collapsible || isExpanded
-  const diffLines = useMemo(() => {
-    if (!shouldRenderDiffContent) {
-      return []
-    }
-
-    const diff = computeDiffLines(oldContent, newContent, { isStreaming, startLineNumber })
-    return filterDiffWithContext(diff, contextLines)
-  }, [contextLines, isStreaming, newContent, oldContent, shouldRenderDiffContent, startLineNumber])
-
-  const iconConfig = resolveFileIconConfig({ fileName: filePath })
+  const iconConfig = useMemo(() => resolveFileIconConfig({ fileName: filePath }), [filePath])
   const FileIcon = iconConfig.icon
-  const renderedLines = useMemo(() => diffLines.filter((line) => line.type !== 'collapsed'), [diffLines])
-  const highlightedOldLines = useHighlightedCodeLines(oldContent ?? '', {
-    fileName: filePath,
-    stripTrailingNewline: false,
-  })
-  const highlightedNewLines = useHighlightedCodeLines(newContent, {
-    fileName: filePath,
-    stripTrailingNewline: false,
-  })
-  const hasOldSide = !viewOnly && renderedLines.some((line) => line.oldLineNumber !== undefined)
-  const shouldVirtualizeLines = renderedLines.length >= DIFF_VIRTUALIZATION_THRESHOLD
-  const visibleStartIndex = shouldVirtualizeLines ? virtualRange.startIndex : 0
-  const visibleEndIndex = shouldVirtualizeLines ? Math.min(renderedLines.length, virtualRange.endIndex) : renderedLines.length
-  const visibleLines = shouldVirtualizeLines ? renderedLines.slice(visibleStartIndex, visibleEndIndex) : renderedLines
-  const topSpacerHeight = shouldVirtualizeLines ? visibleStartIndex * DIFF_LINE_HEIGHT_PX : 0
-  const bottomSpacerHeight = shouldVirtualizeLines ? (renderedLines.length - visibleEndIndex) * DIFF_LINE_HEIGHT_PX : 0
-  const bodyHeightClassName = maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : ''
-
-  useEffect(() => {
-    if (!shouldRenderDiffContent || !shouldVirtualizeLines) {
-      setVirtualRange({
-        endIndex: renderedLines.length,
-        startIndex: 0,
-      })
-      return
-    }
-
-    const rootElement = virtualRootRef.current
-    const scrollContainer = getScrollContainer(rootElement)
-
-    function updateVirtualRange() {
-      if (!rootElement) {
-        return
-      }
-
-      let viewportTop = 0
-      let viewportHeight = window.innerHeight
-      let elementTop = rootElement.getBoundingClientRect().top + window.scrollY
-
-      if (scrollContainer instanceof HTMLElement) {
-        viewportTop = scrollContainer.scrollTop
-        viewportHeight = scrollContainer.clientHeight
-        if (scrollContainer === rootElement) {
-          elementTop = 0
-        } else {
-          const containerRect = scrollContainer.getBoundingClientRect()
-          elementTop = rootElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
-        }
-      } else {
-        viewportTop = window.scrollY
-      }
-
-      const { startIndex: visibleStart, endIndex: visibleEnd } = calculateVisibleDiffRange({
-        elementTop,
-        lineHeight: DIFF_LINE_HEIGHT_PX,
-        overscanCount: DIFF_LINE_OVERSCAN_COUNT,
-        totalLineCount: renderedLines.length,
-        viewportHeight,
-        viewportTop,
-      })
-
-      setVirtualRange((currentRange) => {
-        if (currentRange.startIndex === visibleStart && currentRange.endIndex === visibleEnd) {
-          return currentRange
-        }
-
-        return {
-          endIndex: visibleEnd,
-          startIndex: visibleStart,
-        }
-      })
-    }
-
-    updateVirtualRange()
-    const frameId = window.requestAnimationFrame(updateVirtualRange)
-    if (scrollContainer instanceof HTMLElement) {
-      scrollContainer.addEventListener('scroll', updateVirtualRange, { passive: true })
-    } else {
-      window.addEventListener('scroll', updateVirtualRange, { passive: true })
-    }
-    window.addEventListener('resize', updateVirtualRange)
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-      if (scrollContainer instanceof HTMLElement) {
-        scrollContainer.removeEventListener('scroll', updateVirtualRange)
-      } else {
-        window.removeEventListener('scroll', updateVirtualRange)
-      }
-      window.removeEventListener('resize', updateVirtualRange)
-    }
-  }, [renderedLines.length, shouldRenderDiffContent, shouldVirtualizeLines])
-  const headerMainContent = (
-    <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
-      <span className="relative flex h-4 w-4 items-center justify-center">
-        <FileIcon
-          size={14}
-          style={{ color: iconConfig.color }}
-          aria-hidden="true"
-          className={collapsible ? 'transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0' : ''}
-        />
-        {collapsible ? (
-          <ChevronRight
-            size={15}
-            className={[
-              'absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100',
-              isExpanded ? 'rotate-90' : '',
-            ].join(' ')}
+  const headerMainContent = useMemo(
+    () => (
+      <span className="inline-flex min-h-4 min-w-0 flex-1 items-center gap-2">
+        <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+          <FileIcon
+            size={14}
+            style={{ color: iconConfig.color }}
+            aria-hidden="true"
+            className={collapsible ? 'transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0' : ''}
           />
-        ) : null}
+          {collapsible ? (
+            <ChevronRight
+              size={14}
+              className={[
+                'absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100',
+                isExpanded ? 'rotate-90' : '',
+              ].join(' ')}
+            />
+          ) : null}
+        </span>
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
+          {headerInlineContent ? <span className="inline-flex shrink-0 items-center">{headerInlineContent}</span> : null}
+          {headerTrailingContent ? <span className="inline-flex shrink-0 items-center">{headerTrailingContent}</span> : null}
+        </span>
       </span>
-      <span className="inline-flex min-w-0 items-center gap-2">
-        <PathLabel path={filePath} className="min-w-0 leading-[1] text-foreground" />
-        {headerInlineContent ? <span className="inline-flex shrink-0 items-center">{headerInlineContent}</span> : null}
-        {headerTrailingContent ? <span className="inline-flex shrink-0 items-center">{headerTrailingContent}</span> : null}
-      </span>
-    </span>
+    ),
+    [FileIcon, collapsible, filePath, headerInlineContent, headerTrailingContent, iconConfig.color, isExpanded],
   )
   const hasRightHeaderContent = Boolean(headerRightContent)
 
   const isStackedLayout = layout === 'stacked'
+
+  useEffect(() => {
+    if (!shouldRenderDiffContent) {
+      setIsBodyReady(false)
+      return undefined
+    }
+
+    if (!shouldDeferBodyRender) {
+      setIsBodyReady(true)
+      return undefined
+    }
+
+    let isCancelled = false
+    setIsBodyReady(false)
+
+    const frameId = window.requestAnimationFrame(() => {
+      if (!isCancelled) {
+        setIsBodyReady(true)
+      }
+    })
+
+    return () => {
+      isCancelled = true
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [
+    contextLines,
+    diffCacheKey,
+    filePath,
+    isExpanded,
+    isStreaming,
+    newContent,
+    oldContent,
+    shouldRenderDiffContent,
+    shouldDeferBodyRender,
+    startLineNumber,
+    viewOnly,
+  ])
 
   return (
     <div
@@ -342,7 +577,7 @@ const DiffViewerComponent = ({
       {collapsible ? (
         <div
           className={[
-            'group flex w-full items-center justify-between bg-surface px-4 py-3 text-[12px] text-muted-foreground',
+            'group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center bg-surface px-4 py-3 text-[12px] text-muted-foreground',
             isExpanded ? 'border-b border-border' : '',
             headerClassName ?? '',
           ].join(' ')}
@@ -357,7 +592,7 @@ const DiffViewerComponent = ({
               }
               onExpandedChange?.(nextExpanded)
             }}
-            className={hasRightHeaderContent ? 'group flex min-w-0 flex-1 items-center text-left' : 'group flex min-w-0 w-full items-center text-left'}
+            className="group flex min-w-0 w-full items-center text-left"
           >
             {headerMainContent}
           </button>
@@ -366,7 +601,7 @@ const DiffViewerComponent = ({
       ) : (
         <div
           className={[
-            'flex items-center justify-between border-b border-border bg-surface px-4 py-3 text-[12px] text-muted-foreground',
+            'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border bg-surface px-4 py-3 text-[12px] text-muted-foreground',
             headerClassName ?? '',
           ].join(' ')}
         >
@@ -375,68 +610,40 @@ const DiffViewerComponent = ({
         </div>
       )}
 
-      {shouldRenderDiffContent && (
-        <div
-          ref={virtualRootRef}
-          className={[
-            isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
-            bodyHeightClassName,
-            'overflow-x-auto',
-          ]
-            .filter((value) => value.length > 0)
-            .join(' ')}
-        >
-          <div className="min-w-0 bg-surface font-mono text-[12px] leading-5">
-            <div className="flex min-w-0 items-stretch">
-              <div className={`sticky left-0 z-10 shrink-0 border-r border-border ${getLineGutterClassName()}`}>
-                {topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
-                {visibleLines.map((line, index) => {
-                  return (
-                    <div key={`gutter-${line.type}-${visibleStartIndex + index}`} className="flex h-5 items-stretch px-2 text-right">
-                      {viewOnly || !hasOldSide ? (
-                        <span className="flex h-5 min-w-8 items-center justify-end">{line.newLineNumber ?? ''}</span>
-                      ) : (
-                        <span className="inline-grid h-5 grid-cols-[2rem_3px_2rem] items-stretch gap-0">
-                          <span className="flex h-5 min-w-8 items-center justify-end pr-1">{line.oldLineNumber ?? ''}</span>
-                          <span className="flex h-full items-stretch justify-center" aria-hidden="true">
-                            <span className={`block h-full w-px ${getLineNumberDividerClassName()}`} />
-                          </span>
-                          <span className="flex h-5 min-w-8 items-center justify-end pl-1">{line.newLineNumber ?? ''}</span>
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-                {bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
-              </div>
-
-              <div className="min-w-0 flex-1 bg-surface">
-                <div className="min-w-full w-fit">
-                  {topSpacerHeight > 0 ? <div style={{ height: `${topSpacerHeight}px` }} aria-hidden="true" /> : null}
-                  {visibleLines.map((line, index) => {
-                    const highlightedTokens = getLineTokens(line, highlightedOldLines, highlightedNewLines, startLineNumber)
-                    return (
-                      <div
-                        key={`content-${line.type}-${visibleStartIndex + index}`}
-                        className={`h-5 px-3 whitespace-pre ${getLineContentClassName(line, viewOnly)}`}
-                      >
-                        {highlightedTokens.length > 0 ? (
-                          <HighlightedCodeTokens tokens={highlightedTokens} />
-                        ) : (
-                          line.content.length > 0 ? line.content : ' '
-                        )}
-                      </div>
-                    )
-                  })}
-                  {bottomSpacerHeight > 0 ? <div style={{ height: `${bottomSpacerHeight}px` }} aria-hidden="true" /> : null}
-                </div>
-              </div>
+      {shouldRenderDiffContent ? (
+        isBodyReady ? (
+        <DiffViewerBody
+          contextLines={contextLines}
+          diffCacheKey={diffCacheKey}
+          filePath={filePath}
+          hasOldSide={!viewOnly && oldContent != null}
+          isStreaming={isStreaming}
+          isStackedLayout={isStackedLayout}
+          newContent={newContent}
+          oldContent={oldContent}
+          maxBodyHeightClassName={maxBodyHeightClassName}
+          shouldRenderDiffContent={shouldRenderDiffContent}
+          startLineNumber={startLineNumber}
+          viewOnly={viewOnly}
+        />
+        ) : (
+          <div
+            className={[
+              isStackedLayout ? 'overflow-hidden bg-surface' : 'overflow-hidden rounded-b-2xl bg-surface',
+              maxBodyHeightClassName ? `${maxBodyHeightClassName} overflow-y-auto` : '',
+              'overflow-x-auto',
+            ]
+              .filter((value) => value.length > 0)
+              .join(' ')}
+          >
+            <div className="flex min-h-20 items-center px-4 py-3 text-sm text-muted-foreground">
+              Rendering diff...
             </div>
           </div>
-        </div>
-      )}
+        )
+      ) : null}
     </div>
   )
 }
 
-export const DiffViewer = memo(DiffViewerComponent)
+export const DiffViewer = memo(DiffViewerComponent, areDiffViewerPropsEqual)

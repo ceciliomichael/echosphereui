@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Maximize, Minimize, Minus, Plus, Undo2 } from 'lucide-react'
+import { Check, ChevronDown, Maximize, Minimize } from 'lucide-react'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import { Tooltip } from '../Tooltip'
-import { DiffViewer } from './DiffViewer'
+import { VirtualizedConversationDiffFileList } from './VirtualizedConversationDiffFileList'
 
 interface ConversationDiffPanelProps {
   currentBranch: string | null
@@ -32,7 +32,7 @@ interface DiffScopeOption {
   value: DiffPanelScope
 }
 
-export function ConversationDiffPanel({
+function ConversationDiffPanelContent({
   currentBranch,
   expandedFilePaths,
   fileDiffs,
@@ -68,21 +68,17 @@ export function ConversationDiffPanel({
   })
 
   const branchLabel = currentBranch ? `${currentBranch} → origin/${currentBranch}` : 'No branch selected'
-  const isUnstagedLikeFileDiff = useMemo(
-    () => (fileDiff: ConversationFileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked),
-    [],
-  )
   const displayedFileDiffs = useMemo(() => {
     if (selectedScope === 'staged') {
       return fileDiffs.filter((fileDiff) => fileDiff.isStaged)
     }
 
     if (selectedScope === 'unstaged') {
-      return fileDiffs.filter((fileDiff) => isUnstagedLikeFileDiff(fileDiff))
+      return fileDiffs.filter((fileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked))
     }
 
     return fileDiffs
-  }, [fileDiffs, isUnstagedLikeFileDiff, selectedScope])
+  }, [fileDiffs, selectedScope])
   const selectedScopeLabel =
     selectedScope === 'unstaged'
       ? 'Unstaged'
@@ -92,12 +88,14 @@ export function ConversationDiffPanel({
           ? 'Branch'
           : 'Last turn'
   const unstagedFileCount = useMemo(
-    () => fileDiffs.filter((fileDiff) => isUnstagedLikeFileDiff(fileDiff)).length,
-    [fileDiffs, isUnstagedLikeFileDiff],
+    () => fileDiffs.filter((fileDiff) => fileDiff.isUnstaged || fileDiff.isUntracked || (!fileDiff.isStaged && !fileDiff.isUnstaged && !fileDiff.isUntracked)).length,
+    [fileDiffs],
   )
   const stagedFileCount = useMemo(() => fileDiffs.filter((fileDiff) => fileDiff.isStaged).length, [fileDiffs])
   const selectedScopeCount = selectedScope === 'unstaged' ? unstagedFileCount : selectedScope === 'staged' ? stagedFileCount : null
   const expandedFilePathSet = useMemo(() => new Set(expandedFilePaths), [expandedFilePaths])
+  const panelIconButtonClassName =
+    'inline-flex h-6 w-6 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent'
 
   const scopeOptions = useMemo(
     () =>
@@ -290,58 +288,6 @@ export function ConversationDiffPanel({
     onExpandedFilePathsChange(expandedFilePaths.filter((existingFileName) => existingFileName !== fileName))
   }
 
-  function canStageFile(fileDiff: ConversationFileDiff) {
-    return isUnstagedLikeFileDiff(fileDiff)
-  }
-
-  function canDiscardFile(fileDiff: ConversationFileDiff) {
-    return isUnstagedLikeFileDiff(fileDiff)
-  }
-
-  function canUnstageFile(fileDiff: ConversationFileDiff) {
-    return selectedScope === 'staged' && fileDiff.isStaged
-  }
-
-  function getDiscardTooltipLabel(fileDiff: ConversationFileDiff) {
-    if (pendingFileActionPath === fileDiff.fileName) {
-      return 'Updating file state...'
-    }
-
-    if (canDiscardFile(fileDiff)) {
-      return 'Discard file changes'
-    }
-
-    return 'No unstaged changes for this file'
-  }
-
-  function getUnstageTooltipLabel(fileDiff: ConversationFileDiff) {
-    if (pendingFileActionPath === fileDiff.fileName) {
-      return 'Updating file state...'
-    }
-
-    if (canUnstageFile(fileDiff)) {
-      return 'Unstage file'
-    }
-
-    return 'File is not staged'
-  }
-
-  function getStageTooltipLabel(fileDiff: ConversationFileDiff) {
-    if (pendingFileActionPath === fileDiff.fileName) {
-      return 'Updating file state...'
-    }
-
-    if (canStageFile(fileDiff)) {
-      return 'Stage file'
-    }
-
-    return 'File is already staged'
-  }
-
-  const panelIconButtonClassName =
-    'inline-flex h-6 w-6 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent'
-  const fileActionButtonClassName = `${panelIconButtonClassName} disabled:cursor-not-allowed disabled:text-muted-foreground/50 disabled:hover:bg-transparent`
-
   function renderScopeOption(option: DiffScopeOption) {
     const isSelected = option.value === selectedScope
     const isHighlighted = option.value === highlightedScope
@@ -459,101 +405,26 @@ export function ConversationDiffPanel({
               : 'No changed files were detected for this branch.'}
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {displayedFileDiffs.map((diff) => (
-              <DiffViewer
-                key={diff.fileName}
-                collapsible
-                defaultExpanded={false}
-                filePath={diff.fileName}
-                isExpanded={expandedFilePathSet.has(diff.fileName)}
-                newContent={diff.newContent}
-                onExpandedChange={(nextValue) => handleFileExpandedChange(diff.fileName, nextValue)}
-                oldContent={diff.oldContent}
-                contextLines={diff.contextLines}
-                layout="stacked"
-                startLineNumber={diff.startLineNumber}
-                headerInlineContent={
-                  <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-xs">
-                    <span className="text-emerald-600 dark:text-emerald-400">{`+${diff.addedLineCount}`}</span>
-                    <span className="text-red-600 dark:text-red-400">{`-${diff.removedLineCount}`}</span>
-                  </span>
-                }
-                headerRightContent={
-                  <span className="inline-flex items-center gap-0.5">
-                    {selectedScope === 'staged' ? (
-                      pendingFileActionPath === diff.fileName ? (
-                        <button
-                          type="button"
-                          aria-label={`Unstage ${diff.fileName}`}
-                          disabled={!canUnstageFile(diff) || pendingFileActionPath === diff.fileName}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            void onUnstageFile(diff.fileName)
-                          }}
-                          className={fileActionButtonClassName}
-                        >
-                          <Minus size={14} />
-                        </button>
-                      ) : (
-                        <Tooltip content={getUnstageTooltipLabel(diff)} side="left" noWrap>
-                          <button
-                            type="button"
-                            aria-label={`Unstage ${diff.fileName}`}
-                            disabled={!canUnstageFile(diff) || pendingFileActionPath === diff.fileName}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              void onUnstageFile(diff.fileName)
-                            }}
-                            className={fileActionButtonClassName}
-                          >
-                            <Minus size={14} />
-                          </button>
-                        </Tooltip>
-                      )
-                    ) : (
-                      <>
-                        <Tooltip content={getDiscardTooltipLabel(diff)} side="left" noWrap>
-                          <button
-                            type="button"
-                            aria-label={`Discard ${diff.fileName}`}
-                            disabled={!canDiscardFile(diff) || pendingFileActionPath === diff.fileName}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              void onDiscardFile(diff.fileName)
-                            }}
-                            className={fileActionButtonClassName}
-                          >
-                            <Undo2 size={14} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip content={getStageTooltipLabel(diff)} side="left" noWrap>
-                          <button
-                            type="button"
-                            aria-label={`Stage ${diff.fileName}`}
-                            disabled={!canStageFile(diff) || pendingFileActionPath === diff.fileName}
-                            onClick={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              void onStageFile(diff.fileName)
-                            }}
-                            className={fileActionButtonClassName}
-                          >
-                            <Plus size={14} />
-                          </button>
-                        </Tooltip>
-                      </>
-                    )}
-                  </span>
-                }
-              />
-            ))}
-          </div>
+          <VirtualizedConversationDiffFileList
+            diffs={displayedFileDiffs}
+            expandedFilePathSet={expandedFilePathSet}
+            onDiscardFile={onDiscardFile}
+            onExpandedChange={handleFileExpandedChange}
+            onStageFile={onStageFile}
+            onUnstageFile={onUnstageFile}
+            pendingFileActionPath={pendingFileActionPath}
+            selectedScope={selectedScope}
+          />
         )}
       </aside>
     </div>
   )
+}
+
+export function ConversationDiffPanel(props: ConversationDiffPanelProps) {
+  if (!props.isOpen) {
+    return null
+  }
+
+  return <ConversationDiffPanelContent {...props} />
 }

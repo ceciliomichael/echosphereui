@@ -162,6 +162,7 @@ export function toApiKeyProviderStatuses(storedProviders: StoredApiKeyProviders)
         : Boolean(storedProvider?.api_key)
 
     return {
+      apiKey: storedProvider?.api_key ?? null,
       baseUrl: storedProvider?.base_url ?? null,
       configured,
       hasApiKey: Boolean(storedProvider?.api_key),

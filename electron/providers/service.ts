@@ -4,7 +4,7 @@ import {
   connectCodexProviderWithOAuth,
   disconnectCodexProvider,
   getCodexProviderStatus,
-  switchCodexAccount as switchCodexAccountInternal,
+  switchCodexAccount as switchStoredCodexAccount,
 } from './codex/service'
 import {
   readStoredApiKeyProviders,
@@ -66,7 +66,8 @@ async function refreshProvidersCache() {
 }
 
 async function buildProvidersState(): Promise<ProvidersState> {
-  const [codex, storedApiKeyProviders] = await Promise.all([getCodexProviderStatus(), readStoredApiKeyProviders()])
+  const storedApiKeyProviders = await readStoredApiKeyProviders()
+  const codex = await getCodexProviderStatus()
 
   return {
     apiKeyProviders: toApiKeyProviderStatuses(storedApiKeyProviders),
@@ -90,7 +91,7 @@ export async function disconnectCodex() {
 }
 
 export async function switchCodexAccount(accountId: string) {
-  await switchCodexAccountInternal(accountId)
+  await switchStoredCodexAccount(accountId)
   return refreshProvidersCache()
 }
 

@@ -3,6 +3,7 @@ import type { FileDiffToolResultPresentation, GitFileDiff, Message } from '../ty
 
 export interface ConversationFileDiff {
   addedLineCount: number
+  contentSignature: string
   contextLines?: number
   fileName: string
   isStaged: boolean
@@ -21,6 +22,24 @@ export interface ConversationDiffSnapshot {
   totalRemovedLineCount: number
 }
 
+function hashString(value: string) {
+  let hash = 2166136261
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+function buildDiffContentSignature(oldContent: string | null, newContent: string) {
+  return [
+    oldContent === null ? 'null' : `${oldContent.length}:${hashString(oldContent)}`,
+    `${newContent.length}:${hashString(newContent)}`,
+  ].join('|')
+}
+
 function normalizeFileDiff(result: FileDiffToolResultPresentation): ConversationFileDiff {
   const computedSummary = getDiffSummary(result.oldContent, result.newContent, {
     ...(result.startLineNumber === undefined ? {} : { startLineNumber: result.startLineNumber }),
@@ -28,6 +47,7 @@ function normalizeFileDiff(result: FileDiffToolResultPresentation): Conversation
 
   return {
     addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
+    contentSignature: buildDiffContentSignature(result.oldContent, result.newContent),
     fileName: result.fileName,
     isStaged: false,
     isUnstaged: false,
@@ -47,6 +67,7 @@ function normalizeRawFileDiff(result: GitFileDiff): ConversationFileDiff {
 
   return {
     addedLineCount: result.addedLineCount ?? computedSummary.addedLineCount,
+    contentSignature: buildDiffContentSignature(result.oldContent, result.newContent),
     fileName: result.fileName,
     isStaged: result.isStaged,
     isUnstaged: result.isUnstaged,

@@ -167,6 +167,7 @@ export default function App() {
               activeOperation: providersState.activeOperation,
               addCodexAccountWithOAuth: providersState.addCodexAccountWithOAuth,
               connectCodexWithOAuth: providersState.connectCodexWithOAuth,
+              disconnectCodex: providersState.disconnectCodex,
               errorMessage: providersState.errorMessage,
               isLoading: providersState.isLoading,
               onRemoveApiKeyProvider: providersState.removeApiKeyProvider,

@@ -1,4 +1,5 @@
 import type { ApiKeyProviderId, SaveCustomModelInput } from '../../src/types/chat'
+import { listOpenAICompatibleModels } from '../chat/openaiCompatible/models'
 import { listStoredCustomModels, removeCustomModelConfig, saveCustomModelConfig } from './store'
 
 export async function listCustomModels() {
@@ -14,6 +15,9 @@ export async function removeCustomModel(modelId: string) {
 }
 
 export async function listProviderModels(providerId: ApiKeyProviderId) {
-  void providerId
+  if (providerId === 'openai-compatible') {
+    return listOpenAICompatibleModels()
+  }
+
   return []
 }

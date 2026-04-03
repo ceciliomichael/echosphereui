@@ -1,6 +1,7 @@
 import { GitCommitHorizontal } from 'lucide-react'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { ConversationFileDiff } from '../../lib/chatDiffs'
+import type { DiffPanelScope } from '../chat/ConversationDiffPanel'
 import { MIN_DIFF_PANEL_WIDTH, getMaxDiffPanelWidth } from '../../lib/diffPanelSizing'
 import { clampSourceControlHistoryHeight, getDefaultSourceControlHistoryHeight } from '../../lib/sourceControlSizing'
 import type {
@@ -13,14 +14,19 @@ import { SourceControlHistorySection } from './SourceControlHistorySection'
 import { computeSwimlanes } from './historyGraphLayout'
 
 interface SourceControlPanelProps {
+  onDiffPanelExpandedFilePathsChange: (nextFilePaths: string[]) => void
+  onDiffPanelSelectedScopeChange: (nextScope: DiffPanelScope) => void
   fileDiffs: readonly ConversationFileDiff[]
   isOpen: boolean
   onDiscardFile: (filePath: string) => Promise<void>
   onOpenCommitModal: () => void
+  onOpenDiffPanel: () => void
   onQuickCommit: (input: { includeUnstaged: boolean; message: string }) => Promise<void>
   onRefreshAll: () => Promise<void>
   onSectionOpenChange: (nextValue: Record<'changes' | 'commit' | 'history' | 'staged' | 'unstaged', boolean>) => void
+  onStageFiles: (filePaths: string[]) => Promise<void>
   onStageFile: (filePath: string) => Promise<void>
+  onUnstageFiles: (filePaths: string[]) => Promise<void>
   onUnstageFile: (filePath: string) => Promise<void>
   onWidthChange: (nextWidth: number) => void
   onWidthCommit?: (nextWidth: number) => void
@@ -32,15 +38,20 @@ interface SourceControlPanelProps {
 
 const HISTORY_PAGE_SIZE = 200
 
-function SourceControlPanelComponent({
+function SourceControlPanelContent({
+  onDiffPanelExpandedFilePathsChange,
+  onDiffPanelSelectedScopeChange,
   fileDiffs,
   isOpen,
   onDiscardFile,
   onOpenCommitModal,
+  onOpenDiffPanel,
   onQuickCommit,
   onRefreshAll,
   onSectionOpenChange,
+  onStageFiles,
   onStageFile,
+  onUnstageFiles,
   onUnstageFile,
   onWidthChange,
   onWidthCommit,
@@ -82,7 +93,6 @@ function SourceControlPanelComponent({
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null)
-  const [expandedChangeFilePaths, setExpandedChangeFilePaths] = useState<string[]>([])
   const [expandedCommitHashes, setExpandedCommitHashes] = useState<string[]>([])
   const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, GitHistoryCommitDetailsResult>>({})
   const [loadingCommitHashes, setLoadingCommitHashes] = useState<string[]>([])
@@ -558,10 +568,10 @@ function SourceControlPanelComponent({
     document.body.style.cursor = 'row-resize'
   }
 
-  function handleChangeFileExpandedChange(filePath: string, nextValue: boolean) {
-    setExpandedChangeFilePaths((currentValue) =>
-      nextValue ? [...currentValue, filePath] : currentValue.filter((value) => value !== filePath),
-    )
+  function handleOpenDiffPanelForFile(filePath: string, scope: DiffPanelScope) {
+    onDiffPanelSelectedScopeChange(scope)
+    onDiffPanelExpandedFilePathsChange([filePath])
+    onOpenDiffPanel()
   }
 
   function handleCommitExpandedToggle(commitHash: string) {
@@ -636,7 +646,6 @@ function SourceControlPanelComponent({
           <SourceControlChangesSection
             commitActionControlsRef={commitActionControlsRef}
             commitMessage={commitMessage}
-            expandedChangeFilePaths={expandedChangeFilePaths}
             includeUnstaged={includeUnstaged}
             isChangesSectionOpen={isChangesSectionOpen}
             isCommitActionDisabled={isCommitActionDisabled}
@@ -656,13 +665,15 @@ function SourceControlPanelComponent({
             onCommitActionMenuOpenChange={setIsCommitActionMenuOpen}
             onCommitMessageChange={setCommitMessage}
             onDiscardFile={onDiscardFile}
-            onExpandedChange={handleChangeFileExpandedChange}
             onIncludeUnstagedChange={setIncludeUnstaged}
             onOpenCommitModal={onOpenCommitModal}
             onQuickCommitSubmit={handleQuickCommitSubmit}
+            onOpenDiffPanelForFile={handleOpenDiffPanelForFile}
+            onStageFiles={onStageFiles}
             onStageFile={onStageFile}
             onStagedSectionOpenChange={handleStagedSectionOpenChange}
             onToggleChangesSection={handleToggleChangesSection}
+            onUnstageFiles={onUnstageFiles}
             onUnstageFile={onUnstageFile}
             onUnstagedSectionOpenChange={handleUnstagedSectionOpenChange}
           />
@@ -700,4 +711,12 @@ function SourceControlPanelComponent({
   )
 }
 
-export const SourceControlPanel = memo(SourceControlPanelComponent)
+function SourceControlPanelGate(props: SourceControlPanelProps) {
+  if (!props.isOpen) {
+    return null
+  }
+
+  return <SourceControlPanelContent {...props} />
+}
+
+export const SourceControlPanel = memo(SourceControlPanelGate)

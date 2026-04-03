@@ -12,6 +12,7 @@ import type {
   EchosphereProvidersApi,
   EchosphereTerminalApi,
   GitCommitInput,
+  GitFileStageBatchInput,
   GitHistoryCommitDetailsInput,
   GitHistoryPageInput,
   SaveApiKeyProviderInput,
@@ -129,7 +130,9 @@ const gitApi: EchosphereGitApi = {
   getHistoryPage: (input: GitHistoryPageInput) => ipcRenderer.invoke('git:getHistoryPage', input),
   getStatus: (workspacePath: string) => ipcRenderer.invoke('git:getStatus', workspacePath),
   sync: (input: GitSyncInput) => ipcRenderer.invoke('git:sync', input),
+  stageFiles: (input: GitFileStageBatchInput) => ipcRenderer.invoke('git:stageFiles', input),
   stageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:stageFile', input),
+  unstageFiles: (input: GitFileStageBatchInput) => ipcRenderer.invoke('git:unstageFiles', input),
   unstageFile: (input: GitFileStageInput) => ipcRenderer.invoke('git:unstageFile', input),
 }
 

@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { GitFileStageInput, GitFileStageResult } from '../../src/types/chat'
+import type { GitFileStageBatchInput, GitFileStageBatchResult, GitFileStageInput, GitFileStageResult } from '../../src/types/chat'
 import {
   getErrorMessage,
   isGitUnavailable,
@@ -16,6 +16,25 @@ async function isTrackedGitFile(repoRootPath: string, filePath: string) {
   } catch {
     return false
   }
+}
+
+async function resolveStageFileBatch(input: GitFileStageBatchInput) {
+  const workspacePath = input.workspacePath.trim()
+  if (workspacePath.length === 0) {
+    throw new Error('Workspace path is required.')
+  }
+
+  const repoRootPath = await resolveRepositoryRoot(workspacePath)
+  if (!repoRootPath) {
+    throw new Error('No git repository was found for this workspace.')
+  }
+
+  const filePaths = await Promise.all(input.filePaths.map(async (filePath) => resolveAndValidateGitFilePath(repoRootPath, filePath)))
+  if (filePaths.length === 0) {
+    throw new Error('At least one file path is required.')
+  }
+
+  return { repoRootPath, filePaths }
 }
 
 export async function discardGitFileChanges(input: GitFileStageInput): Promise<GitFileStageResult> {
@@ -86,6 +105,25 @@ export async function stageGitFile(input: GitFileStageInput): Promise<GitFileSta
   }
 }
 
+export async function stageGitFiles(input: GitFileStageBatchInput): Promise<GitFileStageBatchResult> {
+  const { repoRootPath, filePaths } = await resolveStageFileBatch(input)
+
+  try {
+    await runGit(['add', '--', ...filePaths], repoRootPath)
+  } catch (error) {
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+
+    throw new Error(`Failed to stage files: ${getErrorMessage(error)}`)
+  }
+
+  return {
+    filePaths,
+    success: true,
+  }
+}
+
 export async function unstageGitFile(input: GitFileStageInput): Promise<GitFileStageResult> {
   const workspacePath = input.workspacePath.trim()
   if (workspacePath.length === 0) {
@@ -119,6 +157,33 @@ export async function unstageGitFile(input: GitFileStageInput): Promise<GitFileS
 
   return {
     filePath,
+    success: true,
+  }
+}
+
+export async function unstageGitFiles(input: GitFileStageBatchInput): Promise<GitFileStageBatchResult> {
+  const { repoRootPath, filePaths } = await resolveStageFileBatch(input)
+
+  try {
+    await runGit(['restore', '--staged', '--', ...filePaths], repoRootPath)
+  } catch (error) {
+    try {
+      await runGit(['reset', '--', ...filePaths], repoRootPath)
+    } catch (fallbackError) {
+      if (isGitUnavailable(fallbackError)) {
+        throw new Error('Git is not available in the current environment.')
+      }
+
+      throw new Error(`Failed to unstage files: ${getErrorMessage(fallbackError)}`)
+    }
+
+    if (isGitUnavailable(error)) {
+      throw new Error('Git is not available in the current environment.')
+    }
+  }
+
+  return {
+    filePaths,
     success: true,
   }
 }

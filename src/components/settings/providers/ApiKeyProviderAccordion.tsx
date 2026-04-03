@@ -1,3 +1,5 @@
+import { Eye, EyeOff } from 'lucide-react'
+import { useState } from 'react'
 import type { ApiKeyProviderStatus } from '../../../types/chat'
 import { ProviderAccordionItem } from './ProviderAccordionItem'
 import type { ApiKeyProviderSchema } from './providerSchemas'
@@ -54,6 +56,7 @@ export function ApiKeyProviderAccordion({
 }: ApiKeyProviderAccordionProps) {
   const statusLabel = providerStatus?.configured ? 'Configured' : 'Not Configured'
   const hasStoredApiKey = Boolean(providerStatus?.hasApiKey)
+  const [isApiKeyVisible, setIsApiKeyVisible] = useState(false)
 
   return (
     <ProviderAccordionItem
@@ -71,19 +74,28 @@ export function ApiKeyProviderAccordion({
           <label htmlFor={`${schema.id}-api-key`} className="text-sm font-medium text-foreground">
             API Key {schema.apiKeyOptional ? '(optional)' : ''}
           </label>
-          <input
-            id={`${schema.id}-api-key`}
-            type="password"
-            value={draft.apiKey}
-            onChange={(event) => onUpdateApiKey(event.target.value)}
-            placeholder={
-              hasStoredApiKey ? 'Stored locally. Enter a new API key to rotate.' : 'Paste API key'
-            }
-            className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
-            required={!schema.apiKeyOptional}
-          />
+          <div className="relative">
+            <input
+              id={`${schema.id}-api-key`}
+              type={isApiKeyVisible ? 'text' : 'password'}
+              value={draft.apiKey}
+              onChange={(event) => onUpdateApiKey(event.target.value)}
+              placeholder={hasStoredApiKey ? 'Stored locally.' : 'Paste API key'}
+              className="h-11 w-full rounded-xl border border-border bg-surface px-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
+              required={!schema.apiKeyOptional}
+            />
+            <button
+              type="button"
+              aria-label={isApiKeyVisible ? 'Hide API key' : 'Show API key'}
+              aria-pressed={isApiKeyVisible}
+              onClick={() => setIsApiKeyVisible((currentValue) => !currentValue)}
+              className="group absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {isApiKeyVisible ? <EyeOff size={16} className="transition-colors group-hover:text-foreground" /> : <Eye size={16} className="transition-colors group-hover:text-foreground" />}
+            </button>
+          </div>
           {hasStoredApiKey ? (
-            <p className="text-xs text-muted-foreground">Leave this blank to keep the saved API key.</p>
+            <p className="text-xs text-muted-foreground">Stored locally and loaded back into this field.</p>
           ) : schema.apiKeyOptional ? (
             <p className="text-xs text-muted-foreground">
               Optional. Leave this blank if your endpoint does not require authentication.
@@ -105,6 +117,11 @@ export function ApiKeyProviderAccordion({
               className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
               required={schema.baseUrlRequired}
             />
+            {schema.id === 'openai-compatible' ? (
+              <p className="text-xs text-muted-foreground">
+                The backend normalizes this URL to the `/v1` API root before calling models and chat.
+              </p>
+            ) : null}
           </div>
         ) : null}
 

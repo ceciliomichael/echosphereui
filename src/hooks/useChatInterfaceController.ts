@@ -83,6 +83,10 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
   }, [hasRepository])
 
   useEffect(() => {
+    if (!isRightPanelOpen) {
+      return
+    }
+
     if (!hasRepository) {
       return
     }
@@ -96,7 +100,14 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
       forceRefresh: !workspaceChanged,
       silent: true,
     })
-  }, [activeWorkspacePath, gitBranchState.branchState.currentBranch, hasRepository, messagesLength, onDiffRefresh])
+  }, [
+    activeWorkspacePath,
+    gitBranchState.branchState.currentBranch,
+    hasRepository,
+    isRightPanelOpen,
+    messagesLength,
+    onDiffRefresh,
+  ])
 
   const handleToggleSidebar = useCallback(() => {
     setIsSidebarOpen((currentValue) => {
@@ -186,6 +197,30 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
         await onDiffRefresh({ forceRefresh: true, silent: true })
       } catch (error) {
         console.error(`Failed to ${action} file from git panel`, error)
+      } finally {
+        setPendingFileActionPath(null)
+      }
+    },
+    [activeWorkspacePath, hasRepository, onDiffRefresh],
+  )
+
+  const handleGitFileBatchAction = useCallback(
+    async (filePaths: string[], action: 'stage' | 'unstage') => {
+      const normalizedWorkspacePath = activeWorkspacePath?.trim() ?? ''
+      if (!hasRepository || normalizedWorkspacePath.length === 0 || filePaths.length === 0) {
+        return
+      }
+
+      setPendingFileActionPath(filePaths[0] ?? null)
+      try {
+        if (action === 'stage') {
+          await window.echosphereGit.stageFiles({ filePaths, workspacePath: normalizedWorkspacePath })
+        } else {
+          await window.echosphereGit.unstageFiles({ filePaths, workspacePath: normalizedWorkspacePath })
+        }
+        await onDiffRefresh({ forceRefresh: true, silent: true })
+      } catch (error) {
+        console.error(`Failed to ${action} files from git panel`, error)
       } finally {
         setPendingFileActionPath(null)
       }
@@ -291,9 +326,11 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
     handleQuickCommit,
     handleRefreshGitUi,
     handleSourceControlSectionOpenChange,
+    handleStageDiffFiles: (filePaths: string[]) => handleGitFileBatchAction(filePaths, 'stage'),
     handleStageDiffFile: (filePath: string) => handleGitFileAction(filePath, 'stage'),
     handleTerminalExecutionModeChange,
     handleTerminalPanelHeightCommit,
+    handleUnstageDiffFiles: (filePaths: string[]) => handleGitFileBatchAction(filePaths, 'unstage'),
     handleUnstageDiffFile: (filePath: string) => handleGitFileAction(filePath, 'unstage'),
     isCommitModalOpen,
     isDiffPanelOpen,

@@ -185,7 +185,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Read failed'
   }
 
-  if (invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') {
+  if (invocation.toolName === 'apply' || invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
       return 'Editing'
     }
@@ -264,7 +264,12 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if ((invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
+    if (
+      (invocation.toolName === 'apply' ||
+        invocation.toolName === 'file_change' ||
+        invocation.toolName === 'apply_patch') &&
+      normalizedStructuredPath === '.'
+    ) {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }

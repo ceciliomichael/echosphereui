@@ -6,6 +6,12 @@ import {
   shouldAlwaysShowEntry,
   shouldIgnoreWorkspaceEntry,
 } from './gitignoreMatcher'
+import {
+  assertWorkspaceDirectory,
+  DEFAULT_WORKSPACE_RELATIVE_PATH,
+  getSafeWorkspaceTargetPath,
+  normalizeWorkspacePath,
+} from './paths'
 import type {
   WorkspaceRefactorCandidate,
   WorkspaceRefactorCandidatesInput,
@@ -24,8 +30,6 @@ import type {
   WorkspaceExplorerWriteFileInput,
   WorkspaceExplorerWriteFileResult,
 } from '../../src/types/chat'
-
-const DEFAULT_RELATIVE_PATH = '.'
 const MAX_TEXT_FILE_BYTES = 256 * 1024
 const REFACTOR_CANDIDATE_LINE_THRESHOLD = 300
 const REFACTOR_CODE_EXTENSIONS = new Set([
@@ -64,40 +68,6 @@ const REFACTOR_CODE_EXTENSIONS = new Set([
   '.vb',
   '.vue',
 ])
-
-function normalizeWorkspacePath(workspaceRootPath: string) {
-  return path.resolve(workspaceRootPath.trim())
-}
-
-function normalizeRelativePath(relativePath: string | undefined) {
-  const normalized = (relativePath ?? DEFAULT_RELATIVE_PATH).trim()
-  return normalized.length === 0 ? DEFAULT_RELATIVE_PATH : normalized
-}
-
-function getSafeTargetPath(workspaceRootPath: string, relativePath: string | undefined) {
-  const normalizedRelativePath = normalizeRelativePath(relativePath)
-  const absolutePath = path.resolve(workspaceRootPath, normalizedRelativePath)
-  const workspaceRelativePath = path.relative(workspaceRootPath, absolutePath)
-  if (workspaceRelativePath.startsWith('..') || path.isAbsolute(workspaceRelativePath)) {
-    throw new Error(`Path is outside the workspace root: ${relativePath ?? DEFAULT_RELATIVE_PATH}`)
-  }
-  return {
-    absolutePath,
-    relativePath: workspaceRelativePath === '' ? DEFAULT_RELATIVE_PATH : workspaceRelativePath,
-  }
-}
-
-async function assertWorkspaceDirectory(workspaceRootPath: string) {
-  const stats = await fs.stat(workspaceRootPath).catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`Workspace path does not exist: ${workspaceRootPath}`)
-    }
-    throw error
-  })
-  if (!stats.isDirectory()) {
-    throw new Error(`Workspace root must be a directory: ${workspaceRootPath}`)
-  }
-}
 
 function sortWorkspaceEntries(entries: WorkspaceExplorerEntry[]) {
   return entries.sort((left, right) => {
@@ -227,7 +197,7 @@ async function resolveTransferDestinationPath(
 
     const candidateAbsolutePath = path.join(destinationDirectoryAbsolutePath, candidateName)
     const candidateRelativePath =
-      destinationDirectoryRelativePath === DEFAULT_RELATIVE_PATH
+      destinationDirectoryRelativePath === DEFAULT_WORKSPACE_RELATIVE_PATH
         ? candidateName
         : path.join(destinationDirectoryRelativePath, candidateName)
 
@@ -244,7 +214,7 @@ async function resolveTransferDestinationPath(
 export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirectoryInput) {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
   const targetStats = await fs.stat(target.absolutePath).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(`Directory does not exist: ${target.relativePath}`)
@@ -276,7 +246,7 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
       continue
     }
     const entryRelativePath =
-      target.relativePath === DEFAULT_RELATIVE_PATH
+      target.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH
         ? directoryEntry.name
         : path.join(target.relativePath, directoryEntry.name)
 
@@ -297,7 +267,10 @@ export async function listWorkspaceRefactorCandidates(
   await assertWorkspaceDirectory(workspaceRootPath)
   const candidates: WorkspaceRefactorCandidate[] = []
 
-  async function visitDirectory(directoryAbsolutePath: string, directoryRelativePath: string = DEFAULT_RELATIVE_PATH) {
+  async function visitDirectory(
+    directoryAbsolutePath: string,
+    directoryRelativePath: string = DEFAULT_WORKSPACE_RELATIVE_PATH,
+  ) {
     const directoryEntries = await fs.readdir(directoryAbsolutePath, { withFileTypes: true }).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return null
@@ -333,7 +306,7 @@ export async function listWorkspaceRefactorCandidates(
       }
 
       const entryRelativePath =
-        directoryRelativePath === DEFAULT_RELATIVE_PATH
+        directoryRelativePath === DEFAULT_WORKSPACE_RELATIVE_PATH
           ? directoryEntry.name
           : path.join(directoryRelativePath, directoryEntry.name)
 
@@ -373,7 +346,7 @@ export async function listWorkspaceRefactorCandidates(
 export async function readWorkspaceFile(input: WorkspaceExplorerReadFileInput): Promise<WorkspaceExplorerReadFileResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
   const targetStats = await fs.stat(target.absolutePath).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(`File does not exist: ${target.relativePath}`)
@@ -428,7 +401,7 @@ export async function readWorkspaceFile(input: WorkspaceExplorerReadFileInput): 
 export async function writeWorkspaceFile(input: WorkspaceExplorerWriteFileInput): Promise<WorkspaceExplorerWriteFileResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
+  const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
   await fs.mkdir(path.dirname(target.absolutePath), { recursive: true })
   await fs.writeFile(target.absolutePath, input.content, 'utf8')
   const writtenStats = await fs.stat(target.absolutePath)
@@ -444,8 +417,8 @@ export async function createWorkspaceEntry(
 ): Promise<WorkspaceExplorerCreateEntryResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
-  if (target.relativePath === DEFAULT_RELATIVE_PATH) {
+  const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
+  if (target.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH) {
     throw new Error('Cannot create workspace root.')
   }
 
@@ -478,9 +451,12 @@ export async function renameWorkspaceEntry(
 ): Promise<WorkspaceExplorerRenameEntryResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const sourceTarget = getSafeTargetPath(workspaceRootPath, input.relativePath)
-  const destinationTarget = getSafeTargetPath(workspaceRootPath, input.nextRelativePath)
-  if (sourceTarget.relativePath === DEFAULT_RELATIVE_PATH || destinationTarget.relativePath === DEFAULT_RELATIVE_PATH) {
+  const sourceTarget = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
+  const destinationTarget = getSafeWorkspaceTargetPath(workspaceRootPath, input.nextRelativePath)
+  if (
+    sourceTarget.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH ||
+    destinationTarget.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH
+  ) {
     throw new Error('Cannot rename workspace root.')
   }
   if (sourceTarget.relativePath === destinationTarget.relativePath) {
@@ -525,8 +501,8 @@ export async function deleteWorkspaceEntry(
 ): Promise<WorkspaceExplorerDeleteEntryResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const target = getSafeTargetPath(workspaceRootPath, input.relativePath)
-  if (target.relativePath === DEFAULT_RELATIVE_PATH) {
+  const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
+  if (target.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH) {
     throw new Error('Cannot delete workspace root.')
   }
 
@@ -551,10 +527,10 @@ export async function transferWorkspaceEntry(
 ): Promise<WorkspaceExplorerTransferEntryResult> {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
-  const sourceTarget = getSafeTargetPath(workspaceRootPath, input.relativePath)
-  const destinationDirectoryTarget = getSafeTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
+  const sourceTarget = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
+  const destinationDirectoryTarget = getSafeWorkspaceTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
 
-  if (sourceTarget.relativePath === DEFAULT_RELATIVE_PATH) {
+  if (sourceTarget.relativePath === DEFAULT_WORKSPACE_RELATIVE_PATH) {
     throw new Error('Cannot transfer workspace root.')
   }
 
@@ -585,7 +561,10 @@ export async function transferWorkspaceEntry(
     throw new Error('Cannot place a folder inside itself.')
   }
 
-  const sourceParentRelativePath = getSafeTargetPath(workspaceRootPath, path.dirname(sourceTarget.relativePath)).relativePath
+  const sourceParentRelativePath = getSafeWorkspaceTargetPath(
+    workspaceRootPath,
+    path.dirname(sourceTarget.relativePath),
+  ).relativePath
   const sourceEntryName = path.basename(sourceTarget.relativePath)
   if (
     input.mode === 'move' &&
@@ -647,7 +626,7 @@ export async function importWorkspaceEntry(input: {
     throw new Error(`Unsupported entry type: ${sourcePath}`)
   }
 
-  const destinationDirectoryTarget = getSafeTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
+  const destinationDirectoryTarget = getSafeWorkspaceTargetPath(workspaceRootPath, input.targetDirectoryRelativePath)
   const destinationDirectoryStats = await fs.stat(destinationDirectoryTarget.absolutePath).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(`Directory does not exist: ${destinationDirectoryTarget.relativePath}`)

@@ -72,9 +72,23 @@ export function stripInternalToolCallLeakage(input: string) {
 }
 
 export function normalizeMarkdownText(input: string) {
-  return stripInternalToolCallLeakage(input)
+  const normalized = stripInternalToolCallLeakage(input)
     .replace(/\r\n/g, '\n')
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n')
+    .replace(/([.!?])([A-Z])/g, '$1\n\n$2')
+
+  const fenceMatches = normalized.match(/```/g)
+  const tripleFenceCount = fenceMatches?.length ?? 0
+
+  if (tripleFenceCount % 2 === 1 && /``\s*$/.test(normalized) && !/```\s*$/.test(normalized)) {
+    return normalized.replace(/``(\s*)$/, '```$1')
+  }
+
+  if (tripleFenceCount % 2 === 1 && !/```\s*$/.test(normalized)) {
+    return `${normalized}\n\`\`\``
+  }
+
+  return normalized
 }
 
 export function splitThinkingContent(input: string): AssistantMessageContentSplit {
@@ -138,6 +152,37 @@ function joinTextParts(parts: readonly string[]) {
   return nonEmptyParts.join('\n\n')
 }
 
+function dedupeReasoningFromContent(content: string, reasoningContent: string) {
+  const trimmedContent = content.trim()
+  const trimmedReasoning = reasoningContent.trim()
+
+  if (!trimmedContent || !trimmedReasoning) {
+    return {
+      content,
+      reasoningContent,
+    }
+  }
+
+  if (trimmedContent === trimmedReasoning) {
+    return {
+      content: '',
+      reasoningContent,
+    }
+  }
+
+  if (trimmedContent.startsWith(trimmedReasoning)) {
+    return {
+      content: content.replace(trimmedReasoning, '').trimStart(),
+      reasoningContent,
+    }
+  }
+
+  return {
+    content,
+    reasoningContent,
+  }
+}
+
 export function normalizeAssistantMessageContent(message: Pick<Message, 'content' | 'reasoningContent'>): AssistantMessageContentParts {
   const sanitizedContent = stripInternalToolCallLeakage(message.content)
   const splitContent = splitThinkingContent(sanitizedContent)
@@ -147,8 +192,9 @@ export function normalizeAssistantMessageContent(message: Pick<Message, 'content
   ])
   const sanitizedReasoningContent = stripInternalToolCallLeakage(message.reasoningContent ?? '')
   const shouldTrimEdgeBlankLines = splitContent.hasThinkingTags || hasThinkingMarkup(sanitizedReasoningContent)
-  const normalizedContent = normalizeMarkdownText(splitContent.content)
-  const normalizedReasoning = normalizeMarkdownText(normalizedReasoningContent)
+  const dedupedParts = dedupeReasoningFromContent(splitContent.content, normalizedReasoningContent)
+  const normalizedContent = normalizeMarkdownText(dedupedParts.content)
+  const normalizedReasoning = normalizeMarkdownText(dedupedParts.reasoningContent)
 
   return {
     content: shouldTrimEdgeBlankLines ? trimEdgeBlankLines(normalizedContent) : normalizedContent,
