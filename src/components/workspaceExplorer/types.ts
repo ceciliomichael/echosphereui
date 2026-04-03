@@ -1,4 +1,6 @@
 export interface WorkspaceFileTab {
+  kind: 'file'
+  tabKey: string
   content: string
   errorMessage?: string
   fileName: string
@@ -8,3 +10,12 @@ export interface WorkspaceFileTab {
   sizeBytes: number
   status: 'error' | 'loading' | 'ready'
 }
+
+export interface WorkspaceMarkdownPreviewTab {
+  kind: 'markdown-preview'
+  fileName: string
+  relativePath: string
+  tabKey: string
+}
+
+export type WorkspaceTab = WorkspaceFileTab | WorkspaceMarkdownPreviewTab

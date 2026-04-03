@@ -1,37 +1,47 @@
-import { ChevronRight, LoaderCircle, TriangleAlert, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { ChevronRight, Eye, LoaderCircle, TriangleAlert, X } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react'
+import { isMarkdownPreviewablePath } from '../../lib/markdown-preview'
 import { resolveFileIconConfig } from '../../lib/fileIconResolver'
 import { clampWorkspaceEditorWidth } from '../../lib/workspaceEditorSizing'
-import type { WorkspaceFileTab } from './types'
-import { WorkspaceFileEditor } from './WorkspaceFileEditor'
+import type { WorkspaceTab } from './types'
+import { WorkspaceFileTabsPanelContent } from './workspaceFileTabsPanel/WorkspaceFileTabsPanelContent'
 
 interface WorkspaceFileTabsPanelProps {
-  activeTabPath: string | null
+  activeTabKey: string | null
   isOpen: boolean
-  onSelectTab: (relativePath: string) => void
-  onCloseTab: (relativePath: string) => void
+  onCloseTab: (tabKey: string) => void
   onFileContentChange: (relativePath: string, content: string) => void
+  onOpenMarkdownPreview: (relativePath: string) => void
+  onSelectTab: (tabKey: string) => void
   onWidthChange: (nextWidth: number) => void
   onWidthCommit: (nextWidth: number) => void
-  wordWrapEnabled: boolean
-  tabs: readonly WorkspaceFileTab[]
+  tabs: readonly WorkspaceTab[]
   width: number
+  wordWrapEnabled: boolean
 }
 
 export function WorkspaceFileTabsPanel({
-  activeTabPath,
+  activeTabKey,
   isOpen,
-  onSelectTab,
   onCloseTab,
   onFileContentChange,
+  onOpenMarkdownPreview,
+  onSelectTab,
   onWidthChange,
   onWidthCommit,
-  wordWrapEnabled,
   tabs,
   width,
+  wordWrapEnabled,
 }: WorkspaceFileTabsPanelProps) {
   const hasTabs = tabs.length > 0
-  const activeTab = tabs.find((tab) => tab.relativePath === activeTabPath) ?? null
+  const activeTab = tabs.find((tab) => tab.tabKey === activeTabKey) ?? null
   const panelRef = useRef<HTMLElement | null>(null)
   const tabsViewportRef = useRef<HTMLDivElement | null>(null)
   const resizeDragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
@@ -274,6 +284,18 @@ export function WorkspaceFileTabsPanel({
     viewport.scrollLeft += dominantDelta
   }
 
+  const markdownPreviewTab =
+    activeTab.kind === 'markdown-preview'
+      ? tabs.find((tab) => tab.kind === 'file' && tab.relativePath === activeTab.relativePath) ?? null
+      : null
+
+  const previewTabContent =
+    activeTab.kind === 'markdown-preview'
+      ? markdownPreviewTab
+      : activeTab.kind === 'file' && isMarkdownPreviewablePath(activeTab.relativePath)
+        ? activeTab
+        : null
+
   return (
     <section
       ref={panelRef}
@@ -287,20 +309,21 @@ export function WorkspaceFileTabsPanel({
           className="workspace-tabs-scroll-viewport flex h-full items-stretch gap-0 overflow-x-auto overflow-y-hidden"
         >
           {tabs.map((tab) => {
-            const isActive = tab.relativePath === activeTab.relativePath
-            const iconConfig = resolveFileIconConfig({ fileName: tab.relativePath })
-            const TabIcon = iconConfig.icon
+            const isActive = tab.tabKey === activeTab.tabKey
+            const isPreviewTab = tab.kind === 'markdown-preview'
+            const resolvedIconConfig = isPreviewTab ? null : resolveFileIconConfig({ fileName: tab.relativePath })
+
             return (
-              <div key={tab.relativePath} className="group relative inline-flex h-full shrink-0 items-stretch border-r border-border">
+              <div key={tab.tabKey} className="group relative inline-flex h-full shrink-0 items-stretch border-r border-border">
                 <button
                   type="button"
-                  onClick={() => onSelectTab(tab.relativePath)}
+                  onClick={() => onSelectTab(tab.tabKey)}
                   onMouseDown={(event) => {
                     if (event.button !== 1) {
                       return
                     }
                     event.preventDefault()
-                    onCloseTab(tab.relativePath)
+                    onCloseTab(tab.tabKey)
                   }}
                   className={[
                     'inline-flex h-full max-w-[248px] items-center gap-2 px-3 pr-9 text-sm transition-colors',
@@ -309,14 +332,21 @@ export function WorkspaceFileTabsPanel({
                       : 'border-t-2 border-t-transparent bg-background text-muted-foreground hover:bg-surface-muted hover:text-foreground',
                   ].join(' ')}
                 >
-                  <TabIcon size={14} className="shrink-0" style={{ color: iconConfig.color }} />
+                  {isPreviewTab ? (
+                    <Eye size={14} className="shrink-0 text-[#8771FF]" />
+                  ) : (
+                    (() => {
+                      const FileIcon = resolvedIconConfig!.icon
+                      return <FileIcon size={14} className="shrink-0" style={{ color: resolvedIconConfig!.color }} />
+                    })()
+                  )}
                   <span className="truncate">{tab.fileName}</span>
-                  {tab.status === 'loading' ? <LoaderCircle size={12} className="shrink-0 animate-spin" /> : null}
-                  {tab.status === 'error' ? <TriangleAlert size={12} className="shrink-0" /> : null}
+                  {!isPreviewTab && tab.status === 'loading' ? <LoaderCircle size={12} className="shrink-0 animate-spin" /> : null}
+                  {!isPreviewTab && tab.status === 'error' ? <TriangleAlert size={12} className="shrink-0" /> : null}
                 </button>
                 <button
                   type="button"
-                  onClick={() => onCloseTab(tab.relativePath)}
+                  onClick={() => onCloseTab(tab.tabKey)}
                   className="absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                   aria-label={`Close ${tab.fileName}`}
                 >
@@ -343,38 +373,33 @@ export function WorkspaceFileTabsPanel({
         ) : null}
       </div>
 
-      <div className="flex h-7 items-center bg-surface px-2">
-        <div className="flex min-w-0 items-center gap-1 overflow-hidden text-[12px] text-subtle-foreground">
-          {breadcrumbSegments.map((segment, index) => (
-            <span key={`${segment}-${index}`} className="inline-flex min-w-0 items-center gap-1.5">
-              {index > 0 ? <ChevronRight size={12} className="shrink-0 text-subtle-foreground/70" /> : null}
-              <span className="truncate" title={activeTab.relativePath}>
-                {segment}
+      {activeTab.kind === 'markdown-preview' ? null : (
+        <div className="flex h-7 items-center bg-surface px-2">
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden text-[12px] text-subtle-foreground">
+            {breadcrumbSegments.map((segment, index) => (
+              <span key={`${segment}-${index}`} className="inline-flex min-w-0 items-center gap-1.5">
+                {index > 0 ? <ChevronRight size={12} className="shrink-0 text-subtle-foreground/70" /> : null}
+                <span className="truncate" title={activeTab.relativePath}>
+                  {segment}
+                </span>
               </span>
-            </span>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {!hasTabs ? null : activeTab.status === 'loading' ? (
-          <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-subtle-foreground">
-            Loading {activeTab.fileName}...
-          </div>
-        ) : activeTab.status === 'error' ? (
-          <div className="h-full border-t border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
-            {activeTab.errorMessage ?? 'Failed to open file.'}
-          </div>
-        ) : activeTab.isBinary ? (
-          <div className="h-full border-t border-border bg-surface px-4 py-3 text-sm text-subtle-foreground">
-            Binary file preview is not supported for {activeTab.fileName}.
-          </div>
-        ) : (
-          <WorkspaceFileEditor
-            fileName={activeTab.fileName}
-            value={activeTab.content}
+        {!hasTabs || !activeTab ? null : (
+          <WorkspaceFileTabsPanelContent
+            activeTab={activeTab}
+            tabs={tabs}
+            onFileContentChange={onFileContentChange}
+            onOpenMarkdownPreview={
+              previewTabContent && previewTabContent.kind === 'file'
+                ? () => onOpenMarkdownPreview(previewTabContent.relativePath)
+                : undefined
+            }
             wordWrapEnabled={wordWrapEnabled}
-            onChange={(nextValue) => onFileContentChange(activeTab.relativePath, nextValue)}
           />
         )}
       </div>

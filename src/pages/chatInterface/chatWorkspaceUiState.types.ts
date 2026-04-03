@@ -1,16 +1,17 @@
 import type { ChatInterfaceRightPanelTab } from "../../hooks/useChatInterfaceController";
 import type { AppSettings } from "../../types/chat";
-import type { WorkspaceFileTab } from "../../components/workspaceExplorer/types";
+import type { WorkspaceTab } from "../../components/workspaceExplorer/types";
 
 export const DEFAULT_TERMINAL_WORKSPACE_KEY = "__global__";
 
 export interface WorkspaceUiSession {
   activeFilePath: string | null;
+  activeTabKey: string | null;
   isExplorerOpen: boolean;
   isRightPanelOpen: boolean;
   isTabsVisible: boolean;
   rightPanelTab: ChatInterfaceRightPanelTab;
-  tabs: WorkspaceFileTab[];
+  tabs: WorkspaceTab[];
 }
 
 export interface WorkspaceClipboardEntry {
@@ -39,6 +40,7 @@ export interface UseChatWorkspaceUiStateInput {
 
 export interface ChatWorkspaceUiState {
   activeWorkspaceFilePath: string | null;
+  activeWorkspaceTabKey: string | null;
   activeWorkspacePath: string | null;
   conversationDiffPanelWidth: number;
   handleCloseWorkspaceTab: (relativePath: string) => void;
@@ -62,9 +64,11 @@ export interface ChatWorkspaceUiState {
   handleOpenDiffPanel: () => void;
   handleOpenSourceControlPanel: () => void;
   handleOpenWorkspaceFile: (relativePath: string) => void;
+  handleOpenWorkspaceMarkdownPreview: (relativePath: string) => void;
   handlePasteWorkspaceEntry: (
     targetDirectoryRelativePath: string,
   ) => Promise<void>;
+  handleRefreshWorkspaceFileTabs: () => Promise<void>;
   handleRenameWorkspaceEntry: (
     relativePath: string,
     nextRelativePath: string,
@@ -90,5 +94,5 @@ export interface ChatWorkspaceUiState {
   workspaceClipboard: WorkspaceClipboardEntry | null;
   workspaceEditorWidth: number;
   workspaceExplorerWidth: number;
-  workspaceFileTabs: WorkspaceFileTab[];
+  workspaceFileTabs: WorkspaceTab[];
 }

@@ -1,10 +1,12 @@
-import { promises as fs } from 'node:fs'
+import { createReadStream, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { ConversationRecord, Message } from '../../src/types/chat'
+import { createInterface } from 'node:readline'
+import type { ConversationRecord, Message, UserMessageRunCheckpoint } from '../../src/types/chat'
 import {
   buildConversationSummary,
   createMessageLogPayload,
+  type MessageLogEntry,
   normalizeConversationRecord,
 } from './documents'
 import {
@@ -18,6 +20,7 @@ import {
 
 const CONVERSATION_FILE_SUFFIX = '.json'
 const BACKUP_FILE_SUFFIX = `${CONVERSATION_FILE_SUFFIX}.bak`
+const userMessageCheckpointHistoryCache = new Map<string, Map<string, UserMessageRunCheckpoint[]>>()
 
 function getBackupConversationFilePath(conversationFilePath: string) {
   return `${conversationFilePath}.bak`
@@ -41,6 +44,52 @@ function normalizeConversationFileNameToId(fileName: string) {
   }
 
   return null
+}
+
+function getCheckpointHistoryCacheForConversation(conversationId: string) {
+  const normalizedConversationId = conversationId.trim()
+  if (normalizedConversationId.length === 0) {
+    return null
+  }
+
+  const cachedConversation = userMessageCheckpointHistoryCache.get(normalizedConversationId)
+  if (cachedConversation) {
+    return cachedConversation
+  }
+
+  const nextConversationCache = new Map<string, UserMessageRunCheckpoint[]>()
+  userMessageCheckpointHistoryCache.set(normalizedConversationId, nextConversationCache)
+  return nextConversationCache
+}
+
+function updateCachedUserMessageCheckpoints(conversationId: string, messages: Message[]) {
+  const conversationCache = getCheckpointHistoryCacheForConversation(conversationId)
+  if (!conversationCache) {
+    return
+  }
+
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      continue
+    }
+
+    const checkpoint = message.runCheckpoint
+    if (!checkpoint) {
+      continue
+    }
+
+    const messageId = message.id.trim()
+    if (messageId.length === 0) {
+      continue
+    }
+
+    const existingHistory = conversationCache.get(messageId) ?? []
+    if (existingHistory.some((entry) => entry.id === checkpoint.id)) {
+      continue
+    }
+
+    conversationCache.set(messageId, [...existingHistory, checkpoint])
+  }
 }
 
 async function readConversationFileExact(filePath: string) {
@@ -144,6 +193,73 @@ export async function appendMessagesToLog(conversationId: string, messages: Mess
   const payload = createMessageLogPayload(conversationId, messages)
   await ensureHistoryDirectory()
   await fs.appendFile(getMessageLogPath(), `${payload}\n`, 'utf8')
+  updateCachedUserMessageCheckpoints(conversationId, messages)
+}
+
+export async function readUserMessageCheckpointHistory(conversationId: string, messageId: string) {
+  const conversationCache = getCheckpointHistoryCacheForConversation(conversationId)
+  const normalizedMessageId = messageId.trim()
+  if (!conversationCache || normalizedMessageId.length === 0) {
+    return []
+  }
+
+  const cachedHistory = conversationCache.get(normalizedMessageId)
+  if (cachedHistory) {
+    return [...cachedHistory].sort((left, right) => left.createdAt - right.createdAt)
+  }
+
+  await ensureHistoryDirectory()
+  const messageLogPath = getMessageLogPath()
+  const stream = createReadStream(messageLogPath, { encoding: 'utf8' })
+  const reader = createInterface({
+    crlfDelay: Infinity,
+    input: stream,
+  })
+  const checkpoints = new Map<string, UserMessageRunCheckpoint>()
+
+  try {
+    for await (const line of reader) {
+      const trimmedLine = line.trim()
+      if (trimmedLine.length === 0) {
+        continue
+      }
+
+      let parsedEntry: MessageLogEntry
+      try {
+        parsedEntry = JSON.parse(trimmedLine) as MessageLogEntry
+      } catch {
+        continue
+      }
+
+      if (
+        parsedEntry.conversationId !== conversationId ||
+        parsedEntry.message.role !== 'user' ||
+        parsedEntry.message.id !== normalizedMessageId
+      ) {
+        continue
+      }
+
+      const checkpoint = parsedEntry.message.runCheckpoint
+      if (!checkpoint) {
+        continue
+      }
+
+      checkpoints.set(checkpoint.id, checkpoint)
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+
+    throw error
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+
+  const history = Array.from(checkpoints.values()).sort((left, right) => left.createdAt - right.createdAt)
+  conversationCache.set(normalizedMessageId, history)
+  return [...history]
 }
 
 export async function listConversationSummaries() {

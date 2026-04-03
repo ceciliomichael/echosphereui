@@ -2,8 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getPathBasename } from "../../lib/pathPresentation";
 import { DEFAULT_DIFF_PANEL_WIDTH } from "../../lib/diffPanelSizing";
 import { DEFAULT_TERMINAL_PANEL_HEIGHT } from "../../lib/terminalPanelSizing";
+import { createMarkdownPreviewTabKey, isMarkdownPreviewablePath } from "../../lib/markdown-preview";
 import { clampWorkspaceExplorerWidth } from "../../lib/workspaceExplorerSizing";
-import type { WorkspaceFileTab } from "../../components/workspaceExplorer/types";
+import type {
+  WorkspaceFileTab,
+  WorkspaceTab,
+} from "../../components/workspaceExplorer/types";
 import type {
   ChatWorkspaceUiState,
   UseChatWorkspaceUiStateInput,
@@ -49,9 +53,13 @@ export function useChatWorkspaceUiState({
 }: UseChatWorkspaceUiStateInput): ChatWorkspaceUiState {
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [workspaceFileTabs, setWorkspaceFileTabs] = useState<
-    WorkspaceFileTab[]
+    WorkspaceTab[]
   >([]);
+  const workspaceFileTabsRef = useRef<WorkspaceTab[]>([]);
   const [activeWorkspaceFilePath, setActiveWorkspaceFilePath] = useState<
+    string | null
+  >(null);
+  const [activeWorkspaceTabKey, setActiveWorkspaceTabKey] = useState<
     string | null
   >(null);
   const [isWorkspaceTabsPanelVisible, setIsWorkspaceTabsPanelVisible] =
@@ -84,6 +92,10 @@ export function useChatWorkspaceUiState({
   }, [activeWorkspacePath]);
 
   useEffect(() => {
+    workspaceFileTabsRef.current = workspaceFileTabs;
+  }, [workspaceFileTabs]);
+
+  useEffect(() => {
     clearWorkspaceAutosaveTimeoutsForWorkspace({
       workspaceAutosaveTimeoutsRef,
     });
@@ -104,6 +116,7 @@ export function useChatWorkspaceUiState({
   useEffect(() => {
     restoreWorkspaceUiSession({
       activeWorkspaceFilePath,
+      activeWorkspaceTabKey,
       activeWorkspaceUiKey,
       isExplorerOpen,
       isRightPanelOpen,
@@ -112,6 +125,7 @@ export function useChatWorkspaceUiState({
       onRightPanelTabChange,
       previousWorkspaceUiKeyRef,
       setActiveWorkspaceFilePath,
+      setActiveWorkspaceTabKey,
       setIsExplorerOpen,
       setIsWorkspaceTabsPanelVisible,
       setWorkspaceFileTabs,
@@ -120,6 +134,7 @@ export function useChatWorkspaceUiState({
     });
   }, [
     activeWorkspaceFilePath,
+    activeWorkspaceTabKey,
     activeWorkspaceUiKey,
     isExplorerOpen,
     isRightPanelOpen,
@@ -133,6 +148,7 @@ export function useChatWorkspaceUiState({
   useEffect(() => {
     saveWorkspaceUiSession({
       activeWorkspaceFilePath,
+      activeWorkspaceTabKey,
       activeWorkspaceUiKey,
       isExplorerOpen,
       isRightPanelOpen,
@@ -143,6 +159,7 @@ export function useChatWorkspaceUiState({
     });
   }, [
     activeWorkspaceFilePath,
+    activeWorkspaceTabKey,
     activeWorkspaceUiKey,
     isExplorerOpen,
     isRightPanelOpen,
@@ -234,7 +251,156 @@ export function useChatWorkspaceUiState({
       }
       return null;
     });
-  }, []);
+    setActiveWorkspaceTabKey((currentActiveTabKey) => {
+      if (!currentActiveTabKey) {
+        return currentActiveTabKey;
+      }
+
+      const currentActiveTab =
+        workspaceFileTabs.find((tab) => tab.tabKey === currentActiveTabKey) ?? null;
+      if (
+        !currentActiveTab ||
+        !isWorkspacePathWithinTarget(currentActiveTab.relativePath, normalizedTargetPath)
+      ) {
+        return currentActiveTabKey;
+      }
+      return null;
+    });
+  }, [workspaceFileTabs]);
+
+  const handleRefreshWorkspaceFileTabs = useCallback(async () => {
+    const workspaceRootPath = activeWorkspacePathRef.current;
+    if (!workspaceRootPath) {
+      return;
+    }
+
+    const fileTabs = workspaceFileTabsRef.current.filter(
+      (tab): tab is WorkspaceFileTab => tab.kind === "file",
+    );
+    if (fileTabs.length === 0) {
+      return;
+    }
+
+    const pendingRefreshes = await Promise.all(
+      fileTabs.map(async (tab) => {
+        if (workspaceAutosaveTimeoutsRef.current.has(tab.relativePath)) {
+          return null;
+        }
+
+        try {
+          const result = await window.echosphereWorkspace.readFile({
+            relativePath: tab.relativePath,
+            workspaceRootPath,
+          });
+
+          return {
+            relativePath: tab.relativePath,
+            result,
+          };
+        } catch (error) {
+          return {
+            error,
+            relativePath: tab.relativePath,
+          };
+        }
+      }),
+    );
+
+    const refreshByPath = new Map<
+      string,
+      | {
+          error: unknown;
+          relativePath: string;
+        }
+      | {
+          relativePath: string;
+          result: Awaited<ReturnType<typeof window.echosphereWorkspace.readFile>>;
+        }
+    >()
+
+    for (const refresh of pendingRefreshes) {
+      if (!refresh) {
+        continue;
+      }
+
+      refreshByPath.set(refresh.relativePath, refresh)
+    }
+
+    if (refreshByPath.size === 0) {
+      return
+    }
+
+    setWorkspaceFileTabs((currentTabs) =>
+      currentTabs.map((tab) => {
+        if (tab.kind !== "file") {
+          return tab
+        }
+
+        const refresh = refreshByPath.get(tab.relativePath)
+        if (!refresh) {
+          return tab
+        }
+
+        if ("error" in refresh) {
+          return {
+            ...tab,
+            errorMessage:
+              refresh.error instanceof Error
+                ? refresh.error.message
+                : "Failed to refresh file.",
+            status: "error",
+          }
+        }
+
+        const { result } = refresh
+        return {
+          ...tab,
+          content: result.content,
+          errorMessage: undefined,
+          fileName: getPathBasename(result.relativePath),
+          isBinary: result.isBinary,
+          isTruncated: result.isTruncated,
+          relativePath: result.relativePath,
+          sizeBytes: result.sizeBytes,
+          status: "ready",
+          tabKey: result.relativePath,
+        }
+      }),
+    )
+  }, [activeWorkspacePathRef, workspaceAutosaveTimeoutsRef])
+
+  useEffect(() => {
+    const workspaceRootPath = activeWorkspacePath?.trim() ?? ""
+    const shouldWatchWorkspaceChanges = workspaceRootPath.length > 0 && (isExplorerOpen || workspaceFileTabs.length > 0)
+    if (!shouldWatchWorkspaceChanges) {
+      return
+    }
+
+    let isDisposed = false
+    const unsubscribeWorkspaceChanges = window.echosphereWorkspace.onExplorerChange((event) => {
+      if (isDisposed || event.workspaceRootPath !== workspaceRootPath) {
+        return
+      }
+
+      void handleRefreshWorkspaceFileTabs()
+    })
+
+    void window.echosphereWorkspace.watchExplorerChanges({
+      workspaceRootPath,
+    }).catch((error) => {
+      console.error("Failed to watch workspace changes for open file tabs", error)
+    })
+
+    return () => {
+      isDisposed = true
+      unsubscribeWorkspaceChanges()
+      void window.echosphereWorkspace.unwatchExplorerChanges({
+        workspaceRootPath,
+      }).catch((error) => {
+        console.error("Failed to stop watching workspace changes for open file tabs", error)
+      })
+    }
+  }, [activeWorkspacePath, handleRefreshWorkspaceFileTabs, isExplorerOpen, workspaceFileTabs.length])
 
   const clearWorkspaceClipboardByPathPrefix = useCallback(
     (targetPath: string) => {
@@ -283,19 +449,22 @@ export function useChatWorkspaceUiState({
       setIsWorkspaceTabsPanelVisible(true);
       onRightPanelOpenChange(false);
       setActiveWorkspaceFilePath(relativePath);
+      setActiveWorkspaceTabKey(relativePath);
       setWorkspaceFileTabs((currentTabs) => {
-        if (currentTabs.some((tab) => tab.relativePath === relativePath)) {
+        if (currentTabs.some((tab) => tab.kind === "file" && tab.relativePath === relativePath)) {
           return currentTabs;
         }
 
         return [
           ...currentTabs,
           {
+            kind: "file",
             content: "",
             fileName: getPathBasename(relativePath),
             isBinary: false,
             isTruncated: false,
             relativePath,
+            tabKey: relativePath,
             sizeBytes: 0,
             status: "loading",
           },
@@ -314,13 +483,15 @@ export function useChatWorkspaceUiState({
 
           setWorkspaceFileTabs((currentTabs) =>
             currentTabs.map((tab) =>
-              tab.relativePath === relativePath
+              tab.kind === "file" && tab.relativePath === relativePath
                 ? {
+                    ...tab,
                     content: result.content,
                     fileName: getPathBasename(result.relativePath),
                     isBinary: result.isBinary,
                     isTruncated: result.isTruncated,
                     relativePath: result.relativePath,
+                    tabKey: result.relativePath,
                     sizeBytes: result.sizeBytes,
                     status: "ready",
                   }
@@ -335,7 +506,7 @@ export function useChatWorkspaceUiState({
 
           setWorkspaceFileTabs((currentTabs) =>
             currentTabs.map((tab) =>
-              tab.relativePath === relativePath
+              tab.kind === "file" && tab.relativePath === relativePath
                 ? {
                     ...tab,
                     errorMessage:
@@ -352,43 +523,109 @@ export function useChatWorkspaceUiState({
     [activeWorkspacePanelWidth, onRightPanelOpenChange, setIsSidebarOpen],
   );
 
-  const handleCloseWorkspaceTab = useCallback((relativePath: string) => {
-    const pendingAutosaveTimeout =
-      workspaceAutosaveTimeoutsRef.current.get(relativePath);
-    if (typeof pendingAutosaveTimeout === "number") {
-      window.clearTimeout(pendingAutosaveTimeout);
-      workspaceAutosaveTimeoutsRef.current.delete(relativePath);
+  const handleOpenWorkspaceMarkdownPreview = useCallback(
+    (relativePath: string) => {
+      if (!isMarkdownPreviewablePath(relativePath)) {
+        return;
+      }
+
+      const previewTabKey = createMarkdownPreviewTabKey(relativePath);
+
+      setIsSidebarOpen(false);
+      setIsExplorerOpen(true);
+      setIsWorkspaceTabsPanelVisible(true);
+      onRightPanelOpenChange(false);
+      setActiveWorkspaceFilePath(relativePath);
+      setActiveWorkspaceTabKey(previewTabKey);
+
+      setWorkspaceFileTabs((currentTabs) => {
+        if (currentTabs.some((tab) => tab.tabKey === previewTabKey)) {
+          return currentTabs
+        }
+
+        return [
+          ...currentTabs,
+          {
+            kind: "markdown-preview",
+            fileName: getPathBasename(relativePath),
+            relativePath,
+            tabKey: previewTabKey,
+          },
+        ]
+      })
+    },
+    [onRightPanelOpenChange, setIsSidebarOpen],
+  );
+
+  const handleCloseWorkspaceTab = useCallback((tabKey: string) => {
+    const closingTab = workspaceFileTabs.find((tab) => tab.tabKey === tabKey) ?? null;
+    const targetPath = closingTab?.relativePath ?? tabKey;
+    const closingPreviewTabKey =
+      closingTab?.kind === "file" ? createMarkdownPreviewTabKey(closingTab.relativePath) : null;
+
+    if (closingTab?.kind === "file") {
+      const pendingAutosaveTimeout =
+        workspaceAutosaveTimeoutsRef.current.get(targetPath);
+      if (typeof pendingAutosaveTimeout === "number") {
+        window.clearTimeout(pendingAutosaveTimeout);
+        workspaceAutosaveTimeoutsRef.current.delete(targetPath);
+      }
     }
 
     setWorkspaceFileTabs((currentTabs) => {
-      const closingIndex = currentTabs.findIndex(
-        (tab) => tab.relativePath === relativePath,
-      );
+      const closingIndex = currentTabs.findIndex((tab) => tab.tabKey === tabKey);
       if (closingIndex === -1) {
         return currentTabs;
       }
 
-      const nextTabs = currentTabs.filter(
-        (tab) => tab.relativePath !== relativePath,
-      );
+      const nextTabs =
+        closingTab?.kind === "file"
+          ? currentTabs.filter(
+              (tab) =>
+                tab.tabKey !== tabKey &&
+                !(tab.kind === "markdown-preview" && tab.relativePath === closingTab.relativePath),
+            )
+          : currentTabs.filter((tab) => tab.tabKey !== tabKey);
+
       if (nextTabs.length === 0) {
         setIsWorkspaceTabsPanelVisible(false);
       }
       setActiveWorkspaceFilePath((currentActiveFilePath) => {
-        if (currentActiveFilePath !== relativePath) {
+        if (!closingTab) {
           return currentActiveFilePath;
         }
+
+        const shouldClearActivePath =
+          closingTab.kind === "markdown-preview"
+            ? currentActiveFilePath === closingTab.relativePath
+            : currentActiveFilePath === closingTab.relativePath;
+        if (!shouldClearActivePath) {
+          return currentActiveFilePath;
+        }
+
         const fallbackTab =
           nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null;
         return fallbackTab?.relativePath ?? null;
       });
+      setActiveWorkspaceTabKey((currentActiveTabKey) => {
+        if (
+          currentActiveTabKey !== tabKey &&
+          currentActiveTabKey !== closingPreviewTabKey
+        ) {
+          return currentActiveTabKey;
+        }
+        const fallbackTab = nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null;
+        return fallbackTab?.tabKey ?? null;
+      });
       return nextTabs;
     });
-  }, []);
+  }, [workspaceFileTabs]);
 
-  const handleSelectWorkspaceTab = useCallback((relativePath: string) => {
-    setActiveWorkspaceFilePath(relativePath);
-  }, []);
+  const handleSelectWorkspaceTab = useCallback((tabKey: string) => {
+    const selectedTab = workspaceFileTabs.find((tab) => tab.tabKey === tabKey) ?? null;
+    setActiveWorkspaceFilePath(selectedTab?.relativePath ?? null);
+    setActiveWorkspaceTabKey(selectedTab?.tabKey ?? tabKey);
+  }, [workspaceFileTabs]);
 
   const handleWorkspaceEditorWidthChange = useCallback((nextWidth: number) => {
     setWorkspaceEditorWidth(nextWidth);
@@ -459,7 +696,7 @@ export function useChatWorkspaceUiState({
 
     setWorkspaceFileTabs((currentTabs) =>
       currentTabs.map((tab) =>
-        tab.relativePath === relativePath
+        tab.kind === "file" && tab.relativePath === relativePath
           ? {
               ...tab,
               content,
@@ -488,7 +725,7 @@ export function useChatWorkspaceUiState({
 
           setWorkspaceFileTabs((currentTabs) =>
             currentTabs.map((tab) =>
-              tab.relativePath === relativePath
+              tab.kind === "file" && tab.relativePath === relativePath
                 ? {
                     ...tab,
                     sizeBytes: result.sizeBytes,
@@ -666,6 +903,7 @@ export function useChatWorkspaceUiState({
 
   return {
     activeWorkspaceFilePath,
+    activeWorkspaceTabKey,
     activeWorkspacePath,
     conversationDiffPanelWidth,
     handleCloseWorkspaceTab,
@@ -680,7 +918,9 @@ export function useChatWorkspaceUiState({
     handleOpenDiffPanel,
     handleOpenSourceControlPanel,
     handleOpenWorkspaceFile,
+    handleOpenWorkspaceMarkdownPreview,
     handlePasteWorkspaceEntry,
+    handleRefreshWorkspaceFileTabs,
     handleRenameWorkspaceEntry,
     handleSelectWorkspaceTab,
     handleSourceControlPanelWidthChange,

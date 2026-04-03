@@ -182,12 +182,26 @@ export function ChatInterfaceContent({
   )
 
   const handleRevertUserMessage = useCallback(
-    (messageId: string) => {
+    async (messageId: string) => {
       clearQueuedMessages()
-      void chatMessages.revertUserMessage(messageId)
+      await chatMessages.revertUserMessage(messageId)
+      await workspaceState.handleRefreshWorkspaceFileTabs()
     },
-    [chatMessages, clearQueuedMessages],
+    [chatMessages, clearQueuedMessages, workspaceState],
   )
+
+  const handleEditUserMessage = useCallback(
+    async (messageId: string) => {
+      await chatMessages.startEditingMessage(messageId)
+      await workspaceState.handleRefreshWorkspaceFileTabs()
+    },
+    [chatMessages, workspaceState],
+  )
+
+  const handleCancelEditingMessage = useCallback(async () => {
+    await chatMessages.cancelEditingMessage()
+    await workspaceState.handleRefreshWorkspaceFileTabs()
+  }, [chatMessages, workspaceState])
 
   const handleSendMainMessage = useCallback(
     (value: string, attachments: ChatAttachment[]) => {
@@ -395,7 +409,7 @@ export function ChatInterfaceContent({
                     editComposerMentionPathMap={chatMessages.editComposerMentionPathMap}
                     onChatModeChange={chatMessages.setSelectedChatMode}
                     onToolDecisionSubmit={handleToolDecisionSubmit}
-                    onEditUserMessage={chatMessages.startEditingMessage}
+                    onEditUserMessage={handleEditUserMessage}
                     onRevertUserMessage={handleRevertUserMessage}
                     composerAttachments={chatMessages.editComposerAttachments}
                     composerValue={chatMessages.editComposerValue}
@@ -403,7 +417,7 @@ export function ChatInterfaceContent({
                     onComposerValueChange={chatMessages.setEditComposerValue}
                     onSendEditedMessage={handleSendEditedMessage}
                     onAbortStreamingResponse={chatMessages.abortStreamingResponse}
-                    onCancelEditingMessage={chatMessages.cancelEditingMessage}
+                    onCancelEditingMessage={handleCancelEditingMessage}
                     composerFocusSignal={chatMessages.editComposerFocusSignal}
                     isSending={chatMessages.isSending}
                     modelOptions={selectorOptions}
@@ -484,16 +498,17 @@ export function ChatInterfaceContent({
           </div>
           {workspaceState.isWorkspaceTabsPanelOpen ? (
             <WorkspaceFileTabsPanel
-              activeTabPath={workspaceState.activeWorkspaceFilePath}
+              activeTabKey={workspaceState.activeWorkspaceTabKey}
               isOpen={workspaceState.isWorkspaceTabsPanelOpen}
               onCloseTab={workspaceState.handleCloseWorkspaceTab}
               onFileContentChange={workspaceState.handleWorkspaceFileContentChange}
+              onOpenMarkdownPreview={workspaceState.handleOpenWorkspaceMarkdownPreview}
               onSelectTab={workspaceState.handleSelectWorkspaceTab}
               onWidthChange={workspaceState.handleWorkspaceEditorWidthChange}
               onWidthCommit={workspaceState.handleWorkspaceEditorWidthCommit}
-              wordWrapEnabled={settings.workspaceFileEditorWordWrap}
               tabs={workspaceState.workspaceFileTabs}
               width={workspaceState.workspaceEditorWidth}
+              wordWrapEnabled={settings.workspaceFileEditorWordWrap}
             />
           ) : null}
           {workspaceState.isExplorerOpen ? (

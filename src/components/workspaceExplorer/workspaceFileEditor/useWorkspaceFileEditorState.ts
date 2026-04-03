@@ -17,6 +17,7 @@ import {
 
 interface WorkspaceFileEditorProps {
   fileName: string
+  onOpenMarkdownPreview?: () => void
   value: string
   wordWrapEnabled: boolean
   onChange: (nextValue: string) => void
@@ -36,6 +37,7 @@ function makeSearchOptions(
 
 export function useWorkspaceFileEditorState({
   fileName,
+  onOpenMarkdownPreview,
   value,
   wordWrapEnabled,
   onChange,
@@ -265,6 +267,12 @@ export function useWorkspaceFileEditorState({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') {
+        event.preventDefault()
+        onOpenMarkdownPreview?.()
+        return
+      }
+
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         setIsSearchOpen(true)
@@ -311,7 +319,16 @@ export function useWorkspaceFileEditorState({
         textAreaRef.current.selectionEnd = selectionStart + 2
       })
     },
-    [closeSearchPanel, focusReplaceInput, focusSearchInput, isSearchOpen, moveSearchMatch, onChange, value],
+    [
+      closeSearchPanel,
+      focusReplaceInput,
+      focusSearchInput,
+      isSearchOpen,
+      moveSearchMatch,
+      onChange,
+      onOpenMarkdownPreview,
+      value,
+    ],
   )
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import { useWorkspaceFileEditorState } from './workspaceFileEditor/useWorkspaceF
 
 interface WorkspaceFileEditorProps {
   fileName: string
+  onOpenMarkdownPreview?: () => void
   value: string
   wordWrapEnabled: boolean
   onChange: (nextValue: string) => void
@@ -11,12 +12,14 @@ interface WorkspaceFileEditorProps {
 
 export const WorkspaceFileEditor = memo(function WorkspaceFileEditor({
   fileName,
+  onOpenMarkdownPreview,
   value,
   wordWrapEnabled,
   onChange,
 }: WorkspaceFileEditorProps) {
   const editorState = useWorkspaceFileEditorState({
     fileName,
+    onOpenMarkdownPreview,
     onChange,
     value,
     wordWrapEnabled,

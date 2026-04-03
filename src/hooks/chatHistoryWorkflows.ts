@@ -87,8 +87,13 @@ function findUserMessageOrThrow(conversation: ConversationRecord, messageId: str
   }
 }
 
-function resolveRevertCheckpointIdOrThrow(conversation: ConversationRecord, targetMessageIndex: number) {
+async function resolveRevertCheckpointIdOrThrow(conversation: ConversationRecord, targetMessageIndex: number) {
   const targetMessage = conversation.messages[targetMessageIndex]
+  const checkpointHistory = await window.echosphereHistory.getUserMessageCheckpointHistory(conversation.id, targetMessage.id)
+  if (checkpointHistory.length > 0) {
+    return checkpointHistory[0].id
+  }
+
   const directCheckpointId = targetMessage?.runCheckpoint?.id
   if (directCheckpointId) {
     return directCheckpointId
@@ -109,9 +114,9 @@ function resolveRevertCheckpointIdOrThrow(conversation: ConversationRecord, targ
   throw new Error('This message and later user messages do not have a workspace checkpoint.')
 }
 
-function findUserMessageForRevertOrThrow(conversation: ConversationRecord, messageId: string) {
+async function findUserMessageForRevertOrThrow(conversation: ConversationRecord, messageId: string) {
   const { targetMessage, targetMessageIndex } = findUserMessageOrThrow(conversation, messageId)
-  const checkpointId = resolveRevertCheckpointIdOrThrow(conversation, targetMessageIndex)
+  const checkpointId = await resolveRevertCheckpointIdOrThrow(conversation, targetMessageIndex)
 
   return {
     checkpointId,
@@ -256,7 +261,7 @@ export async function persistConversationSnapshot(conversationId: string, messag
 
 export async function restoreWorkspaceCheckpointForMessage(conversationId: string, messageId: string) {
   const conversation = await loadStoredConversationOrThrow(conversationId)
-  const { checkpointId, targetMessage, targetMessageIndex } = findUserMessageForRevertOrThrow(conversation, messageId)
+  const { checkpointId, targetMessage, targetMessageIndex } = await findUserMessageForRevertOrThrow(conversation, messageId)
 
   await window.echosphereWorkspace.restoreCheckpoint(checkpointId)
   return {
@@ -271,7 +276,7 @@ export async function prepareRevertSessionForMessage(
   messageId: string,
 ): Promise<RevertPreparationResult> {
   const conversation = await loadStoredConversationOrThrow(conversationId)
-  const { checkpointId, targetMessage } = findUserMessageForRevertOrThrow(conversation, messageId)
+  const { checkpointId, targetMessage } = await findUserMessageForRevertOrThrow(conversation, messageId)
   const redoCheckpoint = await window.echosphereWorkspace.createRedoCheckpointFromSource(checkpointId)
 
   return {

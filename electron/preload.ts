@@ -67,6 +67,8 @@ const historyApi: EchosphereHistoryApi = {
   listConversations: () => ipcRenderer.invoke('history:list'),
   listFolders: () => ipcRenderer.invoke('history:listFolders'),
   getConversation: (conversationId: string) => ipcRenderer.invoke('history:get', conversationId),
+  getUserMessageCheckpointHistory: (conversationId: string, messageId: string) =>
+    ipcRenderer.invoke('history:getUserMessageCheckpointHistory', conversationId, messageId),
   createConversation: (input?: CreateConversationInput) => ipcRenderer.invoke('history:create', input),
   createFolder: (input: CreateConversationFolderInput) => ipcRenderer.invoke('history:createFolder', input),
   renameFolder: (input: RenameConversationFolderInput) => ipcRenderer.invoke('history:renameFolder', input),

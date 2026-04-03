@@ -1,0 +1,104 @@
+import { memo } from 'react'
+import { WorkspaceFileEditor } from '../WorkspaceFileEditor'
+import { WorkspaceMarkdownPreview } from '../workspaceMarkdownPreview/WorkspaceMarkdownPreview'
+import type { WorkspaceFileTab, WorkspaceTab } from '../types'
+
+interface WorkspaceFileTabsPanelContentProps {
+  activeTab: WorkspaceTab
+  tabs: readonly WorkspaceTab[]
+  onOpenMarkdownPreview?: () => void
+  onFileContentChange: (relativePath: string, content: string) => void
+  wordWrapEnabled: boolean
+}
+
+function isWorkspaceFileTab(tab: WorkspaceTab): tab is WorkspaceFileTab {
+  return tab.kind === 'file'
+}
+
+export const WorkspaceFileTabsPanelContent = memo(function WorkspaceFileTabsPanelContent({
+  activeTab,
+  tabs,
+  onOpenMarkdownPreview,
+  onFileContentChange,
+  wordWrapEnabled,
+}: WorkspaceFileTabsPanelContentProps) {
+  if (activeTab.kind === 'markdown-preview') {
+    const sourceTab = tabs.find(
+      (tab): tab is WorkspaceFileTab => isWorkspaceFileTab(tab) && tab.relativePath === activeTab.relativePath,
+    )
+
+    if (!sourceTab) {
+      return (
+        <div className="h-full border-t border-border bg-surface px-4 py-3 text-sm text-subtle-foreground">
+          The source file is no longer open.
+        </div>
+      )
+    }
+
+    if (sourceTab.status === 'loading') {
+      return (
+        <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-subtle-foreground">
+          Loading {sourceTab.fileName}...
+        </div>
+      )
+    }
+
+    if (sourceTab.status === 'error') {
+      return (
+        <div className="h-full border-t border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
+          {sourceTab.errorMessage ?? 'Failed to open file.'}
+        </div>
+      )
+    }
+
+    if (sourceTab.isBinary) {
+      return (
+        <div className="h-full border-t border-border bg-surface px-4 py-3 text-sm text-subtle-foreground">
+          Markdown view is not supported for binary file {sourceTab.fileName}.
+        </div>
+      )
+    }
+
+    return (
+      <WorkspaceMarkdownPreview
+        content={sourceTab.content}
+        fileName={sourceTab.fileName}
+        isTruncated={sourceTab.isTruncated}
+      />
+    )
+  }
+
+  if (activeTab.status === 'loading') {
+    return (
+      <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-subtle-foreground">
+        Loading {activeTab.fileName}...
+      </div>
+    )
+  }
+
+  if (activeTab.status === 'error') {
+    return (
+      <div className="h-full border-t border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
+        {activeTab.errorMessage ?? 'Failed to open file.'}
+      </div>
+    )
+  }
+
+  if (activeTab.isBinary) {
+    return (
+      <div className="h-full border-t border-border bg-surface px-4 py-3 text-sm text-subtle-foreground">
+        Binary file view is not supported for {activeTab.fileName}.
+      </div>
+    )
+  }
+
+  return (
+    <WorkspaceFileEditor
+      fileName={activeTab.fileName}
+      onOpenMarkdownPreview={onOpenMarkdownPreview}
+      value={activeTab.content}
+      wordWrapEnabled={wordWrapEnabled}
+      onChange={(nextValue) => onFileContentChange(activeTab.relativePath, nextValue)}
+    />
+  )
+})

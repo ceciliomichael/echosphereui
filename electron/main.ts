@@ -57,6 +57,7 @@ import {
   deleteStoredFolder,
   deleteStoredConversation,
   getStoredConversation,
+  getStoredUserMessageCheckpointHistory,
   listStoredConversations,
   listStoredFolders,
   renameStoredFolder,
@@ -302,6 +303,9 @@ function registerHistoryHandlers() {
   ipcMain.handle('history:list', async () => listStoredConversations())
   ipcMain.handle('history:listFolders', async () => listStoredFolders())
   ipcMain.handle('history:get', async (_event, conversationId: string) => getStoredConversation(conversationId))
+  ipcMain.handle('history:getUserMessageCheckpointHistory', async (_event, conversationId: string, messageId: string) =>
+    getStoredUserMessageCheckpointHistory(conversationId, messageId),
+  )
   ipcMain.handle('history:create', async (_event, input?: CreateConversationInput) => createStoredConversation(input))
   ipcMain.handle('history:createFolder', async (_event, input: CreateConversationFolderInput) =>
     createStoredFolder(input),

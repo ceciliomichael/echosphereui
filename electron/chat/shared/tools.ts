@@ -854,7 +854,7 @@ async function createApplyPatchToolResult(context: Pick<AgentToolContext, 'check
   )
 }
 
-function createWholeFileApplyTool(context: { workspaceRootPath: string }) {
+function createWholeFileApplyTool(context: Pick<AgentToolContext, 'checkpointId' | 'workspaceRootPath'>) {
   return tool({
     description:
       'Create, replace, or delete entire files. Prefer this for whole-file writes or file creation; prefer apply_patch for surgical edits.',
@@ -905,16 +905,17 @@ function createWholeFileApplyTool(context: { workspaceRootPath: string }) {
   })
 }
 
-async function createReadOnlyToolContext(input: AgentToolContext) {
+async function createToolContext(input: AgentToolContext) {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
   await assertWorkspaceDirectory(workspaceRootPath)
   return {
+    checkpointId: input.checkpointId?.trim() || null,
     workspaceRootPath,
   }
 }
 
 export async function createAgentTools(input: AgentToolContext, options?: { readOnly?: boolean }): Promise<ToolSet> {
-  const context = await createReadOnlyToolContext(input)
+  const context = await createToolContext(input)
 
   const tools: ToolSet = {
     list: tool({

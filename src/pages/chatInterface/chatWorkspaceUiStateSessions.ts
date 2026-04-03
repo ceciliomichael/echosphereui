@@ -1,21 +1,23 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ChatInterfaceRightPanelTab } from "../../hooks/useChatInterfaceController";
-import type { WorkspaceFileTab } from "../../components/workspaceExplorer/types";
+import type { WorkspaceTab } from "../../components/workspaceExplorer/types";
 import type { WorkspaceUiSession } from "./chatWorkspaceUiState.types";
 
 interface SaveWorkspaceUiSessionInput {
   activeWorkspaceFilePath: string | null;
+  activeWorkspaceTabKey: string | null;
   activeWorkspaceUiKey: string;
   isExplorerOpen: boolean;
   isRightPanelOpen: boolean;
   isWorkspaceTabsPanelVisible: boolean;
   rightPanelTab: ChatInterfaceRightPanelTab;
-  workspaceFileTabs: WorkspaceFileTab[];
+  workspaceFileTabs: WorkspaceTab[];
   workspaceUiSessionsRef: MutableRefObject<Record<string, WorkspaceUiSession>>;
 }
 
 interface RestoreWorkspaceUiSessionInput {
   activeWorkspaceFilePath: string | null;
+  activeWorkspaceTabKey: string | null;
   activeWorkspaceUiKey: string;
   isExplorerOpen: boolean;
   isRightPanelOpen: boolean;
@@ -24,10 +26,11 @@ interface RestoreWorkspaceUiSessionInput {
   onRightPanelTabChange: (nextTab: ChatInterfaceRightPanelTab) => void;
   previousWorkspaceUiKeyRef: MutableRefObject<string>;
   setActiveWorkspaceFilePath: Dispatch<SetStateAction<string | null>>;
+  setActiveWorkspaceTabKey: Dispatch<SetStateAction<string | null>>;
   setIsExplorerOpen: Dispatch<SetStateAction<boolean>>;
   setIsWorkspaceTabsPanelVisible: Dispatch<SetStateAction<boolean>>;
-  setWorkspaceFileTabs: Dispatch<SetStateAction<WorkspaceFileTab[]>>;
-  workspaceFileTabs: WorkspaceFileTab[];
+  setWorkspaceFileTabs: Dispatch<SetStateAction<WorkspaceTab[]>>;
+  workspaceFileTabs: WorkspaceTab[];
   workspaceUiSessionsRef: MutableRefObject<Record<string, WorkspaceUiSession>>;
 }
 
@@ -59,6 +62,7 @@ interface WorkspaceAutosaveTimeoutsRefInput {
 
 export function saveWorkspaceUiSession({
   activeWorkspaceFilePath,
+  activeWorkspaceTabKey,
   activeWorkspaceUiKey,
   isExplorerOpen,
   isRightPanelOpen,
@@ -69,6 +73,7 @@ export function saveWorkspaceUiSession({
 }: SaveWorkspaceUiSessionInput) {
   workspaceUiSessionsRef.current[activeWorkspaceUiKey] = {
     activeFilePath: activeWorkspaceFilePath,
+    activeTabKey: activeWorkspaceTabKey,
     isExplorerOpen,
     isRightPanelOpen,
     isTabsVisible: isWorkspaceTabsPanelVisible,
@@ -79,6 +84,7 @@ export function saveWorkspaceUiSession({
 
 export function restoreWorkspaceUiSession({
   activeWorkspaceFilePath,
+  activeWorkspaceTabKey,
   activeWorkspaceUiKey,
   isExplorerOpen,
   isRightPanelOpen,
@@ -87,6 +93,7 @@ export function restoreWorkspaceUiSession({
   onRightPanelTabChange,
   previousWorkspaceUiKeyRef,
   setActiveWorkspaceFilePath,
+  setActiveWorkspaceTabKey,
   setIsExplorerOpen,
   setIsWorkspaceTabsPanelVisible,
   setWorkspaceFileTabs,
@@ -100,6 +107,7 @@ export function restoreWorkspaceUiSession({
 
   saveWorkspaceUiSession({
     activeWorkspaceFilePath,
+    activeWorkspaceTabKey,
     activeWorkspaceUiKey: previousWorkspaceUiKey,
     isExplorerOpen,
     isRightPanelOpen,
@@ -114,6 +122,7 @@ export function restoreWorkspaceUiSession({
   const nextSession = workspaceUiSessionsRef.current[activeWorkspaceUiKey];
   if (nextSession) {
     setActiveWorkspaceFilePath(nextSession.activeFilePath);
+    setActiveWorkspaceTabKey(nextSession.activeTabKey ?? nextSession.activeFilePath);
     setIsWorkspaceTabsPanelVisible(nextSession.isTabsVisible);
     setIsExplorerOpen(nextSession.isExplorerOpen);
     onRightPanelTabChange(nextSession.rightPanelTab);
@@ -121,6 +130,7 @@ export function restoreWorkspaceUiSession({
   } else {
     setWorkspaceFileTabs([]);
     setActiveWorkspaceFilePath(null);
+    setActiveWorkspaceTabKey(null);
     setIsWorkspaceTabsPanelVisible(false);
     setIsExplorerOpen(false);
     onRightPanelTabChange("diff");

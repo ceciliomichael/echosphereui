@@ -13,6 +13,7 @@ import {
   appendMessagesToLog,
   deleteConversationFile,
   listConversationRecords,
+  readUserMessageCheckpointHistory,
   readConversationFile,
   writeConversationFile,
 } from './conversationFileStore'
@@ -88,6 +89,10 @@ export async function getStoredConversation(conversationId: string) {
     console.error(`Failed to load conversation: ${conversationId}`, error)
     throw error
   }
+}
+
+export async function getStoredUserMessageCheckpointHistory(conversationId: string, messageId: string) {
+  return readUserMessageCheckpointHistory(conversationId, messageId)
 }
 
 export async function createStoredConversation(input?: CreateConversationInput) {
@@ -241,8 +246,19 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
     throw new Error(`Conversation not found: ${input.conversationId}`)
   }
 
-  const existingMessageIds = new Set(existingConversation.messages.map((message) => message.id))
-  const newMessages = input.messages.filter((message) => !existingMessageIds.has(message.id))
+  const existingMessagesById = new Map(existingConversation.messages.map((message) => [message.id, message]))
+  const messagesToLog = input.messages.filter((message) => {
+    const existingMessage = existingMessagesById.get(message.id)
+    if (!existingMessage) {
+      return true
+    }
+
+    return (
+      message.role === 'user' &&
+      message.runCheckpoint?.id !== undefined &&
+      message.runCheckpoint.id !== existingMessage.runCheckpoint?.id
+    )
+  })
 
   const nextConversation: ConversationRecord = {
     ...existingConversation,
@@ -254,7 +270,7 @@ export async function replaceStoredMessages(input: ReplaceConversationMessagesIn
 
   await Promise.all([
     writeConversationFile(nextConversation),
-    appendMessagesToLog(input.conversationId, newMessages),
+    appendMessagesToLog(input.conversationId, messagesToLog),
   ])
 
   return nextConversation

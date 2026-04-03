@@ -21,7 +21,7 @@ interface WorkspaceCheckpointStore {
   captureFileState: (checkpointId: string, absolutePath: string) => Promise<void>
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
-  restoreCheckpoint: (checkpointId: string) => Promise<void>
+  restoreCheckpoint: (checkpointId: string) => Promise<string>
 }
 
 const CHECKPOINTS_DIRECTORY_NAME = 'workspace-checkpoints'
@@ -224,7 +224,7 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
     },
 
     async restoreCheckpoint(checkpointId: string) {
-      await withCheckpointLock(checkpointId, async () => {
+      return withCheckpointLock(checkpointId, async () => {
         const manifest = await readManifest(checkpointId)
         const restoreEntries = [...manifest.entries].reverse()
         const directoryCleanupCandidates = new Set<string>()
@@ -282,6 +282,8 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
             throw error
           })
         }
+
+        return manifest.workspaceRootPath
       })
     },
 
@@ -323,7 +325,14 @@ export async function captureWorkspaceCheckpointFileState(checkpointId: string, 
 
 export async function restoreWorkspaceCheckpoint(checkpointId: string) {
   const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
-  return workspaceCheckpointStore.restoreCheckpoint(checkpointId)
+  const workspaceRootPath = await workspaceCheckpointStore.restoreCheckpoint(checkpointId)
+  void import('./explorerWatch')
+    .then(({ notifyWorkspaceExplorerChange }) => {
+      notifyWorkspaceExplorerChange(workspaceRootPath)
+    })
+    .catch(() => {
+      // Node-only tests import checkpoint helpers without the Electron runtime.
+    })
 }
 
 export async function createWorkspaceRedoCheckpointFromSource(sourceCheckpointId: string) {

@@ -331,10 +331,6 @@ export function ChatInput({
           if (event.target.closest('[data-floating-menu-root="true"]')) {
             return
           }
-
-          if (event.target.closest('[data-sidebar-root="true"]')) {
-            return
-          }
         }
 
         cancelEditing?.()

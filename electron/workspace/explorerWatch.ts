@@ -254,6 +254,15 @@ export function unsubscribeWorkspaceExplorerChanges(senderId: number, workspaceR
   removeWorkspaceExplorerSubscriber(senderId, workspaceRootPath)
 }
 
+export function notifyWorkspaceExplorerChange(workspaceRootPath: string) {
+  const normalizedRootPath = normalizeWorkspaceRootPath(workspaceRootPath)
+  if (!watcherStates.has(normalizedRootPath)) {
+    return
+  }
+
+  scheduleWorkspaceExplorerChange(normalizedRootPath)
+}
+
 export function disposeWorkspaceExplorerWatchers() {
   for (const rootPath of Array.from(watcherStates.keys())) {
     removeWorkspaceExplorerWatcherState(rootPath)

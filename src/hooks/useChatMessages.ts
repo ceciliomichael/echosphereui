@@ -158,7 +158,17 @@ export function useChatMessages(input: UseChatMessagesInput) {
     }
   }, [activeConversationId, cancelComposerEditingMessage, clearRevertEditSession])
 
-  const cancelEditingMessage = useCallback(() => {
+  const redoRevertSession = useCallback(
+    async (_conversationId: string, revertSession: RevertEditSession, failureMessage: string) => {
+      await window.echosphereWorkspace.restoreCheckpoint(revertSession.redoCheckpointId).catch((caughtError) => {
+        console.error(caughtError)
+        throw new Error(failureMessage)
+      })
+    },
+    [],
+  )
+
+  const cancelEditingMessage = useCallback(async () => {
     const activeEditingMessageId = editingMessageId
     cancelComposerEditingMessage()
 
@@ -172,17 +182,21 @@ export function useChatMessages(input: UseChatMessagesInput) {
     }
 
     clearRevertEditSession(activeConversationId)
-    void window.echosphereWorkspace
-      .restoreCheckpoint(revertSession.redoCheckpointId)
-      .catch((caughtError) => {
-        console.error(caughtError)
-        setSessionError('Unable to redo reverted workspace changes.')
-      })
+    try {
+      await redoRevertSession(activeConversationId, revertSession, 'Unable to redo reverted workspace changes.')
+    } catch (caughtError) {
+      setSessionError(
+        caughtError instanceof Error && caughtError.message.trim().length > 0
+          ? caughtError.message
+          : 'Unable to redo reverted workspace changes.',
+      )
+    }
   }, [
-    clearRevertEditSession,
     activeConversationId,
     cancelComposerEditingMessage,
+    clearRevertEditSession,
     editingMessageId,
+    redoRevertSession,
     setSessionError,
   ])
 
@@ -241,14 +255,33 @@ export function useChatMessages(input: UseChatMessagesInput) {
   ])
 
   const startEditingMessage = useCallback(
-    (messageId: string) => {
+    async (messageId: string) => {
       if (activeConversationId) {
-        clearRevertEditSession(activeConversationId)
+        const activeRevertSession = revertEditSessionsRef.current[activeConversationId]
+        if (activeRevertSession) {
+          try {
+            await redoRevertSession(
+              activeConversationId,
+              activeRevertSession,
+              'Unable to redo reverted workspace changes before editing that message.',
+            )
+          } catch (caughtError) {
+            clearRevertEditSession(activeConversationId)
+            setSessionError(
+              caughtError instanceof Error && caughtError.message.trim().length > 0
+                ? caughtError.message
+                : 'Unable to redo reverted workspace changes before editing that message.',
+            )
+            return
+          }
+
+          clearRevertEditSession(activeConversationId)
+        }
       }
 
       conversationActions.startEditingMessage(messageId)
     },
-    [activeConversationId, clearRevertEditSession, conversationActions],
+    [activeConversationId, clearRevertEditSession, conversationActions, redoRevertSession, setSessionError],
   )
 
   useEffect(() => {

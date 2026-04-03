@@ -753,6 +753,7 @@ export interface EchosphereHistoryApi {
   listConversations: () => Promise<ConversationSummary[]>
   listFolders: () => Promise<ConversationFolderSummary[]>
   getConversation: (conversationId: string) => Promise<ConversationRecord | null>
+  getUserMessageCheckpointHistory: (conversationId: string, messageId: string) => Promise<UserMessageRunCheckpoint[]>
   createConversation: (input?: CreateConversationInput) => Promise<ConversationRecord>
   createFolder: (input: CreateConversationFolderInput) => Promise<ConversationFolderRecord>
   renameFolder: (input: RenameConversationFolderInput) => Promise<ConversationFolderRecord>
