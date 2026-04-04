@@ -4,6 +4,7 @@ import type { ConversationRuntimeSnapshot } from './chatMessageSendTypes'
 
 interface UseChatConversationActionsInput {
   activeConversationId: string | null
+  activeWorkspacePath: string | null
   addFolder: (folder: ConversationFolderSummary) => void
   applyConversation: (conversation: ConversationRecord) => void
   beginEditingMessage: (messageId: string) => void
@@ -20,6 +21,7 @@ interface UseChatConversationActionsInput {
   replaceConversationSummaries: (summaries: ConversationSummary[]) => void
   resetComposerState: () => void
   selectedFolderId: string | null
+  resolveFolderIdForWorkspacePath: (workspacePath: string | null) => string | null
   setError: (errorMessage: string | null) => void
   upsertConversation: (conversation: ConversationRecord) => void
 }
@@ -27,6 +29,7 @@ interface UseChatConversationActionsInput {
 export function useChatConversationActions(input: UseChatConversationActionsInput) {
   const {
     activeConversationId,
+    activeWorkspacePath,
     addFolder,
     applyConversation,
     beginEditingMessage,
@@ -40,6 +43,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     replaceConversationSummaries,
     resetComposerState,
     selectedFolderId,
+    resolveFolderIdForWorkspacePath,
     setError,
     upsertConversation,
   } = input
@@ -53,11 +57,16 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
   )
 
   const createConversation = useCallback(
-    (folderId = selectedFolderId) => {
+    (folderId?: string | null) => {
       clearError()
-      resetDraft(folderId)
+      const nextFolderId =
+        folderId !== undefined
+          ? folderId
+          : selectedFolderId ?? resolveFolderIdForWorkspacePath(activeWorkspacePath)
+
+      resetDraft(nextFolderId)
     },
-    [clearError, resetDraft, selectedFolderId],
+    [activeWorkspacePath, clearError, resolveFolderIdForWorkspacePath, resetDraft, selectedFolderId],
   )
 
   const createFolder = useCallback(async () => {

@@ -147,6 +147,11 @@ export function ChatInterfaceContent({
     await chatMessages.createConversation(folderId)
   }, [chatMessages, clearQueuedMessages])
 
+  const handleCreateWorkspaceConversation = useCallback(async () => {
+    clearQueuedMessages()
+    await chatMessages.createConversation()
+  }, [chatMessages, clearQueuedMessages])
+
   const handleSelectConversation = useCallback(
     (conversationId: string) => {
       clearQueuedMessages()
@@ -268,7 +273,7 @@ export function ChatInterfaceContent({
           isSidebarOpen={interfaceController.isSidebarOpen}
           onToggleSidebar={interfaceController.handleToggleSidebar}
           newThreadButton={{
-            onClick: handleCreateConversation,
+            onClick: handleCreateWorkspaceConversation,
           }}
         />
       }

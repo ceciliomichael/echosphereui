@@ -9,6 +9,7 @@ import type {
 } from '../types/chat'
 import {
   buildConversationGroups,
+  getFolderIdForWorkspacePath,
   getSelectedFolderName,
   insertFolderSummary,
   removeConversationSummary,
@@ -321,6 +322,10 @@ export function useChatSessionState(language: AppLanguage) {
   }, [])
 
   const clearError = useCallback(() => setError(null), [])
+  const resolveFolderIdForWorkspacePath = useCallback(
+    (workspacePath: string | null) => getFolderIdForWorkspacePath(folderSummaries, workspacePath),
+    [folderSummaries],
+  )
 
   return {
     activeConversationChatMode,
@@ -353,6 +358,7 @@ export function useChatSessionState(language: AppLanguage) {
     selectedFolderId,
     selectedFolderName: getSelectedFolderName(folderSummaries, selectedFolderId),
     selectedFolderPath: selectedFolderId === null ? null : folderSummaries.find((folder) => folder.id === selectedFolderId)?.path ?? null,
+    resolveFolderIdForWorkspacePath,
     setError,
     setIsLoading,
     updateConversationRuntimeState,

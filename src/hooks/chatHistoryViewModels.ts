@@ -48,6 +48,29 @@ export function getSelectedFolderName(
   return folderSummaries.find((folder) => folder.id === selectedFolderId)?.name ?? UNFILED_FOLDER_NAME
 }
 
+function normalizeFolderPath(folderPath: string) {
+  return folderPath.trim().replace(/\\/g, '/')
+}
+
+export function getFolderIdForWorkspacePath(
+  folderSummaries: ConversationFolderSummary[],
+  workspacePath: string | null,
+) {
+  const normalizedWorkspacePath = workspacePath ? normalizeFolderPath(workspacePath) : ''
+  if (normalizedWorkspacePath.length === 0) {
+    return null
+  }
+
+  const matchedFolder = folderSummaries.find(
+    (folder) =>
+      normalizeFolderPath(folder.path).localeCompare(normalizedWorkspacePath, undefined, {
+        sensitivity: 'base',
+      }) === 0,
+  )
+
+  return matchedFolder?.id ?? null
+}
+
 function formatUpdatedAtLabel(timestamp: number, language: AppLanguage) {
   const relativeTimeFormatter = getRelativeTimeFormatter(language)
   const differenceMs = timestamp - Date.now()

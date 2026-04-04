@@ -31,6 +31,8 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const sessionState = useChatSessionState(language)
   const messages = sessionState.activeConversationState?.conversation.messages ?? EMPTY_MESSAGES
   const isSending = sessionState.activeConversationState?.isSending ?? false
+  const activeWorkspacePath =
+    sessionState.activeConversationState?.conversation.agentContextRootPath ?? sessionState.selectedFolderPath
   const composerState = useChatComposerState(messages)
   const activeConversationId = sessionState.activeConversationId
   const setSessionError = sessionState.setError
@@ -91,6 +93,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
   const conversationActions = useChatConversationActions({
     activeConversationId,
+    activeWorkspacePath,
     addFolder: sessionState.addFolder,
     applyConversation: sessionState.applyConversation,
     beginEditingMessage: startComposerEditingMessage,
@@ -104,6 +107,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     replaceConversationSummaries: sessionState.replaceConversationSummaries,
     resetComposerState: composerState.resetComposerState,
     selectedFolderId: sessionState.selectedFolderId,
+    resolveFolderIdForWorkspacePath: sessionState.resolveFolderIdForWorkspacePath,
     setError: sessionState.setError,
     upsertConversation: sessionState.upsertConversation,
   })
