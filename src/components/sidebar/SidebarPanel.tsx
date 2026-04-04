@@ -69,7 +69,7 @@ export function SidebarPanel({
         />
       </div>
 
-      <div className="pt-4">
+      <div className="pt-4 pr-6 md:pr-7">
         <button
           type="button"
           onClick={onOpenSettings}
