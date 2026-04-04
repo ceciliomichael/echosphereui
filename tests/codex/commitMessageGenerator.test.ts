@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildCommitMessagePrompt,
+  buildHeuristicCommitMessageFromDiff,
+} from '../../electron/git/commitMessageGenerator'
+import {
   normalizeGeneratedCommitMessage,
   normalizeGeneratedCommitMessageWithDescription,
 } from '../../electron/git/commitMessageFormatting'
@@ -71,4 +75,56 @@ test('normalizeGeneratedCommitMessageWithDescription strips think blocks from ge
   assert.equal(normalized.includes('plan the response'), false)
   assert.equal(normalized.includes('ignore this'), false)
   assert.equal(normalized.includes('Keep commit bodies free of model reasoning tags'), true)
+})
+
+test('buildCommitMessagePrompt explicitly bans generic filler and requires bullet output', () => {
+  const prompt = buildCommitMessagePrompt({
+    diffText: [
+      'diff --git a/electron/git/commitMessageGenerator.ts b/electron/git/commitMessageGenerator.ts',
+      '@@ -1,3 +1,5 @@',
+      '-Generate the best possible commit message for this staged diff.',
+      '+Write a git commit message for this staged diff.',
+      '+- Do not use generic filler like "update implementation details" or "changed modules".',
+    ].join('\n'),
+    numstatText: '2\t1\telectron/git/commitMessageGenerator.ts',
+  })
+
+  assert.equal(prompt.promptText.includes('conventional commit subject no longer than 72 characters'), true)
+  assert.equal(prompt.promptText.includes('Then write 2-4 bullet points'), true)
+  assert.equal(prompt.promptText.includes('Do not use generic filler like "update implementation details"'), true)
+})
+
+test('buildHeuristicCommitMessageFromDiff derives a specific fallback from diff context', () => {
+  const commitMessage = buildHeuristicCommitMessageFromDiff({
+    diffText: [
+      'diff --git a/electron/chat/shared/tools/factory.ts b/electron/chat/shared/tools/factory.ts',
+      '@@ -1,5 +1,6 @@',
+      "-import { createToolRegistry } from './index'",
+      "+import { createRipgrepTool } from './ripgrep'",
+      "+import { createToolRegistry } from './index'",
+      ' export function createSharedTools() {',
+      '-  return createToolRegistry()',
+      '+  return createToolRegistry([createRipgrepTool()])',
+      ' }',
+      'diff --git a/electron/chat/shared/tools/index.ts b/electron/chat/shared/tools/index.ts',
+      '@@ -1,2 +1,3 @@',
+      "+export { createRipgrepTool } from './ripgrep'",
+      ' export { createToolRegistry } from "./factory"',
+      'diff --git a/tests/codex/ripgrepTools.test.ts b/tests/codex/ripgrepTools.test.ts',
+      '@@ -1,2 +1,5 @@',
+      "+test('registers the ripgrep tool in shared factories', () => {",
+      '+  assert.equal(true, true)',
+      '+})',
+    ].join('\n'),
+    numstatText: [
+      '3\t1\telectron/chat/shared/tools/factory.ts',
+      '1\t0\telectron/chat/shared/tools/index.ts',
+      '3\t0\ttests/codex/ripgrepTools.test.ts',
+    ].join('\n'),
+  })
+
+  assert.equal(commitMessage.includes('update implementation details across changed modules'), false)
+  assert.equal(commitMessage.includes('changed modules'), false)
+  assert.equal(/\bripgrep\b/iu.test(commitMessage), true)
+  assert.equal(commitMessage.includes('\n\n- '), true)
 })
