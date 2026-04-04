@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react'
 import {
   prepareRevertSessionForMessage,
-  revertConversationToMessage,
   restoreWorkspaceCheckpointForMessage,
 } from './chatHistoryWorkflows'
 import { persistAndStreamMessage } from './chatMessageSendWorkflow'
@@ -316,8 +315,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         await abortActiveStreamIfNeeded()
         const revertPreparation = await prepareRevertSessionForMessage(conversationId, messageId)
         try {
-          const revertedConversation = await revertConversationToMessage(conversationId, messageId)
-          input.applyConversation(revertedConversation)
+          await restoreWorkspaceCheckpointForMessage(conversationId, messageId)
         } catch (caughtError) {
           if (!isMissingCheckpointError(caughtError)) {
             throw caughtError

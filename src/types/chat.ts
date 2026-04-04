@@ -800,6 +800,7 @@ export interface EchosphereChatApi {
 export interface EchosphereWorkspaceApi {
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
+  createRedoCheckpointFromSources: (sourceCheckpointIds: string[]) => Promise<UserMessageRunCheckpoint>
   createEntry: (input: WorkspaceExplorerCreateEntryInput) => Promise<WorkspaceExplorerCreateEntryResult>
   deleteEntry: (input: WorkspaceExplorerDeleteEntryInput) => Promise<WorkspaceExplorerDeleteEntryResult>
   importEntry: (input: WorkspaceExplorerImportEntryInput) => Promise<WorkspaceExplorerImportEntryResult>
@@ -813,6 +814,7 @@ export interface EchosphereWorkspaceApi {
   watchExplorerChanges: (input: WorkspaceExplorerWatchChangesInput) => Promise<void>
   writeFile: (input: WorkspaceExplorerWriteFileInput) => Promise<WorkspaceExplorerWriteFileResult>
   restoreCheckpoint: (checkpointId: string) => Promise<void>
+  restoreCheckpointSequence: (checkpointIds: string[]) => Promise<void>
 }
 
 export interface EchosphereTerminalApi {

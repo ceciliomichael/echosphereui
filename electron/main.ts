@@ -122,7 +122,9 @@ import {
 import {
   createWorkspaceCheckpoint,
   createWorkspaceRedoCheckpointFromSource,
+  createWorkspaceRedoCheckpointFromSources,
   restoreWorkspaceCheckpoint,
+  restoreWorkspaceCheckpointSequence,
 } from './workspace/checkpoints'
 import {
   disposeWorkspaceExplorerWatchers,
@@ -471,6 +473,12 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('workspace:checkpoint:createRedoFromSource', async (_event, sourceCheckpointId: string) =>
     createWorkspaceRedoCheckpointFromSource(sourceCheckpointId),
+  )
+  ipcMain.handle('workspace:checkpoint:createRedoFromSources', async (_event, sourceCheckpointIds: string[]) =>
+    createWorkspaceRedoCheckpointFromSources(sourceCheckpointIds),
+  )
+  ipcMain.handle('workspace:checkpoint:restoreSequence', async (_event, checkpointIds: string[]) =>
+    restoreWorkspaceCheckpointSequence(checkpointIds),
   )
   ipcMain.handle('workspace:explorer:watch', async (event, input: WorkspaceExplorerWatchChangesInput) =>
     subscribeWorkspaceExplorerChanges(event.sender, input.workspaceRootPath),

@@ -113,6 +113,8 @@ function createSyntheticToolMessage(
   completedAt: number,
   result: AgentToolExecutionResult,
 ): Message {
+  // This JSON envelope is the exact tool output replayed back into the next model turn.
+  // Edit `summary`, `body`, `subject`, or `semantics` here to change what the AI receives.
   return {
     content: formatStructuredToolResultContent(
       {
@@ -206,7 +208,7 @@ export async function runToolEnabledChatStream(input: {
         workspaceRootPath: input.startInput.agentContextRootPath,
       },
       {
-        readOnly: input.startInput.chatMode === 'plan',
+        chatMode: input.startInput.chatMode,
       },
     )
     const prompt = buildChatPrompt({

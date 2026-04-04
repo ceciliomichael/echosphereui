@@ -2,20 +2,10 @@ import type { ModelMessage } from 'ai'
 import { normalizeAssistantMessageContent } from '../../../src/lib/chatMessageContent'
 import { getToolResultModelContent, parseStructuredToolResultContent } from '../../../src/lib/toolResultContent'
 import type { ChatMode, Message } from '../../../src/types/chat'
+import { buildChatModeSystemPrompt } from './prompts/mode'
 
-const AGENT_SYSTEM_PROMPT = `You are EchoSphere, a pragmatic desktop coding assistant.
-
-Use the available tools to inspect the workspace before editing.
-Prefer list/glob/grep/read to gather context.
-Prefer apply_patch for surgical edits and apply for whole-file writes. file_change is a compatibility alias.
-Treat tool results as the source of truth. Do not invent file contents or command outputs.
-Keep working until the task is actually resolved.`
-
-const PLAN_SYSTEM_PROMPT = `You are EchoSphere in planning mode.
-
-Use the available read-only tools to inspect the workspace and form a concrete plan.
-Do not make file edits in this mode.
-Treat tool results as the source of truth and keep exploring until the plan is grounded in the codebase.`
+type ToolModelMessage = Extract<ModelMessage, { role: 'tool' }>
+type ToolResultPart = ToolModelMessage['content'][number]
 
 function toUserContent(message: Message) {
   const textAttachments = (message.attachments ?? [])
@@ -63,6 +53,35 @@ function buildAssistantToolCallParts(message: Message, validToolCallIds: Set<str
   return toolCallParts
 }
 
+function buildToolResultParts(message: Message, validToolCallIds: Set<string>): ToolResultPart[] {
+  if (!message.toolCallId || !validToolCallIds.has(message.toolCallId)) {
+    return []
+  }
+
+  const parsedStructuredResult = parseStructuredToolResultContent(message.content)
+  const toolName = parsedStructuredResult.metadata?.toolName?.trim()
+  if (!toolName) {
+    return []
+  }
+
+  const outputText = getToolResultModelContent(message.content)
+  if (!outputText) {
+    return []
+  }
+
+  return [
+    {
+      output: {
+        type: 'text',
+        value: outputText,
+      },
+      toolCallId: message.toolCallId,
+      toolName,
+      type: 'tool-result',
+    },
+  ]
+}
+
 function toAssistantMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
   const normalized = normalizeAssistantMessageContent(message)
   const toolCallParts = buildAssistantToolCallParts(message, validToolCallIds)
@@ -107,36 +126,28 @@ function toAssistantMessage(message: Message, validToolCallIds: Set<string>): Mo
   }
 }
 
-function toToolMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
-  if (!message.toolCallId || !validToolCallIds.has(message.toolCallId)) {
-    return null
-  }
-
-  const parsedStructuredResult = parseStructuredToolResultContent(message.content)
-  const toolName = parsedStructuredResult.metadata?.toolName?.trim()
-  if (!toolName) {
-    return null
-  }
-
-  const outputText = getToolResultModelContent(message.content)
-  if (!outputText) {
+function toToolMessage(message: Message, validToolCallIds: Set<string>): ToolModelMessage | null {
+  const toolResultParts = buildToolResultParts(message, validToolCallIds)
+  if (toolResultParts.length === 0) {
     return null
   }
 
   return {
-    content: [
-      {
-        output: {
-          type: 'text',
-          value: outputText,
-        },
-        toolCallId: message.toolCallId,
-        toolName,
-        type: 'tool-result',
-      },
-    ],
+    content: toolResultParts,
     role: 'tool',
   }
+}
+
+function appendModelMessage(messages: ModelMessage[], nextMessage: ModelMessage) {
+  const lastMessage = messages[messages.length - 1]
+  if (lastMessage?.role === 'tool' && nextMessage.role === 'tool') {
+    // The AI SDK allows multiple `tool-result` parts in one tool message.
+    // Combining consecutive tool history entries keeps the replay compact.
+    lastMessage.content.push(...nextMessage.content)
+    return
+  }
+
+  messages.push(nextMessage)
 }
 
 function toModelMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
@@ -164,8 +175,7 @@ function toModelMessage(message: Message, validToolCallIds: Set<string>): ModelM
 }
 
 export function buildChatSystemPrompt(chatMode: ChatMode, workspaceRootPath: string) {
-  const basePrompt = chatMode === 'plan' ? PLAN_SYSTEM_PROMPT : AGENT_SYSTEM_PROMPT
-  return `${basePrompt}\n\nWorkspace root: ${workspaceRootPath}`
+  return buildChatModeSystemPrompt(chatMode, workspaceRootPath)
 }
 
 export function buildChatPrompt(input: {
@@ -174,9 +184,16 @@ export function buildChatPrompt(input: {
   workspaceRootPath: string
 }): { messages: ModelMessage[]; system: string } {
   const validToolCallIds = new Set<string>()
-  const messages = input.messages
-    .map((message) => toModelMessage(message, validToolCallIds))
-    .filter((message): message is ModelMessage => message !== null)
+  const messages: ModelMessage[] = []
+
+  for (const message of input.messages) {
+    const modelMessage = toModelMessage(message, validToolCallIds)
+    if (!modelMessage) {
+      continue
+    }
+
+    appendModelMessage(messages, modelMessage)
+  }
 
   return {
     messages,

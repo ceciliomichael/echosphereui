@@ -100,7 +100,7 @@ test('applyPatchInWorkspace reports each path before mutation for checkpoint cap
   }
 })
 
-test('createAgentTools omits write tools in read-only mode', async () => {
+test('createAgentTools omits write tools in plan mode', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-tools-'))
 
   try {
@@ -109,30 +109,30 @@ test('createAgentTools omits write tools in read-only mode', async () => {
         workspaceRootPath,
       },
       {
-        readOnly: true,
+        chatMode: 'plan',
       },
     )
 
     assert.ok('list' in tools)
     assert.ok('read' in tools)
     assert.ok(!('apply' in tools))
-    assert.ok(!('file_change' in tools))
     assert.ok(!('apply_patch' in tools))
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
 
-test('createAgentTools exposes apply as the primary whole-file write tool', async () => {
+test('createAgentTools exposes write tools in agent mode', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-tools-'))
 
   try {
     const tools = await createAgentTools({
       workspaceRootPath,
+    }, {
+      chatMode: 'agent',
     })
 
     assert.ok('apply' in tools)
-    assert.ok('file_change' in tools)
     assert.ok('apply_patch' in tools)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })

@@ -1,107 +1,201 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { prepareRevertSessionForMessage, restoreWorkspaceCheckpointForMessage } from '../../src/hooks/chatHistoryWorkflows'
 import type { ConversationRecord, Message, UserMessageRunCheckpoint } from '../../src/types/chat'
-import { revertConversationToMessage } from '../../src/hooks/chatHistoryWorkflows'
 
 type WindowMock = {
   echosphereHistory: {
     getConversation: (conversationId: string) => Promise<ConversationRecord | null>
     getUserMessageCheckpointHistory: (conversationId: string, messageId: string) => Promise<UserMessageRunCheckpoint[]>
-    replaceMessages: (input: { conversationId: string; messages: Message[] }) => Promise<ConversationRecord>
   }
   echosphereWorkspace: {
+    createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
+    createRedoCheckpointFromSources: (sourceCheckpointIds: string[]) => Promise<UserMessageRunCheckpoint>
     restoreCheckpoint: (checkpointId: string) => Promise<void>
+    restoreCheckpointSequence: (checkpointIds: string[]) => Promise<void>
   }
 }
 
-test('revertConversationToMessage truncates later messages', async () => {
-  const targetCheckpoint: UserMessageRunCheckpoint = {
-    createdAt: 100,
-    id: 'checkpoint-1',
+function installWindowMock(windowMock: WindowMock) {
+  const globalWithWindow = globalThis as typeof globalThis & { window?: WindowMock }
+  const previousWindow = globalWithWindow.window
+  globalWithWindow.window = windowMock
+
+  return () => {
+    if (previousWindow === undefined) {
+      delete globalWithWindow.window
+      return
+    }
+
+    globalWithWindow.window = previousWindow
   }
-  const conversation: ConversationRecord = {
+}
+
+function buildConversation(messages: Message[]): ConversationRecord {
+  return {
     agentContextRootPath: '/workspace',
     chatMode: 'agent',
     createdAt: 1,
     folderId: null,
     id: 'conversation-1',
-    messages: [
-      {
-        content: 'message 1',
-        id: 'message-1',
-        reasoningEffort: 'minimal',
-        role: 'user',
-        timestamp: 10,
-        runCheckpoint: targetCheckpoint,
-      },
-      {
-        content: 'assistant 2',
-        id: 'message-2',
-        role: 'assistant',
-        timestamp: 20,
-      },
-      {
-        content: 'message 3',
-        id: 'message-3',
-        reasoningEffort: 'minimal',
-        role: 'user',
-        timestamp: 30,
-        runCheckpoint: {
-          createdAt: 200,
-          id: 'checkpoint-3',
-        },
-      },
-      {
-        content: 'assistant 4',
-        id: 'message-4',
-        role: 'assistant',
-        timestamp: 40,
-      },
-    ],
+    messages,
     title: 'Thread',
-    updatedAt: 40,
+    updatedAt: messages.at(-1)?.timestamp ?? 1,
   }
+}
 
-  const replaceMessagesCalls: Array<{ conversationId: string; messages: Message[] }> = []
-  const restoreCheckpointCalls: string[] = []
-  const globalWithWindow = globalThis as typeof globalThis & { window?: WindowMock }
-  const previousWindow = globalWithWindow.window
-
-  globalWithWindow.window = {
+test('revert helpers rewind the clicked message and every later user turn', async () => {
+  const firstCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 100,
+    id: 'checkpoint-1',
+  }
+  const secondCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 200,
+    id: 'checkpoint-2',
+  }
+  const thirdCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 300,
+    id: 'checkpoint-3',
+  }
+  const redoCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 301,
+    id: 'checkpoint-redo',
+  }
+  const conversation = buildConversation([
+    {
+      content: 'message 1',
+      id: 'message-1',
+      reasoningEffort: 'minimal',
+      role: 'user',
+      timestamp: 10,
+      runCheckpoint: firstCheckpoint,
+    },
+    {
+      content: 'assistant 1',
+      id: 'assistant-1',
+      role: 'assistant',
+      timestamp: 20,
+    },
+    {
+      content: 'message 2',
+      id: 'message-2',
+      reasoningEffort: 'minimal',
+      role: 'user',
+      timestamp: 30,
+      runCheckpoint: secondCheckpoint,
+    },
+    {
+      content: 'assistant 2',
+      id: 'assistant-2',
+      role: 'assistant',
+      timestamp: 40,
+    },
+    {
+      content: 'message 3',
+      id: 'message-3',
+      reasoningEffort: 'minimal',
+      role: 'user',
+      timestamp: 50,
+      runCheckpoint: thirdCheckpoint,
+    },
+  ])
+  const restoreCheckpointCalls: string[][] = []
+  const redoCheckpointCalls: string[][] = []
+  const restoreWindow = installWindowMock({
     echosphereHistory: {
-      getConversation: async (conversationId) => {
-        return conversationId === conversation.id ? conversation : null
-      },
-      getUserMessageCheckpointHistory: async () => [],
-      replaceMessages: async (input) => {
-        replaceMessagesCalls.push(input)
-        return {
-          ...conversation,
-          messages: input.messages,
-        }
+      getConversation: async (conversationId) => (conversationId === conversation.id ? conversation : null),
+      getUserMessageCheckpointHistory: async () => {
+        throw new Error('history lookup should not be used when direct checkpoints exist')
       },
     },
     echosphereWorkspace: {
+      createRedoCheckpointFromSource: async (sourceCheckpointId) => {
+        redoCheckpointCalls.push([sourceCheckpointId])
+        return redoCheckpoint
+      },
+      createRedoCheckpointFromSources: async (sourceCheckpointIds) => {
+        redoCheckpointCalls.push([...sourceCheckpointIds])
+        return redoCheckpoint
+      },
       restoreCheckpoint: async (checkpointId) => {
-        restoreCheckpointCalls.push(checkpointId)
+        restoreCheckpointCalls.push([checkpointId])
+      },
+      restoreCheckpointSequence: async (checkpointIds) => {
+        restoreCheckpointCalls.push([...checkpointIds])
       },
     },
-  }
+  })
 
   try {
-    const nextConversation = await revertConversationToMessage(conversation.id, 'message-1')
+    const revertPreparation = await prepareRevertSessionForMessage(conversation.id, 'message-1')
+    const restoredConversation = await restoreWorkspaceCheckpointForMessage(conversation.id, 'message-1')
 
-    assert.equal(restoreCheckpointCalls.length, 1)
-    assert.equal(restoreCheckpointCalls[0], targetCheckpoint.id)
-    assert.equal(replaceMessagesCalls.length, 1)
-    assert.deepEqual(replaceMessagesCalls[0].messages, [conversation.messages[0]])
-    assert.equal(nextConversation.messages.length, 1)
-    assert.equal(nextConversation.messages[0]?.id, 'message-1')
+    assert.equal(revertPreparation.redoCheckpointId, redoCheckpoint.id)
+    assert.deepEqual(redoCheckpointCalls, [[firstCheckpoint.id, secondCheckpoint.id, thirdCheckpoint.id]])
+    assert.deepEqual(restoreCheckpointCalls, [[firstCheckpoint.id, secondCheckpoint.id, thirdCheckpoint.id]])
+    assert.equal(restoredConversation.conversation.messages.length, 5)
+    assert.equal(restoredConversation.targetMessage.id, 'message-1')
   } finally {
-    if (previousWindow === undefined) {
-      delete globalWithWindow.window
-    } else {
-      globalWithWindow.window = previousWindow
-    }
+    restoreWindow()
+  }
+})
+
+test('revert helpers fall back to checkpoint history when the message checkpoint is missing', async () => {
+  const historicalCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 100,
+    id: 'checkpoint-history',
+  }
+  const redoCheckpoint: UserMessageRunCheckpoint = {
+    createdAt: 101,
+    id: 'checkpoint-redo',
+  }
+  const conversation = buildConversation([
+    {
+      content: 'message 1',
+      id: 'message-1',
+      role: 'user',
+      timestamp: 10,
+    },
+    {
+      content: 'assistant 1',
+      id: 'assistant-1',
+      role: 'assistant',
+      timestamp: 20,
+    },
+  ])
+  const restoreCheckpointCalls: string[][] = []
+  const redoCheckpointCalls: string[][] = []
+  const restoreWindow = installWindowMock({
+    echosphereHistory: {
+      getConversation: async (conversationId) => (conversationId === conversation.id ? conversation : null),
+      getUserMessageCheckpointHistory: async () => [historicalCheckpoint],
+    },
+    echosphereWorkspace: {
+      createRedoCheckpointFromSource: async (sourceCheckpointId) => {
+        redoCheckpointCalls.push([sourceCheckpointId])
+        return redoCheckpoint
+      },
+      createRedoCheckpointFromSources: async (sourceCheckpointIds) => {
+        redoCheckpointCalls.push([...sourceCheckpointIds])
+        return redoCheckpoint
+      },
+      restoreCheckpoint: async (checkpointId) => {
+        restoreCheckpointCalls.push([checkpointId])
+      },
+      restoreCheckpointSequence: async (checkpointIds) => {
+        restoreCheckpointCalls.push([...checkpointIds])
+      },
+    },
+  })
+
+  try {
+    const revertPreparation = await prepareRevertSessionForMessage(conversation.id, 'message-1')
+    await restoreWorkspaceCheckpointForMessage(conversation.id, 'message-1')
+
+    assert.equal(revertPreparation.redoCheckpointId, redoCheckpoint.id)
+    assert.deepEqual(redoCheckpointCalls, [[historicalCheckpoint.id]])
+    assert.deepEqual(restoreCheckpointCalls, [[historicalCheckpoint.id]])
+  } finally {
+    restoreWindow()
   }
 })

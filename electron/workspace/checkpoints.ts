@@ -21,7 +21,9 @@ interface WorkspaceCheckpointStore {
   captureFileState: (checkpointId: string, absolutePath: string) => Promise<void>
   createCheckpoint: (input: CreateWorkspaceCheckpointInput) => Promise<UserMessageRunCheckpoint>
   createRedoCheckpointFromSource: (sourceCheckpointId: string) => Promise<UserMessageRunCheckpoint>
+  createRedoCheckpointFromSources: (sourceCheckpointIds: string[]) => Promise<UserMessageRunCheckpoint>
   restoreCheckpoint: (checkpointId: string) => Promise<string>
+  restoreCheckpointSequence: (checkpointIds: string[]) => Promise<string>
 }
 
 const CHECKPOINTS_DIRECTORY_NAME = 'workspace-checkpoints'
@@ -124,6 +126,16 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
     const manifestPath = getCheckpointManifestPath(checkpointId)
     const raw = await fs.readFile(manifestPath, 'utf8')
     return JSON.parse(raw) as WorkspaceCheckpointDocument
+  }
+
+  function normalizeCheckpointIdList(checkpointIds: string[]) {
+    return Array.from(
+      new Set(
+        checkpointIds
+          .map((checkpointId) => checkpointId.trim())
+          .filter((checkpointId) => checkpointId.length > 0),
+      ),
+    )
   }
 
   async function withCheckpointLock<T>(checkpointId: string, operation: () => Promise<T>) {
@@ -287,14 +299,55 @@ export function createWorkspaceCheckpointStore(storageRootPath: string): Workspa
       })
     },
 
+    async restoreCheckpointSequence(checkpointIds: string[]) {
+      const normalizedCheckpointIds = normalizeCheckpointIdList(checkpointIds)
+      if (normalizedCheckpointIds.length === 0) {
+        throw new Error('At least one checkpoint is required to restore a sequence.')
+      }
+
+      let workspaceRootPath = ''
+      for (const checkpointId of [...normalizedCheckpointIds].reverse()) {
+        workspaceRootPath = await this.restoreCheckpoint(checkpointId)
+      }
+
+      return workspaceRootPath
+    },
+
     async createRedoCheckpointFromSource(sourceCheckpointId: string) {
-      const sourceManifest = await readManifest(sourceCheckpointId)
+      return this.createRedoCheckpointFromSources([sourceCheckpointId])
+    },
+
+    async createRedoCheckpointFromSources(sourceCheckpointIds: string[]) {
+      const normalizedCheckpointIds = normalizeCheckpointIdList(sourceCheckpointIds)
+      if (normalizedCheckpointIds.length === 0) {
+        throw new Error('At least one checkpoint is required to create a redo snapshot.')
+      }
+
+      const sourceManifests = await Promise.all(normalizedCheckpointIds.map((checkpointId) => readManifest(checkpointId)))
+      const workspaceRootPath = sourceManifests[0].workspaceRootPath
+
+      for (const sourceManifest of sourceManifests) {
+        if (sourceManifest.workspaceRootPath !== workspaceRootPath) {
+          throw new Error('Redo checkpoints must come from the same workspace root.')
+        }
+      }
+
       const redoCheckpoint = await this.createCheckpoint({
-        workspaceRootPath: sourceManifest.workspaceRootPath,
+        workspaceRootPath,
       })
 
-      for (const sourceEntry of sourceManifest.entries) {
-        const absolutePath = path.join(sourceManifest.workspaceRootPath, sourceEntry.relativePath)
+      const absolutePaths = new Set<string>()
+      for (const sourceManifest of sourceManifests) {
+        for (const sourceEntry of sourceManifest.entries) {
+          absolutePaths.add(path.join(workspaceRootPath, sourceEntry.relativePath))
+        }
+      }
+
+      const sortedAbsolutePaths = Array.from(absolutePaths).sort((left, right) =>
+        left.localeCompare(right, undefined, { sensitivity: 'base' }),
+      )
+
+      for (const absolutePath of sortedAbsolutePaths) {
         await this.captureFileState(redoCheckpoint.id, absolutePath)
       }
 
@@ -338,4 +391,21 @@ export async function restoreWorkspaceCheckpoint(checkpointId: string) {
 export async function createWorkspaceRedoCheckpointFromSource(sourceCheckpointId: string) {
   const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
   return workspaceCheckpointStore.createRedoCheckpointFromSource(sourceCheckpointId)
+}
+
+export async function createWorkspaceRedoCheckpointFromSources(sourceCheckpointIds: string[]) {
+  const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
+  return workspaceCheckpointStore.createRedoCheckpointFromSources(sourceCheckpointIds)
+}
+
+export async function restoreWorkspaceCheckpointSequence(checkpointIds: string[]) {
+  const workspaceCheckpointStore = await getDefaultWorkspaceCheckpointStore()
+  const workspaceRootPath = await workspaceCheckpointStore.restoreCheckpointSequence(checkpointIds)
+  void import('./explorerWatch')
+    .then(({ notifyWorkspaceExplorerChange }) => {
+      notifyWorkspaceExplorerChange(workspaceRootPath)
+    })
+    .catch(() => {
+      // Node-only tests import checkpoint helpers without the Electron runtime.
+    })
 }

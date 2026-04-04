@@ -9,8 +9,10 @@
     "output": "release/${version}"
   },
   "files": [
+    "AGENTS.md",
     "dist",
     "dist-electron",
+    "electron/chat/shared/prompts/**/*",
     "public/logo/icon.svg"
   ],
   "extraResources": [

@@ -1,4 +1,5 @@
 import { jsonSchema, tool, type ToolSet } from 'ai'
+import type { ChatMode } from '../../../../src/types/chat'
 import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import {
   createApplyPatchToolResult,
@@ -19,9 +20,10 @@ function createToolErrorResult(summary: string, body?: string): AgentToolExecuti
   }
 }
 
-export async function createAgentTools(input: AgentToolContext, options?: { readOnly?: boolean }): Promise<ToolSet> {
+export async function createAgentTools(input: AgentToolContext, options?: { chatMode?: ChatMode }): Promise<ToolSet> {
   const context = await createToolContext(input)
   const wholeFileApplyTool = createWholeFileApplyTool(context)
+  const isPlanMode = options?.chatMode === 'plan'
 
   const tools: ToolSet = {
     list: tool({
@@ -151,14 +153,13 @@ export async function createAgentTools(input: AgentToolContext, options?: { read
     }),
   }
 
-  if (options?.readOnly) {
+  if (isPlanMode) {
     return tools
   }
 
   return {
     ...tools,
     apply: wholeFileApplyTool,
-    file_change: wholeFileApplyTool,
     apply_patch: tool({
       description:
         'Apply a structured patch using the Codex-style *** Begin Patch format. Prefer this for targeted edits to existing files.',

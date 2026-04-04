@@ -50,3 +50,43 @@ test('workspace checkpoints restore and redo created, updated, and deleted files
     await fs.rm(tempRootPath, { force: true, recursive: true })
   }
 })
+
+test('workspace checkpoint sequences rewind multiple turns and can be redone', async () => {
+  const tempRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-workspace-checkpoints-sequence-'))
+  const workspaceRootPath = path.join(tempRootPath, 'workspace')
+  const checkpointStorageRootPath = path.join(tempRootPath, 'checkpoint-storage')
+  const firstCreatedFilePath = path.join(workspaceRootPath, 'hello.txt')
+  const secondCreatedFilePath = path.join(workspaceRootPath, 'hi.txt')
+
+  const checkpointStore = createWorkspaceCheckpointStore(checkpointStorageRootPath)
+  await fs.mkdir(workspaceRootPath, { recursive: true })
+  const firstCheckpoint = await checkpointStore.createCheckpoint({
+    workspaceRootPath,
+  })
+
+  try {
+    await checkpointStore.captureFileState(firstCheckpoint.id, firstCreatedFilePath)
+    await fs.mkdir(path.dirname(firstCreatedFilePath), { recursive: true })
+    await fs.writeFile(firstCreatedFilePath, 'hello\n', 'utf8')
+
+    const secondCheckpoint = await checkpointStore.createCheckpoint({
+      workspaceRootPath,
+    })
+    await checkpointStore.captureFileState(secondCheckpoint.id, secondCreatedFilePath)
+    await fs.writeFile(secondCreatedFilePath, 'hi\n', 'utf8')
+
+    const redoCheckpoint = await checkpointStore.createRedoCheckpointFromSources([firstCheckpoint.id, secondCheckpoint.id])
+
+    await checkpointStore.restoreCheckpointSequence([firstCheckpoint.id, secondCheckpoint.id])
+
+    await assert.rejects(fs.readFile(firstCreatedFilePath, 'utf8'), { code: 'ENOENT' })
+    await assert.rejects(fs.readFile(secondCreatedFilePath, 'utf8'), { code: 'ENOENT' })
+
+    await checkpointStore.restoreCheckpoint(redoCheckpoint.id)
+
+    assert.equal(await fs.readFile(firstCreatedFilePath, 'utf8'), 'hello\n')
+    assert.equal(await fs.readFile(secondCreatedFilePath, 'utf8'), 'hi\n')
+  } finally {
+    await fs.rm(tempRootPath, { force: true, recursive: true })
+  }
+})

@@ -4,6 +4,7 @@ import { CHAT_ATTACHMENT_INPUT_ACCEPT, readChatAttachmentsFromFiles } from '../l
 import { chatConversationSurfacePaddingClassName, chatInputSurfaceClassName } from '../lib/chatStyles'
 import { ChatMentionMenu } from './chat/ChatMentionMenu'
 import { ChatMentionTextarea } from './chat/ChatMentionTextarea'
+import { getNextChatMode, isChatModeToggleShortcut } from './chat/chatModeShortcut'
 import { useChatFileMentionMenu } from '../hooks/useChatFileMentionMenu'
 import { useChatMentionNavigation } from '../hooks/useChatMentionNavigation'
 import type {
@@ -143,6 +144,7 @@ export function ChatInput({
     typeof onTerminalExecutionModeChange === 'function'
   const showGitBranchSelector = variant === 'composer' && typeof onGitBranchChange === 'function' && gitBranchState !== undefined
   const showRuntimeControls = canManageAttachments || showChatModeSelector || showModelSelector || showReasoningControl
+  const canToggleChatMode = showChatModeSelector && !chatModeSelectorDisabled
   const showDetachedFooterControls =
     showRuntimeTargetControl || showTerminalExecutionModeControl || showGitBranchSelector
   const mentionMenu = useChatFileMentionMenu({
@@ -224,6 +226,15 @@ export function ChatInput({
     }
 
     if (mentionNavigation.handleKeyDown(e)) {
+      return
+    }
+
+    if (canToggleChatMode && isChatModeToggleShortcut(e)) {
+      const nextChatMode = getNextChatMode(selectedChatMode, chatModeOptions)
+      if (nextChatMode) {
+        e.preventDefault()
+        onChatModeChange?.(nextChatMode)
+      }
       return
     }
 
@@ -433,7 +444,7 @@ export function ChatInput({
               ) : null}
 
               {showChatModeSelector ? (
-                <Tooltip content="Select mode" hideWhenTriggerExpanded>
+                <Tooltip content="Select mode (Ctrl + .)" hideWhenTriggerExpanded>
                   <ChatModeSelectorField
                     value={selectedChatMode}
                     onChange={onChatModeChange ?? (() => undefined)}

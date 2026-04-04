@@ -81,6 +81,7 @@ export function formatStructuredToolResultContent(
   metadata: StructuredToolResultMetadata,
   body?: string | null,
 ) {
+  // `body` is the model-facing text. If it is omitted, the summary becomes the fallback.
   const envelope: StructuredToolResultEnvelope = {
     ...(typeof body === 'string' && body.length > 0 ? { body } : {}),
     metadata,
@@ -110,6 +111,7 @@ export function parseStructuredToolResultContent(content: string): ParsedStructu
 }
 
 export function getToolResultModelContent(content: string) {
+  // This is the final text that gets replayed to the model when history is rebuilt.
   const parsedContent = parseStructuredToolResultContent(content)
   if (parsedContent.body) {
     return parsedContent.body
