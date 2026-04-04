@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { streamText, type ModelMessage, type StopCondition, type ToolSet } from 'ai'
 import type { ReasoningEffort } from '../../../src/types/chat'
+import { buildCodexProviderOptions } from './providerOptions'
 import { refreshCodexOAuthTokensIfNeeded } from '../../providers/codex/refresh'
 import { readStoredCodexAuthData, writeStoredCodexAuthData, type StoredCodexAuthData } from '../../providers/codex/store'
 
@@ -41,18 +42,6 @@ export interface CodexChatCompletionsCreateInput {
   stopWhen?: StopCondition<ToolSet> | Array<StopCondition<ToolSet>>
   system?: string
   tools?: ToolSet
-}
-
-function buildCodexProviderOptions(input: Pick<CodexChatCompletionsCreateInput, 'reasoningEffort' | 'system'>) {
-  return {
-    openai: {
-      forceReasoning: true,
-      instructions: input.system,
-      reasoningEffort: input.reasoningEffort,
-      reasoningSummary: 'auto',
-      store: false,
-    },
-  } as const
 }
 
 export function createCodexClient() {

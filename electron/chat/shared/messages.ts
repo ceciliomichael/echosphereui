@@ -85,20 +85,41 @@ function buildToolResultParts(message: Message, validToolCallIds: Set<string>): 
 function toAssistantMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
   const normalized = normalizeAssistantMessageContent(message)
   const toolCallParts = buildAssistantToolCallParts(message, validToolCallIds)
+  const reasoningText = normalized.reasoningContent.trim()
   const text = normalized.content.trim()
 
   if (toolCallParts.length === 0) {
-    if (!text) {
+    if (!text && !reasoningText) {
       return null
     }
 
     return {
-      content: text,
+      content:
+        reasoningText.length > 0
+          ? [
+              {
+                text: reasoningText,
+                type: 'reasoning' as const,
+              },
+              ...(text.length > 0
+                ? [
+                    {
+                      text,
+                      type: 'text' as const,
+                    },
+                  ]
+                : []),
+            ]
+          : text,
       role: 'assistant',
     }
   }
 
   const contentParts: Array<
+    | {
+        text: string
+        type: 'reasoning'
+      }
     | {
         text: string
         type: 'text'
@@ -110,6 +131,13 @@ function toAssistantMessage(message: Message, validToolCallIds: Set<string>): Mo
         type: 'tool-call'
       }
   > = []
+
+  if (reasoningText) {
+    contentParts.push({
+      text: reasoningText,
+      type: 'reasoning',
+    })
+  }
 
   if (text) {
     contentParts.push({

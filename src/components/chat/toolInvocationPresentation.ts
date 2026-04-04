@@ -116,6 +116,38 @@ function getFilenameWithExtension(absolutePath: string) {
 
 const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
 
+type FileChangeActionKind = 'add' | 'delete' | 'update'
+
+interface FileChangeActionLabels {
+  completed: string
+  failed: string
+  running: string
+}
+
+const FILE_CHANGE_ACTION_LABELS: Record<FileChangeActionKind, FileChangeActionLabels> = {
+  add: {
+    completed: 'Created',
+    failed: 'Create failed',
+    running: 'Creating',
+  },
+  delete: {
+    completed: 'Deleted',
+    failed: 'Delete failed',
+    running: 'Deleting',
+  },
+  update: {
+    completed: 'Replaced',
+    failed: 'Replace failed',
+    running: 'Replacing',
+  },
+}
+
+const GENERIC_FILE_CHANGE_LABELS: FileChangeActionLabels = {
+  completed: 'Edited',
+  failed: 'Edit failed',
+  running: 'Editing',
+}
+
 function truncateDisplayText(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value
@@ -158,6 +190,31 @@ function getSearchTarget(argumentsText: string): string | null {
   return searchText ? truncateDisplayText(searchText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
 }
 
+function getFileChangeActionKind(
+  addedPathCount: number | null,
+  deletedPathCount: number | null,
+  updatedPathCount: number | null,
+) {
+  if (addedPathCount !== null && deletedPathCount === 0 && updatedPathCount === 0 && addedPathCount > 0) {
+    return 'add' as const
+  }
+
+  if (deletedPathCount !== null && addedPathCount === 0 && updatedPathCount === 0 && deletedPathCount > 0) {
+    return 'delete' as const
+  }
+
+  if (updatedPathCount !== null && addedPathCount === 0 && deletedPathCount === 0 && updatedPathCount > 0) {
+    return 'update' as const
+  }
+
+  return null
+}
+
+function getFileChangeActionStateLabel(kind: FileChangeActionKind | null, state: 'running' | 'completed' | 'failed') {
+  const labels = kind ? FILE_CHANGE_ACTION_LABELS[kind] : GENERIC_FILE_CHANGE_LABELS
+  return labels[state]
+}
+
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const operation =
@@ -176,6 +233,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.updated_path_count === 'number'
       ? parsedResult.metadata.semantics.updated_path_count
       : null
+  const fileChangeActionKind = getFileChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -199,19 +257,16 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 
   if (invocation.toolName === 'apply' || invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
-      return 'Editing'
+      return getFileChangeActionStateLabel(fileChangeActionKind, 'running')
     }
     if (invocation.state === 'failed') {
-      return 'Edit failed'
+      return getFileChangeActionStateLabel(fileChangeActionKind, 'failed')
     }
     if (operation === 'noop') {
       return 'Verified'
     }
-    if (addedPathCount !== null && deletedPathCount === 0 && updatedPathCount === 0 && addedPathCount > 0) {
-      return 'Created'
-    }
-    if (deletedPathCount !== null && addedPathCount === 0 && updatedPathCount === 0 && deletedPathCount > 0) {
-      return 'Deleted'
+    if (fileChangeActionKind !== null) {
+      return getFileChangeActionStateLabel(fileChangeActionKind, 'completed')
     }
     return 'Edited'
   }
@@ -264,15 +319,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 }
 
 export function getFileChangeActionLabel(kind: 'add' | 'delete' | 'update') {
-  if (kind === 'add') {
-    return 'Created'
-  }
-
-  if (kind === 'delete') {
-    return 'Deleted'
-  }
-
-  return 'Edited'
+  return FILE_CHANGE_ACTION_LABELS[kind].completed
 }
 
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {

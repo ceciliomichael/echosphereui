@@ -14,7 +14,9 @@ import { createAgentTools } from './tools'
 import type { AgentToolExecutionResult } from './toolTypes'
 
 const CHAT_STREAM_EVENT_CHANNEL = 'chat:stream:event'
-const MAX_TOOL_STEPS = 16
+// Tool-heavy coding runs routinely exceed a dozen read/search/edit steps.
+// Keep the limit high enough that the AI SDK does not terminate mid-task.
+const MAX_TOOL_STEPS = 64
 
 interface ToolInvocationState {
   argumentsText: string
@@ -200,6 +202,8 @@ export async function runToolEnabledChatStream(input: {
   webContents: WebContents
 }) {
   const invocationStateById = new Map<string, ToolInvocationState>()
+  let completedStepCount = 0
+  let lastFinishReason: string | null = null
 
   try {
     const tools = await createAgentTools(
@@ -423,6 +427,20 @@ export async function runToolEnabledChatStream(input: {
           type: 'tool_invocation_failed',
         })
       }
+
+      if (isStreamPart(part, 'finish')) {
+        completedStepCount += 1
+        lastFinishReason = typeof part.finishReason === 'string' ? part.finishReason : null
+      }
+    }
+
+    if (completedStepCount >= MAX_TOOL_STEPS && lastFinishReason === 'tool-calls') {
+      emitChatStreamEvent(input.webContents, {
+        errorMessage: `The assistant hit the tool-step limit (${MAX_TOOL_STEPS}) before finishing. Increase the limit or continue the task in a follow-up turn.`,
+        streamId: input.streamId,
+        type: 'error',
+      })
+      return
     }
 
     emitChatStreamEvent(input.webContents, {

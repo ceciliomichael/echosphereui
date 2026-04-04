@@ -229,3 +229,50 @@ test('buildChatPrompt combines consecutive tool messages into one replay message
   assert.equal(toolMessage?.content.length, 3)
   assert.deepEqual(toolMessage?.content.map((part) => part.toolCallId), ['tool-call-1', 'tool-call-2', 'tool-call-3'])
 })
+
+test('buildChatPrompt preserves assistant reasoning content alongside tool calls', () => {
+  const messages: Message[] = [
+    {
+      content: 'Inspect the file',
+      id: 'user-1',
+      role: 'user',
+      timestamp: 1,
+    },
+    {
+      content: '',
+      id: 'assistant-1',
+      reasoningCompletedAt: 3,
+      reasoningContent: 'I should inspect the file before changing it.',
+      role: 'assistant',
+      timestamp: 2,
+      toolInvocations: [
+        {
+          argumentsText: JSON.stringify({ absolute_path: 'C:/repo/src/example.ts' }),
+          completedAt: 3,
+          id: 'tool-call-1',
+          resultContent: '',
+          startedAt: 2,
+          state: 'completed',
+          toolName: 'read',
+        },
+      ],
+    },
+  ]
+
+  const prompt = buildChatPrompt({
+    chatMode: 'agent',
+    messages,
+    workspaceRootPath: 'C:/repo',
+  })
+
+  assert.equal(prompt.messages.length, 2)
+  const assistantMessage = prompt.messages[1]
+  assert.equal(assistantMessage?.role, 'assistant')
+  assert.ok(Array.isArray(assistantMessage?.content))
+  assert.equal(assistantMessage?.content[0]?.type, 'reasoning')
+  assert.equal(assistantMessage?.content[0]?.text, 'I should inspect the file before changing it.')
+  assert.equal(assistantMessage?.content[1]?.type, 'tool-call')
+  assert.deepEqual(assistantMessage?.content[1]?.input, {
+    absolute_path: 'C:/repo/src/example.ts',
+  })
+})

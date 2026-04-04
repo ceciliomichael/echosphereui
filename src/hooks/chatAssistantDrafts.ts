@@ -158,6 +158,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
   let activeAssistantDraftId: string | null = null
   let activeAssistantDraftKind: DraftAssistantMessageKind | null = null
   let reasoningDraftAssistantId: string | null = null
+  let shouldStartFreshReasoningDraft = false
   let assistantDraftCount = 0
 
   const notifyConversationMessagesUpdated = (options?: { immediate?: boolean }, hint?: { deltaCharCount?: number }) => {
@@ -329,6 +330,10 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
     }))
   }
 
+  const markReasoningBoundary = () => {
+    shouldStartFreshReasoningDraft = true
+  }
+
   const ensureAssistantDraft = (kind: Exclude<DraftAssistantMessageKind, 'placeholder'>) => {
     if (!activeAssistantDraftId) {
       return appendAssistantDraft(kind)
@@ -350,14 +355,37 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
   }
 
   const ensureReasoningDraft = () => {
-    if (activeAssistantDraftId && activeAssistantDraftKind === 'content') {
-      const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
-      if ((activeDraftMessage.toolInvocations?.length ?? 0) === 0) {
-        return activeAssistantDraftId
+    if (shouldStartFreshReasoningDraft) {
+      shouldStartFreshReasoningDraft = false
+      return appendAssistantDraft('content')
+    }
+
+    if (activeAssistantDraftId) {
+      if (activeAssistantDraftKind === 'content') {
+        const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
+        const hasOpenReasoningBlock = activeDraftMessage.reasoningCompletedAt === undefined
+        const hasToolInvocations = (activeDraftMessage.toolInvocations?.length ?? 0) > 0
+        const normalizedActiveDraft = normalizeAssistantMessageContent(activeDraftMessage)
+        const hasAssistantContent = normalizedActiveDraft.content.trim().length > 0
+
+        if (!hasToolInvocations && (hasOpenReasoningBlock || !hasAssistantContent)) {
+          return activeAssistantDraftId
+        }
+
+        return appendAssistantDraft('content')
+      }
+
+      if (activeAssistantDraftKind === 'placeholder') {
+        const activeDraftMessage = getDraftAssistantMessage(activeAssistantDraftId)
+        if (!hasMeaningfulAssistantOutput(activeDraftMessage)) {
+          activeAssistantDraftKind = 'content'
+          updateStreamingIndicatorState(activeAssistantDraftId)
+          return activeAssistantDraftId
+        }
       }
     }
 
-    return ensureAssistantDraft('content')
+    return appendAssistantDraft('content')
   }
 
   const promoteWaitingIndicatorToSplash = (draftAssistantId: string) => {
@@ -477,6 +505,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       >,
     ) {
       completeReasoningDraft(nextValue.completedAt)
+      markReasoningBoundary()
       input.stopTextStreaming(input.conversationId)
       const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
       activeAssistantDraftId = draftAssistantId
@@ -542,6 +571,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       >,
     ) {
       completeReasoningDraft(nextValue.completedAt)
+      markReasoningBoundary()
       input.stopTextStreaming(input.conversationId)
       const draftAssistantId = toolInvocationMessageIds.get(invocationId) ?? ensureAssistantDraft('tool')
       activeAssistantDraftId = draftAssistantId
@@ -554,6 +584,7 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
       nextValue: Pick<ToolInvocationTrace, 'argumentsText' | 'startedAt' | 'toolName'>,
     ) {
       completeReasoningDraft(nextValue.startedAt)
+      markReasoningBoundary()
       input.stopTextStreaming(input.conversationId)
       const draftAssistantId = ensureAssistantDraft('tool')
       toolInvocationMessageIds.set(invocationId, draftAssistantId)
