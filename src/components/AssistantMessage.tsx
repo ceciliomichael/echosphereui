@@ -66,7 +66,8 @@ export function AssistantMessage({
   ]
     .filter((value) => value.length > 0)
     .join("\n\n");
-  const canShowCopyButton = showCopyButton && copyableText.length > 0;
+  const canShowCopyButton =
+    showCopyButton && !isStreaming && copyableText.length > 0;
   const messagePaddingClassName = canShowCopyButton ? "pb-5 pr-5" : "";
 
   useEffect(() => {
