@@ -23,6 +23,7 @@ interface ResolveRipgrepCommandCandidatesOptions {
   currentWorkingDirectory?: string | null
   includePathLookup?: boolean
   isPackagedApp?: boolean
+  executablePath?: string | null
   moduleCandidatePaths?: string[]
   pathExistsImpl?: typeof pathExists
   resourcesPath?: string | null
@@ -75,6 +76,35 @@ function resetRipgrepCommandCandidatesCache() {
   ripgrepCommandCandidatesPromise = null
 }
 
+function normalizePackagedResourcesRoot(candidatePath: string) {
+  const normalizedCandidatePath = path.normalize(candidatePath.trim())
+  if (normalizedCandidatePath.length === 0) {
+    return normalizedCandidatePath
+  }
+
+  const baseName = path.basename(normalizedCandidatePath).toLowerCase()
+  if (baseName === 'app.asar' || baseName === 'app.asar.unpacked') {
+    return path.dirname(normalizedCandidatePath)
+  }
+
+  return normalizedCandidatePath
+}
+
+function resolvePackagedResourceRoots(options: Pick<ResolveRipgrepCommandCandidatesOptions, 'executablePath' | 'resourcesPath'> = {}) {
+  const candidateRoots = toUniquePaths([
+    options.resourcesPath,
+    typeof process.resourcesPath === 'string' && process.resourcesPath.trim().length > 0 ? process.resourcesPath : null,
+  ])
+
+  const executablePath =
+    options.executablePath ?? (typeof process.execPath === 'string' && process.execPath.trim().length > 0 ? process.execPath : null)
+  if (executablePath) {
+    candidateRoots.push(path.join(path.dirname(path.normalize(executablePath)), 'resources'))
+  }
+
+  return toUniquePaths(candidateRoots.map(normalizePackagedResourcesRoot))
+}
+
 function resolveRipgrepModuleCandidatePaths() {
   const candidatePaths: Array<string | null | undefined> = []
 
@@ -99,20 +129,20 @@ function resolveRipgrepModuleCandidatePaths() {
 
 async function buildRipgrepCommandCandidates(options: ResolveRipgrepCommandCandidatesOptions = {}) {
   const isPackagedApp = options.isPackagedApp ?? (typeof process.defaultApp === 'boolean' ? !process.defaultApp : false)
-  const resourcesPath =
-    options.resourcesPath ??
-    (typeof process.resourcesPath === 'string' && process.resourcesPath.trim().length > 0 ? process.resourcesPath : null)
   const currentWorkingDirectory =
     options.currentWorkingDirectory ?? (typeof process.cwd === 'function' ? process.cwd() : null)
   const pathExistsImpl = options.pathExistsImpl ?? pathExists
   const moduleCandidatePaths = toUniquePaths(options.moduleCandidatePaths ?? resolveRipgrepModuleCandidatePaths())
-  const bundledCandidatePaths = resourcesPath
-    ? toUniquePaths([
-        path.join(resourcesPath, 'ripgrep', RIPGREP_EXECUTABLE_NAME),
-        path.join(resourcesPath, 'app.asar.unpacked', 'ripgrep', RIPGREP_EXECUTABLE_NAME),
-        path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@vscode', 'ripgrep', 'bin', RIPGREP_EXECUTABLE_NAME),
-      ])
-    : []
+  const bundledCandidatePaths = toUniquePaths(
+    resolvePackagedResourceRoots({
+      executablePath: options.executablePath,
+      resourcesPath: options.resourcesPath,
+    }).flatMap((resourcesRoot) => [
+      path.join(resourcesRoot, 'ripgrep', RIPGREP_EXECUTABLE_NAME),
+      path.join(resourcesRoot, 'app.asar.unpacked', 'ripgrep', RIPGREP_EXECUTABLE_NAME),
+      path.join(resourcesRoot, 'app.asar.unpacked', 'node_modules', '@vscode', 'ripgrep', 'bin', RIPGREP_EXECUTABLE_NAME),
+    ]),
+  )
   const developmentCandidatePaths = toUniquePaths([
     ...moduleCandidatePaths,
     currentWorkingDirectory
