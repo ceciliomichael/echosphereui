@@ -41,6 +41,7 @@ export interface PersistAndStreamMessageInput {
   setMainComposerAttachments: (attachments: ChatAttachment[]) => void
   setMainComposerValue: (value: string) => void
   setPendingDraftSendCount: (updater: (currentValue: number) => number) => void
+  resetMainComposerAfterSend?: boolean
   stopTextStreaming: (conversationId: string) => void
   targetEditMessageId: string | null
   trimmedText: string

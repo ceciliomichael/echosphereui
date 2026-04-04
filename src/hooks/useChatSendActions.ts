@@ -20,6 +20,10 @@ interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'ru
   pendingDraftSendCount: number
 }
 
+interface SendNewMessageOptions {
+  resetMainComposerAfterSend?: boolean
+}
+
 type ConversationStateSnapshot =
   | PersistAndStreamMessageInput['conversationRuntimeStatesRef']['current'][string]
   | null
@@ -142,7 +146,12 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
   }, [getConversationState, waitForAbortableConversationId, waitForConversationRunState])
 
   const sendNewMessage = useCallback(
-    async (runtimeSelection: ChatRuntimeSelection, messageText?: string, attachments = input.mainComposerAttachments) => {
+    async (
+      runtimeSelection: ChatRuntimeSelection,
+      messageText?: string,
+      attachments = input.mainComposerAttachments,
+      options?: SendNewMessageOptions,
+    ) => {
       if (
         actionInFlightRef.current ||
         input.activeConversationStateIsSending ||
@@ -160,6 +169,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       return persistAndStreamMessage({
         ...input,
         attachments,
+        resetMainComposerAfterSend: options?.resetMainComposerAfterSend,
         runtimeSelection,
         targetEditMessageId: null,
         trimmedText,
@@ -193,6 +203,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         ...input,
         attachments: [],
         draftChatMode: options?.chatMode ?? input.draftChatMode,
+        resetMainComposerAfterSend: false,
         runtimeSelection,
         targetEditMessageId: null,
         trimmedText,

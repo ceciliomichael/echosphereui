@@ -6,6 +6,7 @@ interface ChatMentionTextProps {
   mentionPathMap?: ReadonlyMap<string, string>
   text: string
   variant?: 'backdrop' | 'inline' | 'rendered'
+  wrap?: 'wrap' | 'nowrap'
 }
 
 const mentionHighlightSurfaceClassName = 'rounded-[4px] bg-[rgba(59,130,246,0.18)]'
@@ -16,10 +17,11 @@ export const ChatMentionText = memo(function ChatMentionText({
   mentionPathMap,
   text,
   variant = 'inline',
+  wrap = 'wrap',
 }: ChatMentionTextProps) {
   const segments = splitChatMentionSegments(text, mentionPathMap)
   const rootClassName = [
-    'whitespace-pre-wrap [overflow-wrap:anywhere]',
+    wrap === 'nowrap' ? 'block whitespace-nowrap overflow-hidden text-ellipsis [overflow-wrap:normal]' : 'whitespace-pre-wrap [overflow-wrap:anywhere]',
     variant === 'backdrop' ? 'text-transparent' : 'text-foreground',
     className,
   ]

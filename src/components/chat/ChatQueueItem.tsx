@@ -199,16 +199,21 @@ export function ChatQueueItem({
           handleActivate()
         }
       }}
-      className="group flex cursor-pointer items-center justify-between gap-2 px-2 py-2 text-left transition-[background-color,color,box-shadow] hover:bg-surface-muted/70"
+      className="group flex min-h-12 cursor-pointer items-center justify-between gap-2 px-2 py-2 text-left transition-[background-color,color,box-shadow] hover:bg-surface-muted/70"
     >
-      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
         <span className="shrink-0 text-sm font-medium leading-5 text-muted-foreground">{`${index + 1}.`}</span>
-        <div className="min-w-0 flex-1">
-          <ChatMentionText text={message.content} variant="rendered" className="truncate text-sm leading-5 text-foreground" />
+        <div className="flex min-w-0 flex-1 items-center gap-2" title={message.content}>
+          <ChatMentionText
+            text={message.content}
+            variant="rendered"
+            wrap="nowrap"
+            className="min-w-0 truncate text-sm leading-5 text-foreground"
+          />
           {attachmentCount > 0 ? (
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               {`${attachmentCount} attachment${attachmentCount === 1 ? '' : 's'}`}
-            </p>
+            </span>
           ) : null}
         </div>
       </div>

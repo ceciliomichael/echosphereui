@@ -21,7 +21,7 @@ export function ChatQueueBlock({
   onRemove,
   onUpdate,
 }: ChatQueueBlockProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   if (queuedMessages.length === 0) {
     return null
@@ -32,15 +32,19 @@ export function ChatQueueBlock({
       <button
         type="button"
         onClick={() => setIsExpanded((currentValue) => !currentValue)}
-        className="flex h-11 w-full items-center justify-between gap-3 px-3 text-left transition-colors hover:bg-surface-muted"
+        className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-muted"
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <Clock size={14} className="shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium text-foreground">Queued messages</span>
-          <span className="shrink-0 text-sm font-medium text-muted-foreground">{`(${queuedMessages.length})`}</span>
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <Clock size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium leading-5 text-foreground">Queued messages</span>
+              <span className="shrink-0 text-sm font-medium leading-5 text-muted-foreground">{`(${queuedMessages.length})`}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 self-center text-muted-foreground">
           {onClearQueue ? (
             <button
               type="button"

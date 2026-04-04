@@ -113,7 +113,9 @@ export function ChatInterfaceContent({
     useWorkspaceRefactorCandidates(activeWorkspacePath)
   const sendQueuedMessage = useCallback(
     (queuedMessage: { content: string; attachments?: ChatAttachment[] }) => {
-      return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments)
+      return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments, {
+        resetMainComposerAfterSend: false,
+      })
     },
     [chatMessages, runtimeSelection],
   )
@@ -450,7 +452,6 @@ export function ChatInterfaceContent({
                   <ChatQueueBlock
                     queuedMessages={queuedMessages}
                     editCancelBoundaryRef={messageListBoundaryRef}
-                    onClearQueue={clearQueuedMessages}
                     onForceSend={forceSendQueuedMessage}
                     onRemove={removeQueuedMessage}
                     onUpdate={updateQueuedMessage}

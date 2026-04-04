@@ -214,7 +214,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       // Always clear edit mode once the edited turn is persisted to avoid stale
       // message ids being reused on later sends after history rewrites.
       input.completeEditingMessage()
-    } else if (shouldKeepSelected) {
+    } else if (shouldKeepSelected && input.resetMainComposerAfterSend !== false) {
       input.setMainComposerValue('')
       input.setMainComposerAttachments([])
     }
