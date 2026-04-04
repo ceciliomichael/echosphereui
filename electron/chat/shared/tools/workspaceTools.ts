@@ -24,6 +24,7 @@ const MAX_READ_BYTES = 50 * 1024
 const MAX_READ_BYTES_LABEL = `${MAX_READ_BYTES / 1024} KB`
 
 type WorkspaceToolContext = Pick<AgentToolContext, 'checkpointId' | 'workspaceRootPath'>
+type GitignoreMatchers = Awaited<ReturnType<typeof loadGitignoreMatchers>>
 
 export function resolveWorkspaceTargetPath(workspaceRootPath: string, candidatePath: string | undefined) {
   if (!candidatePath || candidatePath.trim().length === 0) {
@@ -150,6 +151,58 @@ async function listImmediateDirectoryEntries(workspaceRootPath: string, director
   return visibleEntries
 }
 
+function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
+  const matcherCache = new Map<string, Promise<GitignoreMatchers>>()
+
+  function loadCachedMatchers(directoryPath: string) {
+    const normalizedDirectoryPath = path.resolve(directoryPath)
+    let matchersPromise = matcherCache.get(normalizedDirectoryPath)
+    if (!matchersPromise) {
+      matchersPromise = loadGitignoreMatchers(workspaceRootPath, normalizedDirectoryPath)
+      matcherCache.set(normalizedDirectoryPath, matchersPromise)
+    }
+
+    return matchersPromise
+  }
+
+  return async (entryAbsolutePath: string, isDirectory: boolean) => {
+    const entryName = path.basename(entryAbsolutePath)
+    const workspaceRelativeSegments = path
+      .relative(workspaceRootPath, entryAbsolutePath)
+      .split(path.sep)
+      .filter((segment) => segment.length > 0)
+
+    if (workspaceRelativeSegments.some((segment) => shouldIgnoreWorkspaceEntry(segment))) {
+      return false
+    }
+
+    if (shouldAlwaysShowEntry(entryName)) {
+      return true
+    }
+
+    const gitignoreMatchers = await loadCachedMatchers(path.dirname(entryAbsolutePath))
+    return !isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)
+  }
+}
+
+async function filterVisibleRelativeFileEntries(
+  workspaceRootPath: string,
+  baseAbsolutePath: string,
+  relativeEntries: readonly string[],
+) {
+  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
+  const visibleEntries: string[] = []
+
+  for (const relativeEntry of relativeEntries) {
+    const entryAbsolutePath = path.resolve(baseAbsolutePath, relativeEntry)
+    if (await isVisibleEntry(entryAbsolutePath, false)) {
+      visibleEntries.push(relativeEntry)
+    }
+  }
+
+  return visibleEntries
+}
+
 export async function createListToolResult(workspaceRootPath: string, absolutePath: string, relativePath: string) {
   const result = await runRipgrep(['--files', '--hidden'], absolutePath)
   if (result.exitCode !== 0) {
@@ -171,8 +224,9 @@ export async function createListToolResult(workspaceRootPath: string, absolutePa
     .split(/\r?\n/u)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
+  const visibleFiles = await filterVisibleRelativeFileEntries(workspaceRootPath, absolutePath, files)
 
-  const limitedFiles = files.slice(0, LIST_LIMIT)
+  const limitedFiles = visibleFiles.slice(0, LIST_LIMIT)
   const directories = new Set<string>(['.'])
   const filesByDirectory = new Map<string, string[]>()
 
@@ -217,21 +271,21 @@ export async function createListToolResult(workspaceRootPath: string, absolutePa
   }
 
   const bodyLines = [`Directory: ${absolutePath}`, '', ...renderDirectory('.', 0)]
-  if (files.length > LIST_LIMIT) {
-    bodyLines.push('', `(Showing ${LIST_LIMIT} of ${files.length} files. Refine the path or use glob/read next.)`)
+  if (visibleFiles.length > LIST_LIMIT) {
+    bodyLines.push('', `(Showing ${LIST_LIMIT} of ${visibleFiles.length} files. Refine the path or use glob/read next.)`)
   }
 
   return createSuccessResult({
     body: bodyLines.join('\n'),
     semantics: {
-      count: files.length,
+      count: visibleFiles.length,
     },
     subject: {
       kind: 'directory',
       path: relativePath,
     },
     summary: `Listed ${relativePath}`,
-    truncated: files.length > LIST_LIMIT,
+    truncated: visibleFiles.length > LIST_LIMIT,
   })
 }
 
@@ -367,7 +421,12 @@ export async function createReadToolResult(
   })
 }
 
-export async function createGlobToolResult(absolutePath: string, relativePath: string, pattern: string) {
+export async function createGlobToolResult(
+  workspaceRootPath: string,
+  absolutePath: string,
+  relativePath: string,
+  pattern: string,
+) {
   const result = await runRipgrep(['--files', '--hidden', '--glob', pattern], absolutePath)
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     return createErrorResult(`Glob failed for ${relativePath}`, {
@@ -383,7 +442,8 @@ export async function createGlobToolResult(absolutePath: string, relativePath: s
     .split(/\r?\n/u)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
-  const matches = relativeMatches.map((entry) => path.resolve(absolutePath, entry))
+  const visibleRelativeMatches = await filterVisibleRelativeFileEntries(workspaceRootPath, absolutePath, relativeMatches)
+  const matches = visibleRelativeMatches.map((entry) => path.resolve(absolutePath, entry))
   const limitedMatches = matches.slice(0, SEARCH_LIMIT)
   const bodyLines = limitedMatches.length === 0 ? ['No files found'] : limitedMatches
 
@@ -417,6 +477,7 @@ interface GrepMatch {
 }
 
 export async function createGrepToolResult(
+  workspaceRootPath: string,
   absolutePath: string,
   relativePath: string,
   pattern: string,
@@ -453,6 +514,7 @@ export async function createGrepToolResult(
     })
   }
 
+  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
   const matches: GrepMatch[] = []
   for (const line of result.stdout.split(/\r?\n/u)) {
     if (!line.trim()) {
@@ -489,6 +551,10 @@ export async function createGrepToolResult(
     }
 
     const candidateAbsolutePath = path.resolve(absolutePath, matchPath)
+    if (!(await isVisibleEntry(candidateAbsolutePath, false))) {
+      continue
+    }
+
     const modifiedAt = (await fs.stat(candidateAbsolutePath).catch(() => null))?.mtimeMs ?? 0
     matches.push({
       absolutePath: candidateAbsolutePath,

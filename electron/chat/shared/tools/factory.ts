@@ -108,7 +108,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
         }
         try {
           const target = resolveWorkspaceTargetPath(context.workspaceRootPath, inputValue.absolute_path)
-          return await createGlobToolResult(target.absolutePath, target.relativePath, inputValue.pattern)
+          return await createGlobToolResult(context.workspaceRootPath, target.absolutePath, target.relativePath, inputValue.pattern)
         } catch (error) {
           return createToolErrorResult(
             error instanceof Error && error.message.trim().length > 0 ? error.message : 'Glob failed.',
@@ -143,7 +143,13 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
         }
         try {
           const target = resolveWorkspaceTargetPath(context.workspaceRootPath, inputValue.absolute_path)
-          return await createGrepToolResult(target.absolutePath, target.relativePath, inputValue.pattern, inputValue.include)
+          return await createGrepToolResult(
+            context.workspaceRootPath,
+            target.absolutePath,
+            target.relativePath,
+            inputValue.pattern,
+            inputValue.include,
+          )
         } catch (error) {
           return createToolErrorResult(
             error instanceof Error && error.message.trim().length > 0 ? error.message : 'Search failed.',
