@@ -208,7 +208,7 @@ export async function createListToolResult(workspaceRootPath: string, absolutePa
   if (result.exitCode !== 0) {
     const immediateEntries = await listImmediateDirectoryEntries(workspaceRootPath, absolutePath)
     return createSuccessResult({
-      body: [`Directory: ${absolutePath}`, '', ...immediateEntries].join('\n'),
+      body: immediateEntries.join('\n'),
       semantics: {
         count: immediateEntries.length,
       },
@@ -270,7 +270,7 @@ export async function createListToolResult(workspaceRootPath: string, absolutePa
     return lines
   }
 
-  const bodyLines = [`Directory: ${absolutePath}`, '', ...renderDirectory('.', 0)]
+  const bodyLines = renderDirectory('.', 0)
   if (visibleFiles.length > LIST_LIMIT) {
     bodyLines.push('', `(Showing ${LIST_LIMIT} of ${visibleFiles.length} files. Refine the path or use glob/read next.)`)
   }
@@ -306,7 +306,7 @@ export async function createReadToolResult(
     const sliced = lines.slice(start, start + maxEntries)
 
     return createSuccessResult({
-      body: [`Path: ${absolutePath}`, 'Type: directory', '', ...sliced].join('\n'),
+      body: sliced.join('\n'),
       semantics: {
         entry_count: lines.length,
         is_directory: true,
@@ -393,7 +393,7 @@ export async function createReadToolResult(
   }
 
   const numberedLines = collectedLines.map((line, index) => `${startLine + index}: ${line}`)
-  const bodyLines = [`Path: ${absolutePath}`, 'Type: file', '', ...numberedLines]
+  const bodyLines = [...numberedLines]
   if (truncatedByBytes) {
     bodyLines.push('', `(Output capped at ${MAX_READ_BYTES_LABEL}. Continue with offset=${startLine + collectedLines.length}.)`)
   } else if (hasMoreLines) {

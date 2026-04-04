@@ -8,7 +8,6 @@ interface ToolArgumentsValue {
   cmd?: unknown
   pattern?: unknown
   query?: unknown
-  workdir?: unknown
 }
 
 function parseCompleteToolArguments(argumentsText: string): ToolArgumentsValue | null {
@@ -97,10 +96,6 @@ function getAbsolutePath(invocation: ToolInvocationTrace) {
     return argumentsValue.absolute_path.trim()
   }
 
-  if (typeof argumentsValue?.workdir === 'string' && argumentsValue.workdir.trim().length > 0) {
-    return argumentsValue.workdir.trim()
-  }
-
   return extractPartialAbsolutePath(invocation.argumentsText)
 }
 
@@ -110,8 +105,8 @@ function getBasename(absolutePath: string) {
   return pathSegments[pathSegments.length - 1] ?? absolutePath
 }
 
-function getFilenameWithExtension(absolutePath: string) {
-  return getBasename(absolutePath)
+function getReadToolTarget(path: string, workspaceRootPath?: string | null) {
+  return getBasename(workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, path) : path)
 }
 
 const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
@@ -353,7 +348,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
 
     if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
       if (invocation.toolName === 'read') {
-        return getFilenameWithExtension(normalizedStructuredPath)
+        return getReadToolTarget(normalizedStructuredPath, workspaceRootPath)
       }
       return normalizedStructuredPath
     }
@@ -373,7 +368,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
 
   if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
     if (invocation.toolName === 'read') {
-      return getFilenameWithExtension(absolutePath)
+      return getReadToolTarget(absolutePath, workspaceRootPath)
     }
     return workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, absolutePath) : absolutePath
   }

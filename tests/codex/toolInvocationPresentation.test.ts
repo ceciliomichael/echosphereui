@@ -103,3 +103,32 @@ test('apply tool header labels keep mixed changes on the generic edit fallback',
 
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
 })
+
+test('read tool header labels collapse to the basename for the visible toolblock', () => {
+  const invocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({ absolute_path: TARGET_FILE_PATH }),
+    id: 'tool-read-1',
+    resultContent: formatStructuredToolResultContent(
+      {
+        arguments: {
+          absolute_path: TARGET_FILE_PATH,
+        },
+        schema: 'echosphere.tool_result/v1',
+        status: 'success',
+        subject: {
+          kind: 'file',
+          path: 'src/example.ts',
+        },
+        summary: 'Read src/example.ts',
+        toolCallId: 'tool-read-1',
+        toolName: 'read',
+      },
+      '1: export const value = 1;',
+    ),
+    startedAt: 0,
+    state: 'completed',
+    toolName: 'read',
+  }
+
+  assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Read example.ts')
+})

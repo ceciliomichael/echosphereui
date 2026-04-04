@@ -77,6 +77,86 @@ function isStructuredToolResultEnvelope(value: unknown): value is StructuredTool
   )
 }
 
+function formatReadToolResultBody(metadata: StructuredToolResultMetadata, body: string | null) {
+  const subjectPath = metadata.subject?.path?.trim() ?? ''
+  const absolutePath =
+    typeof metadata.arguments?.absolute_path === 'string' ? metadata.arguments.absolute_path.trim() : ''
+  const bodyText = body?.trim() ?? ''
+  const headerLines = ['Read result']
+
+  if (subjectPath.length > 0) {
+    headerLines.push(`Path: ${subjectPath}`)
+  }
+
+  if (absolutePath.length > 0 && absolutePath !== subjectPath) {
+    headerLines.push(`Absolute path: ${absolutePath}`)
+  }
+
+  if (metadata.subject?.kind === 'directory') {
+    headerLines.push('Type: directory')
+  } else if (metadata.subject?.kind === 'file') {
+    headerLines.push('Type: file')
+  }
+
+  const lineCount = metadata.semantics && typeof metadata.semantics.line_count === 'number' ? metadata.semantics.line_count : null
+  const offset = metadata.semantics && typeof metadata.semantics.offset === 'number' ? metadata.semantics.offset : null
+  const entryCount =
+    metadata.semantics && typeof metadata.semantics.entry_count === 'number' ? metadata.semantics.entry_count : null
+
+  if (typeof lineCount === 'number') {
+    headerLines.push(`Line count: ${lineCount}`)
+  }
+
+  if (typeof offset === 'number' && offset > 1) {
+    headerLines.push(`Offset: ${offset}`)
+  }
+
+  if (typeof entryCount === 'number') {
+    headerLines.push(`Entry count: ${entryCount}`)
+  }
+
+  if (bodyText.length === 0) {
+    return headerLines.join('\n')
+  }
+
+  return `${headerLines.join('\n')}\n\n${bodyText}`
+}
+
+function formatListToolResultBody(metadata: StructuredToolResultMetadata, body: string | null) {
+  const subjectPath = metadata.subject?.path?.trim() ?? ''
+  const absolutePath =
+    typeof metadata.arguments?.absolute_path === 'string' ? metadata.arguments.absolute_path.trim() : ''
+  const bodyText = body?.trim() ?? ''
+  const headerLines = ['List result']
+
+  if (absolutePath.length > 0) {
+    headerLines.push(`Absolute path: ${absolutePath}`)
+  }
+
+  if (subjectPath.length > 0 && subjectPath !== absolutePath) {
+    headerLines.push(`Relative path: ${subjectPath}`)
+  }
+
+  if (metadata.subject?.kind === 'directory') {
+    headerLines.push('Type: directory')
+  } else if (metadata.subject?.kind === 'file') {
+    headerLines.push('Type: file')
+  }
+
+  const count =
+    metadata.semantics && typeof metadata.semantics.count === 'number' ? metadata.semantics.count : null
+
+  if (typeof count === 'number') {
+    headerLines.push(`Entry count: ${count}`)
+  }
+
+  if (bodyText.length === 0) {
+    return headerLines.join('\n')
+  }
+
+  return `${headerLines.join('\n')}\n\n${bodyText}`
+}
+
 export function formatStructuredToolResultContent(
   metadata: StructuredToolResultMetadata,
   body?: string | null,
@@ -113,6 +193,14 @@ export function parseStructuredToolResultContent(content: string): ParsedStructu
 export function getToolResultModelContent(content: string) {
   // This is the final text that gets replayed to the model when history is rebuilt.
   const parsedContent = parseStructuredToolResultContent(content)
+  if (parsedContent.metadata?.toolName === 'read') {
+    return formatReadToolResultBody(parsedContent.metadata, parsedContent.body)
+  }
+
+  if (parsedContent.metadata?.toolName === 'list') {
+    return formatListToolResultBody(parsedContent.metadata, parsedContent.body)
+  }
+
   if (parsedContent.body) {
     return parsedContent.body
   }

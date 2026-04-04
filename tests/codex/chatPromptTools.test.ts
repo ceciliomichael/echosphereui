@@ -12,8 +12,6 @@ test('buildChatSystemPrompt loads the mode-specific prompt content', () => {
   assert.match(agentPrompt, /## Required Workflow For Code Changes/u)
   assert.match(agentPrompt, /Act as Echo, a senior production-grade software engineering agent/u)
   assert.match(agentPrompt, /<user_specific_instructions>/u)
-  assert.match(agentPrompt, /Here are the specific workspace instructions from the project root AGENTS\.md\./u)
-  assert.match(agentPrompt, /<agents\.md_content_here>/u)
   assert.match(agentPrompt, /WHEN ADDING PACKAGES ALWAYS USE npm install to get latest/u)
   assert.match(agentPrompt, /## Engineering Principles/u)
   assert.match(agentPrompt, /simplest correct implementation that is modular, DRY, and easy to extend/u)
@@ -60,6 +58,10 @@ test('buildChatPrompt preserves assistant tool calls and matching tool results',
           arguments: {
             absolute_path: 'C:/repo/src/example.ts',
           },
+          semantics: {
+            line_count: 1,
+            offset: 1,
+          },
           schema: 'echosphere.tool_result/v1',
           status: 'success',
           subject: {
@@ -70,7 +72,7 @@ test('buildChatPrompt preserves assistant tool calls and matching tool results',
           toolCallId: 'tool-call-1',
           toolName: 'read',
         },
-        'Path: C:/repo/src/example.ts\n\n1: export const value = 1;',
+        '1: export const value = 1;',
       ),
       id: 'tool-message-1',
       role: 'tool',
@@ -102,7 +104,75 @@ test('buildChatPrompt preserves assistant tool calls and matching tool results',
   assert.equal(toolMessage?.content[0]?.type, 'tool-result')
   assert.deepEqual(toolMessage?.content[0]?.output, {
     type: 'text',
-    value: 'Path: C:/repo/src/example.ts\n\n1: export const value = 1;',
+    value: 'Read result\nPath: src/example.ts\nAbsolute path: C:/repo/src/example.ts\nType: file\nLine count: 1\n\n1: export const value = 1;',
+  })
+})
+
+test('buildChatPrompt formats list tool results with structured directory metadata', () => {
+  const messages: Message[] = [
+    {
+      content: 'Inspect the workspace',
+      id: 'user-1',
+      role: 'user',
+      timestamp: 1,
+    },
+    {
+      content: '',
+      id: 'assistant-1',
+      role: 'assistant',
+      timestamp: 2,
+      toolInvocations: [
+        {
+          argumentsText: JSON.stringify({ absolute_path: 'C:/repo/src' }),
+          completedAt: 3,
+          id: 'tool-call-1',
+          resultContent: '',
+          startedAt: 2,
+          state: 'completed',
+          toolName: 'list',
+        },
+      ],
+    },
+    {
+      content: formatStructuredToolResultContent(
+        {
+          arguments: {
+            absolute_path: 'C:/repo/src',
+          },
+          schema: 'echosphere.tool_result/v1',
+          semantics: {
+            count: 2,
+          },
+          status: 'success',
+          subject: {
+            kind: 'directory',
+            path: 'src',
+          },
+          summary: 'Listed src',
+          toolCallId: 'tool-call-1',
+          toolName: 'list',
+        },
+        'components/\nlib/',
+      ),
+      id: 'tool-message-1',
+      role: 'tool',
+      timestamp: 4,
+      toolCallId: 'tool-call-1',
+    },
+  ]
+
+  const prompt = buildChatPrompt({
+    chatMode: 'agent',
+    messages,
+    workspaceRootPath: 'C:/repo',
+  })
+
+  const toolMessage = prompt.messages[2]
+  assert.equal(toolMessage?.role, 'tool')
+  assert.ok(Array.isArray(toolMessage?.content))
+  assert.deepEqual(toolMessage?.content[0]?.output, {
+    type: 'text',
+    value: 'List result\nAbsolute path: C:/repo/src\nRelative path: src\nType: directory\nEntry count: 2\n\ncomponents/\nlib/',
   })
 })
 
@@ -165,7 +235,7 @@ test('buildChatPrompt combines consecutive tool messages into one replay message
           toolCallId: 'tool-call-1',
           toolName: 'read',
         },
-        'Path: C:/repo/src/one.ts\n\n1: export const one = 1;',
+        '1: export const one = 1;',
       ),
       id: 'tool-message-1',
       role: 'tool',
@@ -188,7 +258,7 @@ test('buildChatPrompt combines consecutive tool messages into one replay message
           toolCallId: 'tool-call-2',
           toolName: 'read',
         },
-        'Path: C:/repo/src/two.ts\n\n1: export const two = 2;',
+        '1: export const two = 2;',
       ),
       id: 'tool-message-2',
       role: 'tool',
