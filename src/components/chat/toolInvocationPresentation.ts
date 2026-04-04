@@ -110,6 +110,10 @@ function getBasename(absolutePath: string) {
   return pathSegments[pathSegments.length - 1] ?? absolutePath
 }
 
+function getFilenameWithExtension(absolutePath: string) {
+  return getBasename(absolutePath)
+}
+
 const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
 
 function truncateDisplayText(value: string, maxLength: number) {
@@ -164,6 +168,14 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.added_path_count === 'number'
       ? parsedResult.metadata.semantics.added_path_count
       : null
+  const deletedPathCount =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.deleted_path_count === 'number'
+      ? parsedResult.metadata.semantics.deleted_path_count
+      : null
+  const updatedPathCount =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.updated_path_count === 'number'
+      ? parsedResult.metadata.semantics.updated_path_count
+      : null
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -195,7 +207,13 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     if (operation === 'noop') {
       return 'Verified'
     }
-    return addedPathCount !== null && addedPathCount > 0 ? 'Created' : 'Edited'
+    if (addedPathCount !== null && deletedPathCount === 0 && updatedPathCount === 0 && addedPathCount > 0) {
+      return 'Created'
+    }
+    if (deletedPathCount !== null && addedPathCount === 0 && updatedPathCount === 0 && deletedPathCount > 0) {
+      return 'Deleted'
+    }
+    return 'Edited'
   }
 
   if (invocation.toolName === 'run_terminal') {
@@ -245,6 +263,18 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : `Failed ${invocation.toolName}`
 }
 
+export function getFileChangeActionLabel(kind: 'add' | 'delete' | 'update') {
+  if (kind === 'add') {
+    return 'Created'
+  }
+
+  if (kind === 'delete') {
+    return 'Deleted'
+  }
+
+  return 'Edited'
+}
+
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
   const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
 
@@ -275,6 +305,9 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     }
 
     if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
+      if (invocation.toolName === 'read') {
+        return getFilenameWithExtension(normalizedStructuredPath)
+      }
       return normalizedStructuredPath
     }
 
@@ -292,6 +325,9 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   }
 
   if (invocation.toolName === 'list' || invocation.toolName === 'glob' || invocation.toolName === 'grep' || invocation.toolName === 'read') {
+    if (invocation.toolName === 'read') {
+      return getFilenameWithExtension(absolutePath)
+    }
     return workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, absolutePath) : absolutePath
   }
 
