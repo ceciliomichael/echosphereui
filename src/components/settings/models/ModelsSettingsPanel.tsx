@@ -4,6 +4,7 @@ import type { ModelToggleState } from './modelTypes'
 import type { ProviderModelConfig, ProvidersState } from '../../../types/chat'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
 import { buildModelProviderSections } from './modelViewUtils'
+import { getProviderModelLoadErrorMessage } from './modelLoadErrorUtils'
 import { Switch } from '../../ui/Switch'
 
 interface RemoteModelState {
@@ -33,6 +34,16 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
   const providerSections = useMemo(
     () => buildModelProviderSections(normalizedSearchValue, providersState, [], remoteState.models),
     [normalizedSearchValue, providersState, remoteState.models],
+  )
+  const mixedModels = useMemo(
+    () =>
+      providerSections.flatMap((section) =>
+        section.models.map((model) => ({
+          model,
+          providerLabel: section.provider.label,
+        })),
+      ),
+    [providerSections],
   )
   const hasConfiguredProvider = providerSections.length > 0
 
@@ -81,8 +92,9 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
         }
 
         console.error('Failed to load OpenAI-compatible models', error)
+        const errorMessage = getProviderModelLoadErrorMessage(error)
         setRemoteState({
-          errorMessage: error instanceof Error && error.message.trim() ? error.message : 'Unable to load models.',
+          errorMessage,
           isLoading: false,
           models: [],
         })
@@ -96,27 +108,24 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
   function handleToggleModel(modelId: string) {
     setToggleState((currentValue) => ({
       ...currentValue,
-      [modelId]:
-        !(currentValue[modelId] ??
-          providerSections.flatMap((section) => section.models).find((model) => model.id === modelId)?.enabledByDefault ??
-          true),
+      [modelId]: !(currentValue[modelId] ?? mixedModels.find((item) => item.model.id === modelId)?.model.enabledByDefault ?? true),
     }))
   }
 
   return (
-    <div className="mx-auto my-auto flex w-full max-w-[780px] flex-col gap-1 self-stretch">
+    <div className="mx-auto flex h-full w-full max-w-[1040px] flex-1 flex-col gap-4 py-3 md:py-4">
       <header className="px-4 pb-1">
         <h2 className="text-[21px] font-medium tracking-tight text-foreground md:text-[24px]">Models</h2>
       </header>
 
-      <section className="flex flex-col gap-0.5 pb-0">
+      <section className="flex min-h-0 flex-1 flex-col gap-0.5 pb-0">
         {remoteState.errorMessage ? (
           <div className="rounded-2xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
             {remoteState.errorMessage}
           </div>
         ) : null}
 
-        <section className="mb-4 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <section className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           <div className="border-b border-border px-4 py-3 md:px-5">
             <div className="relative">
               <Search
@@ -134,7 +143,7 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
             </div>
           </div>
 
-          <div className="max-h-[calc(100dvh-14rem)] overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {!hasConfiguredProvider ? (
               <div className="px-4 py-6 text-sm text-muted-foreground md:px-5">
                 No models are available until at least one provider is configured.
@@ -144,39 +153,34 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                 No models found.
               </div>
             ) : (
-              providerSections.map((section, sectionIndex) => (
-                <section key={section.provider.id} className={sectionIndex === 0 ? '' : 'border-t border-border'}>
-                  <div className="border-b border-border bg-surface-muted px-4 py-3 md:px-5">
-                    <p className="text-sm font-medium text-foreground">{section.provider.label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{section.provider.description}</p>
+              mixedModels.map((item, modelIndex) => {
+                const { model, providerLabel } = item
+                const isEnabled = Boolean(toggleState[model.id] ?? model.enabledByDefault)
+
+                return (
+                  <div
+                    key={model.id}
+                    className={[
+                      'flex min-h-14 items-center justify-between gap-3 px-4 py-3 md:px-5',
+                      modelIndex === 0 ? '' : 'border-t border-border',
+                      !isProvidersLoading && !remoteState.isLoading ? '' : 'opacity-60',
+                    ].join(' ')}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">{model.label}</p>
+                      <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {providerLabel}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={isEnabled}
+                      disabled={isProvidersLoading || remoteState.isLoading}
+                      label={`Enable ${model.label}`}
+                      onChange={() => handleToggleModel(model.id)}
+                    />
                   </div>
-
-                  {section.models.map((model, modelIndex) => {
-                    const isEnabled = Boolean(toggleState[model.id] ?? model.enabledByDefault)
-
-                    return (
-                      <div
-                        key={model.id}
-                        className={[
-                          'flex min-h-14 items-center justify-between gap-3 px-4 py-3 md:px-5',
-                          modelIndex === 0 ? '' : 'border-t border-border',
-                          !isProvidersLoading && !remoteState.isLoading ? '' : 'opacity-60',
-                        ].join(' ')}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-foreground">{model.label}</p>
-                        </div>
-                        <Switch
-                          checked={isEnabled}
-                          disabled={isProvidersLoading || remoteState.isLoading}
-                          label={`Enable ${model.label}`}
-                          onChange={() => handleToggleModel(model.id)}
-                        />
-                      </div>
-                    )
-                  })}
-                </section>
-              ))
+                )
+              })
             )}
           </div>
         </section>
