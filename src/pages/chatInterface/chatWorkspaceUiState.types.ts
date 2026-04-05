@@ -40,6 +40,7 @@ export interface UseChatWorkspaceUiStateInput {
 
 export interface ChatWorkspaceUiState {
   activeWorkspaceFilePath: string | null;
+  activeTerminalWorkspaceKey: string;
   activeWorkspaceTabKey: string | null;
   activeWorkspacePath: string | null;
   conversationDiffPanelWidth: number;

@@ -16,6 +16,7 @@ import type {
 } from "./chatWorkspaceUiState.types";
 import {
   isWorkspacePathWithinTarget,
+  getTerminalWorkspaceKey,
   normalizeWorkspaceRelativePath,
   toWorkspaceScopedKey,
 } from "./chatWorkspaceUiState.utils";
@@ -202,11 +203,11 @@ export function useChatWorkspaceUiState({
   }, [diffPanelWidth]);
 
   const activeTerminalWorkspaceKey =
-    selectedFolderId === null
-      ? activeConversationId
-        ? `unfiled:${activeConversationId}`
-        : toWorkspaceScopedKey(activeWorkspacePath)
-      : toWorkspaceScopedKey(activeWorkspacePath);
+    getTerminalWorkspaceKey({
+      activeConversationId,
+      activeWorkspacePath,
+      selectedFolderId,
+    });
   const isTerminalOpen =
     settings.terminalOpenByWorkspace[activeTerminalWorkspaceKey] ?? false;
   const terminalPanelHeight =
@@ -903,6 +904,7 @@ export function useChatWorkspaceUiState({
 
   return {
     activeWorkspaceFilePath,
+    activeTerminalWorkspaceKey,
     activeWorkspaceTabKey,
     activeWorkspacePath,
     conversationDiffPanelWidth,

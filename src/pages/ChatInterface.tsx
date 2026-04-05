@@ -10,6 +10,7 @@ import {
   type ChatInterfaceRightPanelTab,
 } from '../hooks/useChatInterfaceController'
 import { useChatWorkspaceUiState } from './chatInterface/useChatWorkspaceUiState'
+import { getTerminalWorkspaceKey } from './chatInterface/chatWorkspaceUiState.utils'
 import type { AppSettings, ProvidersState } from '../types/chat'
 import type { DiffPanelScope } from '../components/chat/ConversationDiffPanel'
 import type { ResolvedTheme } from '../lib/theme'
@@ -89,12 +90,11 @@ export function ChatInterface({
     workspacePath: activeWorkspacePath,
   })
   const sidebarOpenChangeHandlerRef = useRef<(nextSidebarOpen: boolean) => void>(() => undefined)
-  const activeTerminalWorkspaceKey =
-    chatMessages.selectedFolderId === null
-      ? chatMessages.activeConversationId
-        ? `unfiled:${chatMessages.activeConversationId}`
-        : activeWorkspacePath?.trim() ?? '__global__'
-      : activeWorkspacePath?.trim() ?? '__global__'
+  const activeTerminalWorkspaceKey = getTerminalWorkspaceKey({
+    activeConversationId: chatMessages.activeConversationId,
+    activeWorkspacePath,
+    selectedFolderId: chatMessages.selectedFolderId,
+  })
 
   const interfaceController = useChatInterfaceController({
     activeTerminalWorkspaceKey,

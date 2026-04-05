@@ -9,6 +9,25 @@ export function toWorkspaceScopedKey(workspacePath: string | null) {
   return normalizedPath;
 }
 
+interface TerminalWorkspaceKeyInput {
+  activeConversationId: string | null;
+  activeWorkspacePath: string | null;
+  selectedFolderId: string | null;
+}
+
+export function getTerminalWorkspaceKey({
+  activeConversationId,
+  activeWorkspacePath,
+  selectedFolderId,
+}: TerminalWorkspaceKeyInput) {
+  const workspaceKey = toWorkspaceScopedKey(activeWorkspacePath);
+  if (selectedFolderId === null && activeConversationId) {
+    return `unfiled:${activeConversationId}`;
+  }
+
+  return workspaceKey;
+}
+
 export function normalizeWorkspaceRelativePath(relativePath: string) {
   return relativePath.replace(/\\/g, "/");
 }
