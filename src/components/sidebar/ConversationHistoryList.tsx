@@ -91,9 +91,9 @@ export function ConversationHistoryList({
               <FolderOpen size={22} />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">No threads here</p>
+              <p className="text-sm font-medium text-foreground">No project folders yet</p>
               <p className="text-sm leading-6 text-subtle-foreground">
-                Start a new thread to keep conversations organized.
+                Add a project folder to start a thread
               </p>
             </div>
           </div>

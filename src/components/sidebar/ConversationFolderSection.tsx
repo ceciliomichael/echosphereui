@@ -362,9 +362,9 @@ export function ConversationFolderSection({
                     <FolderOpen size={22} />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">No threads here</p>
+                    <p className="text-sm font-medium text-foreground">No threads yet</p>
                     <p className="text-sm leading-6 text-subtle-foreground">
-                      Start a new thread in this folder to keep conversations organized.
+                      Start a new thread in this project folder
                     </p>
                   </div>
                 </div>
