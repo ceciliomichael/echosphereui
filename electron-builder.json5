@@ -17,7 +17,7 @@
   ],
   "extraResources": [
     {
-      "from": "node_modules/@vscode/ripgrep/bin",
+      "from": "resources/ripgrep",
       "to": "ripgrep",
       "filter": [
         "**/*"

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
+import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import test from 'node:test'
@@ -11,39 +13,38 @@ class FakeChildProcess extends EventEmitter {
   stdout = new PassThrough()
 }
 
-test('normalizeRipgrepCandidatePath repairs missing node_modules separator before scoped packages', () => {
-  const brokenPath = path.join('C:', 'repo', 'node_modules@vscode', 'ripgrep', 'bin', 'rg.exe')
-  const repairedPath = path.join('C:', 'repo', 'node_modules', '@vscode', 'ripgrep', 'bin', 'rg.exe')
+test('resolveCanonicalRipgrepPath uses the repo resources directory in development', () => {
+  const canonicalPath = __testOnly.resolveCanonicalRipgrepPath({
+    currentWorkingDirectory: path.join('C:', 'repo'),
+    isPackagedApp: false,
+  })
 
-  assert.equal(__testOnly.normalizeRipgrepCandidatePath(brokenPath), repairedPath)
+  assert.equal(canonicalPath, path.join('C:', 'repo', 'resources', 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg'))
 })
 
-test('buildRipgrepCommandCandidates keeps repaired module paths and PATH lookup fallback', async () => {
-  const repairedPath = path.join('C:', 'repo', 'node_modules', '@vscode', 'ripgrep', 'bin', 'rg.exe')
+test('buildRipgrepCommandCandidates only returns the canonical dev ripgrep path', async () => {
+  const canonicalPath = path.join('C:', 'repo', 'resources', 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg')
   const candidates = await __testOnly.buildRipgrepCommandCandidates({
     currentWorkingDirectory: path.join('C:', 'repo'),
     isPackagedApp: false,
-    moduleCandidatePaths: [path.join('C:', 'repo', 'node_modules@vscode', 'ripgrep', 'bin', 'rg.exe')],
-    pathExistsImpl: async (candidatePath) => candidatePath === repairedPath,
+    pathExistsImpl: async (candidatePath) => candidatePath === canonicalPath,
     resourcesPath: null,
   })
 
-  assert.deepEqual(candidates, [repairedPath, process.platform === 'win32' ? 'rg.exe' : 'rg'])
+  assert.deepEqual(candidates, [canonicalPath])
 })
 
 test('buildRipgrepCommandCandidates resolves packaged ripgrep from an app.asar resources root', async () => {
   const packagedResourcesRoot = path.join('C:', 'repo', 'resources')
-  const packagedBinaryPath = path.join(packagedResourcesRoot, 'ripgrep', 'rg.exe')
+  const packagedBinaryPath = path.join(packagedResourcesRoot, 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg')
   const candidates = await __testOnly.buildRipgrepCommandCandidates({
     executablePath: path.join('C:', 'repo', 'Echosphere.exe'),
     isPackagedApp: true,
-    moduleCandidatePaths: [],
     pathExistsImpl: async (candidatePath) => candidatePath === packagedBinaryPath,
     resourcesPath: path.join(packagedResourcesRoot, 'app.asar'),
   })
 
-  assert.equal(candidates[0], packagedBinaryPath)
-  assert.equal(candidates[candidates.length - 1], process.platform === 'win32' ? 'rg.exe' : 'rg')
+  assert.deepEqual(candidates, [packagedBinaryPath])
 })
 
 test('runRipgrepWithCandidates retries another executable after ENOENT', async () => {
@@ -80,4 +81,66 @@ test('runRipgrepWithCandidates retries another executable after ENOENT', async (
   assert.equal(result.exitCode, 0)
   assert.equal(result.stdout, 'match\n')
   assert.equal(result.stderr, '')
+})
+
+test('runRipgrepFallback lists files recursively when ripgrep is unavailable', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-list-'))
+  await fs.mkdir(path.join(workspaceRootPath, 'src', 'nested'), { recursive: true })
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'nested', 'file.ts'), 'export const value = 1;\n')
+  await fs.writeFile(path.join(workspaceRootPath, 'README.md'), '# Readme\n')
+
+  const result = await __testOnly.runRipgrepFallback(['--files', '--hidden'], workspaceRootPath)
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, '')
+  assert.deepEqual(result.stdout.split(/\r?\n/u).sort(), ['README.md', path.join('src', 'nested', 'file.ts')].sort())
+})
+
+test('runRipgrepFallback filters recursive file listings by glob', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-glob-'))
+  await fs.mkdir(path.join(workspaceRootPath, 'src', 'nested'), { recursive: true })
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'nested', 'file.ts'), 'export const value = 1;\n')
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'nested', 'file.test.ts'), 'test()\n')
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'nested', 'file.js'), 'console.log("x")\n')
+
+  const result = await __testOnly.runRipgrepFallback(['--files', '--hidden', '--glob', '**/*.test.ts'], workspaceRootPath)
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, '')
+  assert.deepEqual(result.stdout.split(/\r?\n/u), [path.join('src', 'nested', 'file.test.ts')])
+})
+
+test('runRipgrepFallback searches file contents and emits json match lines', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-search-'))
+  await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'example.ts'), 'const foo = 1;\nconst bar = foo + 1;\n')
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'other.ts'), 'const baz = 2;\n')
+
+  const result = await __testOnly.runRipgrepFallback(
+    ['--json', '--hidden', '--line-number', '--no-messages', 'foo', '.'],
+    workspaceRootPath,
+  )
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, '')
+  const lines = result.stdout.split(/\r?\n/u).filter((line) => line.length > 0)
+  assert.equal(lines.length, 2)
+
+  const parsedLines = lines.map((line) => JSON.parse(line) as { data: { line_number: number; path: { text: string } } })
+  assert.deepEqual(
+    parsedLines.map((line) => ({
+      line_number: line.data.line_number,
+      path: line.data.path.text,
+    })),
+    [
+      {
+        line_number: 1,
+        path: path.join('src', 'example.ts'),
+      },
+      {
+        line_number: 2,
+        path: path.join('src', 'example.ts'),
+      },
+    ],
+  )
 })

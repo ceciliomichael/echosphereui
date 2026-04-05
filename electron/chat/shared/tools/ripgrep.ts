@@ -1,9 +1,8 @@
 import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import path from 'node:path'
+import { runRipgrepFallback } from './ripgrepFallback'
 
-const require = createRequire(import.meta.url)
 const RIPGREP_EXECUTABLE_NAME = process.platform === 'win32' ? 'rg.exe' : 'rg'
 
 let ripgrepCommandCandidatesPromise: Promise<string[]> | null = null
@@ -21,46 +20,10 @@ class RipgrepBinaryNotFoundError extends Error {
 
 interface ResolveRipgrepCommandCandidatesOptions {
   currentWorkingDirectory?: string | null
-  includePathLookup?: boolean
   isPackagedApp?: boolean
   executablePath?: string | null
-  moduleCandidatePaths?: string[]
   pathExistsImpl?: typeof pathExists
   resourcesPath?: string | null
-}
-
-function normalizeRipgrepCandidatePath(candidatePath: string) {
-  const trimmedPath = candidatePath.trim()
-  if (trimmedPath.length === 0) {
-    return trimmedPath
-  }
-
-  const repairedScopedModulePath = trimmedPath
-    .replace(/^node_modules(?=@[^\\/]+)/u, `node_modules${path.sep}`)
-    .replace(/([\\/])node_modules(?=@[^\\/]+)/gu, `$1node_modules${path.sep}`)
-
-  return path.normalize(repairedScopedModulePath)
-}
-
-function toUniquePaths(candidatePaths: Array<string | null | undefined>) {
-  const seenPaths = new Set<string>()
-  const uniquePaths: string[] = []
-
-  for (const candidatePath of candidatePaths) {
-    if (!candidatePath) {
-      continue
-    }
-
-    const normalizedPath = normalizeRipgrepCandidatePath(candidatePath)
-    if (normalizedPath.length === 0 || seenPaths.has(normalizedPath)) {
-      continue
-    }
-
-    seenPaths.add(normalizedPath)
-    uniquePaths.push(normalizedPath)
-  }
-
-  return uniquePaths
 }
 
 async function pathExists(candidatePath: string) {
@@ -76,7 +39,7 @@ function resetRipgrepCommandCandidatesCache() {
   ripgrepCommandCandidatesPromise = null
 }
 
-function normalizePackagedResourcesRoot(candidatePath: string) {
+function normalizeResourcesRoot(candidatePath: string) {
   const normalizedCandidatePath = path.normalize(candidatePath.trim())
   if (normalizedCandidatePath.length === 0) {
     return normalizedCandidatePath
@@ -90,81 +53,40 @@ function normalizePackagedResourcesRoot(candidatePath: string) {
   return normalizedCandidatePath
 }
 
-function resolvePackagedResourceRoots(options: Pick<ResolveRipgrepCommandCandidatesOptions, 'executablePath' | 'resourcesPath'> = {}) {
-  const candidateRoots = toUniquePaths([
-    options.resourcesPath,
-    typeof process.resourcesPath === 'string' && process.resourcesPath.trim().length > 0 ? process.resourcesPath : null,
-  ])
+function resolveCanonicalRipgrepPath(options: ResolveRipgrepCommandCandidatesOptions = {}) {
+  const isPackagedApp = options.isPackagedApp ?? (typeof process.defaultApp === 'boolean' ? !process.defaultApp : false)
+  if (isPackagedApp) {
+    const candidateResourcesPath =
+      options.resourcesPath ??
+      (typeof process.resourcesPath === 'string' && process.resourcesPath.trim().length > 0 ? process.resourcesPath : null)
 
-  const executablePath =
-    options.executablePath ?? (typeof process.execPath === 'string' && process.execPath.trim().length > 0 ? process.execPath : null)
-  if (executablePath) {
-    candidateRoots.push(path.join(path.dirname(path.normalize(executablePath)), 'resources'))
-  }
-
-  return toUniquePaths(candidateRoots.map(normalizePackagedResourcesRoot))
-}
-
-function resolveRipgrepModuleCandidatePaths() {
-  const candidatePaths: Array<string | null | undefined> = []
-
-  try {
-    const ripgrepModule = require('@vscode/ripgrep') as { rgPath?: string }
-    if (typeof ripgrepModule.rgPath === 'string' && ripgrepModule.rgPath.trim().length > 0) {
-      candidatePaths.push(ripgrepModule.rgPath)
+    const packagedResourcesRoot = candidateResourcesPath ? normalizeResourcesRoot(candidateResourcesPath) : null
+    if (packagedResourcesRoot) {
+      return path.join(packagedResourcesRoot, 'ripgrep', RIPGREP_EXECUTABLE_NAME)
     }
-  } catch {
-    // Ignore and continue with other resolution strategies.
+
+    const executablePath =
+      options.executablePath ?? (typeof process.execPath === 'string' && process.execPath.trim().length > 0 ? process.execPath : null)
+    if (executablePath) {
+      return path.join(path.dirname(path.normalize(executablePath)), 'resources', 'ripgrep', RIPGREP_EXECUTABLE_NAME)
+    }
+
+    return null
   }
 
-  try {
-    const ripgrepPackageJsonPath = require.resolve('@vscode/ripgrep/package.json')
-    candidatePaths.push(path.join(path.dirname(ripgrepPackageJsonPath), 'bin', RIPGREP_EXECUTABLE_NAME))
-  } catch {
-    // Ignore and continue with other resolution strategies.
-  }
-
-  return toUniquePaths(candidatePaths)
+  const currentWorkingDirectory =
+    options.currentWorkingDirectory ?? (typeof process.cwd === 'function' ? process.cwd() : null)
+  return currentWorkingDirectory ? path.join(currentWorkingDirectory, 'resources', 'ripgrep', RIPGREP_EXECUTABLE_NAME) : null
 }
 
 async function buildRipgrepCommandCandidates(options: ResolveRipgrepCommandCandidatesOptions = {}) {
-  const isPackagedApp = options.isPackagedApp ?? (typeof process.defaultApp === 'boolean' ? !process.defaultApp : false)
-  const currentWorkingDirectory =
-    options.currentWorkingDirectory ?? (typeof process.cwd === 'function' ? process.cwd() : null)
   const pathExistsImpl = options.pathExistsImpl ?? pathExists
-  const moduleCandidatePaths = toUniquePaths(options.moduleCandidatePaths ?? resolveRipgrepModuleCandidatePaths())
-  const bundledCandidatePaths = toUniquePaths(
-    resolvePackagedResourceRoots({
-      executablePath: options.executablePath,
-      resourcesPath: options.resourcesPath,
-    }).flatMap((resourcesRoot) => [
-      path.join(resourcesRoot, 'ripgrep', RIPGREP_EXECUTABLE_NAME),
-      path.join(resourcesRoot, 'app.asar.unpacked', 'ripgrep', RIPGREP_EXECUTABLE_NAME),
-      path.join(resourcesRoot, 'app.asar.unpacked', 'node_modules', '@vscode', 'ripgrep', 'bin', RIPGREP_EXECUTABLE_NAME),
-    ]),
-  )
-  const developmentCandidatePaths = toUniquePaths([
-    ...moduleCandidatePaths,
-    currentWorkingDirectory
-      ? path.join(currentWorkingDirectory, 'node_modules', '@vscode', 'ripgrep', 'bin', RIPGREP_EXECUTABLE_NAME)
-      : null,
-  ])
-  const candidatePaths = isPackagedApp
-    ? [...bundledCandidatePaths, ...developmentCandidatePaths]
-    : [...developmentCandidatePaths, ...bundledCandidatePaths]
-  const availablePaths: string[] = []
-
-  for (const candidatePath of candidatePaths) {
-    if (await pathExistsImpl(candidatePath)) {
-      availablePaths.push(candidatePath)
-    }
+  const candidatePath = resolveCanonicalRipgrepPath(options)
+  if (!candidatePath) {
+    return []
   }
 
-  if (options.includePathLookup === false) {
-    return availablePaths
-  }
-
-  return toUniquePaths([...availablePaths, RIPGREP_EXECUTABLE_NAME])
+  return (await pathExistsImpl(candidatePath)) ? [candidatePath] : []
 }
 
 async function resolveRipgrepCommandCandidates() {
@@ -246,12 +168,21 @@ export async function runRipgrep(args: string[], cwd: string) {
     }
 
     resetRipgrepCommandCandidatesCache()
-    return runRipgrepWithCandidates(args, cwd, await resolveRipgrepCommandCandidates())
+    try {
+      return await runRipgrepWithCandidates(args, cwd, await resolveRipgrepCommandCandidates())
+    } catch (retryError) {
+      if (!(retryError instanceof RipgrepBinaryNotFoundError)) {
+        throw retryError
+      }
+
+      return runRipgrepFallback(args, cwd)
+    }
   }
 }
 
 export const __testOnly = {
   buildRipgrepCommandCandidates,
-  normalizeRipgrepCandidatePath,
+  resolveCanonicalRipgrepPath,
+  runRipgrepFallback,
   runRipgrepWithCandidates,
 }
