@@ -5,6 +5,7 @@ import type { ProviderModelConfig, ProvidersState } from '../../../types/chat'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
 import { buildModelProviderSections } from './modelViewUtils'
 import { getProviderModelLoadErrorMessage } from './modelLoadErrorUtils'
+import { mergeProviderModels } from './providerModelMergeUtils'
 import { Switch } from '../../ui/Switch'
 
 interface RemoteModelState {
@@ -14,7 +15,6 @@ interface RemoteModelState {
 }
 
 interface ModelsSettingsPanelProps {
-  isProvidersLoading: boolean
   providersState: ProvidersState | null
 }
 
@@ -22,7 +22,7 @@ function normalizeSearchValue(value: string) {
   return value.trim().toLowerCase()
 }
 
-export function ModelsSettingsPanel({ isProvidersLoading, providersState }: ModelsSettingsPanelProps) {
+export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps) {
   const [searchValue, setSearchValue] = useState('')
   const [toggleState, setToggleState] = useState<ModelToggleState>(() => readStoredModelToggleState())
   const [remoteState, setRemoteState] = useState<RemoteModelState>({
@@ -57,11 +57,11 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
     )
 
     if (!isOpenAICompatibleConfigured) {
-      setRemoteState({
+      setRemoteState((currentValue) => ({
         errorMessage: null,
         isLoading: false,
-        models: [],
-      })
+        models: currentValue.models,
+      }))
       return
     }
 
@@ -80,11 +80,11 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
           return
         }
 
-        setRemoteState({
+        setRemoteState((currentValue) => ({
           errorMessage: null,
           isLoading: false,
-          models,
-        })
+          models: mergeProviderModels(currentValue.models, models),
+        }))
       })
       .catch((error) => {
         if (!isMounted) {
@@ -93,11 +93,11 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
 
         console.error('Failed to load OpenAI-compatible models', error)
         const errorMessage = getProviderModelLoadErrorMessage(error)
-        setRemoteState({
+        setRemoteState((currentValue) => ({
           errorMessage,
           isLoading: false,
-          models: [],
-        })
+          models: currentValue.models,
+        }))
       })
 
     return () => {
@@ -163,7 +163,6 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                     className={[
                       'flex min-h-14 items-center justify-between gap-3 px-4 py-3 md:px-5',
                       modelIndex === 0 ? '' : 'border-t border-border',
-                      !isProvidersLoading && !remoteState.isLoading ? '' : 'opacity-60',
                     ].join(' ')}
                   >
                     <div className="min-w-0 flex-1">
@@ -174,7 +173,6 @@ export function ModelsSettingsPanel({ isProvidersLoading, providersState }: Mode
                     </div>
                     <Switch
                       checked={isEnabled}
-                      disabled={isProvidersLoading || remoteState.isLoading}
                       label={`Enable ${model.label}`}
                       onChange={() => handleToggleModel(model.id)}
                     />

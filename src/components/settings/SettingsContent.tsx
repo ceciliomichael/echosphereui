@@ -23,7 +23,6 @@ interface SettingsContentProps {
   activeItemId: SettingsItemId
   generalSettings: GeneralSettingsViewModel
   modelsSettings: {
-    isProvidersLoading: boolean
     providersState: ProvidersState | null
   }
   providersSettings: {

@@ -95,7 +95,6 @@ export function SettingsInterface({
             },
           }}
           modelsSettings={{
-            isProvidersLoading: providersState.isLoading,
             providersState: providersState.providersState,
           }}
           providersSettings={{
