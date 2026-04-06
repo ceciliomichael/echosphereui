@@ -148,23 +148,17 @@ function toJsonMatchLine(relativePath: string, lineNumber: number, lineText: str
   })
 }
 
-function compileSearchPattern(pattern: string) {
-  try {
-    return new RegExp(pattern, 'u')
-  } catch (error) {
-    const message = error instanceof Error && error.message.trim().length > 0 ? error.message : 'Invalid search pattern.'
-    throw new Error(message)
-  }
-}
-
 export async function searchVisibleFiles(
   workspaceRootPath: string,
   pattern: string,
   include: string | undefined,
   maxResults?: number,
+  options?: {
+    regex?: boolean
+  },
 ): Promise<SearchVisibleFilesResult> {
   const includePattern = include?.trim()
-  const searchExpression = compileSearchPattern(pattern)
+  const searchExpression = options?.regex === true ? new RegExp(pattern, 'u') : null
   const matches: SearchMatch[] = []
   const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
   let truncated = false
@@ -204,7 +198,8 @@ export async function searchVisibleFiles(
     try {
       for await (const line of reader) {
         lineNumber += 1
-        if (!searchExpression.test(line)) {
+        const hasMatch = searchExpression ? searchExpression.test(line) : line.includes(pattern)
+        if (!hasMatch) {
           continue
         }
 

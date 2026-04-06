@@ -83,10 +83,6 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
   }, [hasRepository])
 
   useEffect(() => {
-    if (!isRightPanelOpen) {
-      return
-    }
-
     if (!hasRepository) {
       return
     }
@@ -104,7 +100,6 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
     activeWorkspacePath,
     gitBranchState.branchState.currentBranch,
     hasRepository,
-    isRightPanelOpen,
     messagesLength,
     onDiffRefresh,
   ])

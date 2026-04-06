@@ -12,7 +12,11 @@ async function createWorkspaceFixture() {
   await fs.mkdir(path.join(workspaceRootPath, 'ignored'), { recursive: true })
   await fs.mkdir(path.join(workspaceRootPath, 'node_modules', 'pkg'), { recursive: true })
   await fs.writeFile(path.join(workspaceRootPath, '.gitignore'), 'ignored/\n*.secret\n.env\n', 'utf8')
-  await fs.writeFile(path.join(workspaceRootPath, 'src', 'visible.ts'), 'export const visible = "needle"\n', 'utf8')
+  await fs.writeFile(
+    path.join(workspaceRootPath, 'src', 'visible.ts'),
+    'export const visible = "needle"\nconst clearMpinValue = clearMpin(\n',
+    'utf8',
+  )
   await fs.writeFile(path.join(workspaceRootPath, 'src', 'listable.ts'), 'export const listable = "list"\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'notes.md'), 'This note mentions list and needle.\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'ignored', 'hidden.ts'), 'export const hidden = "needle"\n', 'utf8')
@@ -82,11 +86,38 @@ test('createGrepToolResult defaults to code-like files when no include glob is p
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', '\\blist\\b', undefined)
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'list', undefined)
 
     assert.equal(result.status, 'success')
     assert.match(result.body ?? '', /listable\.ts/u)
     assert.doesNotMatch(result.body ?? '', /notes\.md/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createGrepToolResult supports regex searches when explicitly requested', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+
+  try {
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', '\\blist\\b', undefined, true)
+
+    assert.equal(result.status, 'success')
+    assert.match(result.body ?? '', /listable\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /notes\.md/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createGrepToolResult treats invalid regex input as a literal search', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+
+  try {
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'clearMpin(', undefined)
+
+    assert.equal(result.status, 'success')
+    assert.match(result.body ?? '', /clearMpin\(/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

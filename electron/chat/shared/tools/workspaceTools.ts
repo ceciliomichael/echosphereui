@@ -414,15 +414,19 @@ export async function createGrepToolResult(
   relativePath: string,
   pattern: string,
   include: string | undefined,
+  regex?: boolean,
 ) {
   const effectiveInclude = include && include.trim().length > 0 ? include.trim() : DEFAULT_GREP_INCLUDE_GLOB
-  const result = await searchVisibleFiles(absolutePath, pattern, effectiveInclude, SEARCH_LIMIT)
+  const result = await searchVisibleFiles(absolutePath, pattern, effectiveInclude, SEARCH_LIMIT, {
+    regex: regex === true,
+  })
   if (result.matches.length === 0) {
     return createSuccessResult({
       body: 'No files found',
       semantics: {
         match_count: 0,
         pattern,
+        regex: regex === true,
       },
       subject: {
         kind: 'directory',
@@ -455,6 +459,7 @@ export async function createGrepToolResult(
     semantics: {
       match_count: result.matches.length,
       pattern,
+      regex: regex === true,
     },
     subject: {
       kind: 'directory',

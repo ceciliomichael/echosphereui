@@ -117,7 +117,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
       },
     }),
     grep: tool({
-      description: 'Search file contents with a regex pattern. Use include to narrow by filename glob.',
+      description: 'Search file contents with a literal string by default. Set regex to true to interpret the pattern as a regex. Use include to narrow by filename glob.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -131,6 +131,9 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
             minLength: 1,
             type: 'string',
           },
+          regex: {
+            type: 'boolean',
+          },
         },
         required: ['pattern'],
         type: 'object',
@@ -140,6 +143,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
           absolute_path?: string
           include?: string
           pattern: string
+          regex?: boolean
         }
         try {
           const target = resolveWorkspaceTargetPath(context.workspaceRootPath, inputValue.absolute_path)
@@ -149,6 +153,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
             target.relativePath,
             inputValue.pattern,
             inputValue.include,
+            inputValue.regex,
           )
         } catch (error) {
           return createToolErrorResult(
