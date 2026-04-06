@@ -13,6 +13,8 @@ async function createWorkspaceFixture() {
   await fs.mkdir(path.join(workspaceRootPath, 'node_modules', 'pkg'), { recursive: true })
   await fs.writeFile(path.join(workspaceRootPath, '.gitignore'), 'ignored/\n*.secret\n.env\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'src', 'visible.ts'), 'export const visible = "needle"\n', 'utf8')
+  await fs.writeFile(path.join(workspaceRootPath, 'src', 'listable.ts'), 'export const listable = "list"\n', 'utf8')
+  await fs.writeFile(path.join(workspaceRootPath, 'notes.md'), 'This note mentions list and needle.\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'ignored', 'hidden.ts'), 'export const hidden = "needle"\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'plain.secret'), 'needle\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, '.env'), 'SECRET=needle\n', 'utf8')
@@ -21,18 +23,19 @@ async function createWorkspaceFixture() {
   return workspaceRootPath
 }
 
-test('createListToolResult filters gitignored and always-ignored entries while preserving env files', async () => {
+test('createListToolResult lists only immediate visible directory entries at the requested path', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
     const result = await createListToolResult(workspaceRootPath, workspaceRootPath, '.')
 
     assert.equal(result.status, 'success')
-    assert.match(result.body ?? '', /src\/\s+visible\.ts/us)
+    assert.match(result.body ?? '', /^src\/$/mu)
     assert.match(result.body ?? '', /\.env/u)
     assert.doesNotMatch(result.body ?? '', /ignored/u)
     assert.doesNotMatch(result.body ?? '', /plain\.secret/u)
     assert.doesNotMatch(result.body ?? '', /node_modules/u)
+    assert.doesNotMatch(result.body ?? '', /visible\.ts/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
@@ -62,7 +65,7 @@ test('createGrepToolResult excludes matches from gitignored paths while preservi
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '*')
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '**/{*,.*}')
 
     assert.equal(result.status, 'success')
     assert.match(result.body ?? '', /visible\.ts/u)
@@ -70,6 +73,20 @@ test('createGrepToolResult excludes matches from gitignored paths while preservi
     assert.doesNotMatch(result.body ?? '', /hidden\.ts/u)
     assert.doesNotMatch(result.body ?? '', /plain\.secret/u)
     assert.doesNotMatch(result.body ?? '', /node_modules/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createGrepToolResult defaults to code-like files when no include glob is provided', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+
+  try {
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', '\\blist\\b', undefined)
+
+    assert.equal(result.status, 'success')
+    assert.match(result.body ?? '', /listable\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /notes\.md/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

@@ -27,7 +27,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
 
   const tools: ToolSet = {
     list: tool({
-      description: 'Recursively list files from a workspace directory. Prefer this before reading when you need orientation.',
+      description: 'List the immediate contents of a workspace directory. Prefer this before reading when you need orientation.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {

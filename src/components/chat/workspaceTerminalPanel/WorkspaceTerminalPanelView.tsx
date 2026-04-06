@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { LoaderCircle, Plus, X } from "lucide-react";
 import { Tooltip } from "../../Tooltip";
 import type { WorkspaceTerminalPanelState } from "./workspaceTerminalPanelTypes";
@@ -10,6 +11,26 @@ export function WorkspaceTerminalPanelView({
   panelState,
 }: WorkspaceTerminalPanelViewProps) {
   const activeTerminalTab = panelState.activeTerminalTab;
+
+  const handleTerminalTabMouseDown = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) => {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  };
+
+  const handleTerminalTabAuxClick = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tabKey: string,
+  ) => {
+    if (event.button !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    void panelState.closeTerminalTab(tabKey);
+  };
 
   return (
     <section
@@ -48,6 +69,8 @@ export function WorkspaceTerminalPanelView({
                   <button
                     type="button"
                     onClick={() => panelState.selectTerminalTab(tab.key)}
+                    onMouseDown={handleTerminalTabMouseDown}
+                    onAuxClick={(event) => handleTerminalTabAuxClick(event, tab.key)}
                     className={[
                       "inline-flex h-full max-w-[248px] items-center gap-2 px-3 pr-9 text-sm transition-colors",
                       isActive

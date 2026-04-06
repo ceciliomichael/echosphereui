@@ -19,6 +19,11 @@ interface SearchMatch {
   relativePath: string
 }
 
+interface SearchVisibleFilesResult {
+  matches: SearchMatch[]
+  truncated: boolean
+}
+
 interface RipgrepFallbackResult {
   exitCode: number
   stderr: string
@@ -74,9 +79,10 @@ async function visitVisibleFiles(
   workspaceRootPath: string,
   currentDirectoryPath: string,
   isVisibleEntry: (entryAbsolutePath: string, isDirectory: boolean) => Promise<boolean>,
-  onFile: (fileAbsolutePath: string, fileRelativePath: string) => Promise<void> | void,
+  onFile: (fileAbsolutePath: string, fileRelativePath: string) => Promise<boolean | void> | boolean | void,
 ) {
   const directoryEntries = await fs.readdir(currentDirectoryPath, { withFileTypes: true })
+  directoryEntries.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }))
 
   for (const directoryEntry of directoryEntries) {
     if (directoryEntry.isSymbolicLink()) {
@@ -94,13 +100,21 @@ async function visitVisibleFiles(
     }
 
     if (isDirectory) {
-      await visitVisibleFiles(workspaceRootPath, entryAbsolutePath, isVisibleEntry, onFile)
+      const shouldStop = await visitVisibleFiles(workspaceRootPath, entryAbsolutePath, isVisibleEntry, onFile)
+      if (shouldStop) {
+        return true
+      }
       continue
     }
 
     const fileRelativePath = path.relative(workspaceRootPath, entryAbsolutePath)
-    await onFile(entryAbsolutePath, fileRelativePath)
+    const shouldStop = await onFile(entryAbsolutePath, fileRelativePath)
+    if (shouldStop) {
+      return true
+    }
   }
+
+  return false
 }
 
 async function collectVisibleFilePaths(workspaceRootPath: string) {
@@ -136,15 +150,17 @@ function compileSearchPattern(pattern: string) {
   }
 }
 
-async function searchVisibleFiles(
+export async function searchVisibleFiles(
   workspaceRootPath: string,
   pattern: string,
   include: string | undefined,
-) {
+  maxResults?: number,
+): Promise<SearchVisibleFilesResult> {
   const includePattern = include?.trim()
   const searchExpression = compileSearchPattern(pattern)
   const matches: SearchMatch[] = []
   const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
+  let truncated = false
 
   await visitVisibleFiles(workspaceRootPath, workspaceRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
     if (includePattern && !path.matchesGlob(fileRelativePath, includePattern)) {
@@ -192,6 +208,11 @@ async function searchVisibleFiles(
           modifiedAt,
           relativePath: fileRelativePath,
         })
+
+        if (typeof maxResults === 'number' && Number.isFinite(maxResults) && matches.length >= maxResults) {
+          truncated = true
+          return true
+        }
       }
     } finally {
       reader.close()
@@ -211,7 +232,10 @@ async function searchVisibleFiles(
     return left.lineNumber - right.lineNumber
   })
 
-  return matches
+  return {
+    matches,
+    truncated,
+  }
 }
 
 function getArgumentValue(args: string[], flagName: string) {
@@ -259,8 +283,8 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     }
 
     const include = getArgumentValue(args, '--glob') ?? undefined
-    const matches = await searchVisibleFiles(cwd, searchPattern, include)
-    if (matches.length === 0) {
+    const result = await searchVisibleFiles(cwd, searchPattern, include)
+    if (result.matches.length === 0) {
       return {
         exitCode: 1,
         stderr: '',
@@ -271,7 +295,7 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     return {
       exitCode: 0,
       stderr: '',
-      stdout: matches.map((match) => toJsonMatchLine(match.relativePath, match.lineNumber, match.lineText)).join('\n'),
+      stdout: result.matches.map((match) => toJsonMatchLine(match.relativePath, match.lineNumber, match.lineText)).join('\n'),
     }
   }
 

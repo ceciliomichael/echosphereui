@@ -15,10 +15,12 @@ import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoi
 import { applyPatchInWorkspace } from '../applyPatch'
 import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import { runRipgrep } from './ripgrep'
+import { searchVisibleFiles } from './ripgrepFallback'
 
 const DEFAULT_READ_LIMIT = 2000
 const LIST_LIMIT = 100
 const SEARCH_LIMIT = 100
+const DEFAULT_GREP_INCLUDE_GLOB = '**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}'
 const MAX_LINE_LENGTH = 2000
 const MAX_READ_BYTES = 50 * 1024
 const MAX_READ_BYTES_LABEL = `${MAX_READ_BYTES / 1024} KB`
@@ -204,88 +206,25 @@ async function filterVisibleRelativeFileEntries(
 }
 
 export async function createListToolResult(workspaceRootPath: string, absolutePath: string, relativePath: string) {
-  const result = await runRipgrep(['--files', '--hidden'], absolutePath)
-  if (result.exitCode !== 0) {
-    const immediateEntries = await listImmediateDirectoryEntries(workspaceRootPath, absolutePath)
-    return createSuccessResult({
-      body: immediateEntries.join('\n'),
-      semantics: {
-        count: immediateEntries.length,
-      },
-      subject: {
-        kind: 'directory',
-        path: relativePath,
-      },
-      summary: `Listed ${relativePath}`,
-    })
-  }
+  const immediateEntries = await listImmediateDirectoryEntries(workspaceRootPath, absolutePath)
+  const limitedEntries = immediateEntries.slice(0, LIST_LIMIT)
 
-  const files = result.stdout
-    .split(/\r?\n/u)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-  const visibleFiles = await filterVisibleRelativeFileEntries(workspaceRootPath, absolutePath, files)
-
-  const limitedFiles = visibleFiles.slice(0, LIST_LIMIT)
-  const directories = new Set<string>(['.'])
-  const filesByDirectory = new Map<string, string[]>()
-
-  for (const file of limitedFiles) {
-    const directoryName = path.dirname(file)
-    const segments = directoryName === '.' ? [] : directoryName.split(/[\\/]/u)
-
-    for (let index = 0; index <= segments.length; index += 1) {
-      const directoryPath = index === 0 ? '.' : segments.slice(0, index).join('/')
-      directories.add(directoryPath)
-    }
-
-    if (!filesByDirectory.has(directoryName)) {
-      filesByDirectory.set(directoryName, [])
-    }
-
-    filesByDirectory.get(directoryName)?.push(path.basename(file))
-  }
-
-  function renderDirectory(directoryName: string, depth: number): string[] {
-    const lines: string[] = []
-    if (depth > 0) {
-      lines.push(`${'  '.repeat(depth)}${path.basename(directoryName)}/`)
-    }
-
-    const childDirectories = Array.from(directories)
-      .filter((candidate) => candidate !== directoryName && path.dirname(candidate) === directoryName)
-      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
-
-    for (const childDirectory of childDirectories) {
-      lines.push(...renderDirectory(childDirectory, depth + 1))
-    }
-
-    const fileEntries = [...(filesByDirectory.get(directoryName) ?? [])].sort((left, right) =>
-      left.localeCompare(right, undefined, { sensitivity: 'base' }),
-    )
-    for (const fileEntry of fileEntries) {
-      lines.push(`${'  '.repeat(depth + 1)}${fileEntry}`)
-    }
-
-    return lines
-  }
-
-  const bodyLines = renderDirectory('.', 0)
-  if (visibleFiles.length > LIST_LIMIT) {
-    bodyLines.push('', `(Showing ${LIST_LIMIT} of ${visibleFiles.length} files. Refine the path or use glob/read next.)`)
+  const bodyLines = [...limitedEntries]
+  if (immediateEntries.length > LIST_LIMIT) {
+    bodyLines.push('', `(Showing ${LIST_LIMIT} of ${immediateEntries.length} entries. Refine the path or use glob/read next.)`)
   }
 
   return createSuccessResult({
     body: bodyLines.join('\n'),
     semantics: {
-      count: visibleFiles.length,
+      count: immediateEntries.length,
     },
     subject: {
       kind: 'directory',
       path: relativePath,
     },
     summary: `Listed ${relativePath}`,
-    truncated: visibleFiles.length > LIST_LIMIT,
+    truncated: immediateEntries.length > LIST_LIMIT,
   })
 }
 
@@ -469,27 +408,16 @@ export async function createGlobToolResult(
   })
 }
 
-interface GrepMatch {
-  absolutePath: string
-  lineNumber: number
-  lineText: string
-  modifiedAt: number
-}
-
 export async function createGrepToolResult(
-  workspaceRootPath: string,
+  _workspaceRootPath: string,
   absolutePath: string,
   relativePath: string,
   pattern: string,
   include: string | undefined,
 ) {
-  const args = ['--json', '--hidden', '--line-number', '--no-messages', pattern, '.']
-  if (include && include.trim().length > 0) {
-    args.splice(4, 0, '--glob', include.trim())
-  }
-
-  const result = await runRipgrep(args, absolutePath)
-  if (result.exitCode === 1) {
+  const effectiveInclude = include && include.trim().length > 0 ? include.trim() : DEFAULT_GREP_INCLUDE_GLOB
+  const result = await searchVisibleFiles(absolutePath, pattern, effectiveInclude, SEARCH_LIMIT)
+  if (result.matches.length === 0) {
     return createSuccessResult({
       body: 'No files found',
       semantics: {
@@ -504,97 +432,9 @@ export async function createGrepToolResult(
     })
   }
 
-  if (result.exitCode !== 0 && result.exitCode !== 2) {
-    return createErrorResult(`Search failed for ${pattern}`, {
-      body: result.stderr.trim() || `ripgrep exited with code ${result.exitCode}`,
-      subject: {
-        kind: 'directory',
-        path: relativePath,
-      },
-    })
-  }
-
-  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
-  const matches: GrepMatch[] = []
-  for (const line of result.stdout.split(/\r?\n/u)) {
-    if (!line.trim()) {
-      continue
-    }
-
-    let parsedLine: unknown
-    try {
-      parsedLine = JSON.parse(line)
-    } catch {
-      continue
-    }
-
-    if (
-      typeof parsedLine !== 'object' ||
-      parsedLine === null ||
-      (parsedLine as { type?: string }).type !== 'match'
-    ) {
-      continue
-    }
-
-    const matchData = parsedLine as {
-      data?: {
-        line_number?: number
-        lines?: { text?: string }
-        path?: { text?: string }
-      }
-    }
-    const matchPath = matchData.data?.path?.text
-    const lineNumber = matchData.data?.line_number
-    const lineText = matchData.data?.lines?.text
-    if (typeof matchPath !== 'string' || typeof lineNumber !== 'number' || typeof lineText !== 'string') {
-      continue
-    }
-
-    const candidateAbsolutePath = path.resolve(absolutePath, matchPath)
-    if (!(await isVisibleEntry(candidateAbsolutePath, false))) {
-      continue
-    }
-
-    const modifiedAt = (await fs.stat(candidateAbsolutePath).catch(() => null))?.mtimeMs ?? 0
-    matches.push({
-      absolutePath: candidateAbsolutePath,
-      lineNumber,
-      lineText: lineText.trimEnd().slice(0, MAX_LINE_LENGTH),
-      modifiedAt,
-    })
-  }
-
-  matches.sort((left, right) => {
-    if (right.modifiedAt !== left.modifiedAt) {
-      return right.modifiedAt - left.modifiedAt
-    }
-
-    if (left.absolutePath !== right.absolutePath) {
-      return left.absolutePath.localeCompare(right.absolutePath, undefined, { sensitivity: 'base' })
-    }
-
-    return left.lineNumber - right.lineNumber
-  })
-
-  const limitedMatches = matches.slice(0, SEARCH_LIMIT)
-  if (limitedMatches.length === 0) {
-    return createSuccessResult({
-      body: 'No files found',
-      semantics: {
-        match_count: 0,
-        pattern,
-      },
-      subject: {
-        kind: 'directory',
-        path: relativePath,
-      },
-      summary: `No matches for ${pattern}`,
-    })
-  }
-
-  const bodyLines = [`Found ${matches.length} match${matches.length === 1 ? '' : 'es'}`]
+  const bodyLines = [`Found ${result.matches.length} match${result.matches.length === 1 ? '' : 'es'}`]
   let currentPath: string | null = null
-  for (const match of limitedMatches) {
+  for (const match of result.matches) {
     if (match.absolutePath !== currentPath) {
       if (currentPath !== null) {
         bodyLines.push('')
@@ -606,22 +446,22 @@ export async function createGrepToolResult(
     bodyLines.push(`  ${match.lineNumber}: ${match.lineText}`)
   }
 
-  if (matches.length > SEARCH_LIMIT) {
-    bodyLines.push('', `(Showing ${SEARCH_LIMIT} of ${matches.length} matches. Narrow the pattern or include filter.)`)
+  if (result.truncated) {
+    bodyLines.push('', `(Showing first ${SEARCH_LIMIT} matches. Narrow the pattern or include filter.)`)
   }
 
   return createSuccessResult({
     body: bodyLines.join('\n'),
     semantics: {
-      match_count: matches.length,
+      match_count: result.matches.length,
       pattern,
     },
     subject: {
       kind: 'directory',
       path: relativePath,
     },
-    summary: `Found ${matches.length} match${matches.length === 1 ? '' : 'es'} for ${pattern}`,
-    truncated: matches.length > SEARCH_LIMIT,
+    summary: `Found ${result.matches.length} match${result.matches.length === 1 ? '' : 'es'} for ${pattern}`,
+    truncated: result.truncated,
   })
 }
 
