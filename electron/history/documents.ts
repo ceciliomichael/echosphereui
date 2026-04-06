@@ -21,7 +21,7 @@ interface FolderStoreDocument {
   folders: ConversationFolderRecord[]
 }
 
-interface FileChangeDiffPresentationItem {
+interface ChangeDiffPresentationItem {
   addedLineCount?: number
   contextLines?: number
   endLineNumber?: number
@@ -56,19 +56,19 @@ function isToolInvocationResultPresentation(value: unknown): value is ToolInvoca
     )
   }
 
-  if (presentation.kind === 'file_change_diff') {
-    return Array.isArray(presentation.changes) && presentation.changes.every((change) => isFileChangeDiffItem(change))
+  if (presentation.kind === 'change_diff') {
+    return Array.isArray(presentation.changes) && presentation.changes.every((change) => isChangeDiffItem(change))
   }
 
   return false
 }
 
-function isFileChangeDiffItem(value: unknown): value is FileChangeDiffPresentationItem {
+function isChangeDiffItem(value: unknown): value is ChangeDiffPresentationItem {
   if (!value || typeof value !== 'object') {
     return false
   }
 
-  const item = value as Partial<FileChangeDiffPresentationItem>
+  const item = value as Partial<ChangeDiffPresentationItem>
   return (
     typeof item.fileName === 'string' &&
     (item.kind === 'add' || item.kind === 'delete' || item.kind === 'update') &&

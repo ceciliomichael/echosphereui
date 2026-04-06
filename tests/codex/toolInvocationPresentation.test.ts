@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ToolInvocationTrace } from '../../src/types/chat'
 import { formatStructuredToolResultContent } from '../../src/lib/toolResultContent'
-import { getFileChangeActionLabel, getToolInvocationHeaderLabel } from '../../src/components/chat/toolInvocationPresentation'
+import { getChangeActionLabel, getToolInvocationHeaderLabel } from '../../src/components/chat/toolInvocationPresentation'
 
 const WORKSPACE_ROOT_PATH = '/workspace'
 const TARGET_FILE_PATH = `${WORKSPACE_ROOT_PATH}/src/example.ts`
@@ -60,10 +60,10 @@ function buildFileChangeInvocation(
   return invocation
 }
 
-test('file change action labels use created, deleted, and replaced wording', () => {
-  assert.equal(getFileChangeActionLabel('add'), 'Created')
-  assert.equal(getFileChangeActionLabel('delete'), 'Deleted')
-  assert.equal(getFileChangeActionLabel('update'), 'Replaced')
+test('change action labels use created, deleted, and edited wording', () => {
+  assert.equal(getChangeActionLabel('add'), 'Created')
+  assert.equal(getChangeActionLabel('delete'), 'Deleted')
+  assert.equal(getChangeActionLabel('update'), 'Edited')
 })
 
 test('apply tool header labels use action-specific running and completed verbs', () => {
@@ -73,8 +73,8 @@ test('apply tool header labels use action-specific running and completed verbs',
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Deleting example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Deleted example.ts')
 
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Replacing example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Replaced example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Editing example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
 })
 
 test('apply tool header labels keep mixed changes on the generic edit fallback', () => {

@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { ToolInvocationTrace } from '../../types/chat'
 import { DiffViewer } from './DiffViewer'
-import { FileChangeDiffResult } from './FileChangeDiffResult'
+import { ChangeDiffResult } from './FileChangeDiffResult'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
@@ -32,7 +32,7 @@ function renderDiffCountSummary(invocation: ToolInvocationTrace) {
   if (resultPresentation?.kind === 'file_diff') {
     addedLineCount = resultPresentation.addedLineCount ?? 0
     removedLineCount = resultPresentation.removedLineCount ?? 0
-  } else if (resultPresentation?.kind === 'file_change_diff') {
+  } else if (resultPresentation?.kind === 'change_diff') {
     for (const change of resultPresentation.changes) {
       addedLineCount += change.addedLineCount ?? 0
       removedLineCount += change.removedLineCount ?? 0
@@ -123,8 +123,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
       ? invocation.toolName
       : null
   const diffResultPresentation = invocation.resultPresentation?.kind === 'file_diff' ? invocation.resultPresentation : null
-  const fileChangeResultPresentation =
-    invocation.resultPresentation?.kind === 'file_change_diff' ? invocation.resultPresentation : null
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
   const parsedStructuredResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const resultBody =
     parsedStructuredResult?.body ??
@@ -175,8 +174,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
               startLineNumber={diffResultPresentation.startLineNumber}
               maxBodyHeightClassName="max-h-80"
             />
-          ) : fileChangeResultPresentation ? (
-            <FileChangeDiffResult parsedResult={fileChangeResultPresentation} />
+          ) : changeResultPresentation ? (
+            <ChangeDiffResult parsedResult={changeResultPresentation} />
           ) : terminalToolName ? (
             <TerminalToolResult
               content={resultBody}

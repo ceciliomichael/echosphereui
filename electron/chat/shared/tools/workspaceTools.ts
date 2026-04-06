@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { jsonSchema, tool } from 'ai'
 import { getDiffSummary } from '../../../../src/lib/textDiff'
-import type { FileChangeDiffToolResultItem } from '../../../../src/types/chat'
+import type { ChangeDiffToolResultItem } from '../../../../src/types/chat'
 import { loadGitignoreMatchers, isGitignored, shouldAlwaysShowEntry, shouldIgnoreWorkspaceEntry } from '../../../workspace/gitignoreMatcher'
 import {
   assertWorkspaceDirectory,
@@ -73,10 +73,10 @@ function hasBinaryContent(buffer: Buffer) {
 
 function toFileChangeItem(
   fileName: string,
-  kind: FileChangeDiffToolResultItem['kind'],
+  kind: ChangeDiffToolResultItem['kind'],
   oldContent: string | null,
   newContent: string,
-): FileChangeDiffToolResultItem {
+): ChangeDiffToolResultItem {
   const summary = getDiffSummary(oldContent, newContent)
   return {
     addedLineCount: summary.addedLineCount,
@@ -90,7 +90,7 @@ function toFileChangeItem(
 
 function buildFileChangeResult(
   summary: string,
-  changes: FileChangeDiffToolResultItem[],
+  changes: ChangeDiffToolResultItem[],
   operation: 'edit' | 'noop',
   subjectPath: string,
 ) {
@@ -108,7 +108,7 @@ function buildFileChangeResult(
     body: bodyLines.join('\n'),
     resultPresentation: {
       changes,
-      kind: 'file_change_diff',
+      kind: 'change_diff',
     },
     semantics: {
       added_path_count: addedPathCount,
@@ -475,7 +475,7 @@ async function createFileChangeToolResult(
     }>
   },
 ) {
-  const fileChanges: FileChangeDiffToolResultItem[] = []
+  const fileChanges: ChangeDiffToolResultItem[] = []
 
   for (const change of input.changes) {
     const target = resolveWorkspaceTargetPath(context.workspaceRootPath, change.absolute_path)

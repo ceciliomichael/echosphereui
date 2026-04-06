@@ -111,15 +111,15 @@ function getReadToolTarget(path: string, workspaceRootPath?: string | null) {
 
 const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
 
-type FileChangeActionKind = 'add' | 'delete' | 'update'
+type ChangeActionKind = 'add' | 'delete' | 'update'
 
-interface FileChangeActionLabels {
+interface ChangeActionLabels {
   completed: string
   failed: string
   running: string
 }
 
-const FILE_CHANGE_ACTION_LABELS: Record<FileChangeActionKind, FileChangeActionLabels> = {
+const CHANGE_ACTION_LABELS: Record<ChangeActionKind, ChangeActionLabels> = {
   add: {
     completed: 'Created',
     failed: 'Create failed',
@@ -131,13 +131,13 @@ const FILE_CHANGE_ACTION_LABELS: Record<FileChangeActionKind, FileChangeActionLa
     running: 'Deleting',
   },
   update: {
-    completed: 'Replaced',
-    failed: 'Replace failed',
-    running: 'Replacing',
+    completed: 'Edited',
+    failed: 'Edit failed',
+    running: 'Editing',
   },
 }
 
-const GENERIC_FILE_CHANGE_LABELS: FileChangeActionLabels = {
+const GENERIC_CHANGE_LABELS: ChangeActionLabels = {
   completed: 'Edited',
   failed: 'Edit failed',
   running: 'Editing',
@@ -185,7 +185,7 @@ function getSearchTarget(argumentsText: string): string | null {
   return searchText ? truncateDisplayText(searchText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
 }
 
-function getFileChangeActionKind(
+function getChangeActionKind(
   addedPathCount: number | null,
   deletedPathCount: number | null,
   updatedPathCount: number | null,
@@ -205,8 +205,8 @@ function getFileChangeActionKind(
   return null
 }
 
-function getFileChangeActionStateLabel(kind: FileChangeActionKind | null, state: 'running' | 'completed' | 'failed') {
-  const labels = kind ? FILE_CHANGE_ACTION_LABELS[kind] : GENERIC_FILE_CHANGE_LABELS
+function getChangeActionStateLabel(kind: ChangeActionKind | null, state: 'running' | 'completed' | 'failed') {
+  const labels = kind ? CHANGE_ACTION_LABELS[kind] : GENERIC_CHANGE_LABELS
   return labels[state]
 }
 
@@ -228,7 +228,7 @@ function getToolVerb(invocation: ToolInvocationTrace) {
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.updated_path_count === 'number'
       ? parsedResult.metadata.semantics.updated_path_count
       : null
-  const fileChangeActionKind = getFileChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
+  const changeActionKind = getChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -250,18 +250,18 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Read failed'
   }
 
-  if (invocation.toolName === 'apply' || invocation.toolName === 'file_change' || invocation.toolName === 'apply_patch') {
+  if (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
-      return getFileChangeActionStateLabel(fileChangeActionKind, 'running')
+      return getChangeActionStateLabel(changeActionKind, 'running')
     }
     if (invocation.state === 'failed') {
-      return getFileChangeActionStateLabel(fileChangeActionKind, 'failed')
+      return getChangeActionStateLabel(changeActionKind, 'failed')
     }
     if (operation === 'noop') {
       return 'Verified'
     }
-    if (fileChangeActionKind !== null) {
-      return getFileChangeActionStateLabel(fileChangeActionKind, 'completed')
+    if (changeActionKind !== null) {
+      return getChangeActionStateLabel(changeActionKind, 'completed')
     }
     return 'Edited'
   }
@@ -313,8 +313,8 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : `Failed ${invocation.toolName}`
 }
 
-export function getFileChangeActionLabel(kind: 'add' | 'delete' | 'update') {
-  return FILE_CHANGE_ACTION_LABELS[kind].completed
+export function getChangeActionLabel(kind: 'add' | 'delete' | 'update') {
+  return CHANGE_ACTION_LABELS[kind].completed
 }
 
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
@@ -336,12 +336,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if (
-      (invocation.toolName === 'apply' ||
-        invocation.toolName === 'file_change' ||
-        invocation.toolName === 'apply_patch') &&
-      normalizedStructuredPath === '.'
-    ) {
+    if ((invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }
