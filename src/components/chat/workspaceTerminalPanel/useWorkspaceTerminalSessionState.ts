@@ -474,6 +474,7 @@ export function useWorkspaceTerminalSessionState({
       if (nextTabs.length === 0) {
         pendingTerminalRenderRef.current = null;
         setActiveTerminalTabKey(null);
+        nextTabIndexRef.current = 1;
         activeTabKeyRef.current = null;
         activeSessionIdRef.current = null;
         lastSyncedSizeRef.current = null;

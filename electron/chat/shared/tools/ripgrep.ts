@@ -53,8 +53,28 @@ function normalizeResourcesRoot(candidatePath: string) {
   return normalizedCandidatePath
 }
 
+function isPackagedRuntime(options: ResolveRipgrepCommandCandidatesOptions = {}) {
+  if (typeof options.isPackagedApp === 'boolean') {
+    return options.isPackagedApp
+  }
+
+  const candidateResourcesPath =
+    options.resourcesPath ??
+    (typeof process.resourcesPath === 'string' && process.resourcesPath.trim().length > 0 ? process.resourcesPath : null)
+
+  if (candidateResourcesPath) {
+    return true
+  }
+
+  if (typeof process.defaultApp === 'boolean') {
+    return !process.defaultApp
+  }
+
+  return false
+}
+
 function resolveCanonicalRipgrepPath(options: ResolveRipgrepCommandCandidatesOptions = {}) {
-  const isPackagedApp = options.isPackagedApp ?? (typeof process.defaultApp === 'boolean' ? !process.defaultApp : false)
+  const isPackagedApp = isPackagedRuntime(options)
   if (isPackagedApp) {
     const candidateResourcesPath =
       options.resourcesPath ??

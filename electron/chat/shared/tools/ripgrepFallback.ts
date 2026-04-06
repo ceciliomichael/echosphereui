@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
+import { minimatch } from 'minimatch'
 import {
   isGitignored,
   loadGitignoreMatchers,
@@ -39,6 +40,12 @@ function hasBinaryContent(buffer: Buffer) {
   }
 
   return false
+}
+
+function matchesWorkspaceGlob(candidatePath: string, globPattern: string) {
+  const normalizedCandidatePath = candidatePath.split(path.sep).join('/')
+  const normalizedPattern = globPattern.split(path.sep).join('/')
+  return minimatch(normalizedCandidatePath, normalizedPattern, { dot: true })
 }
 
 function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
@@ -163,7 +170,7 @@ export async function searchVisibleFiles(
   let truncated = false
 
   await visitVisibleFiles(workspaceRootPath, workspaceRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
-    if (includePattern && !path.matchesGlob(fileRelativePath, includePattern)) {
+    if (includePattern && !matchesWorkspaceGlob(fileRelativePath, includePattern)) {
       return
     }
 
@@ -262,7 +269,7 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     const normalizedGlobPattern = globPattern?.trim()
     const filteredFiles =
       normalizedGlobPattern && normalizedGlobPattern.length > 0
-        ? files.filter((filePath) => path.matchesGlob(filePath, normalizedGlobPattern))
+        ? files.filter((filePath) => matchesWorkspaceGlob(filePath, normalizedGlobPattern))
         : files
 
     return {

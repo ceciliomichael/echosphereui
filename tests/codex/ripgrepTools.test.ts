@@ -47,6 +47,17 @@ test('buildRipgrepCommandCandidates resolves packaged ripgrep from an app.asar r
   assert.deepEqual(candidates, [packagedBinaryPath])
 })
 
+test('buildRipgrepCommandCandidates infers packaged mode from process resources path', async () => {
+  const packagedResourcesRoot = path.join('C:', 'repo', 'resources')
+  const packagedBinaryPath = path.join(packagedResourcesRoot, 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg')
+  const candidates = await __testOnly.buildRipgrepCommandCandidates({
+    pathExistsImpl: async (candidatePath) => candidatePath === packagedBinaryPath,
+    resourcesPath: path.join(packagedResourcesRoot, 'app.asar'),
+  })
+
+  assert.deepEqual(candidates, [packagedBinaryPath])
+})
+
 test('runRipgrepWithCandidates retries another executable after ENOENT', async () => {
   const attemptedCommands: string[] = []
   const fakeSpawn = ((command: string) => {
