@@ -137,6 +137,10 @@ function shouldApplyGitignoreFiltering(visibility: WorkspaceEntryVisibility) {
   return visibility === 'workspace'
 }
 
+function shouldLoadGitignoreMatchers(visibility: WorkspaceEntryVisibility) {
+  return visibility === 'workspace' || visibility === 'explorer'
+}
+
 async function statIfExists(targetPath: string) {
   return fs.stat(targetPath).catch((error: unknown) => {
     const code = (error as NodeJS.ErrnoException).code
@@ -232,7 +236,7 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
   }
 
   const directoryEntries = await fs.readdir(target.absolutePath, { withFileTypes: true })
-  const gitignoreMatchers = shouldApplyGitignoreFiltering(visibility)
+  const gitignoreMatchers = shouldLoadGitignoreMatchers(visibility)
     ? await loadGitignoreMatchers(workspaceRootPath, target.absolutePath)
     : []
   const explorerEntries: WorkspaceExplorerEntry[] = []
@@ -247,10 +251,13 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
     if (shouldIgnoreWorkspaceEntry(directoryEntry.name, visibility)) {
       continue
     }
+    const entryAbsolutePath = path.join(target.absolutePath, directoryEntry.name)
+    const entryIsGitignored = isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)
+
     if (
       shouldApplyGitignoreFiltering(visibility) &&
-      !shouldAlwaysShowEntry(directoryEntry.name) &&
-      isGitignored(path.join(target.absolutePath, directoryEntry.name), isDirectory, gitignoreMatchers)
+      entryIsGitignored &&
+      !shouldAlwaysShowEntry(directoryEntry.name)
     ) {
       continue
     }
@@ -261,6 +268,7 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
 
     explorerEntries.push({
       isDirectory,
+      isGitignored: visibility === 'explorer' ? entryIsGitignored : undefined,
       name: directoryEntry.name,
       relativePath: entryRelativePath,
     })

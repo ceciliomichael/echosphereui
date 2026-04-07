@@ -76,7 +76,11 @@ export function WorkspaceExplorerPanelView({
       const isActiveFile = !isDirectory && activeFilePath === entry.relativePath
       const isContextTarget = panelState.contextMenuState?.targetEntry?.relativePath === entry.relativePath
       const isSelectedEntry = panelState.selectedEntryPaths.has(entry.relativePath)
+      const isGitignoredEntry = entry.isGitignored === true
       const isDropTarget = isDirectory && panelState.dropTargetDirectoryPath === entry.relativePath
+      const rowStateClass = isSelectedEntry || isActiveFile || isContextTarget || isDropTarget
+        ? 'bg-surface-muted text-foreground'
+        : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground'
       const isCutEntry =
         clipboardEntry?.mode === 'cut' &&
         clipboardEntry.relativePaths.some(
@@ -133,10 +137,7 @@ export function WorkspaceExplorerPanelView({
             className={[
               'flex h-8 w-full min-w-0 items-center gap-1 rounded-none px-2 text-left text-sm transition-colors',
               isCutEntry ? 'opacity-55' : '',
-              isDropTarget ? 'bg-surface-muted text-foreground' : '',
-              isSelectedEntry || isActiveFile || isContextTarget
-                ? 'bg-surface-muted text-foreground'
-                : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground',
+              rowStateClass,
             ].join(' ')}
             data-workspace-entry-path={entry.relativePath}
             aria-selected={isSelectedEntry || isActiveFile || isContextTarget}
@@ -147,16 +148,14 @@ export function WorkspaceExplorerPanelView({
             ) : (
               <span className="w-[14px] shrink-0" />
             )}
-            {isDirectory ? (
-              isExpanded ? (
-                <FolderOpen size={14} className="shrink-0 text-subtle-foreground" />
-              ) : (
-                <Folder size={14} className="shrink-0 text-subtle-foreground" />
-              )
-            ) : FileIcon ? (
-              <FileIcon size={14} className="shrink-0" style={{ color: fileIconConfig?.color }} />
+            {!isDirectory && FileIcon ? (
+              <FileIcon
+                size={14}
+                className="shrink-0"
+                style={{ color: fileIconConfig?.color }}
+              />
             ) : null}
-            <span className="truncate">{entry.name}</span>
+            <span className={['truncate', isGitignoredEntry ? 'opacity-60' : ''].join(' ')}>{entry.name}</span>
             {isLoading && !isExpanded ? (
               <RefreshCw size={12} className="ml-auto shrink-0 animate-spin text-subtle-foreground" />
             ) : null}

@@ -32,11 +32,15 @@ test('workspace directory listings can expose dependency folders in explorer mod
       workspaceRootPath,
     })
     const explorerEntryNames = explorerEntries.map((entry) => entry.name)
+    const explorerEntryByName = new Map(explorerEntries.map((entry) => [entry.name, entry]))
 
     assert.ok(explorerEntryNames.includes('node_modules'))
     assert.ok(explorerEntryNames.includes('.next'))
     assert.ok(explorerEntryNames.includes('ignored'))
     assert.ok(!explorerEntryNames.includes('.git'))
+    assert.equal(explorerEntryByName.get('ignored')?.isGitignored, true)
+    assert.equal(explorerEntryByName.get('node_modules')?.isGitignored, false)
+    assert.equal(explorerEntryByName.get('.next')?.isGitignored, false)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
@@ -57,6 +61,7 @@ test('workspace directory listings keep workspace-mode pruning for mention/searc
     assert.ok(!workspaceEntryNames.includes('node_modules'))
     assert.ok(!workspaceEntryNames.includes('.next'))
     assert.ok(!workspaceEntryNames.includes('.git'))
+    assert.equal(workspaceEntries.some((entry) => entry.isGitignored), false)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

@@ -372,6 +372,7 @@ export interface WorkspaceExplorerChangeEvent {
 
 export interface WorkspaceExplorerEntry {
   isDirectory: boolean
+  isGitignored?: boolean
   name: string
   relativePath: string
 }
