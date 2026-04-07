@@ -11,6 +11,7 @@ import {
   createWholeFileApplyTool,
   resolveWorkspaceTargetPath,
 } from './workspaceTools'
+import { createTerminalToolSet } from './terminalTools'
 
 function createToolErrorResult(summary: string, body?: string): AgentToolExecutionResult {
   return {
@@ -170,6 +171,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
 
   return {
     ...tools,
+    ...createTerminalToolSet(input),
     apply: wholeFileApplyTool,
     apply_patch: tool({
       description:

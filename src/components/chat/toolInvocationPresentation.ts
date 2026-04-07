@@ -1,4 +1,4 @@
-import type { ToolInvocationTrace } from '../../types/chat'
+import type { ChangeDiffToolResultItem, ToolInvocationTrace } from '../../types/chat'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
@@ -7,7 +7,9 @@ interface ToolArgumentsValue {
   command?: unknown
   cmd?: unknown
   pattern?: unknown
+  polling_ms?: unknown
   query?: unknown
+  session_id?: unknown
 }
 
 function parseCompleteToolArguments(argumentsText: string): ToolArgumentsValue | null {
@@ -205,13 +207,42 @@ function getChangeActionKind(
   return null
 }
 
+function readSessionId(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.floor(value))
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsedValue = Number(value.trim())
+    if (Number.isFinite(parsedValue)) {
+      return String(Math.floor(parsedValue))
+    }
+  }
+
+  return null
+}
+
 function getChangeActionStateLabel(kind: ChangeActionKind | null, state: 'running' | 'completed' | 'failed') {
   const labels = kind ? CHANGE_ACTION_LABELS[kind] : GENERIC_CHANGE_LABELS
   return labels[state]
 }
 
+function getSingleDisplayedChangeActionKind(invocation: ToolInvocationTrace) {
+  if (invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch') {
+    return null
+  }
+
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
+  if (!changeResultPresentation || changeResultPresentation.changes.length !== 1) {
+    return null
+  }
+
+  return changeResultPresentation.changes[0].kind
+}
+
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const displayedChangeActionKind = getSingleDisplayedChangeActionKind(invocation)
   const operation =
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
       ? parsedResult.metadata.semantics.operation
@@ -226,9 +257,9 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : null
   const updatedPathCount =
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.updated_path_count === 'number'
-      ? parsedResult.metadata.semantics.updated_path_count
+    ? parsedResult.metadata.semantics.updated_path_count
       : null
-  const changeActionKind = getChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
+  const changeActionKind = displayedChangeActionKind ?? getChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -317,12 +348,70 @@ export function getChangeActionLabel(kind: 'add' | 'delete' | 'update') {
   return CHANGE_ACTION_LABELS[kind].completed
 }
 
+export interface ToolInvocationDisplayEntry {
+  invocation: ToolInvocationTrace
+  key: string
+}
+
+function getApplyPatchSingleChangeTarget(invocation: ToolInvocationTrace) {
+  if (invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch') {
+    return null
+  }
+
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
+  if (!changeResultPresentation || changeResultPresentation.changes.length !== 1) {
+    return null
+  }
+
+  const [singleChange] = changeResultPresentation.changes
+  return getBasename(singleChange.fileName)
+}
+
+export function getToolInvocationDisplayEntries(invocation: ToolInvocationTrace): ToolInvocationDisplayEntry[] {
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
+  if (
+    invocation.toolName === 'apply_patch' &&
+    invocation.state === 'completed' &&
+    changeResultPresentation !== null &&
+    changeResultPresentation.changes.length > 1
+  ) {
+    return changeResultPresentation.changes.map((change: ChangeDiffToolResultItem, index: number) => ({
+      invocation: {
+        ...invocation,
+        id: `${invocation.id}:${index}`,
+        resultPresentation: {
+          changes: [change],
+          kind: 'change_diff',
+        },
+      },
+      key: `${invocation.id}:${index}:${change.fileName}`,
+    }))
+  }
+
+  return [
+    {
+      invocation,
+      key: invocation.id,
+    },
+  ]
+}
+
 function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: string | null) {
   const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
 
   if (invocation.toolName === 'run_terminal') {
     const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
-    return commandText ? truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
+    if (commandText) {
+      return truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH)
+    }
+
+    const sessionIdText = readSessionId(parsedArguments?.session_id)
+    return sessionIdText ? `session ${sessionIdText}` : null
+  }
+
+  if (invocation.toolName === 'get_terminal_output') {
+    const sessionIdText = readSessionId(parsedArguments?.session_id)
+    return sessionIdText ? `session ${sessionIdText}` : null
   }
 
   if (invocation.toolName === 'glob' || invocation.toolName === 'grep') {
@@ -330,6 +419,11 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     if (searchTarget) {
       return searchTarget
     }
+  }
+
+  const applyPatchSingleChangeTarget = getApplyPatchSingleChangeTarget(invocation)
+  if (applyPatchSingleChangeTarget) {
+    return applyPatchSingleChangeTarget
   }
 
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
@@ -349,11 +443,6 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     }
 
     return getBasename(normalizedStructuredPath)
-  }
-
-  if (invocation.toolName === 'run_terminal') {
-    const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
-    return commandText ? truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
   }
 
   const absolutePath = getAbsolutePath(invocation)

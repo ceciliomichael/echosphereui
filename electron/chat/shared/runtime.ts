@@ -209,7 +209,9 @@ export async function runToolEnabledChatStream(input: {
     const tools = await createAgentTools(
       {
         checkpointId: resolveActiveCheckpointId(input.startInput.messages),
+        conversationId: input.startInput.conversationId ?? null,
         workspaceRootPath: input.startInput.agentContextRootPath,
+        webContents: input.webContents,
       },
       {
         chatMode: input.startInput.chatMode,

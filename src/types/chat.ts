@@ -468,6 +468,7 @@ export interface CreateTerminalSessionInput {
   cols: number
   cwd?: string | null
   sessionKey?: string | null
+  workspaceRootPath?: string | null
   rows: number
 }
 
@@ -482,16 +483,25 @@ export interface CreateTerminalSessionResult {
 export interface WriteTerminalSessionInput {
   data: string
   sessionId: number
+  workspaceRootPath?: string | null
+}
+
+export interface TerminalSessionOutputInput {
+  pollingMs?: number
+  sessionId: number
+  workspaceRootPath?: string | null
 }
 
 export interface ResizeTerminalSessionInput {
   cols: number
   rows: number
   sessionId: number
+  workspaceRootPath?: string | null
 }
 
 export interface CloseTerminalSessionInput {
   sessionId: number
+  workspaceRootPath?: string | null
 }
 
 export interface OpenExternalTerminalLinkInput {

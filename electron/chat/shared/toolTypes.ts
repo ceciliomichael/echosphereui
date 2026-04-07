@@ -1,3 +1,4 @@
+import type { WebContents } from 'electron'
 import type { ToolInvocationResultPresentation } from '../../../src/types/chat'
 
 export interface AgentToolResultSubject {
@@ -17,5 +18,7 @@ export interface AgentToolExecutionResult {
 
 export interface AgentToolContext {
   checkpointId?: string | null
+  conversationId?: string | null
   workspaceRootPath: string
+  webContents?: WebContents | null
 }

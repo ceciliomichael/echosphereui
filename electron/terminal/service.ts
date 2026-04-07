@@ -2,10 +2,16 @@ import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { spawn, type IPty } from "node-pty";
+import {
+  assertWorkspaceDirectory,
+  getSafeWorkspaceTargetPath,
+  normalizeWorkspacePath,
+} from "../workspace/paths";
 import type {
   CloseTerminalSessionInput,
   CreateTerminalSessionInput,
   CreateTerminalSessionResult,
+  TerminalSessionOutputInput,
   OpenExternalTerminalLinkInput,
   ResizeTerminalSessionInput,
   TerminalDataEvent,
@@ -28,12 +34,26 @@ interface TerminalShellSpec {
 
 interface ActiveTerminalSession {
   cwd: string;
-  cwdKey: string;
+  exitCode: number | null;
+  hasExited: boolean;
   outputBuffer: string;
+  outputWaiters: Set<() => void>;
   ownerWebContentsId: number;
   ptyProcess: IPty;
   shellLabel: string;
+  signal: number | null;
+  workspaceRootPath: string;
   workspaceSessionKey: string;
+}
+
+export interface TerminalSessionSnapshot {
+  cwd: string;
+  exitCode: number | null;
+  hasExited: boolean;
+  outputBuffer: string;
+  shellLabel: string;
+  signal: number | null;
+  sessionId: number;
 }
 
 const sessions = new Map<number, ActiveTerminalSession>();
@@ -78,8 +98,37 @@ function assertDirectoryExists(directoryPath: string) {
   }
 }
 
-function resolveTerminalCwd(cwd: string | null | undefined) {
+function resolveTerminalWorkspaceRootPath(workspaceRootPath: string | null | undefined) {
+  const normalizedWorkspaceRootPath = workspaceRootPath?.trim() ?? "";
+  if (normalizedWorkspaceRootPath.length === 0) {
+    return null;
+  }
+
+  return normalizeWorkspacePath(normalizedWorkspaceRootPath);
+}
+
+async function assertTerminalWorkspaceDirectory(workspaceRootPath: string | null) {
+  if (!workspaceRootPath) {
+    return;
+  }
+
+  await assertWorkspaceDirectory(workspaceRootPath);
+}
+
+function resolveTerminalCwd(
+  workspaceRootPath: string | null,
+  cwd: string | null | undefined,
+) {
   const normalizedCwd = cwd?.trim() ?? "";
+  if (workspaceRootPath) {
+    const targetPath = getSafeWorkspaceTargetPath(
+      workspaceRootPath,
+      normalizedCwd.length > 0 ? normalizedCwd : ".",
+    );
+    assertDirectoryExists(targetPath.absolutePath);
+    return targetPath.absolutePath;
+  }
+
   if (normalizedCwd.length === 0) {
     return process.cwd();
   }
@@ -255,6 +304,29 @@ function appendSessionOutputBuffer(
   activeSession.outputBuffer = activeSession.outputBuffer.slice(startIndex);
 }
 
+function createTerminalSessionSnapshot(
+  sessionId: number,
+  activeSession: ActiveTerminalSession,
+): TerminalSessionSnapshot {
+  return {
+    cwd: activeSession.cwd,
+    exitCode: activeSession.exitCode,
+    hasExited: activeSession.hasExited,
+    outputBuffer: activeSession.outputBuffer,
+    shellLabel: activeSession.shellLabel,
+    signal: activeSession.signal,
+    sessionId,
+  };
+}
+
+function notifySessionWaiters(activeSession: ActiveTerminalSession) {
+  const waiters = Array.from(activeSession.outputWaiters.values());
+  activeSession.outputWaiters.clear();
+  for (const resolve of waiters) {
+    resolve();
+  }
+}
+
 function registerSessionWithOwner(
   ownerWebContentsId: number,
   sessionId: number,
@@ -333,6 +405,7 @@ function terminateSession(sessionId: number) {
     return;
   }
 
+  notifySessionWaiters(activeSession);
   sessions.delete(sessionId);
   unregisterSessionFromOwner(activeSession.ownerWebContentsId, sessionId);
   unregisterWorkspaceSession(
@@ -374,7 +447,11 @@ function attachOwnerCleanup(sender: WebContents) {
   });
 }
 
-function assertSessionOwnership(ownerWebContentsId: number, sessionId: number) {
+function assertSessionOwnership(
+  ownerWebContentsId: number,
+  sessionId: number,
+  workspaceRootPath?: string | null,
+) {
   const activeSession = sessions.get(sessionId);
   if (!activeSession) {
     throw new Error(`Unknown terminal session id: ${sessionId}`);
@@ -386,7 +463,55 @@ function assertSessionOwnership(ownerWebContentsId: number, sessionId: number) {
     );
   }
 
+  const normalizedWorkspaceRootPath = workspaceRootPath?.trim()
+    ? normalizeWorkspacePath(workspaceRootPath)
+    : null;
+  if (
+    normalizedWorkspaceRootPath &&
+    activeSession.workspaceRootPath !== normalizedWorkspaceRootPath
+  ) {
+    throw new Error(
+      `Terminal session ${sessionId} does not belong to workspace ${normalizedWorkspaceRootPath}.`,
+    );
+  }
+
   return activeSession;
+}
+
+function assertSessionOwnershipForRead(
+  ownerWebContentsId: number,
+  sessionId: number,
+  workspaceRootPath?: string | null,
+) {
+  return assertSessionOwnership(ownerWebContentsId, sessionId, workspaceRootPath);
+}
+
+function clampTerminalPollingMs(pollingMs: number | undefined) {
+  return clampInteger(pollingMs ?? 0, 0, 30_000, 0);
+}
+
+function waitForTerminalSessionExitOrTimeout(
+  activeSession: ActiveTerminalSession,
+  pollingMs: number,
+) {
+  if (pollingMs <= 0 || activeSession.hasExited) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
+    const wrappedResolve = () => {
+      clearTimeout(timeoutId);
+      activeSession.outputWaiters.delete(wrappedResolve);
+      resolve();
+    };
+
+    const timeoutId = setTimeout(() => {
+      activeSession.outputWaiters.delete(wrappedResolve);
+      resolve();
+    }, pollingMs);
+
+    activeSession.outputWaiters.add(wrappedResolve);
+  });
 }
 
 function spawnTerminalFromCandidates(input: {
@@ -455,7 +580,8 @@ function reuseExistingSession(input: {
   const activeSession = sessions.get(existingSessionId);
   if (
     !activeSession ||
-    activeSession.ownerWebContentsId !== input.ownerWebContentsId
+    activeSession.ownerWebContentsId !== input.ownerWebContentsId ||
+    activeSession.hasExited
   ) {
     unregisterWorkspaceSession(
       input.ownerWebContentsId,
@@ -478,11 +604,11 @@ function reuseExistingSession(input: {
   });
 }
 
-export async function createTerminalSession(
-  event: IpcMainInvokeEvent,
+async function createTerminalSessionInternal(
+  sender: WebContents,
   input: CreateTerminalSessionInput,
 ): Promise<CreateTerminalSessionResult> {
-  attachOwnerCleanup(event.sender);
+  attachOwnerCleanup(sender);
 
   const cols = clampInteger(
     input.cols,
@@ -496,15 +622,19 @@ export async function createTerminalSession(
     TERMINAL_MAX_ROWS,
     30,
   );
-  const cwd = resolveTerminalCwd(input.cwd);
-  const workspaceKey = toWorkspaceKey(cwd);
+  const workspaceRootPath = resolveTerminalWorkspaceRootPath(
+    input.workspaceRootPath ?? input.cwd,
+  );
+  await assertTerminalWorkspaceDirectory(workspaceRootPath);
+  const cwd = resolveTerminalCwd(workspaceRootPath, input.cwd);
+  const workspaceKey = toWorkspaceKey(workspaceRootPath ?? cwd);
   const workspaceSessionKey = toWorkspaceSessionKey(
     workspaceKey,
     input.sessionKey,
   );
   const reusedSession = reuseExistingSession({
     cols,
-    ownerWebContentsId: event.sender.id,
+    ownerWebContentsId: sender.id,
     sessionKey: input.sessionKey,
     rows,
     workspaceKey,
@@ -526,23 +656,27 @@ export async function createTerminalSession(
 
   const activeSession: ActiveTerminalSession = {
     cwd,
-    cwdKey: workspaceKey,
+    exitCode: null,
+    hasExited: false,
     outputBuffer: "",
-    ownerWebContentsId: event.sender.id,
+    outputWaiters: new Set(),
+    ownerWebContentsId: sender.id,
     ptyProcess,
     shellLabel,
+    signal: null,
+    workspaceRootPath: workspaceRootPath ?? cwd,
     workspaceSessionKey,
   };
   sessions.set(sessionId, activeSession);
-  registerSessionWithOwner(event.sender.id, sessionId);
-  registerWorkspaceSession(event.sender.id, workspaceSessionKey, sessionId);
+  registerSessionWithOwner(sender.id, sessionId);
+  registerWorkspaceSession(sender.id, workspaceSessionKey, sessionId);
 
   ptyProcess.onData((data) => {
     const sessionForData = sessions.get(sessionId);
     if (
       !sessionForData ||
-      sessionForData.ownerWebContentsId !== event.sender.id ||
-      event.sender.isDestroyed()
+      sessionForData.ownerWebContentsId !== sender.id ||
+      sender.isDestroyed()
     ) {
       return;
     }
@@ -552,7 +686,7 @@ export async function createTerminalSession(
       data,
       sessionId,
     };
-    event.sender.send("terminal:session:data", payload);
+    sender.send("terminal:session:data", payload);
   });
 
   ptyProcess.onExit((exitEvent) => {
@@ -561,20 +695,18 @@ export async function createTerminalSession(
       return;
     }
 
-    sessions.delete(sessionId);
-    unregisterSessionFromOwner(sessionForExit.ownerWebContentsId, sessionId);
-    unregisterWorkspaceSession(
-      sessionForExit.ownerWebContentsId,
-      sessionForExit.workspaceSessionKey,
-      sessionId,
-    );
-    if (!event.sender.isDestroyed()) {
+    sessionForExit.hasExited = true;
+    sessionForExit.exitCode = exitEvent.exitCode;
+    sessionForExit.signal =
+      typeof exitEvent.signal === "number" ? exitEvent.signal : null;
+    notifySessionWaiters(sessionForExit);
+    if (!sender.isDestroyed()) {
       const payload: TerminalExitEvent = {
         exitCode: exitEvent.exitCode,
         sessionId,
-        signal: typeof exitEvent.signal === "number" ? exitEvent.signal : null,
+        signal: sessionForExit.signal,
       };
-      event.sender.send("terminal:session:exit", payload);
+      sender.send("terminal:session:exit", payload);
     }
   });
 
@@ -585,25 +717,61 @@ export async function createTerminalSession(
   });
 }
 
+export async function createTerminalSessionForWebContents(
+  sender: WebContents,
+  input: CreateTerminalSessionInput,
+): Promise<CreateTerminalSessionResult> {
+  return createTerminalSessionInternal(sender, input);
+}
+
+export async function createTerminalSession(
+  event: IpcMainInvokeEvent,
+  input: CreateTerminalSessionInput,
+): Promise<CreateTerminalSessionResult> {
+  return createTerminalSessionInternal(event.sender, input);
+}
+
+async function writeToTerminalSessionInternal(
+  sender: WebContents,
+  input: WriteTerminalSessionInput,
+) {
+  const activeSession = assertSessionOwnership(
+    sender.id,
+    input.sessionId,
+    input.workspaceRootPath,
+  );
+  if (activeSession.hasExited) {
+    throw new Error(`Terminal session ${input.sessionId} has already exited.`);
+  }
+  activeSession.ptyProcess.write(input.data);
+}
+
+export async function writeToTerminalSessionForWebContents(
+  sender: WebContents,
+  input: WriteTerminalSessionInput,
+) {
+  return writeToTerminalSessionInternal(sender, input);
+}
+
 export async function writeToTerminalSession(
   event: IpcMainInvokeEvent,
   input: WriteTerminalSessionInput,
 ) {
-  const activeSession = assertSessionOwnership(
-    event.sender.id,
-    input.sessionId,
-  );
-  activeSession.ptyProcess.write(input.data);
+  return writeToTerminalSessionInternal(event.sender, input);
 }
 
-export async function resizeTerminalSession(
-  event: IpcMainInvokeEvent,
+async function resizeTerminalSessionInternal(
+  sender: WebContents,
   input: ResizeTerminalSessionInput,
 ) {
   const activeSession = assertSessionOwnership(
-    event.sender.id,
+    sender.id,
     input.sessionId,
+    input.workspaceRootPath,
   );
+  if (activeSession.hasExited) {
+    throw new Error(`Terminal session ${input.sessionId} has already exited.`);
+  }
   const cols = clampInteger(
     input.cols,
     TERMINAL_MIN_COLS,
@@ -625,12 +793,65 @@ export async function resizeTerminalSession(
   activeSession.ptyProcess.resize(cols, rows);
 }
 
+export async function resizeTerminalSessionForWebContents(
+  sender: WebContents,
+  input: ResizeTerminalSessionInput,
+) {
+  return resizeTerminalSessionInternal(sender, input);
+}
+
+export async function resizeTerminalSession(
+  event: IpcMainInvokeEvent,
+  input: ResizeTerminalSessionInput,
+) {
+  return resizeTerminalSessionInternal(event.sender, input);
+}
+
+async function closeTerminalSessionInternal(
+  sender: WebContents,
+  input: CloseTerminalSessionInput,
+) {
+  assertSessionOwnership(sender.id, input.sessionId, input.workspaceRootPath);
+  terminateSession(input.sessionId);
+}
+
+export async function closeTerminalSessionForWebContents(
+  sender: WebContents,
+  input: CloseTerminalSessionInput,
+) {
+  return closeTerminalSessionInternal(sender, input);
+}
+
 export async function closeTerminalSession(
   event: IpcMainInvokeEvent,
   input: CloseTerminalSessionInput,
 ) {
-  assertSessionOwnership(event.sender.id, input.sessionId);
-  terminateSession(input.sessionId);
+  return closeTerminalSessionInternal(event.sender, input);
+}
+
+export async function getTerminalSessionOutputForWebContents(
+  sender: WebContents,
+  input: TerminalSessionOutputInput,
+): Promise<TerminalSessionSnapshot> {
+  const activeSession = assertSessionOwnershipForRead(
+    sender.id,
+    input.sessionId,
+    input.workspaceRootPath,
+  );
+  const pollingMs = clampTerminalPollingMs(input.pollingMs);
+  await waitForTerminalSessionExitOrTimeout(activeSession, pollingMs);
+  const refreshedSession = sessions.get(input.sessionId);
+  if (!refreshedSession) {
+    throw new Error(`Unknown terminal session id: ${input.sessionId}`);
+  }
+
+  if (refreshedSession.ownerWebContentsId !== sender.id) {
+    throw new Error(
+      `Terminal session ${input.sessionId} does not belong to this window.`,
+    );
+  }
+
+  return createTerminalSessionSnapshot(input.sessionId, refreshedSession);
 }
 
 export async function openExternalTerminalLink(

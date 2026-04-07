@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ToolInvocationTrace } from '../../src/types/chat'
 import { formatStructuredToolResultContent } from '../../src/lib/toolResultContent'
-import { getChangeActionLabel, getToolInvocationHeaderLabel } from '../../src/components/chat/toolInvocationPresentation'
+import {
+  getChangeActionLabel,
+  getToolInvocationDisplayEntries,
+  getToolInvocationHeaderLabel,
+} from '../../src/components/chat/toolInvocationPresentation'
 
 const WORKSPACE_ROOT_PATH = '/workspace'
 const TARGET_FILE_PATH = `${WORKSPACE_ROOT_PATH}/src/example.ts`
@@ -60,6 +64,56 @@ function buildFileChangeInvocation(
   return invocation
 }
 
+function buildMultiFileApplyPatchInvocation(
+  state: ToolInvocationTrace['state'],
+  changes: Array<{
+    fileName: string
+    kind: 'add' | 'delete' | 'update'
+    oldContent: string | null
+    newContent: string
+  }>,
+) {
+  return {
+    argumentsText: JSON.stringify({ absolute_path: `${WORKSPACE_ROOT_PATH}/.` }),
+    id: 'tool-multi-1',
+    resultContent: formatStructuredToolResultContent(
+      {
+        schema: 'echosphere.tool_result/v1',
+        semantics: {
+          added_path_count: changes.filter((change) => change.kind === 'add').length,
+          deleted_path_count: changes.filter((change) => change.kind === 'delete').length,
+          operation: 'edit',
+          updated_path_count: changes.filter((change) => change.kind === 'update').length,
+        },
+        status: 'success',
+        subject: {
+          kind: 'workspace',
+          path: '.',
+        },
+        summary: 'Patched multiple files',
+        toolCallId: 'tool-multi-1',
+        toolName: 'apply_patch',
+      },
+      [
+        'Patched multiple files',
+        ...changes.map((change) => `${change.kind === 'add' ? 'A' : change.kind === 'delete' ? 'D' : 'M'} ${change.fileName}`),
+      ].join('\n'),
+    ),
+    resultPresentation: {
+      changes: changes.map((change) => ({
+        fileName: change.fileName,
+        kind: change.kind,
+        newContent: change.newContent,
+        oldContent: change.oldContent,
+      })),
+      kind: 'change_diff' as const,
+    },
+    startedAt: 0,
+    state,
+    toolName: 'apply_patch',
+  } satisfies ToolInvocationTrace
+}
+
 test('change action labels use created, deleted, and edited wording', () => {
   assert.equal(getChangeActionLabel('add'), 'Created')
   assert.equal(getChangeActionLabel('delete'), 'Deleted')
@@ -104,6 +158,39 @@ test('apply tool header labels keep mixed changes on the generic edit fallback',
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
 })
 
+test('multi-file apply_patch invocations expand into separate display blocks', () => {
+  const invocation = buildMultiFileApplyPatchInvocation('completed', [
+    {
+      fileName: 'src/first.ts',
+      kind: 'update',
+      oldContent: 'const first = 1;\n',
+      newContent: 'const first = 2;\n',
+    },
+    {
+      fileName: 'src/second.ts',
+      kind: 'add',
+      oldContent: null,
+      newContent: 'export const second = 2;\n',
+    },
+  ])
+
+  const displayEntries = getToolInvocationDisplayEntries(invocation)
+
+  assert.equal(displayEntries.length, 2)
+  assert.equal(
+    getToolInvocationHeaderLabel(displayEntries[0].invocation, undefined, WORKSPACE_ROOT_PATH),
+    'Edited first.ts',
+  )
+  assert.equal(
+    getToolInvocationHeaderLabel(displayEntries[1].invocation, undefined, WORKSPACE_ROOT_PATH),
+    'Created second.ts',
+  )
+  assert.equal(displayEntries[0].invocation.resultPresentation?.kind, 'change_diff')
+  assert.equal(displayEntries[0].invocation.resultPresentation?.changes.length, 1)
+  assert.equal(displayEntries[1].invocation.resultPresentation?.kind, 'change_diff')
+  assert.equal(displayEntries[1].invocation.resultPresentation?.changes.length, 1)
+})
+
 test('read tool header labels collapse to the basename for the visible toolblock', () => {
   const invocation: ToolInvocationTrace = {
     argumentsText: JSON.stringify({ absolute_path: TARGET_FILE_PATH }),
@@ -131,4 +218,37 @@ test('read tool header labels collapse to the basename for the visible toolblock
   }
 
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Read example.ts')
+})
+
+test('terminal tool header labels prefer the queued command and fall back to the session id', () => {
+  const commandInvocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      command: 'npm run test:unit',
+      session_id: 7,
+    }),
+    id: 'tool-terminal-1',
+    startedAt: 0,
+    state: 'completed',
+    toolName: 'run_terminal',
+  }
+
+  const sessionInvocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      polling_ms: 2500,
+      session_id: 7,
+    }),
+    id: 'tool-terminal-2',
+    startedAt: 0,
+    state: 'running',
+    toolName: 'get_terminal_output',
+  }
+
+  assert.equal(
+    getToolInvocationHeaderLabel(commandInvocation, undefined, WORKSPACE_ROOT_PATH),
+    'Ran npm run test:unit',
+  )
+  assert.equal(
+    getToolInvocationHeaderLabel(sessionInvocation, undefined, WORKSPACE_ROOT_PATH),
+    'Polling session 7',
+  )
 })

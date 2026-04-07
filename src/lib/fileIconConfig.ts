@@ -65,6 +65,7 @@ import {
   VscTextSize,
   VscPackage,
 } from 'react-icons/vsc';
+import { FaDatabase } from 'react-icons/fa6';
 import { BsFileText, BsFiletypeCsv } from 'react-icons/bs';
 
 /**
@@ -213,7 +214,7 @@ export const LANGUAGE_ICONS: Record<string, FileIconConfig> = {
   exs: { icon: SiElixir, color: '#4e2a8e', label: 'Elixir Script' },
   erl: { icon: SiErlang, color: '#b83998', label: 'Erlang' },
   lua: { icon: SiLua, color: '#000080', label: 'Lua' },
-  sql: { icon: VscCode, color: '#e38c00', label: 'SQL' },
+  sql: { icon: FaDatabase, color: '#f55385', label: 'SQL' },
   graphql: { icon: SiGraphql, color: '#e10098', label: 'GraphQL' },
   gql: { icon: SiGraphql, color: '#e10098', label: 'GraphQL' },
 

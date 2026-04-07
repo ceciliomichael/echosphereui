@@ -149,6 +149,7 @@ export function useWorkspaceTerminalSessionState({
           cols: dimensions.cols,
           rows: dimensions.rows,
           sessionId: activeSessionId,
+          workspaceRootPath: workspacePathRef.current,
         })
         .catch((error) => {
           lastSyncedSizeRef.current = null;
@@ -341,6 +342,7 @@ export function useWorkspaceTerminalSessionState({
         .writeToSession({
           data,
           sessionId: activeSessionId,
+          workspaceRootPath: workspacePathRef.current,
         })
         .catch((error) => {
           console.error("Failed to write terminal input", error);
@@ -397,6 +399,7 @@ export function useWorkspaceTerminalSessionState({
         cwd: workspacePathRef.current,
         rows: dimensions.rows,
         sessionKey: tabKey,
+        workspaceRootPath: workspacePathRef.current,
       });
 
       sessionIdToTabKeyRef.current.set(session.sessionId, tabKey);
@@ -455,7 +458,10 @@ export function useWorkspaceTerminalSessionState({
       if (currentTab.sessionId !== null) {
         sessionIdToTabKeyRef.current.delete(currentTab.sessionId);
         void window.echosphereTerminal
-          .closeSession({ sessionId: currentTab.sessionId })
+          .closeSession({
+            sessionId: currentTab.sessionId,
+            workspaceRootPath: workspacePathRef.current,
+          })
           .catch((error) => {
             console.error("Failed to close terminal session", error);
           });

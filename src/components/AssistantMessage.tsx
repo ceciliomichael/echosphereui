@@ -10,6 +10,7 @@ import { MarkdownRenderer } from "./chat/MarkdownRenderer";
 import { ThinkingBlock } from "./chat/ThinkingBlock";
 import { ThinkingIndicator } from "./chat/ThinkingIndicator";
 import { ToolInvocationBlock } from "./chat/ToolInvocationBlock";
+import { getToolInvocationDisplayEntries } from "./chat/toolInvocationPresentation";
 import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
 interface AssistantMessageProps {
@@ -129,14 +130,16 @@ export function AssistantMessage({
         />
       ) : null}
 
-      {toolInvocations.map((invocation) => (
-        <ToolInvocationBlock
-          key={invocation.id}
-          invocation={invocation}
-          onToolDecisionSubmit={onToolDecisionSubmit}
-          workspaceRootPath={workspaceRootPath}
-        />
-      ))}
+      {toolInvocations.flatMap((invocation) =>
+        getToolInvocationDisplayEntries(invocation).map((displayEntry) => (
+          <ToolInvocationBlock
+            key={displayEntry.key}
+            invocation={displayEntry.invocation}
+            onToolDecisionSubmit={onToolDecisionSubmit}
+            workspaceRootPath={workspaceRootPath}
+          />
+        )),
+      )}
 
       {shouldShowWaitingIndicator ? (
         <ThinkingIndicator variant={waitingIndicatorVariant} />
