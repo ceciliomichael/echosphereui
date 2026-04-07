@@ -24,7 +24,7 @@ interface UseChatInterfaceControllerInput {
       includeUnstaged: boolean
       message: string
       preferredBranchName?: string
-    }) => Promise<GitCommitResult>
+    }) => Promise<GitCommitResult | null>
     refreshStatus: () => Promise<void>
     resetResult: () => void
   }
@@ -66,6 +66,7 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
   const [commitSuccessDialog, setCommitSuccessDialog] = useState<CommitSuccessDialogState | null>(null)
   const [pendingFileActionPath, setPendingFileActionPath] = useState<string | null>(null)
   const previousWorkspacePathRef = useRef<string | null>(null)
+  const activeWorkspacePathRef = useRef<string | null>(activeWorkspacePath?.trim() ?? null)
 
   const isDiffPanelOpen = isRightPanelOpen && rightPanelTab === 'diff'
   const isSourceControlPanelOpen = isRightPanelOpen && rightPanelTab === 'source-control'
@@ -81,6 +82,10 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
       setPendingFileActionPath(null)
     }
   }, [hasRepository])
+
+  useEffect(() => {
+    activeWorkspacePathRef.current = activeWorkspacePath?.trim() ?? null
+  }, [activeWorkspacePath])
 
   useEffect(() => {
     if (!hasRepository) {
@@ -160,7 +165,12 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
       message: string
       preferredBranchName?: string
     }) => {
+      const workspacePathAtStart = activeWorkspacePathRef.current
       const commitResult = await gitCommitState.commit(commitInput)
+      if (!commitResult || workspacePathAtStart !== activeWorkspacePathRef.current) {
+        return
+      }
+
       setIsCommitModalOpen(false)
       setCommitSuccessDialog({
         action: commitInput.action,
@@ -246,11 +256,16 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
 
   const handleQuickCommit = useCallback(
     async (commitInput: { includeUnstaged: boolean; message: string }) => {
-      await gitCommitState.commit({
+      const workspacePathAtStart = activeWorkspacePathRef.current
+      const commitResult = await gitCommitState.commit({
         action: 'commit',
         includeUnstaged: commitInput.includeUnstaged,
         message: commitInput.message,
       })
+
+      if (!commitResult || workspacePathAtStart !== activeWorkspacePathRef.current) {
+        return
+      }
 
       await Promise.all([onDiffRefresh({ forceRefresh: true }), gitBranchState.refresh(), gitCommitState.refreshStatus()])
     },

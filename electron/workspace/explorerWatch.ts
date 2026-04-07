@@ -4,8 +4,8 @@ import { watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 
 const DEFAULT_RELATIVE_PATH = '.'
-const IGNORED_DIRECTORY_NAMES = new Set(['.git', 'node_modules', '.next'])
-const IGNORED_FILE_NAMES = new Set(['.DS_Store', 'Thumbs.db'])
+const IGNORED_DIRECTORY_NAMES = new Set(['.git'])
+const IGNORED_FILE_NAMES = new Set<string>()
 const RELOAD_DEBOUNCE_MS = 100
 const POLL_INTERVAL_MS = 1000
 const SNAPSHOT_ERROR = '__workspace_snapshot_error__'

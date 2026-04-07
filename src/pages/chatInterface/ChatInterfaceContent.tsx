@@ -559,6 +559,7 @@ export function ChatInterfaceContent({
 
           {interfaceController.isSourceControlPanelOpen ? (
             <SourceControlPanel
+              key={workspaceState.activeWorkspacePath?.trim() ?? 'no-workspace'}
               onDiffPanelExpandedFilePathsChange={onDiffPanelExpandedFilePathsChange}
               onDiffPanelSelectedScopeChange={onDiffPanelSelectedScopeChange}
               fileDiffs={gitDiffSnapshot.snapshot.fileDiffs}

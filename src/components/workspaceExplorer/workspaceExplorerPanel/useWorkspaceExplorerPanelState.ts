@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
@@ -47,6 +48,18 @@ function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
   return filePaths
 }
 
+function getSelectionDirectoryPath(entry: WorkspaceExplorerEntry) {
+  return entry.isDirectory ? normalizeEntryPath(entry.relativePath) : toDirectoryKey(getPathDirname(entry.relativePath))
+}
+
+function isTreeShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return !target.matches('input, textarea, [contenteditable="true"]')
+}
+
 export function useWorkspaceExplorerPanelState({
   activeFilePath,
   clipboardEntry,
@@ -75,6 +88,8 @@ export function useWorkspaceExplorerPanelState({
   const [creationName, setCreationName] = useState('')
   const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
   const [contextMenuState, setContextMenuState] = useState<WorkspaceExplorerContextMenuState | null>(null)
+  const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set())
+  const [selectionDirectoryPath, setSelectionDirectoryPath] = useState<string>(ROOT_DIRECTORY_KEY)
   const dragStateRef = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(null)
   const draggedEntryRef = useRef<WorkspaceExplorerEntry | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
@@ -109,6 +124,7 @@ export function useWorkspaceExplorerPanelState({
       try {
         const entries = await window.echosphereWorkspace.listDirectory({
           relativePath: targetPath === ROOT_DIRECTORY_KEY ? undefined : targetPath,
+          visibility: 'explorer',
           workspaceRootPath,
         })
         setDirectoryEntriesByPath((current) => ({
@@ -173,6 +189,8 @@ export function useWorkspaceExplorerPanelState({
     [closeContextMenu, reloadExplorerTree],
   )
 
+  const rootEntries = useMemo(() => directoryEntriesByPath[ROOT_DIRECTORY_KEY] ?? [], [directoryEntriesByPath])
+
   useEffect(() => {
     setDirectoryEntriesByPath({})
     setExpandedDirectories(new Set())
@@ -180,6 +198,8 @@ export function useWorkspaceExplorerPanelState({
     setCreationDraft(null)
     setCreationName('')
     setErrorMessage(null)
+    setSelectedEntryPaths(new Set())
+    setSelectionDirectoryPath(ROOT_DIRECTORY_KEY)
     closeContextMenu()
   }, [closeContextMenu, workspaceRootPath])
 
@@ -392,8 +412,6 @@ export function useWorkspaceExplorerPanelState({
     }
   }, [closeContextMenu, contextMenuState])
 
-  const rootEntries = useMemo(() => directoryEntriesByPath[ROOT_DIRECTORY_KEY] ?? [], [directoryEntriesByPath])
-
   const openContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLElement>, targetEntry: WorkspaceExplorerEntry | null) => {
       if (!isWorkspaceConfigured) {
@@ -402,6 +420,14 @@ export function useWorkspaceExplorerPanelState({
 
       event.preventDefault()
       event.stopPropagation()
+      if (targetEntry) {
+        const nextSelectionDirectoryPath = getSelectionDirectoryPath(targetEntry)
+        setSelectionDirectoryPath(nextSelectionDirectoryPath)
+        setSelectedEntryPaths(new Set([targetEntry.relativePath]))
+      } else {
+        setSelectionDirectoryPath(ROOT_DIRECTORY_KEY)
+        setSelectedEntryPaths(new Set())
+      }
       setContextMenuState({
         position: {
           x: event.clientX,
@@ -498,7 +524,12 @@ export function useWorkspaceExplorerPanelState({
         setErrorMessage(null)
         const loadOperations = [loadDirectory(ROOT_DIRECTORY_KEY), loadDirectory(targetDirectoryRelativePath)]
         if (clipboardEntry?.mode === 'cut') {
-          loadOperations.push(loadDirectory(getPathDirname(clipboardEntry.relativePath)))
+          const sourceParentPaths = Array.from(
+            new Set(clipboardEntry.relativePaths.map((relativePath) => getPathDirname(relativePath))),
+          )
+          for (const sourceParentPath of sourceParentPaths) {
+            loadOperations.push(loadDirectory(sourceParentPath))
+          }
         }
         await Promise.all(loadOperations)
       } catch (error) {
@@ -714,6 +745,30 @@ export function useWorkspaceExplorerPanelState({
     })
   }, [closeContextMenu, contextMenuState, onDeleteEntry, runContextAction])
 
+  const requestCopyOrCutEntries = useCallback(
+    (relativePaths: readonly string[], mode: 'copy' | 'cut') => {
+      const normalizedRelativePaths = Array.from(
+        new Set(relativePaths.map((relativePath) => relativePath.trim()).filter((relativePath) => relativePath.length > 0)),
+      )
+      if (normalizedRelativePaths.length === 0) {
+        closeContextMenu()
+        return
+      }
+
+      void runContextAction(
+        async () => {
+          if (mode === 'copy') {
+            await onCopyEntry(normalizedRelativePaths)
+            return
+          }
+          await onCutEntry(normalizedRelativePaths)
+        },
+        false,
+      )
+    },
+    [closeContextMenu, onCopyEntry, onCutEntry, runContextAction],
+  )
+
   const requestCopyOrCutEntry = useCallback(
     (mode: 'copy' | 'cut') => {
       const targetEntry = contextMenuState?.targetEntry
@@ -722,18 +777,82 @@ export function useWorkspaceExplorerPanelState({
         return
       }
 
-      void runContextAction(
-        async () => {
-          if (mode === 'copy') {
-            await onCopyEntry(targetEntry.relativePath)
-            return
-          }
-          await onCutEntry(targetEntry.relativePath)
-        },
-        false,
-      )
+      requestCopyOrCutEntries([targetEntry.relativePath], mode)
     },
-    [closeContextMenu, contextMenuState, onCopyEntry, onCutEntry, runContextAction],
+    [closeContextMenu, contextMenuState, requestCopyOrCutEntries],
+  )
+
+  const selectEntry = useCallback((entry: WorkspaceExplorerEntry) => {
+    setSelectionDirectoryPath(getSelectionDirectoryPath(entry))
+    setSelectedEntryPaths(new Set([entry.relativePath]))
+  }, [])
+
+  const selectAllEntriesInCurrentDirectory = useCallback(() => {
+    const currentDirectoryEntries =
+      selectionDirectoryPath === ROOT_DIRECTORY_KEY
+        ? rootEntries
+        : directoryEntriesByPath[selectionDirectoryPath] ?? []
+    if (currentDirectoryEntries.length === 0) {
+      return false
+    }
+
+    setSelectedEntryPaths(new Set(currentDirectoryEntries.map((entry) => entry.relativePath)))
+    return true
+  }, [directoryEntriesByPath, rootEntries, selectionDirectoryPath])
+
+  const handleTreeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!isTreeShortcutTarget(event.target)) {
+        return
+      }
+
+      if (!event.ctrlKey && !event.metaKey) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      if (event.shiftKey || event.altKey) {
+        return
+      }
+
+      if (key === 'a') {
+        event.preventDefault()
+        selectAllEntriesInCurrentDirectory()
+        return
+      }
+
+      const selectedRelativePaths =
+        selectedEntryPaths.size > 0
+          ? Array.from(selectedEntryPaths)
+          : activeFilePath
+            ? [activeFilePath]
+            : []
+
+      if (key === 'c') {
+        event.preventDefault()
+        requestCopyOrCutEntries(selectedRelativePaths, 'copy')
+        return
+      }
+
+      if (key === 'x') {
+        event.preventDefault()
+        requestCopyOrCutEntries(selectedRelativePaths, 'cut')
+        return
+      }
+
+      if (key === 'v') {
+        event.preventDefault()
+        void submitPasteEntry(selectionDirectoryPath)
+      }
+    },
+    [
+      activeFilePath,
+      requestCopyOrCutEntries,
+      selectAllEntriesInCurrentDirectory,
+      selectedEntryPaths,
+      selectionDirectoryPath,
+      submitPasteEntry,
+    ],
   )
 
   const toggleDirectory = useCallback(
@@ -754,6 +873,19 @@ export function useWorkspaceExplorerPanelState({
       }
     },
     [directoryEntriesByPath, loadDirectory],
+  )
+
+  const handleEntryClick = useCallback(
+    (entry: WorkspaceExplorerEntry) => {
+      selectEntry(entry)
+      if (entry.isDirectory) {
+        toggleDirectory(entry)
+        return
+      }
+
+      onOpenFile(entry.relativePath)
+    },
+    [onOpenFile, selectEntry, toggleDirectory],
   )
 
   const handleResizePointerDown = useCallback(
@@ -794,6 +926,7 @@ export function useWorkspaceExplorerPanelState({
     handleExternalDrop,
     handleEntryDragEnd,
     handleEntryDragStart,
+    handleEntryClick,
     handleResizePointerDown,
     isResizing,
     isSubmittingCreationRef,
@@ -806,10 +939,12 @@ export function useWorkspaceExplorerPanelState({
     requestDeleteEntry,
     requestRenameEntry,
     rootEntries,
+    selectedEntryPaths,
     startCreateEntry,
     submitCreateEntry,
     submitMoveEntry,
     submitPasteEntry,
+    handleTreeKeyDown,
     treeContainerRef,
     toggleDirectory,
   }

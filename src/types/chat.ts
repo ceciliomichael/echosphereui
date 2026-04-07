@@ -354,9 +354,12 @@ export interface CreateWorkspaceCheckpointInput {
   workspaceRootPath: string
 }
 
+export type WorkspaceDirectoryVisibility = 'explorer' | 'workspace'
+
 export interface WorkspaceExplorerListDirectoryInput {
   relativePath?: string
   workspaceRootPath: string
+  visibility?: WorkspaceDirectoryVisibility
 }
 
 export interface WorkspaceExplorerWatchChangesInput {

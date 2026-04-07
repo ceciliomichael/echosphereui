@@ -14,7 +14,6 @@ interface WorkspaceExplorerPanelViewProps extends WorkspaceExplorerPanelProps {
 export function WorkspaceExplorerPanelView({
   activeFilePath,
   clipboardEntry,
-  onOpenFile,
   panelState,
 }: WorkspaceExplorerPanelViewProps) {
   function isExternalFileDrag(event: ReactDragEvent<HTMLElement>) {
@@ -76,9 +75,15 @@ export function WorkspaceExplorerPanelView({
       const isLoading = isDirectory && panelState.loadingDirectories.has(entryPath)
       const isActiveFile = !isDirectory && activeFilePath === entry.relativePath
       const isContextTarget = panelState.contextMenuState?.targetEntry?.relativePath === entry.relativePath
+      const isSelectedEntry = panelState.selectedEntryPaths.has(entry.relativePath)
       const isDropTarget = isDirectory && panelState.dropTargetDirectoryPath === entry.relativePath
       const isCutEntry =
-        clipboardEntry?.mode === 'cut' && isPathWithinTarget(entry.relativePath, clipboardEntry.relativePath)
+        clipboardEntry?.mode === 'cut' &&
+        clipboardEntry.relativePaths.some(
+          (clipboardPath) =>
+            isPathWithinTarget(entry.relativePath, clipboardPath) ||
+            isPathWithinTarget(clipboardPath, entry.relativePath),
+        )
       const nestedEntries = isDirectory ? panelState.directoryEntriesByPath[entryPath] ?? [] : []
       const fileIconConfig = !isDirectory ? resolveFileIconConfig({ fileName: entry.relativePath }) : null
       const FileIcon = fileIconConfig?.icon
@@ -88,7 +93,7 @@ export function WorkspaceExplorerPanelView({
           <button
             type="button"
             draggable
-            onClick={() => (isDirectory ? panelState.toggleDirectory(entry) : onOpenFile(entry.relativePath))}
+            onClick={() => panelState.handleEntryClick(entry)}
             onContextMenu={(event) => panelState.openContextMenu(event, entry)}
             onDragStart={(event) => panelState.handleEntryDragStart(event, entry)}
             onDragEnd={panelState.handleEntryDragEnd}
@@ -129,11 +134,12 @@ export function WorkspaceExplorerPanelView({
               'flex h-8 w-full min-w-0 items-center gap-1 rounded-none px-2 text-left text-sm transition-colors',
               isCutEntry ? 'opacity-55' : '',
               isDropTarget ? 'bg-surface-muted text-foreground' : '',
-              isActiveFile || isContextTarget
+              isSelectedEntry || isActiveFile || isContextTarget
                 ? 'bg-surface-muted text-foreground'
                 : 'text-muted-foreground hover:bg-surface-muted hover:text-foreground',
             ].join(' ')}
             data-workspace-entry-path={entry.relativePath}
+            aria-selected={isSelectedEntry || isActiveFile || isContextTarget}
             style={{ paddingLeft: `${Math.max(8, depth * 12 + 8)}px` }}
           >
             {isDirectory ? (
@@ -189,7 +195,9 @@ export function WorkspaceExplorerPanelView({
           'min-h-0 flex flex-1 flex-col overflow-y-auto',
           panelState.dropTargetDirectoryPath === ROOT_DIRECTORY_KEY ? 'bg-surface/60' : '',
         ].join(' ')}
+        tabIndex={0}
         onContextMenu={(event) => panelState.openContextMenu(event, null)}
+        onKeyDownCapture={panelState.handleTreeKeyDown}
         onDragOver={(event) => {
           if (event.target !== event.currentTarget) {
             return

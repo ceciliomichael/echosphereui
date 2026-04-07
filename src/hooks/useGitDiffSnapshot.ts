@@ -5,6 +5,7 @@ import {
   getEmptyGitDiffSnapshot,
   loadGitDiffSnapshot,
 } from '../lib/gitDiffSnapshotCache'
+import { normalizeGitWorkspacePath } from '../lib/gitBranchStateCache'
 
 interface UseGitDiffSnapshotInput {
   hasRepository: boolean
@@ -55,23 +56,32 @@ export function useGitDiffSnapshot({
   pollingEnabled = true,
   workspacePath,
 }: UseGitDiffSnapshotInput): UseGitDiffSnapshotResult {
+  const normalizedWorkspacePath = normalizeGitWorkspacePath(workspacePath)
   const [snapshot, setSnapshot] = useState<ConversationDiffSnapshot>(
-    () => getCachedGitDiffSnapshot(workspacePath) ?? getEmptyGitDiffSnapshot(),
+    () => getCachedGitDiffSnapshot(normalizedWorkspacePath) ?? getEmptyGitDiffSnapshot(),
   )
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const requestIdRef = useRef(0)
+  const activeWorkspacePathRef = useRef(normalizedWorkspacePath)
+
+  useEffect(() => {
+    activeWorkspacePathRef.current = normalizedWorkspacePath
+  }, [normalizedWorkspacePath])
 
   const refresh = useCallback(async (options?: { forceRefresh?: boolean; silent?: boolean }) => {
-    if (!hasRepository) {
-      setSnapshot((currentSnapshot) => {
-        const emptySnapshot = getEmptyGitDiffSnapshot()
-        return areDiffSnapshotsEqual(currentSnapshot, emptySnapshot) ? currentSnapshot : emptySnapshot
-      })
-      if (!options?.silent) {
-        setIsLoading(false)
+    const requestWorkspacePath = normalizeGitWorkspacePath(workspacePath)
+    if (!requestWorkspacePath || !hasRepository) {
+      if (requestWorkspacePath === activeWorkspacePathRef.current) {
+        setSnapshot((currentSnapshot) => {
+          const emptySnapshot = getEmptyGitDiffSnapshot()
+          return areDiffSnapshotsEqual(currentSnapshot, emptySnapshot) ? currentSnapshot : emptySnapshot
+        })
+        if (!options?.silent) {
+          setIsLoading(false)
+        }
+        setErrorMessage(null)
       }
-      setErrorMessage(null)
       return
     }
 
@@ -83,16 +93,22 @@ export function useGitDiffSnapshot({
     }
 
     try {
-      const diffSnapshot = await loadGitDiffSnapshot(workspacePath, {
+      const diffSnapshot = await loadGitDiffSnapshot(requestWorkspacePath, {
         forceRefresh: options?.forceRefresh,
       })
-      if (requestId !== requestIdRef.current) {
+      if (
+        requestId !== requestIdRef.current ||
+        requestWorkspacePath !== activeWorkspacePathRef.current
+      ) {
         return
       }
 
       setSnapshot((currentSnapshot) => (areDiffSnapshotsEqual(currentSnapshot, diffSnapshot) ? currentSnapshot : diffSnapshot))
     } catch (error) {
-      if (requestId !== requestIdRef.current) {
+      if (
+        requestId !== requestIdRef.current ||
+        requestWorkspacePath !== activeWorkspacePathRef.current
+      ) {
         return
       }
 
@@ -102,7 +118,11 @@ export function useGitDiffSnapshot({
       })
       setErrorMessage(error instanceof Error ? error.message : 'Failed to load git diffs.')
     } finally {
-      if (requestId === requestIdRef.current && !options?.silent) {
+      if (
+        requestId === requestIdRef.current &&
+        requestWorkspacePath === activeWorkspacePathRef.current &&
+        !options?.silent
+      ) {
         setIsLoading(false)
       }
     }

@@ -16,7 +16,7 @@ export interface WorkspaceUiSession {
 
 export interface WorkspaceClipboardEntry {
   mode: "copy" | "cut";
-  relativePath: string;
+  relativePaths: string[];
 }
 
 export interface UseChatWorkspaceUiStateInput {
@@ -47,12 +47,12 @@ export interface ChatWorkspaceUiState {
   handleCloseWorkspaceTab: (relativePath: string) => void;
   handleConversationDiffPanelWidthChange: (nextWidth: number) => void;
   handleConversationDiffPanelWidthCommit: (nextWidth: number) => void;
-  handleCopyWorkspaceEntry: (relativePath: string) => Promise<void>;
+  handleCopyWorkspaceEntry: (relativePaths: string[]) => Promise<void>;
   handleCreateWorkspaceEntry: (
     relativePath: string,
     isDirectory: boolean,
   ) => Promise<void>;
-  handleCutWorkspaceEntry: (relativePath: string) => Promise<void>;
+  handleCutWorkspaceEntry: (relativePaths: string[]) => Promise<void>;
   handleDeleteWorkspaceEntry: (relativePath: string) => Promise<void>;
   handleImportWorkspaceEntry: (
     sourcePath: string,

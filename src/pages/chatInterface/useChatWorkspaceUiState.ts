@@ -408,7 +408,9 @@ export function useChatWorkspaceUiState({
       setWorkspaceClipboard((currentClipboard) => {
         if (
           !currentClipboard ||
-          !isWorkspacePathWithinTarget(currentClipboard.relativePath, targetPath)
+          !currentClipboard.relativePaths.some((relativePath) =>
+            isWorkspacePathWithinTarget(relativePath, targetPath),
+          )
         ) {
           return currentClipboard;
         }

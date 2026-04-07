@@ -2,16 +2,16 @@ import type { WorkspaceExplorerEntry } from '../../../types/chat'
 
 export interface WorkspaceClipboardEntry {
   mode: 'copy' | 'cut'
-  relativePath: string
+  relativePaths: string[]
 }
 
 export interface WorkspaceExplorerPanelProps {
   activeFilePath: string | null
   clipboardEntry: WorkspaceClipboardEntry | null
   isOpen: boolean
-  onCopyEntry: (relativePath: string) => Promise<void>
+  onCopyEntry: (relativePaths: string[]) => Promise<void>
   onCreateEntry: (relativePath: string, isDirectory: boolean) => Promise<void>
-  onCutEntry: (relativePath: string) => Promise<void>
+  onCutEntry: (relativePaths: string[]) => Promise<void>
   onDeleteEntry: (relativePath: string) => Promise<void>
   onMoveEntry: (relativePath: string, targetDirectoryRelativePath: string) => Promise<void>
   onImportEntry: (sourcePath: string, targetDirectoryRelativePath: string) => Promise<void>

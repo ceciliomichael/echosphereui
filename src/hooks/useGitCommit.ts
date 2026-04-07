@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatProviderId, GitCommitAction, GitCommitResult, GitStatusResult, ReasoningEffort } from '../types/chat'
+import { normalizeGitWorkspacePath } from '../lib/gitBranchStateCache'
 
 interface UseGitCommitInput {
   hasRepository: boolean
@@ -15,7 +16,7 @@ interface UseGitCommitResult {
     includeUnstaged: boolean
     message: string
     preferredBranchName?: string
-  }) => Promise<GitCommitResult>
+  }) => Promise<GitCommitResult | null>
   errorMessage: string | null
   isCommitting: boolean
   isLoadingStatus: boolean
@@ -42,38 +43,53 @@ export function useGitCommit({
   reasoningEffort,
   workspacePath,
 }: UseGitCommitInput): UseGitCommitResult {
+  const normalizedWorkspacePath = normalizeGitWorkspacePath(workspacePath)
   const [status, setStatus] = useState<GitStatusResult | null>(null)
   const [isLoadingStatus, setIsLoadingStatus] = useState(false)
   const [isCommitting, setIsCommitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastCommitResult, setLastCommitResult] = useState<GitCommitResult | null>(null)
-  const requestIdRef = useRef(0)
+  const statusRequestIdRef = useRef(0)
+  const commitRequestIdRef = useRef(0)
+  const activeWorkspacePathRef = useRef(normalizedWorkspacePath)
+
+  useEffect(() => {
+    activeWorkspacePathRef.current = normalizedWorkspacePath
+    setStatus(null)
+    setIsLoadingStatus(false)
+    setIsCommitting(false)
+    setErrorMessage(null)
+    setLastCommitResult(null)
+  }, [normalizedWorkspacePath])
 
   const refreshStatus = useCallback(async () => {
-    const normalizedPath = workspacePath?.trim() ?? ''
-    if (normalizedPath.length === 0 || !hasRepository) {
-      setStatus(EMPTY_STATUS)
-      setIsLoadingStatus(false)
+    const requestWorkspacePath = normalizeGitWorkspacePath(workspacePath)
+    if (!requestWorkspacePath || !hasRepository) {
+      if (requestWorkspacePath === activeWorkspacePathRef.current) {
+        setStatus(EMPTY_STATUS)
+        setIsLoadingStatus(false)
+        setErrorMessage(null)
+      }
       return
     }
 
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
+    const requestId = statusRequestIdRef.current + 1
+    statusRequestIdRef.current = requestId
     setIsLoadingStatus(true)
     setErrorMessage(null)
 
     try {
-      const nextStatus = await window.echosphereGit.getStatus(normalizedPath)
-      if (requestId === requestIdRef.current) {
+      const nextStatus = await window.echosphereGit.getStatus(requestWorkspacePath)
+      if (requestId === statusRequestIdRef.current && requestWorkspacePath === activeWorkspacePathRef.current) {
         setStatus(nextStatus)
       }
     } catch (error) {
-      if (requestId === requestIdRef.current) {
+      if (requestId === statusRequestIdRef.current && requestWorkspacePath === activeWorkspacePathRef.current) {
         setStatus(EMPTY_STATUS)
         setErrorMessage(error instanceof Error ? error.message : 'Failed to load git status.')
       }
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (requestId === statusRequestIdRef.current && requestWorkspacePath === activeWorkspacePathRef.current) {
         setIsLoadingStatus(false)
       }
     }
@@ -93,12 +109,14 @@ export function useGitCommit({
     includeUnstaged: boolean
     message: string
     preferredBranchName?: string
-  }): Promise<GitCommitResult> => {
-    const normalizedPath = workspacePath?.trim() ?? ''
-    if (normalizedPath.length === 0) {
+  }): Promise<GitCommitResult | null> => {
+    const requestWorkspacePath = normalizeGitWorkspacePath(workspacePath)
+    if (!requestWorkspacePath) {
       throw new Error('Workspace path is required.')
     }
 
+    const requestId = commitRequestIdRef.current + 1
+    commitRequestIdRef.current = requestId
     setIsCommitting(true)
     setErrorMessage(null)
 
@@ -111,17 +129,36 @@ export function useGitCommit({
         preferredBranchName: input.preferredBranchName,
         providerId: providerId ?? undefined,
         reasoningEffort,
-        workspacePath: normalizedPath,
+        workspacePath: requestWorkspacePath,
       })
+
+      if (
+        requestId !== commitRequestIdRef.current ||
+        requestWorkspacePath !== activeWorkspacePathRef.current
+      ) {
+        return null
+      }
 
       setLastCommitResult(result)
       return result
     } catch (error) {
+      if (
+        requestId !== commitRequestIdRef.current ||
+        requestWorkspacePath !== activeWorkspacePathRef.current
+      ) {
+        return null
+      }
+
       const nextError = error instanceof Error ? error : new Error('Failed to commit changes.')
       setErrorMessage(nextError.message)
       throw nextError
     } finally {
-      setIsCommitting(false)
+      if (
+        requestId === commitRequestIdRef.current &&
+        requestWorkspacePath === activeWorkspacePathRef.current
+      ) {
+        setIsCommitting(false)
+      }
     }
   }, [modelId, providerId, reasoningEffort, workspacePath])
 

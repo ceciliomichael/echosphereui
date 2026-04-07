@@ -30,6 +30,7 @@ import type {
   WorkspaceExplorerWriteFileInput,
   WorkspaceExplorerWriteFileResult,
 } from '../../src/types/chat'
+import type { WorkspaceEntryVisibility } from './gitignoreMatcher'
 const MAX_TEXT_FILE_BYTES = 256 * 1024
 const REFACTOR_CANDIDATE_LINE_THRESHOLD = 300
 const REFACTOR_CODE_EXTENSIONS = new Set([
@@ -132,6 +133,10 @@ async function countCandidateFileLines(targetPath: string, threshold: number) {
   return lineCount > threshold ? lineCount : 0
 }
 
+function shouldApplyGitignoreFiltering(visibility: WorkspaceEntryVisibility) {
+  return visibility === 'workspace'
+}
+
 async function statIfExists(targetPath: string) {
   return fs.stat(targetPath).catch((error: unknown) => {
     const code = (error as NodeJS.ErrnoException).code
@@ -213,6 +218,7 @@ async function resolveTransferDestinationPath(
 
 export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirectoryInput) {
   const workspaceRootPath = normalizeWorkspacePath(input.workspaceRootPath)
+  const visibility = input.visibility ?? 'workspace'
   await assertWorkspaceDirectory(workspaceRootPath)
   const target = getSafeWorkspaceTargetPath(workspaceRootPath, input.relativePath)
   const targetStats = await fs.stat(target.absolutePath).catch((error: unknown) => {
@@ -226,7 +232,9 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
   }
 
   const directoryEntries = await fs.readdir(target.absolutePath, { withFileTypes: true })
-  const gitignoreMatchers = await loadGitignoreMatchers(workspaceRootPath, target.absolutePath)
+  const gitignoreMatchers = shouldApplyGitignoreFiltering(visibility)
+    ? await loadGitignoreMatchers(workspaceRootPath, target.absolutePath)
+    : []
   const explorerEntries: WorkspaceExplorerEntry[] = []
   for (const directoryEntry of directoryEntries) {
     if (directoryEntry.isSymbolicLink()) {
@@ -236,10 +244,11 @@ export async function listWorkspaceDirectory(input: WorkspaceExplorerListDirecto
     if (!isDirectory && !directoryEntry.isFile()) {
       continue
     }
-    if (shouldIgnoreWorkspaceEntry(directoryEntry.name)) {
+    if (shouldIgnoreWorkspaceEntry(directoryEntry.name, visibility)) {
       continue
     }
     if (
+      shouldApplyGitignoreFiltering(visibility) &&
       !shouldAlwaysShowEntry(directoryEntry.name) &&
       isGitignored(path.join(target.absolutePath, directoryEntry.name), isDirectory, gitignoreMatchers)
     ) {
@@ -293,15 +302,12 @@ export async function listWorkspaceRefactorCandidates(
         continue
       }
 
-      if (shouldIgnoreWorkspaceEntry(directoryEntry.name)) {
+      if (shouldIgnoreWorkspaceEntry(directoryEntry.name, 'workspace')) {
         continue
       }
 
       const entryAbsolutePath = path.join(directoryAbsolutePath, directoryEntry.name)
-      if (
-        !shouldAlwaysShowEntry(directoryEntry.name) &&
-        isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)
-      ) {
+      if (!shouldAlwaysShowEntry(directoryEntry.name) && isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)) {
         continue
       }
 
@@ -324,10 +330,10 @@ export async function listWorkspaceRefactorCandidates(
         continue
       }
 
-      candidates.push({
-        lineCount,
-        relativePath: entryRelativePath,
-      })
+        candidates.push({
+          lineCount,
+          relativePath: entryRelativePath,
+        })
     }
   }
 

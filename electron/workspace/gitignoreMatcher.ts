@@ -7,7 +7,10 @@ interface GitignoreMatcherEntry {
   matcher: ignore.Ignore
 }
 
-const ALWAYS_IGNORED_ENTRY_NAMES = new Set(['.git', 'node_modules', '.next', '.DS_Store', 'Thumbs.db'])
+export type WorkspaceEntryVisibility = 'explorer' | 'workspace'
+
+const WORKSPACE_IGNORED_ENTRY_NAMES = new Set(['node_modules', '.next', '.DS_Store', 'Thumbs.db'])
+const EXPLORER_IGNORED_ENTRY_NAMES = new Set(['.git'])
 
 function toPosixRelativePath(fromPath: string, toPath: string) {
   return path.relative(fromPath, toPath).split(path.sep).join('/')
@@ -83,6 +86,14 @@ export function shouldAlwaysShowEntry(entryName: string) {
   return entryName.toLowerCase().startsWith('.env')
 }
 
-export function shouldIgnoreWorkspaceEntry(entryName: string) {
-  return ALWAYS_IGNORED_ENTRY_NAMES.has(entryName)
+export function shouldIgnoreWorkspaceEntry(entryName: string, visibility: WorkspaceEntryVisibility = 'workspace') {
+  if (EXPLORER_IGNORED_ENTRY_NAMES.has(entryName)) {
+    return true
+  }
+
+  if (visibility === 'explorer') {
+    return false
+  }
+
+  return WORKSPACE_IGNORED_ENTRY_NAMES.has(entryName)
 }

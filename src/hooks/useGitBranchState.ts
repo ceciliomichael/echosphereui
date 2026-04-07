@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranchState } from '../types/chat'
 import {
   getCachedGitBranchState,
@@ -21,35 +21,63 @@ interface UseGitBranchStateResult {
 }
 
 export function useGitBranchState(workspacePath: string | null | undefined): UseGitBranchStateResult {
+  const normalizedWorkspacePath = normalizeGitWorkspacePath(workspacePath)
   const [branchState, setBranchState] = useState<GitBranchState>(
-    () => getCachedGitBranchState(workspacePath) ?? EMPTY_BRANCH_STATE,
+    () => getCachedGitBranchState(normalizedWorkspacePath) ?? EMPTY_BRANCH_STATE,
   )
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
+  const requestIdRef = useRef(0)
+  const activeWorkspacePathRef = useRef(normalizedWorkspacePath)
+
+  useEffect(() => {
+    activeWorkspacePathRef.current = normalizedWorkspacePath
+  }, [normalizedWorkspacePath])
 
   const refresh = useCallback(async () => {
-    const normalizedWorkspacePath = normalizeGitWorkspacePath(workspacePath)
-    if (!normalizedWorkspacePath) {
-      setBranchState(EMPTY_BRANCH_STATE)
-      setErrorMessage(null)
-      setIsLoading(false)
+    const requestWorkspacePath = normalizeGitWorkspacePath(workspacePath)
+    if (!requestWorkspacePath) {
+      if (requestWorkspacePath === activeWorkspacePathRef.current) {
+        setBranchState(EMPTY_BRANCH_STATE)
+        setErrorMessage(null)
+        setIsLoading(false)
+      }
       return
     }
 
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setIsLoading(true)
     setErrorMessage(null)
 
     try {
-      const nextBranchState = await loadGitBranchState(normalizedWorkspacePath, {
+      const nextBranchState = await loadGitBranchState(requestWorkspacePath, {
         forceRefresh: true,
       })
+      if (
+        requestId !== requestIdRef.current ||
+        requestWorkspacePath !== activeWorkspacePathRef.current
+      ) {
+        return
+      }
+
       setBranchState(nextBranchState)
     } catch (error) {
-      setBranchState(EMPTY_BRANCH_STATE)
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to load git branches.')
+      if (
+        requestId === requestIdRef.current &&
+        requestWorkspacePath === activeWorkspacePathRef.current
+      ) {
+        setBranchState(EMPTY_BRANCH_STATE)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to load git branches.')
+      }
     } finally {
-      setIsLoading(false)
+      if (
+        requestId === requestIdRef.current &&
+        requestWorkspacePath === activeWorkspacePathRef.current
+      ) {
+        setIsLoading(false)
+      }
     }
   }, [workspacePath])
 
@@ -72,16 +100,16 @@ export function useGitBranchState(workspacePath: string | null | undefined): Use
 
       try {
         const nextBranchState = await loadGitBranchState(normalizedWorkspacePath)
-        if (!isCancelled) {
+        if (!isCancelled && normalizedWorkspacePath === activeWorkspacePathRef.current) {
           setBranchState(nextBranchState)
         }
       } catch (error) {
-        if (!isCancelled) {
+        if (!isCancelled && normalizedWorkspacePath === activeWorkspacePathRef.current) {
           setBranchState(EMPTY_BRANCH_STATE)
           setErrorMessage(error instanceof Error ? error.message : 'Failed to load git branches.')
         }
       } finally {
-        if (!isCancelled) {
+        if (!isCancelled && normalizedWorkspacePath === activeWorkspacePathRef.current) {
           setIsLoading(false)
         }
       }
@@ -108,7 +136,9 @@ export function useGitBranchState(workspacePath: string | null | undefined): Use
           workspacePath: normalizedWorkspacePath,
         })
         storeCachedGitBranchState(normalizedWorkspacePath, nextBranchState)
-        setBranchState(nextBranchState)
+        if (normalizedWorkspacePath === activeWorkspacePathRef.current) {
+          setBranchState(nextBranchState)
+        }
       } catch (error) {
         const nextError = error instanceof Error ? error : new Error('Failed to switch branches.')
         setErrorMessage(nextError.message)
@@ -136,7 +166,9 @@ export function useGitBranchState(workspacePath: string | null | undefined): Use
           workspacePath: normalizedWorkspacePath,
         })
         storeCachedGitBranchState(normalizedWorkspacePath, nextBranchState)
-        setBranchState(nextBranchState)
+        if (normalizedWorkspacePath === activeWorkspacePathRef.current) {
+          setBranchState(nextBranchState)
+        }
       } catch (error) {
         const nextError = error instanceof Error ? error : new Error('Failed to create branch.')
         setErrorMessage(nextError.message)

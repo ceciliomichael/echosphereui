@@ -21,6 +21,10 @@ interface WorkspaceEntryHandlersInput extends WorkspaceTabsControlInput {
   workspaceClipboard: WorkspaceClipboardEntry | null;
 }
 
+function uniqueRelativePaths(relativePaths: readonly string[]) {
+  return Array.from(new Set(relativePaths.filter((relativePath) => relativePath.trim().length > 0)))
+}
+
 export function createClearWorkspaceClipboardByPathPrefix({
   setWorkspaceClipboard,
 }: ClearWorkspaceClipboardInput) {
@@ -28,7 +32,9 @@ export function createClearWorkspaceClipboardByPathPrefix({
     setWorkspaceClipboard((currentClipboard) => {
       if (
         !currentClipboard ||
-        !isWorkspacePathWithinTarget(currentClipboard.relativePath, targetPath)
+        !currentClipboard.relativePaths.some((relativePath) =>
+          isWorkspacePathWithinTarget(relativePath, targetPath),
+        )
       ) {
         return currentClipboard;
       }
@@ -108,17 +114,17 @@ export function createWorkspaceEntryHandlers({
     });
   };
 
-  const handleCopyWorkspaceEntry = async (relativePath: string) => {
+  const handleCopyWorkspaceEntry = async (relativePaths: string[]) => {
     setWorkspaceClipboard({
       mode: "copy",
-      relativePath,
+      relativePaths: uniqueRelativePaths(relativePaths),
     });
   };
 
-  const handleCutWorkspaceEntry = async (relativePath: string) => {
+  const handleCutWorkspaceEntry = async (relativePaths: string[]) => {
     setWorkspaceClipboard({
       mode: "cut",
-      relativePath,
+      relativePaths: uniqueRelativePaths(relativePaths),
     });
   };
 
@@ -133,19 +139,22 @@ export function createWorkspaceEntryHandlers({
       throw new Error("Nothing to paste.");
     }
 
-    const result = await window.echosphereWorkspace.transferEntry({
-      mode: workspaceClipboard.mode === "cut" ? "move" : "copy",
-      relativePath: workspaceClipboard.relativePath,
-      targetDirectoryRelativePath,
-      workspaceRootPath,
-    });
+    const relativePaths = uniqueRelativePaths(workspaceClipboard.relativePaths);
+    for (const relativePath of relativePaths) {
+      const result = await window.echosphereWorkspace.transferEntry({
+        mode: workspaceClipboard.mode === "cut" ? "move" : "copy",
+        relativePath,
+        targetDirectoryRelativePath,
+        workspaceRootPath,
+      });
 
-    if (
-      result.mode === "move" &&
-      result.targetRelativePath !== result.relativePath
-    ) {
-      clearWorkspaceClipboardByPathPrefix(result.relativePath);
-      closeWorkspaceTabsByPathPrefix(result.relativePath);
+      if (
+        result.mode === "move" &&
+        result.targetRelativePath !== result.relativePath
+      ) {
+        clearWorkspaceClipboardByPathPrefix(result.relativePath);
+        closeWorkspaceTabsByPathPrefix(result.relativePath);
+      }
     }
   };
 
