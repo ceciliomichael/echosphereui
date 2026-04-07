@@ -16,7 +16,7 @@ import type { AgentToolExecutionResult } from './toolTypes'
 const CHAT_STREAM_EVENT_CHANNEL = 'chat:stream:event'
 // Tool-heavy coding runs routinely exceed a dozen read/search/edit steps.
 // Keep the limit high enough that the AI SDK does not terminate mid-task.
-const MAX_TOOL_STEPS = 64
+const MAX_TOOL_STEPS = 99999
 
 interface ToolInvocationState {
   argumentsText: string
