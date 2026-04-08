@@ -16,6 +16,8 @@ const ANSI_CSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
 const ANSI_OSC_PATTERN = /\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)/g
 const ANSI_SINGLE_ESCAPE_PATTERN = /\u001B[@-Z\\-_]/g
 const TERMINAL_CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B-\u001A\u001C-\u001F\u007F]/g
+const TERMINAL_OUTPUT_BEGIN_PREFIX = '╭─<<-- begin'
+const TERMINAL_OUTPUT_END_PREFIX = '╰─<<-- end'
 
 interface TerminalThreadSessionState {
   globalToLocalSessionId: Map<number, number>
@@ -109,6 +111,14 @@ function getSessionIdLabel(sessionId: number) {
   return `session ${sessionId}`
 }
 
+function formatTerminalOutputEnvelope(label: string, bodyLines: string[]) {
+  return [
+    `${TERMINAL_OUTPUT_BEGIN_PREFIX} ${label} -->>─╮`,
+    ...bodyLines,
+    `${TERMINAL_OUTPUT_END_PREFIX} ${label} -->>─╯`,
+  ].join('\n')
+}
+
 function normalizeCommand(command: string | undefined) {
   if (typeof command !== 'string') {
     return null
@@ -178,7 +188,7 @@ function buildRunTerminalResult(snapshot: CreateTerminalSessionResult, command: 
   }
 
   return createSuccessResult({
-    body: bodyLines.join('\n'),
+    body: formatTerminalOutputEnvelope(`terminal ${getSessionIdLabel(snapshot.sessionId)}`, bodyLines),
     semantics: {
       command,
       session_id: snapshot.sessionId,
@@ -205,7 +215,10 @@ function buildGetTerminalOutputResult(snapshot: TerminalSessionSnapshot) {
   }
 
   return createSuccessResult({
-    body: bodyLines.join('\n'),
+    body: formatTerminalOutputEnvelope(
+      `terminal output ${getSessionIdLabel(snapshot.sessionId)}`,
+      bodyLines,
+    ),
     semantics: {
       exit_code: snapshot.exitCode,
       has_exited: snapshot.hasExited,
