@@ -25,7 +25,6 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
   const context = await createToolContext(input)
   const wholeFileApplyTool = createWholeFileApplyTool(context)
   const isPlanMode = options?.chatMode === 'plan'
-
   const tools: ToolSet = {
     list: tool({
       description: 'List the immediate contents of a workspace directory. Prefer this before reading when you need orientation.',
@@ -164,6 +163,17 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
         }
       },
     }),
+  }
+
+  try {
+    const isElectronRuntime = typeof process !== 'undefined' && Boolean(process.versions.electron)
+    if (isElectronRuntime) {
+      const { getMcpServerManager } = await import('../../../mcp/serverManager')
+      const mcpTools = await getMcpServerManager().getToolSet(context.workspaceRootPath)
+      Object.assign(tools, mcpTools)
+    }
+  } catch (error) {
+    console.error('Failed to load MCP tools', error)
   }
 
   if (isPlanMode) {

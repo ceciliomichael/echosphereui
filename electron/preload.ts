@@ -40,6 +40,7 @@ import type {
   WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
+import type { EchosphereMcpApi, McpAddServerInput, McpState } from '../src/types/mcp'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -90,6 +91,28 @@ const settingsApi: EchosphereSettingsApi = {
   getInitialSettings: () => parseInitialSettingsArg(process.argv),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   updateSettings: (input: Partial<AppSettings>) => ipcRenderer.invoke('settings:update', input),
+}
+
+const mcpApi: EchosphereMcpApi = {
+  addServer: (input: McpAddServerInput, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:addServer', input, workspacePath),
+  connectServer: (serverId: string, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:connectServer', serverId, workspacePath),
+  disconnectServer: (serverId: string, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:disconnectServer', serverId, workspacePath),
+  getState: (workspacePath?: string | null) => ipcRenderer.invoke('mcp:getState', workspacePath),
+  onStateChange: (listener: (payload: { state: McpState; workspacePath: string | null }) => void) => {
+    const wrappedListener = (_event: unknown, payload: { state: McpState; workspacePath: string | null }) =>
+      listener(payload)
+    ipcRenderer.on('mcp:stateChanged', wrappedListener)
+    return () => {
+      ipcRenderer.off('mcp:stateChanged', wrappedListener)
+    }
+  },
+  refreshServer: (serverId: string, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:refreshServer', serverId, workspacePath),
+  toggleTool: (serverId: string, toolName: string, enabled: boolean, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:toggleTool', serverId, toolName, enabled, workspacePath),
 }
 
 const providersApi: EchosphereProvidersApi = {
@@ -198,6 +221,7 @@ const terminalApi: EchosphereTerminalApi = {
 
 contextBridge.exposeInMainWorld('echosphereHistory', historyApi)
 contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
+contextBridge.exposeInMainWorld('echosphereMcp', mcpApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)

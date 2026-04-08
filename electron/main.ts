@@ -51,6 +51,7 @@ import type {
   WorkspaceExplorerWatchChangesInput,
   WriteTerminalSessionInput,
 } from '../src/types/chat'
+import type { McpAddServerInput } from '../src/types/mcp'
 import {
   appendStoredMessages,
   createStoredFolder,
@@ -128,6 +129,7 @@ import {
   restoreWorkspaceCheckpoint,
   restoreWorkspaceCheckpointSequence,
 } from './workspace/checkpoints'
+import { getMcpServerManager } from './mcp/serverManager'
 import {
   disposeWorkspaceExplorerWatchers,
   subscribeWorkspaceExplorerChanges,
@@ -171,6 +173,7 @@ app.commandLine.appendSwitch(
 
 let win: BrowserWindow | null
 const activeChatStreamProviders = new Map<string, StartChatStreamInput['providerId']>()
+const mcpServerManager = getMcpServerManager()
 
 // --- Instance / profile isolation ---
 //
@@ -520,6 +523,27 @@ function registerHistoryHandlers() {
   )
 }
 
+function registerMcpHandlers() {
+  ipcMain.handle('mcp:getState', async (_event, workspacePath?: string | null) =>
+    mcpServerManager.getState(workspacePath),
+  )
+  ipcMain.handle('mcp:addServer', async (_event, input: McpAddServerInput, workspacePath?: string | null) =>
+    mcpServerManager.addServer(input, workspacePath),
+  )
+  ipcMain.handle('mcp:connectServer', async (_event, serverId: string, workspacePath?: string | null) =>
+    mcpServerManager.connectServer(serverId, workspacePath),
+  )
+  ipcMain.handle('mcp:disconnectServer', async (_event, serverId: string, workspacePath?: string | null) =>
+    mcpServerManager.disconnectServer(serverId, workspacePath),
+  )
+  ipcMain.handle('mcp:refreshServer', async (_event, serverId: string, workspacePath?: string | null) =>
+    mcpServerManager.refreshServer(serverId, workspacePath),
+  )
+  ipcMain.handle('mcp:toggleTool', async (_event, serverId: string, toolName: string, enabled: boolean, workspacePath?: string | null) =>
+    mcpServerManager.toggleTool(serverId, toolName, enabled, workspacePath),
+  )
+}
+
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
@@ -546,9 +570,16 @@ app.on('before-quit', (event) => {
     .catch((error) => {
       console.error('Failed to flush settings updates on quit', error)
     })
-    .finally(() => {
-      app.quit()
-    })
+    .finally(() =>
+      mcpServerManager
+        .dispose()
+        .catch((error) => {
+          console.error('Failed to dispose MCP manager on quit', error)
+        })
+        .finally(() => {
+          app.quit()
+        }),
+    )
 })
 
 app.on('activate', () => {
@@ -561,6 +592,18 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   registerHistoryHandlers()
+  registerMcpHandlers()
+  mcpServerManager.onStateChange(({ state, workspacePath }) => {
+    const currentWindow = win
+    if (!currentWindow) {
+      return
+    }
+
+    currentWindow.webContents.send('mcp:stateChanged', {
+      state,
+      workspacePath,
+    })
+  })
 
   void initializeProvidersState().catch((error) => {
     console.error('Failed to preload providers state', error)

@@ -10,11 +10,13 @@ import {
   getSettingsItem,
   type SettingsItemId,
 } from '../components/settings/settingsItems'
+import { useMcpServersState } from '../hooks/useMcpServersState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppSettingsSaveState } from '../hooks/useAppSettings'
 import type { AppSettings, ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../types/chat'
 
 interface SettingsInterfaceProps {
+  activeWorkspacePath: string | null
   isSettingsLoading: boolean
   onBackToApp: () => void
   onSidebarWidthChange: (sidebarWidth: number) => void
@@ -38,6 +40,7 @@ interface SettingsInterfaceProps {
 }
 
 export function SettingsInterface({
+  activeWorkspacePath,
   isSettingsLoading,
   onBackToApp,
   onSidebarWidthChange,
@@ -49,6 +52,7 @@ export function SettingsInterface({
 }: SettingsInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(DEFAULT_SETTINGS_ITEM_ID)
+  const mcpSettings = useMcpServersState(activeWorkspacePath)
 
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
@@ -93,6 +97,16 @@ export function SettingsInterface({
               sendMessageOnEnter: settings.sendMessageOnEnter,
               workspaceFileEditorWordWrap: settings.workspaceFileEditorWordWrap,
             },
+          }}
+          mcpSettings={{
+            activeOperation: mcpSettings.activeOperation,
+            onAddServer: mcpSettings.addServer,
+            errorMessage: mcpSettings.errorMessage,
+            isLoading: mcpSettings.isLoading,
+            onConnectServer: mcpSettings.connectServer,
+            onDisconnectServer: mcpSettings.disconnectServer,
+            onToggleTool: mcpSettings.toggleTool,
+            state: mcpSettings.state,
           }}
           modelsSettings={{
             providersState: providersState.providersState,

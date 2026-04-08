@@ -30,6 +30,7 @@ export default function App() {
     revertEditSessionsByConversation: settings.revertEditSessionsByConversation,
     shouldInitializeHistory: bootPreferredConversationId !== undefined,
   })
+  const activeWorkspacePath = chatMessages.activeConversationRootPath ?? chatMessages.selectedFolderPath
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
     void updateSettings({ sidebarWidth })
   }, [updateSettings])
@@ -156,10 +157,11 @@ export default function App() {
 
       {activeScreen === 'settings' ? (
         <div className="absolute inset-0 z-50">
-          <SettingsInterface
-            settings={settings}
-            isSettingsLoading={isLoading}
-            settingsSaveState={saveState}
+        <SettingsInterface
+          activeWorkspacePath={activeWorkspacePath}
+          settings={settings}
+          isSettingsLoading={isLoading}
+          settingsSaveState={saveState}
             onBackToApp={() => setActiveScreen('chat')}
             onSidebarWidthChange={handleSidebarWidthChange}
             onUpdateSettings={updateSettings}

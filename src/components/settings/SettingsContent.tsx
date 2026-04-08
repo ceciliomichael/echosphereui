@@ -1,4 +1,5 @@
 import { GeneralSettingsPanel } from './general/GeneralSettingsPanel'
+import { McpServersSettingsPanel } from './mcp/McpServersSettingsPanel'
 import { ModelsSettingsPanel } from './models/ModelsSettingsPanel'
 import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
@@ -6,6 +7,7 @@ import { getSettingsItem, type SettingsItemId } from './settingsItems'
 import type { AppAppearance, AppLanguage } from '../../lib/appSettings'
 import type { AppSettingsSaveState } from '../../hooks/useAppSettings'
 import type { ApiKeyProviderId, AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
+import type { McpAddServerInput, McpState } from '../../types/mcp'
 
 interface GeneralSettingsViewModel {
   isLoading: boolean
@@ -22,6 +24,16 @@ interface GeneralSettingsViewModel {
 interface SettingsContentProps {
   activeItemId: SettingsItemId
   generalSettings: GeneralSettingsViewModel
+  mcpSettings: {
+    activeOperation: string | null
+    onAddServer: (input: McpAddServerInput) => Promise<boolean>
+    errorMessage: string | null
+    isLoading: boolean
+    onConnectServer: (serverId: string) => Promise<boolean>
+    onDisconnectServer: (serverId: string) => Promise<boolean>
+    onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
+    state: McpState | null
+  }
   modelsSettings: {
     providersState: ProvidersState | null
   }
@@ -40,7 +52,13 @@ interface SettingsContentProps {
   }
 }
 
-export function SettingsContent({ activeItemId, generalSettings, modelsSettings, providersSettings }: SettingsContentProps) {
+export function SettingsContent({
+  activeItemId,
+  generalSettings,
+  mcpSettings,
+  modelsSettings,
+  providersSettings,
+}: SettingsContentProps) {
   const activeItem = getSettingsItem(activeItemId)
 
   return (
@@ -51,6 +69,8 @@ export function SettingsContent({ activeItemId, generalSettings, modelsSettings,
         <ProvidersSettingsPanel {...providersSettings} />
       ) : activeItemId === 'settings-item3' ? (
         <ModelsSettingsPanel {...modelsSettings} />
+      ) : activeItemId === 'settings-item4' ? (
+        <McpServersSettingsPanel {...mcpSettings} />
       ) : (
         <SettingsPlaceholderPanel item={activeItem} />
       )}

@@ -16,8 +16,8 @@ export const SETTINGS_ITEMS = [
   },
   {
     id: 'settings-item4',
-    label: 'settings-item4',
-    description: 'Reserved for the fourth settings surface.',
+    label: 'MCP Servers',
+    description: 'Configure and connect external MCP servers.',
   },
   {
     id: 'settings-item5',

@@ -1,0 +1,7 @@
+{
+  "servers": {
+    "read_mcp": {
+      "autoConnect": true
+    }
+  }
+}

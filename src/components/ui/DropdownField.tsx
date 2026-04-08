@@ -125,12 +125,25 @@ export function DropdownField({
       }
     }
 
+    function handleWindowScroll(event: Event) {
+      const target = event.target
+      if (
+        target instanceof Node &&
+        !containerRef.current?.contains(target) &&
+        !listboxRef.current?.contains(target)
+      ) {
+        setIsOpen(false)
+      }
+    }
+
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('keydown', handleEscape)
+    window.addEventListener('scroll', handleWindowScroll, true)
 
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('scroll', handleWindowScroll, true)
     }
   }, [isOpen])
 

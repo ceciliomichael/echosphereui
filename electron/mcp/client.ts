@@ -1,0 +1,57 @@
+import { app } from 'electron'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import type { McpServerConfig, McpTool } from '../../src/types/mcp'
+import { createMcpTransport } from './transportFactory'
+
+export interface ConnectedMcpServer {
+  client: Client
+  tools: McpTool[]
+  transport: Transport
+}
+
+function toMcpTool(tool: {
+  description?: string
+  inputSchema: Record<string, unknown>
+  name: string
+  outputSchema?: Record<string, unknown>
+  title?: string
+}) {
+  return {
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    name: tool.name,
+    outputSchema: tool.outputSchema,
+    title: tool.title,
+  }
+}
+
+export async function connectMcpServer(
+  config: McpServerConfig,
+  workspacePath?: string | null,
+): Promise<ConnectedMcpServer> {
+  const transport = createMcpTransport(config, workspacePath)
+  const client = new Client(
+    {
+      name: app.getName() || 'Echosphere',
+      version: app.getVersion() || '0.0.0',
+    },
+    {
+      capabilities: {
+        roots: {
+          listChanged: true,
+        },
+      },
+    },
+  )
+
+  await client.connect(transport)
+  const result = await client.listTools()
+
+  return {
+    client,
+    tools: result.tools.map((tool) => toMcpTool(tool)),
+    transport,
+  }
+}
+
