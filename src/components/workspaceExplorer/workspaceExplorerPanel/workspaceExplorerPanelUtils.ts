@@ -1,5 +1,8 @@
 import type { CSSProperties } from 'react'
-import type { WorkspaceExplorerContextMenuState } from './workspaceExplorerPanelTypes'
+import type {
+  WorkspaceExplorerContextMenuDimensions,
+  WorkspaceExplorerContextMenuState,
+} from './workspaceExplorerPanelTypes'
 
 export const ROOT_DIRECTORY_KEY = '.'
 
@@ -50,6 +53,7 @@ export function getWorkspaceExplorerContextMenuStyle(
     width: number
     height: number
   },
+  menuDimensions: WorkspaceExplorerContextMenuDimensions | null,
 ): CSSProperties {
   if (!contextMenuState) {
     return {
@@ -59,8 +63,10 @@ export function getWorkspaceExplorerContextMenuStyle(
     }
   }
 
-  const menuWidth = 210
-  const menuHeight = 280
+  const fallbackMenuWidth = 210
+  const fallbackMenuHeight = 280
+  const menuWidth = menuDimensions?.width ?? fallbackMenuWidth
+  const menuHeight = menuDimensions?.height ?? fallbackMenuHeight
   const viewportPadding = 8
   const left = Math.min(contextMenuState.position.x, viewportSize.width - menuWidth - viewportPadding)
   const top = Math.min(contextMenuState.position.y, viewportSize.height - menuHeight - viewportPadding)
@@ -68,6 +74,8 @@ export function getWorkspaceExplorerContextMenuStyle(
   return {
     left: Math.max(left, viewportPadding),
     top: Math.max(top, viewportPadding),
+    maxHeight: `${Math.max(viewportSize.height - viewportPadding * 2, 0)}px`,
+    overflowY: 'auto',
     visibility: 'visible',
   }
 }

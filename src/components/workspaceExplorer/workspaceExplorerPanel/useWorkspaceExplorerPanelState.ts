@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -14,6 +15,7 @@ import type { WorkspaceExplorerEntry } from '../../../types/chat'
 import { clampWorkspaceExplorerWidth } from '../../../lib/workspaceExplorerSizing'
 import { getPathBasename, getPathDirname } from '../../../lib/pathPresentation'
 import type { WorkspaceExplorerPanelProps } from './workspaceExplorerPanelTypes'
+import type { WorkspaceExplorerContextMenuDimensions } from './workspaceExplorerPanelTypes'
 import {
   ROOT_DIRECTORY_KEY,
   getAncestorDirectoryPaths,
@@ -88,6 +90,7 @@ export function useWorkspaceExplorerPanelState({
   const [creationName, setCreationName] = useState('')
   const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
   const [contextMenuState, setContextMenuState] = useState<WorkspaceExplorerContextMenuState | null>(null)
+  const [contextMenuDimensions, setContextMenuDimensions] = useState<WorkspaceExplorerContextMenuDimensions | null>(null)
   const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set())
   const [selectionDirectoryPath, setSelectionDirectoryPath] = useState<string>(ROOT_DIRECTORY_KEY)
   const dragStateRef = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(null)
@@ -110,7 +113,49 @@ export function useWorkspaceExplorerPanelState({
     return getWorkspaceExplorerContextMenuStyle(contextMenuState, {
       height: window.innerHeight,
       width: window.innerWidth,
-    })
+    }, contextMenuDimensions)
+  }, [contextMenuDimensions, contextMenuState])
+
+  useLayoutEffect(() => {
+    if (!contextMenuState) {
+      setContextMenuDimensions(null)
+      return
+    }
+
+    const contextMenuElement = contextMenuRef.current
+    if (!contextMenuElement) {
+      return
+    }
+
+    const updateContextMenuDimensions = () => {
+      const nextRect = contextMenuElement.getBoundingClientRect()
+      setContextMenuDimensions((currentDimensions) => {
+        if (
+          currentDimensions?.width === nextRect.width &&
+          currentDimensions?.height === nextRect.height
+        ) {
+          return currentDimensions
+        }
+
+        return {
+          height: nextRect.height,
+          width: nextRect.width,
+        }
+      })
+    }
+
+    updateContextMenuDimensions()
+
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(updateContextMenuDimensions)
+    resizeObserver.observe(contextMenuElement)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
   }, [contextMenuState])
 
   const loadDirectory = useCallback(

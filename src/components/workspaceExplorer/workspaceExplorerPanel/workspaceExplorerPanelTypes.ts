@@ -32,6 +32,11 @@ export interface WorkspaceExplorerContextMenuState {
   targetEntry: WorkspaceExplorerEntry | null
 }
 
+export interface WorkspaceExplorerContextMenuDimensions {
+  height: number
+  width: number
+}
+
 export interface PendingExplorerCreation {
   isDirectory: boolean
   parentPath: string
