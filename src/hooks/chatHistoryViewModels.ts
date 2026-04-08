@@ -3,6 +3,7 @@ import { getChatAttachmentSummary } from '../lib/chatAttachments'
 import { getConversationPreviewContent } from '../lib/chatMessageMetadata'
 import type {
   ChatAttachment,
+  FolderMoveDirection,
   ConversationFolderSummary,
   ConversationGroupPreview,
   ConversationPreview,
@@ -221,5 +222,26 @@ export function insertFolderSummary(
   folderSummaries: ConversationFolderSummary[],
   nextFolder: ConversationFolderSummary,
 ) {
-  return [...folderSummaries, nextFolder].sort((left, right) => left.createdAt - right.createdAt)
+  return [...folderSummaries, nextFolder]
+}
+
+export function moveFolderSummary(
+  folderSummaries: ConversationFolderSummary[],
+  folderId: string,
+  direction: FolderMoveDirection,
+) {
+  const currentIndex = folderSummaries.findIndex((folder) => folder.id === folderId)
+  if (currentIndex < 0) {
+    return folderSummaries
+  }
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+  if (targetIndex < 0 || targetIndex >= folderSummaries.length) {
+    return folderSummaries
+  }
+
+  const nextFolders = [...folderSummaries]
+  const [movedFolder] = nextFolders.splice(currentIndex, 1)
+  nextFolders.splice(targetIndex, 0, movedFolder)
+  return nextFolders
 }

@@ -9,6 +9,7 @@ interface SidebarPanelProps {
   onCreateFolder: () => Promise<void>
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
+  onMoveFolder: (folderId: string, direction: 'up' | 'down') => Promise<void>
   onOpenSettings: () => void
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
@@ -21,6 +22,7 @@ export function SidebarPanel({
   onCreateConversation,
   onDeleteConversation,
   onDeleteFolder,
+  onMoveFolder,
   onOpenSettings,
   onRenameFolder,
   onSelectConversation,
@@ -33,7 +35,7 @@ export function SidebarPanel({
 
   return (
     <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--sidebar-panel-surface)] pb-5 pl-4 pr-0 pt-3 md:pl-5 md:pr-0">
-      <div className="pb-4">
+      <div className="pb-4 pr-6 md:pr-7">
         <div className="h-10" aria-hidden="true" />
 
         <div className="mt-4 flex items-center justify-between gap-3">
@@ -63,6 +65,7 @@ export function SidebarPanel({
           onCreateConversation={onCreateConversation}
           onDeleteConversation={onDeleteConversation}
           onDeleteFolder={onDeleteFolder}
+          onMoveFolder={onMoveFolder}
           onRenameFolder={onRenameFolder}
           onSelectConversation={onSelectConversation}
           onSelectFolder={onSelectFolder}

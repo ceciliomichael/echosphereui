@@ -19,6 +19,7 @@ import type {
   SaveCustomModelInput,
   RenameConversationFolderInput,
   CreateConversationFolderInput,
+  FolderMoveDirection,
   CreateConversationInput,
   CreateWorkspaceCheckpointInput,
   EchosphereHistoryApi,
@@ -71,6 +72,8 @@ const historyApi: EchosphereHistoryApi = {
     ipcRenderer.invoke('history:getUserMessageCheckpointHistory', conversationId, messageId),
   createConversation: (input?: CreateConversationInput) => ipcRenderer.invoke('history:create', input),
   createFolder: (input: CreateConversationFolderInput) => ipcRenderer.invoke('history:createFolder', input),
+  moveFolder: (folderId: string, direction: FolderMoveDirection) =>
+    ipcRenderer.invoke('history:moveFolder', folderId, direction),
   renameFolder: (input: RenameConversationFolderInput) => ipcRenderer.invoke('history:renameFolder', input),
   deleteFolder: (folderId: string) => ipcRenderer.invoke('history:deleteFolder', folderId),
   pickFolder: () => ipcRenderer.invoke('history:pickFolder'),

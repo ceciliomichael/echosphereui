@@ -8,6 +8,7 @@ interface ConversationHistoryListProps {
   onCreateConversation: (folderId?: string | null) => void
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
+  onMoveFolder: (folderId: string, direction: 'up' | 'down') => Promise<void>
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
@@ -54,6 +55,7 @@ export function ConversationHistoryList({
   onSelectConversation,
   onDeleteConversation,
   onDeleteFolder,
+  onMoveFolder,
   onRenameFolder,
   onSelectFolder,
 }: ConversationHistoryListProps) {
@@ -102,6 +104,9 @@ export function ConversationHistoryList({
         <div className="space-y-2.5">
           {conversationGroups.map((group) => {
             const stateKey = group.folder.id ?? 'unfiled'
+            const folderIndex = conversationGroups.findIndex((candidate) => candidate.folder.id === group.folder.id)
+            const canMoveUp = group.folder.id !== null && folderIndex > 1
+            const canMoveDown = group.folder.id !== null && folderIndex > 0 && folderIndex < conversationGroups.length - 1
 
             return (
               <ConversationFolderSection
@@ -109,12 +114,15 @@ export function ConversationHistoryList({
                 group={group}
                 isCollapsed={Boolean(collapsedFolderState[stateKey])}
                 onCreateConversation={onCreateConversation}
+                onMoveFolder={onMoveFolder}
                 onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
                 onDeleteFolder={onDeleteFolder}
                 onRenameFolder={onRenameFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectConversation={onSelectConversation}
                 onDeleteConversation={onDeleteConversation}
+                canMoveUp={canMoveUp}
+                canMoveDown={canMoveDown}
               />
             )
           })}

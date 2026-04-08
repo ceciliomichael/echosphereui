@@ -1,5 +1,10 @@
 import { useCallback } from 'react'
-import type { ConversationFolderSummary, ConversationRecord, ConversationSummary } from '../types/chat'
+import type {
+  ConversationFolderSummary,
+  ConversationRecord,
+  ConversationSummary,
+  FolderMoveDirection,
+} from '../types/chat'
 import type { ConversationRuntimeSnapshot } from './chatMessageSendTypes'
 
 interface UseChatConversationActionsInput {
@@ -17,6 +22,7 @@ interface UseChatConversationActionsInput {
   }
   removeFolder: (folderId: string, deletedConversationIds: readonly string[]) => void
   removeConversationRuntime: (conversationId: string) => void
+  moveFolder: (folderId: string, direction: FolderMoveDirection) => void
   renameFolder: (folderId: string, name: string) => void
   replaceConversationSummaries: (summaries: ConversationSummary[]) => void
   resetComposerState: () => void
@@ -39,6 +45,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     getDeletionContext,
     removeFolder,
     removeConversationRuntime,
+    moveFolder,
     renameFolder,
     replaceConversationSummaries,
     resetComposerState,
@@ -251,6 +258,18 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
       } catch (caughtError) {
         console.error(caughtError)
         setError('Unable to remove that project folder.')
+        throw caughtError
+      }
+    },
+    moveFolder: async (folderId: string, direction: FolderMoveDirection) => {
+      clearError()
+
+      try {
+        await window.echosphereHistory.moveFolder(folderId, direction)
+        moveFolder(folderId, direction)
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to reorder that project folder.')
         throw caughtError
       }
     },

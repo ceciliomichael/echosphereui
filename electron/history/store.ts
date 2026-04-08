@@ -8,6 +8,7 @@ import type {
   RenameConversationFolderInput,
   ReplaceConversationMessagesInput,
   CreateConversationInput,
+  FolderMoveDirection,
 } from '../../src/types/chat'
 import {
   appendMessagesToLog,
@@ -75,6 +76,31 @@ export async function listStoredConversations() {
 
 export async function listStoredFolders() {
   return toFolderSummaries(await readFolderStore())
+}
+
+export async function moveStoredFolder(folderId: string, direction: FolderMoveDirection) {
+  const folders = await readFolderStore()
+  const currentIndex = folders.findIndex((folder) => folder.id === folderId)
+
+  if (currentIndex < 0) {
+    throw new Error(`Folder not found: ${folderId}`)
+  }
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+  if (targetIndex < 0 || targetIndex >= folders.length) {
+    return folders[currentIndex]
+  }
+
+  const nextFolders = [...folders]
+  const [movedFolder] = nextFolders.splice(currentIndex, 1)
+  const updatedFolder = {
+    ...movedFolder,
+    updatedAt: Date.now(),
+  }
+  nextFolders.splice(targetIndex, 0, updatedFolder)
+
+  await writeFolderStore(nextFolders)
+  return updatedFolder
 }
 
 export async function getStoredConversation(conversationId: string) {

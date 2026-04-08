@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ConversationFolderSummary } from '../src/types/chat'
-import { getFolderIdForWorkspacePath } from '../src/hooks/chatHistoryViewModels'
+import { getFolderIdForWorkspacePath, insertFolderSummary, moveFolderSummary } from '../src/hooks/chatHistoryViewModels'
 
 const folderSummaries: ConversationFolderSummary[] = [
   {
@@ -31,4 +31,24 @@ test('getFolderIdForWorkspacePath treats path separators and case differences as
 test('getFolderIdForWorkspacePath returns null for unmatched or empty paths', () => {
   assert.equal(getFolderIdForWorkspacePath(folderSummaries, 'C:/Projects/Gamma'), null)
   assert.equal(getFolderIdForWorkspacePath(folderSummaries, '   '), null)
+})
+
+test('insertFolderSummary preserves explicit folder ordering', () => {
+  const nextFolders = insertFolderSummary(folderSummaries, {
+    id: 'folder-c',
+    name: 'Project Gamma',
+    path: '/projects/gamma',
+    createdAt: 3,
+    updatedAt: 3,
+  })
+
+  assert.deepEqual(nextFolders.map((folder) => folder.id), ['folder-a', 'folder-b', 'folder-c'])
+})
+
+test('moveFolderSummary reorders folders by moving a folder up or down', () => {
+  const movedDown = moveFolderSummary(folderSummaries, 'folder-a', 'down')
+  assert.deepEqual(movedDown.map((folder) => folder.id), ['folder-b', 'folder-a'])
+
+  const movedUp = moveFolderSummary(folderSummaries, 'folder-b', 'up')
+  assert.deepEqual(movedUp.map((folder) => folder.id), ['folder-b', 'folder-a'])
 })

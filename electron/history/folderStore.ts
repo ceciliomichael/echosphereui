@@ -37,5 +37,5 @@ export async function ensureStoredFolderExists(folderId: string | null | undefin
 }
 
 export function toFolderSummaries(folders: ConversationFolderRecord[]) {
-  return [...folders].sort((left, right) => left.createdAt - right.createdAt) satisfies ConversationFolderSummary[]
+  return [...folders] satisfies ConversationFolderSummary[]
 }

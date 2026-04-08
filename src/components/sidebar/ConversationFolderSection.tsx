@@ -1,10 +1,11 @@
-import { ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
 import { ConversationHistoryItem } from './ConversationHistoryItem'
 import { RemoveProjectFolderDialog } from './RemoveProjectFolderDialog'
+import type { FolderMoveDirection } from '../../types/chat'
 
 interface ConversationFolderSectionProps {
   group: ConversationGroupPreview
@@ -12,10 +13,13 @@ interface ConversationFolderSectionProps {
   onCreateConversation: (folderId?: string | null) => void
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
+  onMoveFolder: (folderId: string, direction: FolderMoveDirection) => Promise<void>
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectFolder: (folderId: string | null) => void
   onSelectConversation: (conversationId: string) => void
   onToggleCollapsed: () => void
+  canMoveUp: boolean
+  canMoveDown: boolean
 }
 
 const MAX_VISIBLE_PROJECT_FOLDER_THREADS = 5
@@ -27,9 +31,12 @@ export function ConversationFolderSection({
   onToggleCollapsed,
   onRenameFolder,
   onDeleteFolder,
+  onMoveFolder,
   onSelectFolder,
   onSelectConversation,
   onDeleteConversation,
+  canMoveUp,
+  canMoveDown,
 }: ConversationFolderSectionProps) {
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
   const hasFolderActions = group.folder.id !== null
@@ -234,6 +241,15 @@ export function ConversationFolderSection({
     setIsRemoveDialogOpen(true)
   }
 
+  function handleMoveFolder(direction: FolderMoveDirection) {
+    if (!group.folder.id) {
+      return
+    }
+
+    setIsActionsMenuOpen(false)
+    void onMoveFolder(group.folder.id, direction)
+  }
+
   async function handleConfirmRemoveFolder() {
     if (!group.folder.id) {
       return
@@ -431,23 +447,45 @@ export function ConversationFolderSection({
               className="fixed z-[1200] min-w-[200px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-soft"
               style={actionsMenuStyle}
             >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleRenameFolder}
-                className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
-              >
-                Rename project folder
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleRemoveFolder}
-                className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
-              >
-                Remove project folder
-              </button>
-            </div>,
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleRenameFolder}
+                  className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
+                >
+                  Rename project folder
+                </button>
+                {canMoveUp ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleMoveFolder('up')}
+                    className="flex h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
+                  >
+                    <ArrowUp size={15} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
+                    <span>Move up</span>
+                  </button>
+                ) : null}
+                {canMoveDown ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleMoveFolder('down')}
+                    className="flex h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
+                  >
+                    <ArrowDown size={15} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
+                    <span>Move down</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleRemoveFolder}
+                  className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
+                >
+                  Remove project folder
+                </button>
+              </div>,
             document.body,
           )
         : null}

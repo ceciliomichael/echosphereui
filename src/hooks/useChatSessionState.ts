@@ -12,6 +12,7 @@ import {
   getFolderIdForWorkspacePath,
   getSelectedFolderName,
   insertFolderSummary,
+  moveFolderSummary,
   removeConversationSummary,
   upsertConversationSummary,
 } from './chatHistoryViewModels'
@@ -136,6 +137,10 @@ export function useChatSessionState(language: AppLanguage) {
     setFolderSummaries((currentValue) =>
       currentValue.map((folder) => (folder.id === folderId ? { ...folder, name } : folder)),
     )
+  }, [])
+
+  const moveFolder = useCallback((folderId: string, direction: 'up' | 'down') => {
+    setFolderSummaries((currentValue) => moveFolderSummary(currentValue, folderId, direction))
   }, [])
 
   const removeFolder = useCallback(
@@ -352,6 +357,7 @@ export function useChatSessionState(language: AppLanguage) {
     isLoading,
     removeFolder,
     removeConversationRuntime,
+    moveFolder,
     renameFolder,
     replaceConversationSummaries: setConversationSummaries,
     runningConversationIds,

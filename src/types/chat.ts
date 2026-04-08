@@ -189,6 +189,8 @@ export interface RenameConversationFolderInput {
   name: string
 }
 
+export type FolderMoveDirection = 'up' | 'down'
+
 export interface AppendConversationMessagesInput {
   chatMode?: ChatMode
   conversationId: string
@@ -770,6 +772,7 @@ export interface EchosphereHistoryApi {
   getUserMessageCheckpointHistory: (conversationId: string, messageId: string) => Promise<UserMessageRunCheckpoint[]>
   createConversation: (input?: CreateConversationInput) => Promise<ConversationRecord>
   createFolder: (input: CreateConversationFolderInput) => Promise<ConversationFolderRecord>
+  moveFolder: (folderId: string, direction: FolderMoveDirection) => Promise<ConversationFolderRecord>
   renameFolder: (input: RenameConversationFolderInput) => Promise<ConversationFolderRecord>
   deleteFolder: (folderId: string) => Promise<string[]>
   pickFolder: () => Promise<ConversationFolderRecord | null>

@@ -21,6 +21,7 @@ import type {
   CreateGitBranchInput,
   CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
+  FolderMoveDirection,
   WorkspaceExplorerCreateEntryInput,
   WorkspaceExplorerDeleteEntryInput,
   WorkspaceExplorerListDirectoryInput,
@@ -60,6 +61,7 @@ import {
   getStoredUserMessageCheckpointHistory,
   listStoredConversations,
   listStoredFolders,
+  moveStoredFolder,
   renameStoredFolder,
   replaceStoredMessages,
   updateStoredConversationTitle,
@@ -311,6 +313,9 @@ function registerHistoryHandlers() {
   ipcMain.handle('history:create', async (_event, input?: CreateConversationInput) => createStoredConversation(input))
   ipcMain.handle('history:createFolder', async (_event, input: CreateConversationFolderInput) =>
     createStoredFolder(input),
+  )
+  ipcMain.handle('history:moveFolder', async (_event, folderId: string, direction: FolderMoveDirection) =>
+    moveStoredFolder(folderId, direction),
   )
   ipcMain.handle('history:renameFolder', async (_event, input: RenameConversationFolderInput) =>
     renameStoredFolder(input),

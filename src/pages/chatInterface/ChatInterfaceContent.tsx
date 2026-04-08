@@ -188,6 +188,14 @@ export function ChatInterfaceContent({
     [chatMessages, clearQueuedMessages],
   )
 
+  const handleMoveFolder = useCallback(
+    async (folderId: string, direction: 'up' | 'down') => {
+      clearQueuedMessages()
+      await chatMessages.moveFolder(folderId, direction)
+    },
+    [chatMessages, clearQueuedMessages],
+  )
+
   const handleRevertUserMessage = useCallback(
     async (messageId: string) => {
       clearQueuedMessages()
@@ -286,6 +294,7 @@ export function ChatInterfaceContent({
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}
           onDeleteFolder={handleDeleteFolder}
+          onMoveFolder={handleMoveFolder}
           onOpenSettings={onOpenSettings}
           onRenameFolder={chatMessages.renameFolder}
           onSelectConversation={handleSelectConversation}
