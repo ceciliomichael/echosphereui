@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { twMerge } from 'tailwind-merge'
 import { useFloatingMenuPosition } from '../../hooks/useFloatingMenuPosition'
 
 export interface DropdownOption {
@@ -24,6 +25,7 @@ interface DropdownFieldProps {
   id?: string
   onChange: (value: string) => void
   options: readonly DropdownOption[]
+  triggerClassName?: string
   value: string
   variant?: 'default' | 'text'
 }
@@ -41,6 +43,7 @@ export function DropdownField({
   id,
   onChange,
   options,
+  triggerClassName,
   value,
   variant = 'default',
 }: DropdownFieldProps) {
@@ -247,7 +250,7 @@ export function DropdownField({
         onClick={() => setIsOpen((currentValue) => !currentValue)}
         onKeyDown={handleButtonKeyDown}
         data-open={isOpen ? 'true' : 'false'}
-        className={[
+        className={twMerge(
           variant === 'text'
             ? 'chat-runtime-control-trigger justify-start disabled:cursor-not-allowed'
             : [
@@ -257,7 +260,8 @@ export function DropdownField({
                   : 'border-border',
               ].join(' '),
           variant === 'text' || fitToContent ? 'w-auto max-w-full' : 'w-full',
-        ].join(' ')}
+          triggerClassName,
+        )}
       >
         <span
           className={[

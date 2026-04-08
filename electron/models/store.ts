@@ -152,6 +152,10 @@ export async function saveCustomModelConfig(input: SaveCustomModelInput) {
 
   const label = input.label?.trim() || apiModelId
   const providerId = input.providerId
+  if (!isCustomModelProviderId(providerId)) {
+    throw new Error(`Unsupported custom model provider: ${providerId}`)
+  }
+
   const now = new Date().toISOString()
   const currentModelsByProvider = await readStoredCustomModelsByProvider()
   const providerModels = currentModelsByProvider[providerId] ?? []
