@@ -127,29 +127,6 @@ function setCachedDiffLines(cacheKey: string, diffLines: DiffLine[]) {
   }
 }
 
-export function calculateVisibleDiffRange(input: {
-  elementTop: number
-  lineHeight: number
-  overscanCount: number
-  totalLineCount: number
-  viewportHeight: number
-  viewportTop: number
-}) {
-  const totalHeight = input.totalLineCount * input.lineHeight
-  const visibleTop = Math.max(0, Math.min(totalHeight, input.viewportTop - input.elementTop))
-  const visibleBottom = Math.max(0, Math.min(totalHeight, input.viewportTop + input.viewportHeight - input.elementTop))
-  const startIndex = Math.max(0, Math.floor(visibleTop / input.lineHeight) - input.overscanCount)
-  const endIndex = Math.min(
-    input.totalLineCount,
-    Math.ceil(visibleBottom / input.lineHeight) + input.overscanCount,
-  )
-
-  return {
-    endIndex,
-    startIndex,
-  }
-}
-
 function filterDiffWithContext(diffLines: DiffLine[], contextLines: number | undefined) {
   if (contextLines === undefined) {
     return diffLines

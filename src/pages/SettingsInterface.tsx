@@ -105,6 +105,7 @@ export function SettingsInterface({
             isLoading: mcpSettings.isLoading,
             onConnectServer: mcpSettings.connectServer,
             onDisconnectServer: mcpSettings.disconnectServer,
+            onRemoveServer: mcpSettings.removeServer,
             onToggleTool: mcpSettings.toggleTool,
             state: mcpSettings.state,
           }}

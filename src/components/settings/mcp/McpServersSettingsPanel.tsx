@@ -13,6 +13,7 @@ interface McpServersSettingsPanelProps {
   onAddServer: (input: McpAddServerInput) => Promise<boolean>
   onConnectServer: (serverId: string) => Promise<boolean>
   onDisconnectServer: (serverId: string) => Promise<boolean>
+  onRemoveServer: (serverId: string) => Promise<boolean>
   onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
   state: McpState | null
 }
@@ -24,6 +25,7 @@ export function McpServersSettingsPanel({
   onAddServer,
   onConnectServer,
   onDisconnectServer,
+  onRemoveServer,
   onToggleTool,
   state,
 }: McpServersSettingsPanelProps) {
@@ -68,6 +70,7 @@ export function McpServersSettingsPanel({
           configs={configs}
           onConnect={onConnectServer}
           onDisconnect={onDisconnectServer}
+          onRemove={onRemoveServer}
           onToggleTool={onToggleTool}
           statuses={statuses}
         />

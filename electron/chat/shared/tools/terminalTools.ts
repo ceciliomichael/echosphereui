@@ -12,10 +12,11 @@ import { resolveWorkspaceTargetPath } from './workspaceTools'
 
 const MAX_TERMINAL_OUTPUT_BODY_LENGTH = 20_000
 const DEFAULT_TERMINAL_POLLING_MS = 15_000
-const ANSI_CSI_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g
-const ANSI_OSC_PATTERN = /\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)/g
-const ANSI_SINGLE_ESCAPE_PATTERN = /\u001B[@-Z\\-_]/g
-const TERMINAL_CONTROL_CHARACTER_PATTERN = /[\u0000-\u0008\u000B-\u001A\u001C-\u001F\u007F]/g
+const ANSI_ESCAPE = '\\u001B'
+const TERMINAL_BELL = '\\u0007'
+const ANSI_CSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-?]*[ -/]*[@-~]`, 'g')
+const ANSI_OSC_PATTERN = new RegExp(`${ANSI_ESCAPE}\\][^${TERMINAL_BELL}${ANSI_ESCAPE}]*(?:${TERMINAL_BELL}|${ANSI_ESCAPE}\\\\)`, 'g')
+const ANSI_SINGLE_ESCAPE_PATTERN = new RegExp(`${ANSI_ESCAPE}[@-Z\\-_]`, 'g')
 const TERMINAL_OUTPUT_BEGIN_PREFIX = '╭─<<-- begin'
 const TERMINAL_OUTPUT_END_PREFIX = '╰─<<-- end'
 
@@ -104,7 +105,17 @@ function sanitizeTerminalOutput(value: string) {
     .replace(ANSI_OSC_PATTERN, '')
     .replace(ANSI_CSI_PATTERN, '')
     .replace(ANSI_SINGLE_ESCAPE_PATTERN, '')
-    .replace(TERMINAL_CONTROL_CHARACTER_PATTERN, '')
+    .split('')
+    .filter((character) => {
+      const code = character.charCodeAt(0)
+      return !(
+        (code >= 0 && code <= 8) ||
+        code === 11 ||
+        (code >= 26 && code <= 31) ||
+        code === 127
+      )
+    })
+    .join('')
 }
 
 function getSessionIdLabel(sessionId: number) {

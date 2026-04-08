@@ -20,7 +20,6 @@ import { searchVisibleFiles } from './ripgrepFallback'
 const DEFAULT_READ_LIMIT = 2000
 const LIST_LIMIT = 100
 const SEARCH_LIMIT = 100
-const DEFAULT_GREP_INCLUDE_GLOB = '**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}'
 const MAX_LINE_LENGTH = 2000
 const MAX_READ_BYTES = 50 * 1024
 const MAX_READ_BYTES_LABEL = `${MAX_READ_BYTES / 1024} KB`
@@ -416,9 +415,9 @@ export async function createGrepToolResult(
   include: string | undefined,
   regex?: boolean,
 ) {
-  const effectiveInclude = include && include.trim().length > 0 ? include.trim() : DEFAULT_GREP_INCLUDE_GLOB
+  const effectiveInclude = include?.trim()
   const result = await searchVisibleFiles(absolutePath, pattern, effectiveInclude, SEARCH_LIMIT, {
-    regex: regex === true,
+    regex: regex !== false,
   })
   if (result.matches.length === 0) {
     return createSuccessResult({
@@ -426,7 +425,7 @@ export async function createGrepToolResult(
       semantics: {
         match_count: 0,
         pattern,
-        regex: regex === true,
+        regex: regex !== false,
       },
       subject: {
         kind: 'directory',
@@ -459,7 +458,7 @@ export async function createGrepToolResult(
     semantics: {
       match_count: result.matches.length,
       pattern,
-      regex: regex === true,
+      regex: regex !== false,
     },
     subject: {
       kind: 'directory',

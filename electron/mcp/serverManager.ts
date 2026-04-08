@@ -13,6 +13,7 @@ import { createMcpToolSetForServer } from './toolAdapter'
 import { connectMcpServer } from './client'
 import {
   appendMcpServerConfig,
+  deleteMcpConfig,
   ensureMcpConfigExists,
   getMcpGlobalConfigPath,
   getMcpProjectConfigPath,
@@ -324,6 +325,21 @@ class McpWorkspaceSession {
     return this.buildState()
   }
 
+  async removeServer(serverId: string) {
+    await this.ensureLoaded()
+    const runtime = this.getRuntime(serverId)
+    const config = this.configsById.get(serverId)
+
+    if (!runtime || !config) {
+      throw new Error(`MCP server not found: ${serverId}`)
+    }
+
+    await this.disconnectRuntime(serverId, runtime, true)
+    await deleteMcpConfig(serverId, this.workspacePath)
+    await this.stateStore.removeServer(config.name, this.workspacePath)
+    return this.reload()
+  }
+
   async refreshServer(serverId: string) {
     await this.ensureLoaded()
     const runtime = this.getRuntime(serverId)
@@ -469,6 +485,15 @@ export class McpServerManager {
 
   async disconnectServer(serverId: string, workspacePath?: string | null) {
     const state = await this.getSession(workspacePath).disconnectServer(serverId)
+    this.emitter.emit('state', {
+      state,
+      workspacePath: normalizeWorkspacePath(workspacePath),
+    })
+    return state
+  }
+
+  async removeServer(serverId: string, workspacePath?: string | null) {
+    const state = await this.getSession(workspacePath).removeServer(serverId)
     this.emitter.emit('state', {
       state,
       workspacePath: normalizeWorkspacePath(workspacePath),

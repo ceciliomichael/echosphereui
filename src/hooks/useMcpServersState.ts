@@ -8,6 +8,7 @@ interface UseMcpServersStateResult {
   disconnectServer: (serverId: string) => Promise<boolean>
   errorMessage: string | null
   isLoading: boolean
+  removeServer: (serverId: string) => Promise<boolean>
   refreshServer: (serverId: string) => Promise<boolean>
   state: McpState | null
   toggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
@@ -149,6 +150,19 @@ export function useMcpServersState(workspacePath?: string | null): UseMcpServers
     [normalizedWorkspacePath, runOperation],
   )
 
+  const removeServer = useCallback(
+    async (serverId: string) =>
+      runOperation(`remove:${serverId}`, async () => {
+        const api = getMcpApi()
+        if (!api) {
+          throw new Error('MCP is unavailable in this renderer.')
+        }
+
+        return api.removeServer(serverId, normalizedWorkspacePath)
+      }),
+    [normalizedWorkspacePath, runOperation],
+  )
+
   const refreshServer = useCallback(
     async (serverId: string) =>
       runOperation(`refresh:${serverId}`, async () => {
@@ -195,6 +209,7 @@ export function useMcpServersState(workspacePath?: string | null): UseMcpServers
     disconnectServer,
     errorMessage,
     isLoading,
+    removeServer,
     refreshServer,
     state,
     toggleTool,

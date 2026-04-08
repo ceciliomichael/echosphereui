@@ -216,7 +216,7 @@ test('get_terminal_output uses the fixed polling window and returns cleaned outp
   assert.match(result.body ?? '', /line 1/u)
   assert.match(result.body ?? '', /line 2/u)
   assert.match(result.body ?? '', /╰─<<-- end terminal output session 1 -->>─╯/u)
-  assert.doesNotMatch(result.body ?? '', /\u001B/u)
+  assert.ok(!(result.body ?? '').includes('\u001B'))
   assert.doesNotMatch(result.body ?? '', /CWD:/u)
   assert.doesNotMatch(result.body ?? '', /Shell:/u)
   assert.doesNotMatch(result.body ?? '', /Polling:/u)

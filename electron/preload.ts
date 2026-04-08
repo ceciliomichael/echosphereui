@@ -109,6 +109,8 @@ const mcpApi: EchosphereMcpApi = {
       ipcRenderer.off('mcp:stateChanged', wrappedListener)
     }
   },
+  removeServer: (serverId: string, workspacePath?: string | null) =>
+    ipcRenderer.invoke('mcp:removeServer', serverId, workspacePath),
   refreshServer: (serverId: string, workspacePath?: string | null) =>
     ipcRenderer.invoke('mcp:refreshServer', serverId, workspacePath),
   toggleTool: (serverId: string, toolName: string, enabled: boolean, workspacePath?: string | null) =>

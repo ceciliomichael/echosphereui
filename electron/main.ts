@@ -536,6 +536,9 @@ function registerMcpHandlers() {
   ipcMain.handle('mcp:disconnectServer', async (_event, serverId: string, workspacePath?: string | null) =>
     mcpServerManager.disconnectServer(serverId, workspacePath),
   )
+  ipcMain.handle('mcp:removeServer', async (_event, serverId: string, workspacePath?: string | null) =>
+    mcpServerManager.removeServer(serverId, workspacePath),
+  )
   ipcMain.handle('mcp:refreshServer', async (_event, serverId: string, workspacePath?: string | null) =>
     mcpServerManager.refreshServer(serverId, workspacePath),
   )

@@ -90,6 +90,7 @@ export async function cancelCodexChatStream(streamId: string) {
   abortController.abort()
 }
 
-export async function submitCodexToolDecision(_input: SubmitToolDecisionInput): Promise<SubmitToolDecisionResult> {
+export async function submitCodexToolDecision(input: SubmitToolDecisionInput): Promise<SubmitToolDecisionResult> {
+  void input
   throw new Error('Tool decisions are not implemented for the Codex backend yet.')
 }

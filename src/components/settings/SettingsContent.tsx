@@ -31,6 +31,7 @@ interface SettingsContentProps {
     isLoading: boolean
     onConnectServer: (serverId: string) => Promise<boolean>
     onDisconnectServer: (serverId: string) => Promise<boolean>
+    onRemoveServer: (serverId: string) => Promise<boolean>
     onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
     state: McpState | null
   }

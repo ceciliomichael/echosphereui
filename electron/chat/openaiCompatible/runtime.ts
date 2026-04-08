@@ -95,7 +95,8 @@ export async function cancelOpenAICompatibleChatStream(streamId: string) {
 }
 
 export async function submitOpenAICompatibleToolDecision(
-  _input: SubmitToolDecisionInput,
+  input: SubmitToolDecisionInput,
 ): Promise<SubmitToolDecisionResult> {
+  void input
   throw new Error('Tool decisions are not implemented for the rebuilt OpenAI-compatible backend yet.')
 }

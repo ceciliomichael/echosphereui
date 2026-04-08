@@ -6,6 +6,7 @@ interface McpServerListProps {
   configs: McpServerConfig[]
   onConnect: (serverId: string) => Promise<boolean>
   onDisconnect: (serverId: string) => Promise<boolean>
+  onRemove: (serverId: string) => Promise<boolean>
   onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
   statuses: Record<string, McpServerStatus>
 }
@@ -15,6 +16,7 @@ export function McpServerList({
   configs,
   onConnect,
   onDisconnect,
+  onRemove,
   onToggleTool,
   statuses,
 }: McpServerListProps) {
@@ -38,6 +40,7 @@ export function McpServerList({
           config={config}
           onConnect={onConnect}
           onDisconnect={onDisconnect}
+          onRemove={onRemove}
           onToggleTool={onToggleTool}
           status={statuses[config.id]}
         />

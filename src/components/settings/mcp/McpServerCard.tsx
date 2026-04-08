@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Power, Server } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, Power, Server, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { McpServerConfig, McpServerStatus } from '../../../types/mcp'
 
@@ -6,6 +6,7 @@ interface McpServerCardProps {
   config: McpServerConfig
   onConnect: (serverId: string) => Promise<boolean>
   onDisconnect: (serverId: string) => Promise<boolean>
+  onRemove: (serverId: string) => Promise<boolean>
   onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
   status?: McpServerStatus
   activeOperation: string | null
@@ -53,19 +54,30 @@ export function McpServerCard({
   config,
   onConnect,
   onDisconnect,
+  onRemove,
   onToggleTool,
   status,
 }: McpServerCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isRemoveConfirmationOpen, setIsRemoveConfirmationOpen] = useState(false)
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
+  const isRemoveBusy = activeOperation === `remove:${config.id}`
   const isBusy =
     activeOperation === `connect:${config.id}` ||
-    activeOperation === `disconnect:${config.id}`
+    activeOperation === `disconnect:${config.id}` ||
+    isRemoveBusy
   const isToolBusy = activeOperation?.startsWith(`toggle:${config.id}:`) ?? false
   const toolCount = status?.tools?.length ?? 0
 
   const statusColor = getStatusColor(status)
+
+  async function handleRemove() {
+    const didRemove = await onRemove(config.id)
+    if (didRemove) {
+      setIsRemoveConfirmationOpen(false)
+    }
+  }
 
   return (
     <article className="flex min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-surface p-4">
@@ -86,20 +98,22 @@ export function McpServerCard({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => (isConnected ? void onDisconnect(config.id) : void onConnect(config.id))}
-          disabled={isConnecting || !config.enabled}
-          className="inline-flex min-h-[28px] shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          style={{
-            backgroundColor: 'var(--color-foreground)',
-            borderColor: 'transparent',
-            color: 'var(--color-background)',
-          }}
-        >
-          <Power className="h-3.5 w-3.5" />
-          {isConnecting ? 'Connecting...' : isConnected ? 'Disconnect' : 'Connect'}
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => (isConnected ? void onDisconnect(config.id) : void onConnect(config.id))}
+            disabled={isConnecting || !config.enabled || isBusy}
+            className="inline-flex min-h-[28px] shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--color-foreground)',
+              borderColor: 'transparent',
+              color: 'var(--color-background)',
+            }}
+          >
+            <Power className="h-3.5 w-3.5" />
+            {isConnecting ? 'Connecting...' : isConnected ? 'Disconnect' : 'Connect'}
+          </button>
+        </div>
       </div>
 
       {status?.error ? (
@@ -110,14 +124,57 @@ export function McpServerCard({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        onClick={() => setIsExpanded((currentValue) => !currentValue)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:opacity-80"
-      >
-        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        {isExpanded ? 'Hide details' : 'Show details'}
-      </button>
+      <div className="flex items-end justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((currentValue) => !currentValue)}
+          className="inline-flex h-7 shrink-0 items-end gap-1 self-end pb-0.5 text-xs leading-none text-muted-foreground hover:opacity-80"
+        >
+          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {isExpanded ? 'Hide details' : 'Show details'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsRemoveConfirmationOpen((currentValue) => !currentValue)}
+          disabled={isBusy}
+          className="inline-flex min-h-[28px] shrink-0 items-center gap-1.5 rounded-xl border border-danger-border bg-danger-surface px-2.5 py-1 text-xs font-medium text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove
+        </button>
+      </div>
+
+      {isRemoveConfirmationOpen ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-danger-border bg-danger-surface px-4 py-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-danger-foreground">Remove this server?</p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              This deletes the MCP config from disk and disconnects any active session for {config.name}.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsRemoveConfirmationOpen(false)}
+              disabled={isRemoveBusy}
+              className="inline-flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRemove()}
+              disabled={isRemoveBusy}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-danger-border bg-danger-surface px-3 text-xs font-medium text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRemoveBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {isRemoveBusy ? 'Removing...' : 'Remove server'}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {isExpanded ? (
         <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-2 text-xs text-muted-foreground">

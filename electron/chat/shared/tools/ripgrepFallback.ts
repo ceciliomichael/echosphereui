@@ -158,7 +158,14 @@ export async function searchVisibleFiles(
   },
 ): Promise<SearchVisibleFilesResult> {
   const includePattern = include?.trim()
-  const searchExpression = options?.regex === true ? new RegExp(pattern, 'u') : null
+  let searchExpression: RegExp | null = null
+  if (options?.regex !== false) {
+    try {
+      searchExpression = new RegExp(pattern, 'u')
+    } catch {
+      searchExpression = null
+    }
+  }
   const matches: SearchMatch[] = []
   const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
   let truncated = false
