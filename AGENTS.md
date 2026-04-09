@@ -226,6 +226,8 @@ Before considering a task complete, verify all of the following:
 - Do not use flexbox for everything, stop using boxes everytime, give it a mix and match of flat, and box, think better think beyond to produce ultimate UX,UI
 </design_rules>
 
+
+
 <design_system>
 ## Current Product UI Preferences
 - Prefer light, neutral interfaces with white or near-white surfaces, dark text, and soft gray borders.
@@ -246,6 +248,10 @@ Before considering a task complete, verify all of the following:
 - Keep light mode interaction states subtle and neutral (`background`/`surface-muted` family) unless a component is intentionally accent-driven.
 - When introducing new interactive components, define and reuse named tokens first, then consume those tokens in components.
 </design_system>
+
+## HATES
+
+DO NOT USE PURPLE TINT IF YOU SEE ONE CHANGE IT IMMEDIATELY
 
 </preferred_styling_everytime>
 

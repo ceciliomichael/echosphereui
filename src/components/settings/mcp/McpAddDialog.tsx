@@ -374,7 +374,7 @@ export function McpServerDialog({ errorMessage, initialServer, isSubmitting, mod
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-surface-muted px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-border bg-surface-muted px-3.5 text-sm font-medium text-foreground transition-colors hover:bg-border-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
