@@ -11,6 +11,7 @@ interface UseMcpServersStateResult {
   removeServer: (serverId: string) => Promise<boolean>
   refreshServer: (serverId: string) => Promise<boolean>
   state: McpState | null
+  updateServer: (serverId: string, input: McpAddServerInput) => Promise<boolean>
   toggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
 }
 
@@ -202,6 +203,19 @@ export function useMcpServersState(workspacePath?: string | null): UseMcpServers
     [normalizedWorkspacePath, runOperation],
   )
 
+  const updateServer = useCallback(
+    async (serverId: string, input: McpAddServerInput) =>
+      runOperation(`update:${serverId}`, async () => {
+        const api = getMcpApi()
+        if (!api) {
+          throw new Error('MCP is unavailable in this renderer.')
+        }
+
+        return api.updateServer(serverId, input, normalizedWorkspacePath)
+      }),
+    [normalizedWorkspacePath, runOperation],
+  )
+
   return {
     activeOperation,
     addServer,
@@ -212,6 +226,7 @@ export function useMcpServersState(workspacePath?: string | null): UseMcpServers
     removeServer,
     refreshServer,
     state,
+    updateServer,
     toggleTool,
   }
 }

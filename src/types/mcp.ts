@@ -67,6 +67,11 @@ export interface EchosphereMcpApi {
   onStateChange: (listener: (payload: { state: McpState; workspacePath: string | null }) => void) => () => void
   removeServer: (serverId: string, workspacePath?: string | null) => Promise<McpState>
   refreshServer: (serverId: string, workspacePath?: string | null) => Promise<McpState>
+  updateServer: (
+    serverId: string,
+    input: McpAddServerInput,
+    workspacePath?: string | null,
+  ) => Promise<McpState>
   toggleTool: (
     serverId: string,
     toolName: string,

@@ -257,6 +257,28 @@ export async function saveMcpConfig(config: McpServerConfig, workspacePath?: str
   await writeConfigFile(targetPath, nextConfig)
 }
 
+export async function replaceMcpServerConfig(
+  previousServerName: string,
+  config: McpServerConfig,
+  workspacePath?: string | null,
+) {
+  const targetPath = config.source === 'project' && workspacePath?.trim() ? getProjectConfigPath(workspacePath) : getGlobalConfigPath()
+  const existing = (await readConfigFile(targetPath)) ?? { mcpServers: {} }
+  const nextServers: Record<string, RawMcpServerConfig> = {}
+
+  for (const [serverName, rawConfig] of Object.entries(existing.mcpServers)) {
+    if (serverName === previousServerName) {
+      continue
+    }
+
+    nextServers[serverName] = rawConfig
+  }
+
+  nextServers[config.name] = configToRaw(config)
+
+  await writeConfigFile(targetPath, { mcpServers: nextServers })
+}
+
 export async function deleteMcpConfig(serverId: string, workspacePath?: string | null) {
   const targetPaths = [getGlobalConfigPath()]
   if (workspacePath?.trim()) {

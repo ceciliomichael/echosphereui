@@ -32,6 +32,7 @@ interface SettingsContentProps {
     onConnectServer: (serverId: string) => Promise<boolean>
     onDisconnectServer: (serverId: string) => Promise<boolean>
     onRemoveServer: (serverId: string) => Promise<boolean>
+    onUpdateServer: (serverId: string, input: McpAddServerInput) => Promise<boolean>
     onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
     state: McpState | null
   }

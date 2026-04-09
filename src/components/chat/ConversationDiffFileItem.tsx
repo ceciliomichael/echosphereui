@@ -190,7 +190,7 @@ function CollapsedConversationDiffFileRow({
                 className="absolute inset-0 m-auto text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
               />
             </span>
-            <span className="inline-flex min-w-0 items-center gap-2">
+            <span className="relative top-px inline-flex min-w-0 items-center gap-2">
               <PathLabel path={diff.fileName} className="min-w-0 leading-[1] text-foreground" />
               <span className="inline-flex items-center gap-1 text-xs leading-none">
                 <span className="leading-none text-emerald-600 dark:text-emerald-400">{`+${diff.addedLineCount}`}</span>

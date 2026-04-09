@@ -1,10 +1,12 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
-import { McpAddDialog } from './McpAddDialog'
+import { McpServerDialog } from './McpAddDialog'
 import { McpServerList } from './McpServerList'
-import type { McpAddServerInput, McpState } from '../../../types/mcp'
+import type { McpAddServerInput, McpServerConfig, McpState } from '../../../types/mcp'
 import { SettingsPanelLayout } from '../shared/SettingsPanelPrimitives'
-import { PRIMARY_ACTION_BUTTON_CLASS_NAME } from '../shared/actionButtonStyles'
+
+const ADD_MCP_BUTTON_CLASS_NAME =
+  'provider-primary-action-button inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-xs font-medium leading-none transition-colors active:scale-[0.99] disabled:cursor-not-allowed'
 
 interface McpServersSettingsPanelProps {
   activeOperation: string | null
@@ -15,7 +17,13 @@ interface McpServersSettingsPanelProps {
   onDisconnectServer: (serverId: string) => Promise<boolean>
   onRemoveServer: (serverId: string) => Promise<boolean>
   onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
+  onUpdateServer: (serverId: string, input: McpAddServerInput) => Promise<boolean>
   state: McpState | null
+}
+
+interface McpServerDialogState {
+  mode: 'add' | 'edit'
+  server: McpServerConfig | null
 }
 
 export function McpServersSettingsPanel({
@@ -27,15 +35,31 @@ export function McpServersSettingsPanel({
   onDisconnectServer,
   onRemoveServer,
   onToggleTool,
+  onUpdateServer,
   state,
 }: McpServersSettingsPanelProps) {
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [dialogState, setDialogState] = useState<McpServerDialogState | null>(null)
   const configs = state?.configs ?? []
   const statuses = state?.statuses ?? {}
   const visibleErrorMessage = errorMessage ?? state?.errorMessage
+  const isSubmitting = (activeOperation?.startsWith('add:') ?? false) || (activeOperation?.startsWith('update:') ?? false)
 
-  async function handleAddServer(input: McpAddServerInput) {
-    return onAddServer(input)
+  function openAddDialog() {
+    setDialogState({
+      mode: 'add',
+      server: null,
+    })
+  }
+
+  function openEditDialog(config: McpServerConfig) {
+    setDialogState({
+      mode: 'edit',
+      server: config,
+    })
+  }
+
+  function closeDialog() {
+    setDialogState(null)
   }
 
   return (
@@ -50,11 +74,11 @@ export function McpServersSettingsPanel({
 
           <button
             type="button"
-            onClick={() => setIsAddDialogOpen(true)}
+            onClick={openAddDialog}
             disabled={isLoading}
-            className={`${PRIMARY_ACTION_BUTTON_CLASS_NAME} h-11 w-full md:w-auto`}
+            className={`${ADD_MCP_BUTTON_CLASS_NAME} w-full md:w-auto`}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5 shrink-0 -mt-px" />
             Add MCP
           </button>
         </div>
@@ -70,23 +94,32 @@ export function McpServersSettingsPanel({
           configs={configs}
           onConnect={onConnectServer}
           onDisconnect={onDisconnectServer}
+          onEdit={openEditDialog}
           onRemove={onRemoveServer}
           onToggleTool={onToggleTool}
           statuses={statuses}
         />
       </div>
 
-      {isAddDialogOpen ? (
-        <McpAddDialog
+      {dialogState ? (
+        <McpServerDialog
+          key={`${dialogState.mode}:${dialogState.server?.id ?? 'new'}`}
           errorMessage={visibleErrorMessage ?? null}
-          isSubmitting={activeOperation?.startsWith('add:') ?? false}
-          onClose={() => setIsAddDialogOpen(false)}
+          initialServer={dialogState.server}
+          isSubmitting={isSubmitting}
+          mode={dialogState.mode}
+          onClose={closeDialog}
           onSubmit={async (input) => {
-            const didAdd = await handleAddServer(input)
-            if (didAdd) {
-              setIsAddDialogOpen(false)
+            const didSubmit =
+              dialogState.mode === 'edit' && dialogState.server
+                ? await onUpdateServer(dialogState.server.id, input)
+                : await onAddServer(input)
+
+            if (didSubmit) {
+              closeDialog()
             }
-            return didAdd
+
+            return didSubmit
           }}
         />
       ) : null}

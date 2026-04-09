@@ -530,6 +530,9 @@ function registerMcpHandlers() {
   ipcMain.handle('mcp:addServer', async (_event, input: McpAddServerInput, workspacePath?: string | null) =>
     mcpServerManager.addServer(input, workspacePath),
   )
+  ipcMain.handle('mcp:updateServer', async (_event, serverId: string, input: McpAddServerInput, workspacePath?: string | null) =>
+    mcpServerManager.updateServer(serverId, input, workspacePath),
+  )
   ipcMain.handle('mcp:connectServer', async (_event, serverId: string, workspacePath?: string | null) =>
     mcpServerManager.connectServer(serverId, workspacePath),
   )

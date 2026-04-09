@@ -10,7 +10,7 @@ import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import type { TerminalSessionSnapshot } from '../../../terminal/service'
 import { resolveWorkspaceTargetPath } from './workspaceTools'
 
-const MAX_TERMINAL_OUTPUT_BODY_LENGTH = 20_000
+const MAX_TERMINAL_OUTPUT_BODY_LENGTH = 100_000
 const DEFAULT_TERMINAL_POLLING_MS = 15_000
 const ANSI_ESCAPE = '\\u001B'
 const TERMINAL_BELL = '\\u0007'

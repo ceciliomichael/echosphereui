@@ -229,7 +229,7 @@ function DiffRow({
         <span className="flex min-w-0 flex-1 items-center gap-2.5">
           <FileIcon size={14} style={{ color: iconConfig.color }} className="shrink-0" />
           <span className="min-w-0 flex-1" title={normalizedPath}>
-            <span className="flex min-w-0 items-center gap-1.5">
+            <span className="relative top-px flex min-w-0 items-center gap-1.5">
               <span className="min-w-0 truncate text-foreground">{fileName}</span>
               <DiffLineSummary addedLineCount={diff.addedLineCount} removedLineCount={diff.removedLineCount} />
             </span>
@@ -286,7 +286,7 @@ function DeletedDiffRow({
       >
         <FileIcon size={14} style={{ color: iconConfig.color }} className="shrink-0" />
         <div className="min-w-0 flex-1" title={normalizedPath}>
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="relative top-px flex min-w-0 items-center gap-1.5">
             <span className="min-w-0 truncate text-left text-foreground decoration-white decoration-[1.5px] line-through">{fileName}</span>
             <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-red-500">D</span>
             <DiffLineSummary addedLineCount={diff.addedLineCount} removedLineCount={diff.removedLineCount} />

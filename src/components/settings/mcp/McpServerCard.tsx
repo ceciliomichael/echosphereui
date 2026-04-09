@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Loader2, Power, Server, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, PencilLine, Power, Server, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { McpServerConfig, McpServerStatus } from '../../../types/mcp'
 
@@ -6,6 +6,7 @@ interface McpServerCardProps {
   config: McpServerConfig
   onConnect: (serverId: string) => Promise<boolean>
   onDisconnect: (serverId: string) => Promise<boolean>
+  onEdit: (config: McpServerConfig) => void
   onRemove: (serverId: string) => Promise<boolean>
   onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
   status?: McpServerStatus
@@ -54,6 +55,7 @@ export function McpServerCard({
   config,
   onConnect,
   onDisconnect,
+  onEdit,
   onRemove,
   onToggleTool,
   status,
@@ -63,10 +65,12 @@ export function McpServerCard({
   const isConnected = status?.status === 'connected'
   const isConnecting = status?.status === 'connecting'
   const isRemoveBusy = activeOperation === `remove:${config.id}`
+  const isUpdateBusy = activeOperation === `update:${config.id}`
   const isBusy =
     activeOperation === `connect:${config.id}` ||
     activeOperation === `disconnect:${config.id}` ||
-    isRemoveBusy
+    isRemoveBusy ||
+    isUpdateBusy
   const isToolBusy = activeOperation?.startsWith(`toggle:${config.id}:`) ?? false
   const toolCount = status?.tools?.length ?? 0
 
@@ -78,6 +82,8 @@ export function McpServerCard({
       setIsRemoveConfirmationOpen(false)
     }
   }
+
+  const connectionLabel = isConnecting ? 'Connecting...' : isConnected ? 'Disconnect' : 'Connect'
 
   return (
     <article className="flex min-w-0 flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-surface p-4">
@@ -103,15 +109,15 @@ export function McpServerCard({
             type="button"
             onClick={() => (isConnected ? void onDisconnect(config.id) : void onConnect(config.id))}
             disabled={isConnecting || !config.enabled || isBusy}
-            className="inline-flex min-h-[28px] shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium leading-none transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               backgroundColor: 'var(--color-foreground)',
               borderColor: 'transparent',
               color: 'var(--color-background)',
             }}
           >
-            <Power className="h-3.5 w-3.5" />
-            {isConnecting ? 'Connecting...' : isConnected ? 'Disconnect' : 'Connect'}
+            <Power className="block h-3.5 w-3.5 shrink-0 self-center" />
+            <span className="relative top-px flex items-center leading-none">{connectionLabel}</span>
           </button>
         </div>
       </div>
@@ -134,15 +140,32 @@ export function McpServerCard({
           {isExpanded ? 'Hide details' : 'Show details'}
         </button>
 
-        <button
-          type="button"
-          onClick={() => setIsRemoveConfirmationOpen((currentValue) => !currentValue)}
-          disabled={isBusy}
-          className="inline-flex min-h-[28px] shrink-0 items-center gap-1.5 rounded-xl border border-danger-border bg-danger-surface px-2.5 py-1 text-xs font-medium text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Remove
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsRemoveConfirmationOpen((currentValue) => !currentValue)}
+            disabled={isBusy}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-danger-border bg-danger-surface px-2.5 text-xs font-medium leading-none text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="block h-3.5 w-3.5 shrink-0 self-center" />
+            <span className="relative top-px flex items-center leading-none">Remove</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onEdit(config)}
+            disabled={isBusy}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium leading-none transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--color-foreground)',
+              borderColor: 'transparent',
+              color: 'var(--color-background)',
+            }}
+          >
+            <PencilLine className="block h-3.5 w-3.5 shrink-0 self-center" />
+            <span className="relative top-px flex items-center leading-none">Edit</span>
+          </button>
+        </div>
       </div>
 
       {isRemoveConfirmationOpen ? (
@@ -167,10 +190,14 @@ export function McpServerCard({
               type="button"
               onClick={() => void handleRemove()}
               disabled={isRemoveBusy}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-danger-border bg-danger-surface px-3 text-xs font-medium text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-danger-border bg-danger-surface px-3 text-xs font-medium leading-none text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isRemoveBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              {isRemoveBusy ? 'Removing...' : 'Remove server'}
+              {isRemoveBusy ? (
+                <Loader2 className="block h-3.5 w-3.5 shrink-0 self-center animate-spin" />
+              ) : (
+                <Trash2 className="block h-3.5 w-3.5 shrink-0 self-center" />
+              )}
+              <span className="relative top-px flex items-center leading-none">{isRemoveBusy ? 'Removing...' : 'Remove server'}</span>
             </button>
           </div>
         </div>

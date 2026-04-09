@@ -19,8 +19,10 @@ import {
   getMcpProjectConfigPath,
   getPreferredMcpConfigPath,
   loadMergedMcpConfigs,
+  replaceMcpServerConfig,
   saveMcpConfig,
 } from './configStore'
+import { parseMcpAddServerInput } from './configValidation'
 import { getMcpStateStore } from './stateStore'
 
 interface ManagedRuntime {
@@ -47,6 +49,41 @@ function createConnectionSignature(config: McpServerConfig) {
     type: config.type,
     url: config.url ?? '',
   })
+}
+
+function generateServerId(name: string) {
+  return `mcp-${name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
+}
+
+function buildUpdatedConfig(currentConfig: McpServerConfig, input: McpAddServerInput): McpServerConfig {
+  const parsed = parseMcpAddServerInput(input)
+  if (!parsed.success || !parsed.data) {
+    throw new Error(parsed.error ?? 'Unable to parse the provided MCP server input.')
+  }
+
+  const nextConfig: McpServerConfig = {
+    ...currentConfig,
+    ...(parsed.data.type === 'stdio'
+      ? {
+          args: parsed.data.args,
+          command: parsed.data.command,
+          env: parsed.data.env,
+          headers: undefined,
+          url: undefined,
+        }
+      : {
+          args: undefined,
+          command: undefined,
+          env: undefined,
+          headers: parsed.data.headers,
+          url: parsed.data.url,
+        }),
+    id: generateServerId(parsed.data.serverName),
+    name: parsed.data.serverName,
+    type: parsed.data.type,
+  }
+
+  return nextConfig
 }
 
 function createDisconnectedStatus(serverId: string): McpServerStatus {
@@ -280,6 +317,45 @@ class McpWorkspaceSession {
   async addServer(input: McpAddServerInput) {
     await this.ensureLoaded()
     await appendMcpServerConfig(input, this.workspacePath)
+    return this.reload()
+  }
+
+  async updateServer(serverId: string, input: McpAddServerInput) {
+    await this.ensureLoaded()
+    const runtime = this.getRuntime(serverId)
+    const config = this.configsById.get(serverId)
+
+    if (!runtime || !config) {
+      throw new Error(`MCP server not found: ${serverId}`)
+    }
+
+    const nextConfig = buildUpdatedConfig(config, input)
+    const shouldReconnect = runtime.status.status === 'connected' || runtime.status.status === 'connecting'
+
+    await replaceMcpServerConfig(config.name, nextConfig, this.workspacePath)
+
+    const currentAutoConnect = config.autoConnect
+    if (nextConfig.name !== config.name) {
+      await this.stateStore.removeServer(config.name, this.workspacePath)
+    }
+    await this.stateStore.setAutoConnect(nextConfig.name, currentAutoConnect, this.workspacePath)
+
+    await this.disconnectRuntime(serverId, runtime, true)
+    this.configsById.delete(serverId)
+    this.configsById.set(nextConfig.id, nextConfig)
+    this.runtimesById.set(nextConfig.id, {
+      client: null,
+      config: nextConfig,
+      connectionSignature: createConnectionSignature(nextConfig),
+      status: createDisconnectedStatus(nextConfig.id),
+      tools: [],
+      transport: null,
+    })
+
+    if (shouldReconnect && nextConfig.enabled && nextConfig.autoConnect) {
+      await this.connectRuntime(nextConfig.id, nextConfig)
+    }
+
     return this.reload()
   }
 
@@ -525,6 +601,15 @@ export class McpServerManager {
 
   async addServer(input: McpAddServerInput, workspacePath?: string | null) {
     const state = await this.getSession(workspacePath).addServer(input)
+    this.emitter.emit('state', {
+      state,
+      workspacePath: normalizeWorkspacePath(workspacePath),
+    })
+    return state
+  }
+
+  async updateServer(serverId: string, input: McpAddServerInput, workspacePath?: string | null) {
+    const state = await this.getSession(workspacePath).updateServer(serverId, input)
     this.emitter.emit('state', {
       state,
       workspacePath: normalizeWorkspacePath(workspacePath),

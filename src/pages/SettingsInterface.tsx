@@ -107,6 +107,7 @@ export function SettingsInterface({
             onDisconnectServer: mcpSettings.disconnectServer,
             onRemoveServer: mcpSettings.removeServer,
             onToggleTool: mcpSettings.toggleTool,
+            onUpdateServer: mcpSettings.updateServer,
             state: mcpSettings.state,
           }}
           modelsSettings={{

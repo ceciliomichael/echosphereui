@@ -13,21 +13,28 @@ function getExtensionFromFileName(fileName: string) {
     return ''
   }
 
-  const normalizedName = trimmedName.toLowerCase()
-  if (normalizedName === 'dockerfile' || normalizedName === 'makefile') {
-    return normalizedName
+  const normalizedName = trimmedName.toLowerCase().replace(/\\/g, '/')
+  const pathSegments = normalizedName.split('/')
+  const basename = pathSegments[pathSegments.length - 1] ?? ''
+
+  if (basename.length === 0) {
+    return ''
   }
 
-  if (normalizedName.startsWith('.')) {
-    return normalizedName.slice(1)
+  if (basename === 'dockerfile' || basename === 'makefile') {
+    return basename
   }
 
-  const lastDotIndex = normalizedName.lastIndexOf('.')
+  if (basename.startsWith('.') && basename.indexOf('.', 1) < 0) {
+    return basename.slice(1)
+  }
+
+  const lastDotIndex = basename.lastIndexOf('.')
   if (lastDotIndex < 0) {
-    return normalizedName
+    return basename
   }
 
-  return normalizedName.slice(lastDotIndex + 1)
+  return basename.slice(lastDotIndex + 1)
 }
 
 function inferExtensionFromMimeType(mimeType: string) {
