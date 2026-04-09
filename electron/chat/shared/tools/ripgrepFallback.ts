@@ -22,6 +22,7 @@ interface SearchMatch {
 
 interface SearchVisibleFilesResult {
   matches: SearchMatch[]
+  invalidPattern: boolean
   truncated: boolean
 }
 
@@ -48,7 +49,12 @@ function matchesWorkspaceGlob(candidatePath: string, globPattern: string) {
   return minimatch(normalizedCandidatePath, normalizedPattern, { dot: true })
 }
 
-function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
+function createWorkspaceEntryVisibilityFilter(
+  workspaceRootPath: string,
+  options?: {
+    ignoreWorkspaceRules?: boolean
+  },
+) {
   const matcherCache = new Map<string, Promise<Awaited<ReturnType<typeof loadGitignoreMatchers>>>>()
 
   function loadCachedMatchers(directoryPath: string) {
@@ -64,17 +70,19 @@ function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
 
   return async (entryAbsolutePath: string, isDirectory: boolean) => {
     const entryName = path.basename(entryAbsolutePath)
-    const workspaceRelativeSegments = path
-      .relative(workspaceRootPath, entryAbsolutePath)
-      .split(path.sep)
-      .filter((segment) => segment.length > 0)
+    if (!options?.ignoreWorkspaceRules) {
+      const workspaceRelativeSegments = path
+        .relative(workspaceRootPath, entryAbsolutePath)
+        .split(path.sep)
+        .filter((segment) => segment.length > 0)
 
-    if (workspaceRelativeSegments.some((segment) => shouldIgnoreWorkspaceEntry(segment))) {
-      return false
-    }
+      if (workspaceRelativeSegments.some((segment) => shouldIgnoreWorkspaceEntry(segment))) {
+        return false
+      }
 
-    if (shouldAlwaysShowEntry(entryName)) {
-      return true
+      if (shouldAlwaysShowEntry(entryName)) {
+        return true
+      }
     }
 
     const gitignoreMatchers = await loadCachedMatchers(path.dirname(entryAbsolutePath))
@@ -150,27 +158,34 @@ function toJsonMatchLine(relativePath: string, lineNumber: number, lineText: str
 
 export async function searchVisibleFiles(
   workspaceRootPath: string,
+  searchRootPath: string,
   pattern: string,
   include: string | undefined,
   maxResults?: number,
   options?: {
+    ignoreWorkspaceRules?: boolean
+    literalFallback?: boolean
     regex?: boolean
   },
 ): Promise<SearchVisibleFilesResult> {
   const includePattern = include?.trim()
   let searchExpression: RegExp | null = null
+  let invalidPattern = false
   if (options?.regex !== false) {
     try {
       searchExpression = new RegExp(pattern, 'u')
     } catch {
       searchExpression = null
+      invalidPattern = true
     }
   }
   const matches: SearchMatch[] = []
-  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
+  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath, {
+    ignoreWorkspaceRules: options?.ignoreWorkspaceRules,
+  })
   let truncated = false
 
-  await visitVisibleFiles(workspaceRootPath, workspaceRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
+  await visitVisibleFiles(workspaceRootPath, searchRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
     if (includePattern && !matchesWorkspaceGlob(fileRelativePath, includePattern)) {
       return
     }
@@ -205,7 +220,11 @@ export async function searchVisibleFiles(
     try {
       for await (const line of reader) {
         lineNumber += 1
-        const hasMatch = searchExpression ? searchExpression.test(line) : line.includes(pattern)
+        const hasMatch = searchExpression
+          ? searchExpression.test(line)
+          : options?.literalFallback === false
+            ? false
+            : line.includes(pattern)
         if (!hasMatch) {
           continue
         }
@@ -243,6 +262,7 @@ export async function searchVisibleFiles(
 
   return {
     matches,
+    invalidPattern,
     truncated,
   }
 }
@@ -264,6 +284,14 @@ function getSearchPatternArg(args: string[]) {
   return args[args.length - 2] ?? null
 }
 
+function getSearchPathArg(args: string[]) {
+  if (args.length === 0) {
+    return null
+  }
+
+  return args[args.length - 1] ?? null
+}
+
 export async function runRipgrepFallback(args: string[], cwd: string): Promise<RipgrepFallbackResult> {
   if (args.includes('--files')) {
     const files = await collectVisibleFilePaths(cwd)
@@ -281,6 +309,55 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     }
   }
 
+  if (args.includes('--regexp')) {
+    const searchPattern = getArgumentValue(args, '--regexp')
+    const searchPath = getSearchPathArg(args)
+    if (searchPattern === null || searchPath === null) {
+      return {
+        exitCode: 2,
+        stderr: 'Invalid search pattern.',
+        stdout: '',
+      }
+    }
+
+    const searchPathStats = await fs.stat(searchPath).catch(() => null)
+    if (!searchPathStats?.isDirectory()) {
+      return {
+        exitCode: 2,
+        stderr: 'Search path must be a directory.',
+        stdout: '',
+      }
+    }
+
+    const include = getArgumentValue(args, '--glob') ?? undefined
+    const result = await searchVisibleFiles(cwd, searchPath, searchPattern, include, undefined, {
+      ignoreWorkspaceRules: true,
+      literalFallback: false,
+      regex: true,
+    })
+    if (result.invalidPattern) {
+      return {
+        exitCode: 2,
+        stderr: 'Invalid search pattern.',
+        stdout: '',
+      }
+    }
+
+    if (result.matches.length === 0) {
+      return {
+        exitCode: 1,
+        stderr: '',
+        stdout: '',
+      }
+    }
+
+    return {
+      exitCode: 0,
+      stderr: result.truncated ? 'Some matches were truncated.' : '',
+      stdout: result.matches.map((match) => `${match.absolutePath}|${match.lineNumber}|${match.lineText}`).join('\n'),
+    }
+  }
+
   if (args.includes('--json') && args.includes('--line-number')) {
     const searchPattern = getSearchPatternArg(args)
     if (searchPattern === null || searchPattern === '.') {
@@ -292,7 +369,7 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     }
 
     const include = getArgumentValue(args, '--glob') ?? undefined
-    const result = await searchVisibleFiles(cwd, searchPattern, include)
+    const result = await searchVisibleFiles(cwd, cwd, searchPattern, include)
     if (result.matches.length === 0) {
       return {
         exitCode: 1,

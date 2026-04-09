@@ -65,72 +65,71 @@ test('createGlobToolResult excludes matches from gitignored directories, even wh
   }
 })
 
-test('createGrepToolResult excludes matches from gitignored paths while preserving always-visible env files', async () => {
+test('createGrepToolResult returns the ripgrep-style workspace match set', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
     const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '**/{*,.*}')
 
     assert.equal(result.status, 'success')
+    assert.equal(result.semantics?.matches, 6)
     assert.match(result.body ?? '', /visible\.ts/u)
-    assert.match(result.body ?? '', /\.env/u)
-    assert.doesNotMatch(result.body ?? '', /hidden\.ts/u)
-    assert.doesNotMatch(result.body ?? '', /plain\.secret/u)
-    assert.doesNotMatch(result.body ?? '', /node_modules/u)
-  } finally {
-    await fs.rm(workspaceRootPath, { force: true, recursive: true })
-  }
-})
-
-test('createGrepToolResult searches broadly when no include glob is provided', async () => {
-  const workspaceRootPath = await createWorkspaceFixture()
-
-  try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'list', undefined)
-
-    assert.equal(result.status, 'success')
-    assert.match(result.body ?? '', /listable\.ts/u)
     assert.match(result.body ?? '', /notes\.md/u)
+    assert.match(result.body ?? '', /node_modules[\\/]+pkg[\\/]+index\.ts/u)
+    assert.match(result.body ?? '', /ignored[\\/]+hidden\.ts/u)
+    assert.match(result.body ?? '', /plain\.secret/u)
+    assert.match(result.body ?? '', /\.env/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
 
-test('createGrepToolResult supports regex searches when explicitly requested', async () => {
+test('createGrepToolResult sorts matches by modification time with the newest file first', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', '\\blistable\\b', undefined, true)
+    const olderFilePath = path.join(workspaceRootPath, 'src', 'older.ts')
+    const newerFilePath = path.join(workspaceRootPath, 'src', 'newer.ts')
+    await fs.writeFile(olderFilePath, 'export const older = "needle"\n', 'utf8')
+    await fs.writeFile(newerFilePath, 'export const newer = "needle"\n', 'utf8')
+    const olderTimestamp = new Date(Date.now() - 10_000)
+    const newerTimestamp = new Date()
+    await fs.utimes(olderFilePath, olderTimestamp, olderTimestamp)
+    await fs.utimes(newerFilePath, newerTimestamp, newerTimestamp)
+
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '**/*.ts')
 
     assert.equal(result.status, 'success')
-    assert.match(result.body ?? '', /listable\.ts/u)
-    assert.doesNotMatch(result.body ?? '', /notes\.md/u)
+    const body = result.body ?? ''
+    assert.ok(body.indexOf(newerFilePath) !== -1)
+    assert.ok(body.indexOf(olderFilePath) !== -1)
+    assert.ok(body.indexOf(newerFilePath) < body.indexOf(olderFilePath))
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
 
-test('createGrepToolResult falls back to literal matching when a regex pattern is invalid', async () => {
+test('createGrepToolResult returns no files for a missing pattern', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'clearMpin(', undefined, true)
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'does-not-exist', undefined)
 
     assert.equal(result.status, 'success')
-    assert.match(result.body ?? '', /clearMpin\(/u)
+    assert.equal(result.body, 'No files found')
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
 
-test('createGrepToolResult supports literal searches when explicitly disabled', async () => {
+test('createGrepToolResult returns no files for invalid regex patterns', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'clearMpin(', undefined, false)
+    const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'clearMpin(', undefined)
 
     assert.equal(result.status, 'success')
-    assert.match(result.body ?? '', /clearMpin\(/u)
+    assert.equal(result.body, 'No files found')
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

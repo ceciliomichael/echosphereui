@@ -15,7 +15,6 @@ import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoi
 import { applyPatchInWorkspace } from '../applyPatch'
 import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import { runRipgrep } from './ripgrep'
-import { searchVisibleFiles } from './ripgrepFallback'
 
 const DEFAULT_READ_LIMIT = 2000
 const LIST_LIMIT = 100
@@ -121,6 +120,79 @@ function buildFileChangeResult(
     },
     summary,
   })
+}
+
+interface GrepMatch {
+  filePath: string
+  lineNumber: number
+  lineText: string
+  modTime: number
+}
+
+function parseRipgrepOutputLine(line: string) {
+  const [filePath, lineNumStr, ...lineTextParts] = line.split('|')
+  if (!filePath || !lineNumStr || lineTextParts.length === 0) {
+    return null
+  }
+
+  const lineNumber = Number.parseInt(lineNumStr, 10)
+  if (!Number.isFinite(lineNumber)) {
+    return null
+  }
+
+  return {
+    filePath,
+    lineNumber,
+    lineText: lineTextParts.join('|'),
+  }
+}
+
+function formatGrepOutput(matches: GrepMatch[], hasErrors: boolean) {
+  if (matches.length === 0) {
+    return {
+      body: 'No files found',
+      summary: 'No files found',
+      truncated: false,
+    }
+  }
+
+  const totalMatches = matches.length
+  const truncated = totalMatches > SEARCH_LIMIT
+  const visibleMatches = truncated ? matches.slice(0, SEARCH_LIMIT) : matches
+  const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${SEARCH_LIMIT})` : ''}`]
+
+  let currentFilePath = ''
+  for (const match of visibleMatches) {
+    if (currentFilePath !== match.filePath) {
+      if (currentFilePath !== '') {
+        outputLines.push('')
+      }
+      currentFilePath = match.filePath
+      outputLines.push(`${match.filePath}:`)
+    }
+
+    const truncatedLineText =
+      match.lineText.length > MAX_LINE_LENGTH ? `${match.lineText.slice(0, MAX_LINE_LENGTH)}...` : match.lineText
+    outputLines.push(`  Line ${match.lineNumber}: ${truncatedLineText}`)
+  }
+
+  if (truncated) {
+    outputLines.push('')
+    outputLines.push(
+      `(Results truncated: showing ${SEARCH_LIMIT} of ${totalMatches} matches (${totalMatches - SEARCH_LIMIT} hidden). Consider using a more specific path or pattern.)`,
+    )
+  }
+
+  if (hasErrors) {
+    outputLines.push('')
+    outputLines.push('(Some paths were inaccessible and skipped)')
+  }
+
+  return {
+    body: outputLines.join('\n'),
+    summary: `Found ${totalMatches} matches`,
+    truncated,
+  }
 }
 
 async function captureCheckpointFileStateIfNeeded(checkpointId: string | null | undefined, absolutePath: string) {
@@ -413,59 +485,90 @@ export async function createGrepToolResult(
   relativePath: string,
   pattern: string,
   include: string | undefined,
-  regex?: boolean,
+  _regex?: boolean,
 ) {
+  const stats = await fs.stat(absolutePath)
+  if (!stats.isDirectory()) {
+    throw new Error(`Search path must be a directory: ${relativePath}`)
+  }
+
+  const args = ['-nH', '--hidden', '--no-messages', '--field-match-separator=|', '--regexp', pattern]
   const effectiveInclude = include?.trim()
-  const result = await searchVisibleFiles(absolutePath, pattern, effectiveInclude, SEARCH_LIMIT, {
-    regex: regex !== false,
-  })
-  if (result.matches.length === 0) {
+  if (effectiveInclude) {
+    args.push('--glob', effectiveInclude)
+  }
+  args.push(absolutePath)
+
+  const result = await runRipgrep(args, _workspaceRootPath)
+  const output = result.stdout.trim()
+  if (result.exitCode === 1 || (result.exitCode === 2 && output.length === 0)) {
     return createSuccessResult({
       body: 'No files found',
       semantics: {
-        match_count: 0,
-        pattern,
-        regex: regex !== false,
+        matches: 0,
+        truncated: false,
       },
       subject: {
         kind: 'directory',
         path: relativePath,
       },
-      summary: `No matches for ${pattern}`,
+      summary: 'No files found',
     })
   }
 
-  const bodyLines = [`Found ${result.matches.length} match${result.matches.length === 1 ? '' : 'es'}`]
-  let currentPath: string | null = null
-  for (const match of result.matches) {
-    if (match.absolutePath !== currentPath) {
-      if (currentPath !== null) {
-        bodyLines.push('')
-      }
-      currentPath = match.absolutePath
-      bodyLines.push(match.absolutePath)
+  if (result.exitCode !== 0 && result.exitCode !== 2) {
+    throw new Error(`ripgrep failed: ${result.stderr}`)
+  }
+
+  const parsedMatches: GrepMatch[] = []
+  for (const line of output.split(/\r?\n/u)) {
+    if (!line) {
+      continue
     }
 
-    bodyLines.push(`  ${match.lineNumber}: ${match.lineText}`)
+    const parsedLine = parseRipgrepOutputLine(line)
+    if (!parsedLine) {
+      continue
+    }
+
+    const fileStats = await fs.stat(parsedLine.filePath).catch(() => null)
+    if (!fileStats) {
+      continue
+    }
+
+    parsedMatches.push({
+      filePath: parsedLine.filePath,
+      lineNumber: parsedLine.lineNumber,
+      lineText: parsedLine.lineText,
+      modTime: fileStats.mtime.getTime(),
+    })
   }
 
-  if (result.truncated) {
-    bodyLines.push('', `(Showing first ${SEARCH_LIMIT} matches. Narrow the pattern or include filter.)`)
-  }
+  parsedMatches.sort((left, right) => {
+    if (right.modTime !== left.modTime) {
+      return right.modTime - left.modTime
+    }
 
+    if (left.filePath !== right.filePath) {
+      return left.filePath.localeCompare(right.filePath, undefined, { sensitivity: 'base' })
+    }
+
+    return left.lineNumber - right.lineNumber
+  })
+
+  const formatted = formatGrepOutput(parsedMatches, result.exitCode === 2)
   return createSuccessResult({
-    body: bodyLines.join('\n'),
+    body: formatted.body,
     semantics: {
-      match_count: result.matches.length,
-      pattern,
-      regex: regex !== false,
+      matches: parsedMatches.length,
+      truncated: formatted.truncated,
     },
     subject: {
       kind: 'directory',
       path: relativePath,
     },
-    summary: `Found ${result.matches.length} match${result.matches.length === 1 ? '' : 'es'} for ${pattern}`,
-    truncated: result.truncated,
+    summary: formatted.summary,
+    truncated: formatted.truncated,
   })
 }
 
