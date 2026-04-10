@@ -247,7 +247,30 @@ export function WorkspaceExplorerPanelView({
             {panelState.errorMessage}
           </div>
         ) : !showExplorerTree ? (
-          <div className="flex flex-1 items-center justify-center px-4 py-6 text-center">
+          <div
+            className="flex flex-1 items-center justify-center px-4 py-6 text-center"
+            onDragOver={(event) => {
+              if (isExternalFileDrag(event)) {
+                panelState.handleExternalDragOver(event, ROOT_DIRECTORY_KEY)
+                return
+              }
+              panelState.handleDirectoryDragOver(event, ROOT_DIRECTORY_KEY)
+            }}
+            onDragLeave={(event) => {
+              if (isExternalFileDrag(event)) {
+                panelState.handleExternalDragLeave(event, ROOT_DIRECTORY_KEY)
+                return
+              }
+              panelState.handleDirectoryDragLeave(event, ROOT_DIRECTORY_KEY)
+            }}
+            onDrop={(event) => {
+              if (isExternalFileDrag(event)) {
+                void panelState.handleExternalDrop(event, ROOT_DIRECTORY_KEY)
+                return
+              }
+              panelState.handleDirectoryDrop(event, ROOT_DIRECTORY_KEY)
+            }}
+          >
             <div className="flex max-w-[240px] flex-col items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
                 <FolderOpen size={22} />

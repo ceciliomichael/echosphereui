@@ -110,25 +110,15 @@ function mergeStreamingDelta(existingValue: string, nextDelta: string) {
     return nextDelta
   }
 
-  if (existingValue.endsWith(nextDelta)) {
+  if (nextDelta.length > 1 && existingValue.endsWith(nextDelta)) {
     return existingValue
   }
 
-  if (nextDelta.startsWith(existingValue)) {
+  if (nextDelta.length > existingValue.length && nextDelta.startsWith(existingValue)) {
     return nextDelta
   }
 
-  const maxOverlap = Math.min(existingValue.length, nextDelta.length)
-  let overlapLength = 0
-
-  for (let index = maxOverlap; index > 0; index -= 1) {
-    if (existingValue.slice(-index) === nextDelta.slice(0, index)) {
-      overlapLength = index
-      break
-    }
-  }
-
-  return existingValue + nextDelta.slice(overlapLength)
+  return existingValue + nextDelta
 }
 
 function mergeReasoningDelta(

@@ -8,6 +8,7 @@ const MODE_PROMPT_PATHS: Record<ChatMode, string> = {
   agent: 'agent/prompt.md',
   plan: 'plan/prompt.md',
 }
+const MARKDOWN_PROMPT_PATH = 'markdown/prompt.md'
 
 function readPromptFile(relativePath: string) {
   const appRoot = process.env.APP_ROOT?.trim()
@@ -24,6 +25,7 @@ function readPromptFile(relativePath: string) {
 }
 
 const cachedPrompts: Partial<Record<ChatMode, string>> = {}
+let cachedMarkdownPrompt: string | null = null
 
 function getModePrompt(chatMode: ChatMode) {
   const cachedPrompt = cachedPrompts[chatMode]
@@ -36,6 +38,15 @@ function getModePrompt(chatMode: ChatMode) {
   return prompt
 }
 
+function getMarkdownPrompt() {
+  if (cachedMarkdownPrompt !== null) {
+    return cachedMarkdownPrompt
+  }
+
+  cachedMarkdownPrompt = readPromptFile(MARKDOWN_PROMPT_PATH)
+  return cachedMarkdownPrompt
+}
+
 export function buildChatModeSystemPrompt(chatMode: ChatMode, workspaceRootPath: string) {
-  return `${getModePrompt(chatMode)}\n\n${buildWorkspaceInstructionsBlock()}\n\nWorkspace root: ${workspaceRootPath}`
+  return `${getModePrompt(chatMode)}\n\n${getMarkdownPrompt()}\n\n${buildWorkspaceInstructionsBlock()}\n\nWorkspace root: ${workspaceRootPath}`
 }

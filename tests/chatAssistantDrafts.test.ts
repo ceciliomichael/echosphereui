@@ -18,8 +18,9 @@ function createRuntimeSelection(): ChatRuntimeSelection {
 function createDraftManager() {
   const messages: Message[] = []
   const runtimeSelection = createRuntimeSelection()
+  const getMessages = () => messages
 
-  return createChatAssistantDraftManager({
+  const draftManager = createChatAssistantDraftManager({
     appendLocalMessage: (_conversationId, message) => {
       messages.push(message)
     },
@@ -42,10 +43,15 @@ function createDraftManager() {
       messages.splice(0, messages.length, ...nextMessages)
     },
   })
+
+  return {
+    draftManager,
+    getMessages,
+  }
 }
 
 test('chat assistant drafts start a new think block after the previous one has completed', () => {
-  const draftManager = createDraftManager()
+  const { draftManager } = createDraftManager()
 
   draftManager.appendPlaceholderDraft()
   draftManager.handleReasoningDelta('First reasoning block')
@@ -68,7 +74,7 @@ test('chat assistant drafts start a new think block after the previous one has c
 })
 
 test('chat assistant drafts create a fresh think block after a tool boundary', () => {
-  const draftManager = createDraftManager()
+  const { draftManager } = createDraftManager()
 
   draftManager.appendPlaceholderDraft()
   draftManager.handleReasoningDelta('First reasoning block')
@@ -111,7 +117,7 @@ test('chat assistant drafts create a fresh think block after a tool boundary', (
 })
 
 test('chat assistant drafts keep consecutive reasoning-only segments in the same think block', () => {
-  const draftManager = createDraftManager()
+  const { draftManager } = createDraftManager()
 
   draftManager.appendPlaceholderDraft()
   draftManager.handleReasoningDelta('First reasoning block')
@@ -129,4 +135,18 @@ test('chat assistant drafts keep consecutive reasoning-only segments in the same
     'First reasoning block\n\nSecond reasoning block',
   )
   assert.equal(streamedMessages[0]?.content.trim(), '')
+})
+
+test('chat assistant drafts preserve streamed triple-backtick closers across single-character deltas', () => {
+  const { draftManager, getMessages } = createDraftManager()
+
+  draftManager.appendPlaceholderDraft()
+  draftManager.handleContentDelta('```ts\nconst value = 1\n')
+  draftManager.handleContentDelta('`')
+  draftManager.handleContentDelta('`')
+  draftManager.handleContentDelta('`')
+
+  const latestDraftAssistantMessage = [...getMessages()].reverse().find((message) => message.role === 'assistant')
+  assert.equal(latestDraftAssistantMessage?.role, 'assistant')
+  assert.equal(latestDraftAssistantMessage?.content, '```ts\nconst value = 1\n```')
 })
