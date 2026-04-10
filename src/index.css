@@ -329,20 +329,15 @@
     word-break: break-word;
   }
 
-  .workspace-terminal-host .xterm .xterm-selection {
-    z-index: 3 !important;
-  }
-
-  :root:not([data-theme='dark']) .workspace-terminal-host .xterm .xterm-selection div {
-    background-color: rgb(96 98 102 / 0.22) !important;
-  }
-
-  :root[data-theme='dark'] .workspace-terminal-host .xterm .xterm-selection div {
-    background-color: rgb(96 98 102 / 0.3) !important;
-  }
-
-  :root .workspace-terminal-host .xterm .xterm-accessibility-tree *::selection {
+  .workspace-terminal-host .xterm .xterm-accessibility-tree:not(.debug) *::selection {
+    color: transparent !important;
     background-color: transparent !important;
+  }
+
+  .workspace-terminal-host .xterm .xterm-accessibility-tree:not(.debug),
+  .workspace-terminal-host .xterm .xterm-accessibility-tree:not(.debug) * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
   }
 
   @keyframes wave-shine {

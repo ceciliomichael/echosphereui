@@ -109,8 +109,8 @@ export function getTerminalTheme(
   const foreground = hostStyles.color;
   const background = hostStyles.backgroundColor;
   const lightModeTextColor = "#101011";
-  const selectionBackground = "rgb(96 98 102 / 0.22)";
-  const selectionInactiveBackground = "rgb(96 98 102 / 0.14)";
+  const selectionBackground = "rgba(96, 98, 102, 0.22)";
+  const selectionInactiveBackground = selectionBackground;
 
   if (resolvedTheme === "dark") {
     return {
