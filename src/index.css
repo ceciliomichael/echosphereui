@@ -329,24 +329,8 @@
     word-break: break-word;
   }
 
-  :root:not([data-theme='dark']) .workspace-terminal-host .xterm .xterm-selection div {
-    background-color: rgb(59 130 246 / 0.3) !important;
-  }
-
-  :root:not([data-theme='dark']) .workspace-terminal-host .xterm .xterm-selection {
-    z-index: 3 !important;
-  }
-
-  :root[data-theme='dark'] .workspace-terminal-host .xterm .xterm-selection div {
-    background-color: rgb(160 160 165 / 0.4) !important;
-  }
-
-  :root:not([data-theme='dark']) .workspace-terminal-host .xterm .xterm-accessibility-tree *::selection {
-    background-color: rgb(59 130 246 / 0.3) !important;
-  }
-
-  :root[data-theme='dark'] .workspace-terminal-host .xterm .xterm-accessibility-tree *::selection {
-    background-color: rgb(160 160 165 / 0.4) !important;
+  :root .workspace-terminal-host .xterm .xterm-accessibility-tree *::selection {
+    background-color: transparent !important;
   }
 
   @keyframes wave-shine {

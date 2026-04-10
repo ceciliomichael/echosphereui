@@ -64,6 +64,43 @@ export function getNativeSelectionTextWithinHost(hostElement: HTMLElement) {
   return selection.toString();
 }
 
+export function clearSelectionWithinHost(hostElement: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return;
+  }
+
+  const anchorNode = selection.anchorNode;
+  const focusNode = selection.focusNode;
+  if (!anchorNode || !focusNode) {
+    return;
+  }
+
+  const isAnchorInsideHost = hostElement.contains(anchorNode);
+  const isFocusInsideHost = hostElement.contains(focusNode);
+  if (!isAnchorInsideHost && !isFocusInsideHost) {
+    return;
+  }
+
+  selection.removeAllRanges();
+}
+
+export async function copyTerminalSelectionToClipboard({
+  hostElement,
+  terminal,
+}: {
+  hostElement: HTMLElement;
+  terminal: Terminal;
+}) {
+  const selectionText = terminal.getSelection() || getNativeSelectionTextWithinHost(hostElement);
+  if (!selectionText) {
+    return false;
+  }
+
+  await navigator.clipboard.writeText(selectionText);
+  return true;
+}
+
 export function getTerminalTheme(
   hostElement: HTMLElement,
   resolvedTheme: ResolvedTheme,
@@ -72,14 +109,16 @@ export function getTerminalTheme(
   const foreground = hostStyles.color;
   const background = hostStyles.backgroundColor;
   const lightModeTextColor = "#101011";
+  const selectionBackground = "rgb(96 98 102 / 0.22)";
+  const selectionInactiveBackground = "rgb(96 98 102 / 0.14)";
 
   if (resolvedTheme === "dark") {
     return {
       background,
       foreground,
       cursor: foreground,
-      selectionBackground: "rgb(135 113 255 / 0.34)",
-      selectionInactiveBackground: "rgb(135 113 255 / 0.22)",
+      selectionBackground,
+      selectionInactiveBackground,
       black: "#1f1f21",
       red: "#f48771",
       green: "#9ad792",
@@ -103,8 +142,8 @@ export function getTerminalTheme(
     background,
     foreground: lightModeTextColor,
     cursor: lightModeTextColor,
-    selectionBackground: "rgb(59 130 246 / 0.30)",
-    selectionInactiveBackground: "rgb(59 130 246 / 0.20)",
+    selectionBackground,
+    selectionInactiveBackground,
     black: lightModeTextColor,
     red: lightModeTextColor,
     green: lightModeTextColor,

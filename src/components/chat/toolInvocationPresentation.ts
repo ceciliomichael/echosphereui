@@ -113,38 +113,6 @@ function getReadToolTarget(path: string, workspaceRootPath?: string | null) {
 
 const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
 
-type ChangeActionKind = 'add' | 'delete' | 'update'
-
-interface ChangeActionLabels {
-  completed: string
-  failed: string
-  running: string
-}
-
-const CHANGE_ACTION_LABELS: Record<ChangeActionKind, ChangeActionLabels> = {
-  add: {
-    completed: 'Created',
-    failed: 'Create failed',
-    running: 'Creating',
-  },
-  delete: {
-    completed: 'Deleted',
-    failed: 'Delete failed',
-    running: 'Deleting',
-  },
-  update: {
-    completed: 'Edited',
-    failed: 'Edit failed',
-    running: 'Editing',
-  },
-}
-
-const GENERIC_CHANGE_LABELS: ChangeActionLabels = {
-  completed: 'Edited',
-  failed: 'Edit failed',
-  running: 'Editing',
-}
-
 function truncateDisplayText(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value
@@ -187,26 +155,6 @@ function getSearchTarget(argumentsText: string): string | null {
   return searchText ? truncateDisplayText(searchText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
 }
 
-function getChangeActionKind(
-  addedPathCount: number | null,
-  deletedPathCount: number | null,
-  updatedPathCount: number | null,
-) {
-  if (addedPathCount !== null && deletedPathCount === 0 && updatedPathCount === 0 && addedPathCount > 0) {
-    return 'add' as const
-  }
-
-  if (deletedPathCount !== null && addedPathCount === 0 && updatedPathCount === 0 && deletedPathCount > 0) {
-    return 'delete' as const
-  }
-
-  if (updatedPathCount !== null && addedPathCount === 0 && deletedPathCount === 0 && updatedPathCount > 0) {
-    return 'update' as const
-  }
-
-  return null
-}
-
 function readSessionId(value: unknown): string | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return String(Math.floor(value))
@@ -222,44 +170,12 @@ function readSessionId(value: unknown): string | null {
   return null
 }
 
-function getChangeActionStateLabel(kind: ChangeActionKind | null, state: 'running' | 'completed' | 'failed') {
-  const labels = kind ? CHANGE_ACTION_LABELS[kind] : GENERIC_CHANGE_LABELS
-  return labels[state]
-}
-
-function getSingleDisplayedChangeActionKind(invocation: ToolInvocationTrace) {
-  if (invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch') {
-    return null
-  }
-
-  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
-  if (!changeResultPresentation || changeResultPresentation.changes.length !== 1) {
-    return null
-  }
-
-  return changeResultPresentation.changes[0].kind
-}
-
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
-  const displayedChangeActionKind = getSingleDisplayedChangeActionKind(invocation)
   const operation =
     parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
       ? parsedResult.metadata.semantics.operation
       : null
-  const addedPathCount =
-    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.added_path_count === 'number'
-      ? parsedResult.metadata.semantics.added_path_count
-      : null
-  const deletedPathCount =
-    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.deleted_path_count === 'number'
-      ? parsedResult.metadata.semantics.deleted_path_count
-      : null
-  const updatedPathCount =
-    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.updated_path_count === 'number'
-    ? parsedResult.metadata.semantics.updated_path_count
-      : null
-  const changeActionKind = displayedChangeActionKind ?? getChangeActionKind(addedPathCount, deletedPathCount, updatedPathCount)
 
   if (invocation.toolName === 'list') {
     return invocation.state === 'running' ? 'Listing' : invocation.state === 'completed' ? 'Listed' : 'List failed'
@@ -283,18 +199,15 @@ function getToolVerb(invocation: ToolInvocationTrace) {
 
   if (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') {
     if (invocation.state === 'running') {
-      return getChangeActionStateLabel(changeActionKind, 'running')
+      return 'Applying'
     }
     if (invocation.state === 'failed') {
-      return getChangeActionStateLabel(changeActionKind, 'failed')
+      return 'Apply failed'
     }
     if (operation === 'noop') {
       return 'Verified'
     }
-    if (changeActionKind !== null) {
-      return getChangeActionStateLabel(changeActionKind, 'completed')
-    }
-    return 'Edited'
+    return 'Applied'
   }
 
   if (invocation.toolName === 'run_terminal') {
@@ -344,10 +257,6 @@ function getToolVerb(invocation: ToolInvocationTrace) {
       : `Failed ${invocation.toolName}`
 }
 
-export function getChangeActionLabel(kind: 'add' | 'delete' | 'update') {
-  return CHANGE_ACTION_LABELS[kind].completed
-}
-
 export interface ToolInvocationDisplayEntry {
   invocation: ToolInvocationTrace
   key: string
@@ -370,7 +279,7 @@ function getApplyPatchSingleChangeTarget(invocation: ToolInvocationTrace) {
 export function getToolInvocationDisplayEntries(invocation: ToolInvocationTrace): ToolInvocationDisplayEntry[] {
   const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
   if (
-    invocation.toolName === 'apply_patch' &&
+    (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') &&
     invocation.state === 'completed' &&
     changeResultPresentation !== null &&
     changeResultPresentation.changes.length > 1

@@ -3,7 +3,6 @@ import test from 'node:test'
 import type { ToolInvocationTrace } from '../../src/types/chat'
 import { formatStructuredToolResultContent } from '../../src/lib/toolResultContent'
 import {
-  getChangeActionLabel,
   getToolInvocationDisplayEntries,
   getToolInvocationHeaderLabel,
 } from '../../src/components/chat/toolInvocationPresentation'
@@ -64,7 +63,8 @@ function buildFileChangeInvocation(
   return invocation
 }
 
-function buildMultiFileApplyPatchInvocation(
+function buildMultiFileApplyInvocation(
+  toolName: 'apply' | 'apply_patch',
   state: ToolInvocationTrace['state'],
   changes: Array<{
     fileName: string
@@ -92,7 +92,7 @@ function buildMultiFileApplyPatchInvocation(
         },
         summary: 'Patched multiple files',
         toolCallId: 'tool-multi-1',
-        toolName: 'apply_patch',
+        toolName,
       },
       [
         'Patched multiple files',
@@ -110,25 +110,19 @@ function buildMultiFileApplyPatchInvocation(
     },
     startedAt: 0,
     state,
-    toolName: 'apply_patch',
+    toolName,
   } satisfies ToolInvocationTrace
 }
 
-test('change action labels use created, deleted, and edited wording', () => {
-  assert.equal(getChangeActionLabel('add'), 'Created')
-  assert.equal(getChangeActionLabel('delete'), 'Deleted')
-  assert.equal(getChangeActionLabel('update'), 'Edited')
-})
+test('apply tool header labels use generic applying and applied verbs', () => {
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Applying example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Applied example.ts')
 
-test('apply tool header labels use action-specific running and completed verbs', () => {
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Creating example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Created example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Applying example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Applied example.ts')
 
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Deleting example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Deleted example.ts')
-
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Editing example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Applying example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Applied example.ts')
 })
 
 test('apply tool header labels keep mixed changes on the generic edit fallback', () => {
@@ -155,11 +149,11 @@ test('apply tool header labels keep mixed changes on the generic edit fallback',
     ),
   })
 
-  assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
+  assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Applied example.ts')
 })
 
 test('multi-file apply_patch invocations expand into separate display blocks', () => {
-  const invocation = buildMultiFileApplyPatchInvocation('completed', [
+  const invocation = buildMultiFileApplyInvocation('apply_patch', 'completed', [
     {
       fileName: 'src/first.ts',
       kind: 'update',
@@ -179,11 +173,44 @@ test('multi-file apply_patch invocations expand into separate display blocks', (
   assert.equal(displayEntries.length, 2)
   assert.equal(
     getToolInvocationHeaderLabel(displayEntries[0].invocation, undefined, WORKSPACE_ROOT_PATH),
-    'Edited first.ts',
+    'Applied first.ts',
   )
   assert.equal(
     getToolInvocationHeaderLabel(displayEntries[1].invocation, undefined, WORKSPACE_ROOT_PATH),
-    'Created second.ts',
+    'Applied second.ts',
+  )
+  assert.equal(displayEntries[0].invocation.resultPresentation?.kind, 'change_diff')
+  assert.equal(displayEntries[0].invocation.resultPresentation?.changes.length, 1)
+  assert.equal(displayEntries[1].invocation.resultPresentation?.kind, 'change_diff')
+  assert.equal(displayEntries[1].invocation.resultPresentation?.changes.length, 1)
+})
+
+test('multi-file apply invocations expand into separate display blocks', () => {
+  const invocation = buildMultiFileApplyInvocation('apply', 'completed', [
+    {
+      fileName: 'src/first.ts',
+      kind: 'update',
+      oldContent: 'const first = 1;\n',
+      newContent: 'const first = 2;\n',
+    },
+    {
+      fileName: 'src/second.ts',
+      kind: 'add',
+      oldContent: null,
+      newContent: 'export const second = 2;\n',
+    },
+  ])
+
+  const displayEntries = getToolInvocationDisplayEntries(invocation)
+
+  assert.equal(displayEntries.length, 2)
+  assert.equal(
+    getToolInvocationHeaderLabel(displayEntries[0].invocation, undefined, WORKSPACE_ROOT_PATH),
+    'Applied first.ts',
+  )
+  assert.equal(
+    getToolInvocationHeaderLabel(displayEntries[1].invocation, undefined, WORKSPACE_ROOT_PATH),
+    'Applied second.ts',
   )
   assert.equal(displayEntries[0].invocation.resultPresentation?.kind, 'change_diff')
   assert.equal(displayEntries[0].invocation.resultPresentation?.changes.length, 1)

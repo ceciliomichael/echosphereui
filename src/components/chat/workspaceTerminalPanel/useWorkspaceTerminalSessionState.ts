@@ -10,6 +10,8 @@ import type {
 import {
   createTerminalTabLabel,
   createTerminalTabKey,
+  clearSelectionWithinHost,
+  copyTerminalSelectionToClipboard,
   getErrorMessage,
   getNativeSelectionTextWithinHost,
   getSessionDimensions,
@@ -60,6 +62,7 @@ export function useWorkspaceTerminalSessionState({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalInputDisposableRef = useRef<IDisposable | null>(null);
   const terminalResizeDisposableRef = useRef<IDisposable | null>(null);
+  const terminalContextMenuListenerRef = useRef<((event: MouseEvent) => void) | null>(null);
   const workspacePathRef = useRef<string | null>(workspacePath);
   const activeWorkspaceKeyRef = useRef(workspaceKey);
   const isResizingRef = useRef(isResizing);
@@ -304,6 +307,29 @@ export function useWorkspaceTerminalSessionState({
     terminal.loadAddon(webLinksAddon);
     terminal.open(hostElement);
     terminal.focus();
+    const handleTerminalContextMenu = (event: MouseEvent) => {
+      const terminalSelection =
+        terminal.getSelection() || getNativeSelectionTextWithinHost(hostElement);
+      if (!terminalSelection) {
+        return;
+      }
+
+      event.preventDefault();
+      void copyTerminalSelectionToClipboard({
+        hostElement,
+        terminal,
+      })
+        .catch((error) => {
+          console.error("Failed to copy selected terminal text", error);
+        })
+        .finally(() => {
+          terminal.clearSelection();
+          clearSelectionWithinHost(hostElement);
+        });
+    };
+
+    terminalContextMenuListenerRef.current = handleTerminalContextMenu;
+    hostElement.addEventListener("contextmenu", handleTerminalContextMenu);
     terminal.attachCustomKeyEventHandler((event) => {
       const isCopyShortcut =
         (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "c";
@@ -360,6 +386,12 @@ export function useWorkspaceTerminalSessionState({
 
   const disposeTerminal = useCallback(() => {
     pendingTerminalRenderRef.current = null;
+    const hostElement = terminalHostRef.current;
+    const handleTerminalContextMenu = terminalContextMenuListenerRef.current;
+    if (hostElement && handleTerminalContextMenu) {
+      hostElement.removeEventListener("contextmenu", handleTerminalContextMenu);
+    }
+    terminalContextMenuListenerRef.current = null;
     terminalInputDisposableRef.current?.dispose();
     terminalResizeDisposableRef.current?.dispose();
     terminalInputDisposableRef.current = null;
