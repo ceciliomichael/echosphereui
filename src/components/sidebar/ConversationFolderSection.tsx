@@ -46,6 +46,11 @@ export function ConversationFolderSection({
   const showMoreResetTimeoutRef = useRef<number | null>(null)
   const addAnimationResetTimeoutRef = useRef<number | null>(null)
   const visibleConversations = group.conversations.slice(0, visibleThreadCount)
+  const activeRunningConversation =
+    group.conversations.find((conversation) => conversation.isActive && conversation.hasRunningTask) ??
+    group.conversations.find((conversation) => conversation.isActive) ??
+    group.conversations.find((conversation) => conversation.hasRunningTask) ??
+    null
   const remainingThreadCount = Math.max(group.conversations.length - visibleConversations.length, 0)
   const canShowLessThreads = remainingThreadCount === 0 && group.conversations.length > MAX_VISIBLE_PROJECT_FOLDER_THREADS
 
@@ -363,80 +368,81 @@ export function ConversationFolderSection({
         )}
       </div>
 
-      <div
-        className={[
-          'grid transition-[grid-template-rows,opacity,margin-top] duration-200 ease-out',
-          isCollapsed ? 'mt-0 grid-rows-[0fr] opacity-0' : 'mt-0.5 grid-rows-[1fr] opacity-100',
-        ].join(' ')}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="space-y-2 px-0 pb-0.5 pt-0.5">
-            {group.conversations.length === 0 ? (
-              <div className="flex min-h-[140px] items-center justify-center px-4 py-6 text-center">
-                <div className="flex max-w-[240px] flex-col items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
-                    <FolderOpen size={22} />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">No threads yet</p>
-                    <p className="text-sm leading-6 text-subtle-foreground">
-                      Start a new thread in this project folder
-                    </p>
-                  </div>
+      {isCollapsed ? (
+        activeRunningConversation ? (
+          <div className="space-y-1.5 px-0 pt-0.5">
+            <ConversationHistoryItem
+              conversation={activeRunningConversation}
+              onSelectConversation={onSelectConversation}
+              onDeleteConversation={onDeleteConversation}
+            />
+          </div>
+        ) : null
+      ) : (
+        <div className="mt-0.5 space-y-2 px-0 pb-0.5 pt-0.5">
+          {group.conversations.length === 0 ? (
+            <div className="flex min-h-[140px] items-center justify-center px-4 py-6 text-center">
+              <div className="flex max-w-[240px] flex-col items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-subtle-foreground">
+                  <FolderOpen size={22} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">No threads yet</p>
+                  <p className="text-sm leading-6 text-subtle-foreground">Start a new thread in this project folder</p>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                {visibleConversations.map((conversation, index) => {
-                  const isRecentlyAdded =
-                    recentlyAddedStartIndex !== null &&
-                    !isThreadListCollapsing &&
-                    index >= recentlyAddedStartIndex
-                  const isCollapsingAway = isThreadListCollapsing && index >= MAX_VISIBLE_PROJECT_FOLDER_THREADS
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {visibleConversations.map((conversation, index) => {
+                const isRecentlyAdded =
+                  recentlyAddedStartIndex !== null &&
+                  !isThreadListCollapsing &&
+                  index >= recentlyAddedStartIndex
+                const isCollapsingAway = isThreadListCollapsing && index >= MAX_VISIBLE_PROJECT_FOLDER_THREADS
 
-                  return (
-                    <div
-                      key={conversation.id}
-                      className={[
-                        'transition-[opacity,transform] duration-180 ease-out',
-                        isRecentlyAdded ? 'sidebar-thread-item-enter' : '',
-                        isCollapsingAway ? 'translate-y-1 opacity-0' : 'translate-y-0 opacity-100',
-                      ].join(' ')}
-                    >
-                      <ConversationHistoryItem
-                        conversation={conversation}
-                        onSelectConversation={onSelectConversation}
-                        onDeleteConversation={onDeleteConversation}
-                      />
-                    </div>
-                  )
-                })}
-                {remainingThreadCount > 0 || canShowLessThreads ? (
-                  <div className="px-4 py-1">
-                    {remainingThreadCount > 0 ? (
-                      <button
-                        type="button"
-                        onClick={handleShowMoreThreads}
-                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        Show more
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleShowLessThreads}
-                        className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        Show less
-                      </button>
-                    )}
+                return (
+                  <div
+                    key={conversation.id}
+                    className={[
+                      'transition-[opacity,transform] duration-180 ease-out',
+                      isRecentlyAdded ? 'sidebar-thread-item-enter' : '',
+                      isCollapsingAway ? 'translate-y-1 opacity-0' : 'translate-y-0 opacity-100',
+                    ].join(' ')}
+                  >
+                    <ConversationHistoryItem
+                      conversation={conversation}
+                      onSelectConversation={onSelectConversation}
+                      onDeleteConversation={onDeleteConversation}
+                    />
                   </div>
-                ) : null}
-              </div>
-            )}
-          </div>
+                )
+              })}
+              {remainingThreadCount > 0 || canShowLessThreads ? (
+                <div className="px-4 py-1">
+                  {remainingThreadCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleShowMoreThreads}
+                      className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Show more
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleShowLessThreads}
+                      className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Show less
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
-      </div>
+      )}
       {isActionsMenuOpen
         ? createPortal(
             <div
