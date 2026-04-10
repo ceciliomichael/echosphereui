@@ -64,9 +64,11 @@ export function CommitFileRow({ file, indentPx }: { file: GitHistoryCommitFile; 
   return (
     <Tooltip
       content={
-        <div className="flex min-w-[18rem] flex-col gap-1 font-sans">
-          <p className="text-[13px] text-tooltip-foreground">{normalizedPath}</p>
-          <p className="text-[13px] text-tooltip-foreground">{getStatusLabel(file.status)}</p>
+        <div className="flex w-full max-w-full flex-col gap-1 font-sans">
+          <p className="break-words whitespace-normal text-[13px] leading-5 text-tooltip-foreground">
+            {normalizedPath}
+          </p>
+          <p className="text-[13px] leading-5 text-tooltip-foreground">{getStatusLabel(file.status)}</p>
         </div>
       }
       side="right"
