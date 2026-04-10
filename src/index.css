@@ -329,6 +329,18 @@
     word-break: break-word;
   }
 
+  .workspace-terminal-host .xterm .xterm-selection {
+    z-index: 3 !important;
+  }
+
+  :root:not([data-theme='dark']) .workspace-terminal-host .xterm .xterm-selection div {
+    background-color: rgb(96 98 102 / 0.22) !important;
+  }
+
+  :root[data-theme='dark'] .workspace-terminal-host .xterm .xterm-selection div {
+    background-color: rgb(96 98 102 / 0.3) !important;
+  }
+
   :root .workspace-terminal-host .xterm .xterm-accessibility-tree *::selection {
     background-color: transparent !important;
   }
