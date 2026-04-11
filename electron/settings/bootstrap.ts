@@ -203,6 +203,10 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0
         ? candidate.lastActiveConversationId.trim()
         : DEFAULT_APP_SETTINGS.lastActiveConversationId,
+    openEmptyConversationOnLaunch:
+      typeof candidate?.openEmptyConversationOnLaunch === 'boolean'
+        ? candidate.openEmptyConversationOnLaunch
+        : DEFAULT_APP_SETTINGS.openEmptyConversationOnLaunch,
     revertEditSessionsByConversation: sanitizeRevertEditSessionsByConversation(
       candidate?.revertEditSessionsByConversation,
     ),

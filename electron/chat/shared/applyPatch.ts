@@ -47,13 +47,20 @@ export interface ApplyPatchWorkspaceOptions {
 }
 
 function normalizePatchInput(patchText: string) {
-  const trimmed = patchText.trim()
-  const heredocMatch = trimmed.match(/^(?:apply_patch\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/u)
-  if (heredocMatch) {
-    return heredocMatch[2]
+  const normalized = patchText.replace(/\r\n?/g, '\n').trim()
+  const heredocPatterns = [
+    /^(?:apply_patch|applypatch)\s*<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/u,
+    /^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/u,
+  ]
+
+  for (const pattern of heredocPatterns) {
+    const match = normalized.match(pattern)
+    if (match) {
+      return match[2]
+    }
   }
 
-  return trimmed
+  return normalized
 }
 
 function parsePatchHeader(lines: string[], index: number) {

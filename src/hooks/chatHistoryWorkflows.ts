@@ -138,13 +138,16 @@ async function createRunCheckpoint(agentContextRootPath: string) {
   })
 }
 
-export async function loadInitialChatHistory(preferredConversationId?: string | null): Promise<ChatHistorySnapshot> {
+export async function loadInitialChatHistory(
+  preferredConversationId?: string | null,
+  openEmptyConversationOnLaunch = false,
+): Promise<ChatHistorySnapshot> {
   const [conversationSummaries, folderSummaries] = await Promise.all([
     window.echosphereHistory.listConversations(),
     window.echosphereHistory.listFolders(),
   ])
 
-  if (conversationSummaries.length === 0) {
+  if (conversationSummaries.length === 0 || openEmptyConversationOnLaunch) {
     return {
       conversationSummaries,
       folderSummaries,

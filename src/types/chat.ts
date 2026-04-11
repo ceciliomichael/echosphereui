@@ -213,6 +213,7 @@ export interface AppSettings {
   editSessionsByConversation: Record<string, ConversationEditSession>
   language: AppLanguage
   lastActiveConversationId: string | null
+  openEmptyConversationOnLaunch: boolean
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   sendMessageOnEnter: boolean
   workspaceFileEditorWordWrap: boolean

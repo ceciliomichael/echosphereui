@@ -13,6 +13,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editSessionsByConversation: {},
   language: DEFAULT_APP_LANGUAGE,
   lastActiveConversationId: null,
+  openEmptyConversationOnLaunch: false,
   revertEditSessionsByConversation: {},
   sendMessageOnEnter: true,
   workspaceFileEditorWordWrap: true,

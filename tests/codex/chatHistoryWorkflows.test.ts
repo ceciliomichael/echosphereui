@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { prepareRevertSessionForMessage, restoreWorkspaceCheckpointForMessage } from '../../src/hooks/chatHistoryWorkflows'
-import type { ConversationRecord, Message, UserMessageRunCheckpoint } from '../../src/types/chat'
+import {
+  loadInitialChatHistory,
+  prepareRevertSessionForMessage,
+  restoreWorkspaceCheckpointForMessage,
+} from '../../src/hooks/chatHistoryWorkflows'
+import type {
+  ConversationFolderSummary,
+  ConversationRecord,
+  ConversationSummary,
+  Message,
+  UserMessageRunCheckpoint,
+} from '../../src/types/chat'
 
 type WindowMock = {
   echosphereHistory: {
+    listConversations: () => Promise<ConversationSummary[]>
+    listFolders: () => Promise<ConversationFolderSummary[]>
     getConversation: (conversationId: string) => Promise<ConversationRecord | null>
     getUserMessageCheckpointHistory: (conversationId: string, messageId: string) => Promise<UserMessageRunCheckpoint[]>
   }
@@ -104,6 +116,8 @@ test('revert helpers rewind the clicked message and every later user turn', asyn
   const restoreWindow = installWindowMock({
     echosphereHistory: {
       getConversation: async (conversationId) => (conversationId === conversation.id ? conversation : null),
+      listConversations: async () => [],
+      listFolders: async () => [],
       getUserMessageCheckpointHistory: async () => {
         throw new Error('history lookup should not be used when direct checkpoints exist')
       },
@@ -168,6 +182,8 @@ test('revert helpers fall back to checkpoint history when the message checkpoint
   const restoreWindow = installWindowMock({
     echosphereHistory: {
       getConversation: async (conversationId) => (conversationId === conversation.id ? conversation : null),
+      listConversations: async () => [],
+      listFolders: async () => [],
       getUserMessageCheckpointHistory: async () => [historicalCheckpoint],
     },
     echosphereWorkspace: {
@@ -195,6 +211,58 @@ test('revert helpers fall back to checkpoint history when the message checkpoint
     assert.equal(revertPreparation.redoCheckpointId, redoCheckpoint.id)
     assert.deepEqual(redoCheckpointCalls, [[historicalCheckpoint.id]])
     assert.deepEqual(restoreCheckpointCalls, [[historicalCheckpoint.id]])
+  } finally {
+    restoreWindow()
+  }
+})
+
+test('loadInitialChatHistory keeps the workspace on an empty draft when requested', async () => {
+  const conversation: ConversationRecord = buildConversation([
+    {
+      content: 'message 1',
+      id: 'message-1',
+      role: 'user',
+      timestamp: 10,
+    },
+  ])
+
+  const restoreWindow = installWindowMock({
+    echosphereHistory: {
+      getConversation: async () => {
+        throw new Error('should not load a conversation when restoring an empty draft')
+      },
+      listConversations: async () => [
+        {
+          agentContextRootPath: '/workspace',
+          chatMode: 'agent',
+          folderId: null,
+          id: conversation.id,
+          messageCount: 1,
+          preview: 'message 1',
+          title: conversation.title,
+          updatedAt: conversation.updatedAt,
+        },
+      ],
+      listFolders: async () => [],
+      getUserMessageCheckpointHistory: async () => [],
+    },
+    echosphereWorkspace: {
+      createRedoCheckpointFromSource: async () => {
+        throw new Error('not used')
+      },
+      createRedoCheckpointFromSources: async () => {
+        throw new Error('not used')
+      },
+      restoreCheckpoint: async () => undefined,
+      restoreCheckpointSequence: async () => undefined,
+    },
+  })
+
+  try {
+    const snapshot = await loadInitialChatHistory(null, true)
+
+    assert.equal(snapshot.initialConversation, null)
+    assert.equal(snapshot.conversationSummaries.length, 1)
   } finally {
     restoreWindow()
   }

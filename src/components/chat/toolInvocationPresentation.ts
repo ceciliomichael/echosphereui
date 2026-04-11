@@ -170,6 +170,99 @@ function readSessionId(value: unknown): string | null {
   return null
 }
 
+type ApplyActionKind = 'create' | 'delete' | 'edit' | 'verify'
+
+function readSemanticsCount(value: unknown, key: string) {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  const semanticsRecord = value as Record<string, unknown>
+  const countValue = semanticsRecord[key]
+  return typeof countValue === 'number' && Number.isFinite(countValue) ? countValue : null
+}
+
+function detectApplyActionKind(
+  invocation: ToolInvocationTrace,
+  operation: string | null,
+  semantics: Record<string, unknown> | null,
+): ApplyActionKind {
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
+  if (changeResultPresentation && changeResultPresentation.changes.length === 1) {
+    const [singleChange] = changeResultPresentation.changes
+    if (singleChange.kind === 'add') {
+      return 'create'
+    }
+    if (singleChange.kind === 'delete') {
+      return 'delete'
+    }
+    return 'edit'
+  }
+
+  if (operation === 'noop') {
+    return 'verify'
+  }
+
+  const addedPathCount = readSemanticsCount(semantics, 'added_path_count') ?? 0
+  const deletedPathCount = readSemanticsCount(semantics, 'deleted_path_count') ?? 0
+  const updatedPathCount = readSemanticsCount(semantics, 'updated_path_count') ?? 0
+  const activeKindCount =
+    Number(addedPathCount > 0) + Number(deletedPathCount > 0) + Number(updatedPathCount > 0)
+
+  if (activeKindCount === 1) {
+    if (addedPathCount > 0) {
+      return 'create'
+    }
+    if (deletedPathCount > 0) {
+      return 'delete'
+    }
+    if (updatedPathCount > 0) {
+      return 'edit'
+    }
+  }
+
+  return 'edit'
+}
+
+function formatApplyVerb(actionKind: ApplyActionKind, state: ToolInvocationTrace['state']) {
+  if (state === 'running') {
+    if (actionKind === 'create') {
+      return 'Creating'
+    }
+    if (actionKind === 'delete') {
+      return 'Deleting'
+    }
+    if (actionKind === 'verify') {
+      return 'Verifying'
+    }
+    return 'Editing'
+  }
+
+  if (state === 'failed') {
+    if (actionKind === 'create') {
+      return 'Create failed'
+    }
+    if (actionKind === 'delete') {
+      return 'Delete failed'
+    }
+    if (actionKind === 'verify') {
+      return 'Verify failed'
+    }
+    return 'Edit failed'
+  }
+
+  if (actionKind === 'create') {
+    return 'Created'
+  }
+  if (actionKind === 'delete') {
+    return 'Deleted'
+  }
+  if (actionKind === 'verify') {
+    return 'Verified'
+  }
+  return 'Edited'
+}
+
 function getToolVerb(invocation: ToolInvocationTrace) {
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const operation =
@@ -198,16 +291,12 @@ function getToolVerb(invocation: ToolInvocationTrace) {
   }
 
   if (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') {
-    if (invocation.state === 'running') {
-      return 'Applying'
-    }
-    if (invocation.state === 'failed') {
-      return 'Apply failed'
-    }
-    if (operation === 'noop') {
-      return 'Verified'
-    }
-    return 'Applied'
+    const semantics =
+      parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics === 'object'
+        ? parsedResult.metadata.semantics
+        : null
+    const actionKind = detectApplyActionKind(invocation, operation, semantics)
+    return formatApplyVerb(actionKind, invocation.state)
   }
 
   if (invocation.toolName === 'run_terminal') {

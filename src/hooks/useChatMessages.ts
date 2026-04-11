@@ -15,10 +15,12 @@ const EMPTY_MESSAGES: Message[] = []
 interface UseChatMessagesInput {
   editSessionsByConversation: Record<string, ConversationEditSession>
   language: AppLanguage
+  persistConversationLaunchPreference: (conversationId: string | null, openEmptyConversationOnLaunch: boolean) => void
   persistEditSessionsByConversation: (nextValue: Record<string, ConversationEditSession>) => void
   preferredConversationId: string | null
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   persistRevertEditSessionsByConversation: (nextValue: Record<string, RevertEditSession>) => void
+  openEmptyConversationOnLaunch: boolean
   shouldInitializeHistory: boolean
 }
 
@@ -26,10 +28,12 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const {
     editSessionsByConversation: persistedEditSessionsByConversation,
     language,
+    persistConversationLaunchPreference,
     persistEditSessionsByConversation,
     persistRevertEditSessionsByConversation,
     preferredConversationId,
     revertEditSessionsByConversation: persistedRevertEditSessionsByConversation,
+    openEmptyConversationOnLaunch,
     shouldInitializeHistory,
   } = input
   const sessionState = useChatSessionState(language)
@@ -144,6 +148,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
   useInitializeChatHistory({
     enabled: shouldInitializeHistory,
     initializeHistory: sessionState.initializeHistory,
+    openEmptyConversationOnLaunch,
     preferredConversationId,
     setError: sessionState.setError,
     setIsLoading: sessionState.setIsLoading,
@@ -468,9 +473,10 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const createConversation = useCallback(
     async (folderId?: string | null) => {
       captureActiveEditDraftSession()
+      persistConversationLaunchPreference(null, true)
       await conversationActions.createConversation(folderId)
     },
-    [captureActiveEditDraftSession, conversationActions],
+    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
   )
 
   const createFolder = useCallback(async () => {

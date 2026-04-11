@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { DiffPanelScope } from './components/chat/ConversationDiffPanel'
 import { ChatInterface, type RightPanelTab } from './pages/ChatInterface'
 import { SettingsInterface } from './pages/SettingsInterface'
@@ -8,7 +8,11 @@ import { useDocumentTheme } from './hooks/useDocumentTheme'
 import { useProvidersState } from './hooks/useProvidersState'
 
 type AppScreen = 'chat' | 'settings'
-const CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST = '__clear_last_active_conversation__'
+
+interface BootConversationLaunchState {
+  preferredConversationId: string | null
+  openEmptyConversationOnLaunch: boolean
+}
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<AppScreen>('chat')
@@ -19,20 +23,29 @@ export default function App() {
   const { isLoading, saveState, settings, updateSettings } = useAppSettings()
   const providersState = useProvidersState()
   const [diffPanelWidth, setDiffPanelWidth] = useState(settings.diffPanelWidth)
-  const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
-  const persistingConversationIdRef = useRef<string | null>(null)
+  const [bootConversationLaunchState, setBootConversationLaunchState] = useState<BootConversationLaunchState | undefined>(
+    undefined,
+  )
+  const persistConversationLaunchPreference = useCallback(
+    (preferredConversationId: string | null, openEmptyConversationOnLaunch: boolean) => {
+      void updateSettings({ lastActiveConversationId: preferredConversationId, openEmptyConversationOnLaunch })
+    },
+    [updateSettings],
+  )
   const chatMessages = useChatMessages({
     editSessionsByConversation: settings.editSessionsByConversation,
     language: settings.language,
+    openEmptyConversationOnLaunch: bootConversationLaunchState?.openEmptyConversationOnLaunch ?? false,
+    persistConversationLaunchPreference,
     persistEditSessionsByConversation: (nextValue) => {
       void updateSettings({ editSessionsByConversation: nextValue })
     },
     persistRevertEditSessionsByConversation: (nextValue) => {
       void updateSettings({ revertEditSessionsByConversation: nextValue })
     },
-    preferredConversationId: bootPreferredConversationId ?? null,
+    preferredConversationId: bootConversationLaunchState?.preferredConversationId ?? null,
     revertEditSessionsByConversation: settings.revertEditSessionsByConversation,
-    shouldInitializeHistory: bootPreferredConversationId !== undefined,
+    shouldInitializeHistory: bootConversationLaunchState !== undefined,
   })
   const activeWorkspacePath = chatMessages.activeConversationRootPath ?? chatMessages.selectedFolderPath
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
@@ -59,12 +72,15 @@ export default function App() {
   }, [settings.diffPanelWidth])
 
   useEffect(() => {
-    if (isLoading || bootPreferredConversationId !== undefined) {
+    if (isLoading || bootConversationLaunchState !== undefined) {
       return
     }
 
-    setBootPreferredConversationId(settings.lastActiveConversationId)
-  }, [bootPreferredConversationId, isLoading, settings.lastActiveConversationId])
+    setBootConversationLaunchState({
+      openEmptyConversationOnLaunch: settings.openEmptyConversationOnLaunch,
+      preferredConversationId: settings.lastActiveConversationId,
+    })
+  }, [bootConversationLaunchState, isLoading, settings.lastActiveConversationId, settings.openEmptyConversationOnLaunch])
 
   useEffect(() => {
     if (isLoading || chatMessages.isLoading) {
@@ -73,52 +89,20 @@ export default function App() {
 
     const activeConversationId = chatMessages.activeConversationId
     if (!activeConversationId) {
-      const hasStoredConversations = chatMessages.conversationGroups.some((group) => group.conversations.length > 0)
-      if (hasStoredConversations || settings.lastActiveConversationId === null) {
-        if (persistingConversationIdRef.current === CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST) {
-          persistingConversationIdRef.current = null
-        }
-
-        return
-      }
-
-      if (persistingConversationIdRef.current === CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST) {
-        return
-      }
-
-      persistingConversationIdRef.current = CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST
-      void updateSettings({ lastActiveConversationId: null }).finally(() => {
-        if (persistingConversationIdRef.current === CLEAR_LAST_ACTIVE_CONVERSATION_REQUEST) {
-          persistingConversationIdRef.current = null
-        }
-      })
       return
     }
 
-    if (activeConversationId === settings.lastActiveConversationId) {
-      if (persistingConversationIdRef.current === activeConversationId) {
-        persistingConversationIdRef.current = null
-      }
-
+    if (activeConversationId === settings.lastActiveConversationId && !settings.openEmptyConversationOnLaunch) {
       return
     }
 
-    if (persistingConversationIdRef.current === activeConversationId) {
-      return
-    }
-
-    persistingConversationIdRef.current = activeConversationId
-    void updateSettings({ lastActiveConversationId: activeConversationId }).finally(() => {
-      if (persistingConversationIdRef.current === activeConversationId) {
-        persistingConversationIdRef.current = null
-      }
-    })
+    void updateSettings({ lastActiveConversationId: activeConversationId, openEmptyConversationOnLaunch: false })
   }, [
     chatMessages.activeConversationId,
-    chatMessages.conversationGroups,
     chatMessages.isLoading,
     isLoading,
     settings.lastActiveConversationId,
+    settings.openEmptyConversationOnLaunch,
     updateSettings,
   ])
 

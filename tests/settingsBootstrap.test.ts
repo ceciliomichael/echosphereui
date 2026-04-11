@@ -44,3 +44,17 @@ test('parseInitialSettingsArg preserves persisted terminal open state', () => {
     workspaceA: true,
   })
 })
+
+test('parseInitialSettingsArg preserves empty chat launch preference', () => {
+  const parsedSettings = parseInitialSettingsArg([
+    'echosphere.exe',
+    serializeInitialSettingsArg({
+      ...DEFAULT_APP_SETTINGS,
+      lastActiveConversationId: null,
+      openEmptyConversationOnLaunch: true,
+    }),
+  ])
+
+  assert.equal(parsedSettings.lastActiveConversationId, null)
+  assert.equal(parsedSettings.openEmptyConversationOnLaunch, true)
+})

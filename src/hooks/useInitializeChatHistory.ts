@@ -7,12 +7,13 @@ interface UseInitializeChatHistoryInput {
   enabled: boolean
   initializeHistory: (snapshot: Awaited<ReturnType<typeof loadInitialChatHistory>>) => void
   preferredConversationId: string | null
+  openEmptyConversationOnLaunch: boolean
   setError: (errorMessage: string | null) => void
   setIsLoading: (isLoading: boolean) => void
 }
 
 export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
-  const { enabled, initializeHistory, preferredConversationId, setError, setIsLoading } = input
+  const { enabled, initializeHistory, openEmptyConversationOnLaunch, preferredConversationId, setError, setIsLoading } = input
   const didStartInitializationRef = useRef(false)
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
 
     async function initializeConversations() {
       try {
-        const snapshot = await loadInitialChatHistory(preferredConversationId)
+        const snapshot = await loadInitialChatHistory(preferredConversationId, openEmptyConversationOnLaunch)
         const initialWorkspacePath = snapshot.initialConversation?.agentContextRootPath ?? null
 
         if (initialWorkspacePath) {
@@ -60,5 +61,5 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
     return () => {
       isMounted = false
     }
-  }, [enabled, initializeHistory, preferredConversationId, setError, setIsLoading])
+  }, [enabled, initializeHistory, openEmptyConversationOnLaunch, preferredConversationId, setError, setIsLoading])
 }

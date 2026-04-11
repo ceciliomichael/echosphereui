@@ -21,6 +21,26 @@ test('parseApplyPatch reads add and update hunks', () => {
   assert.equal(parsed.hunks[1]?.type, 'update')
 })
 
+test('parseApplyPatch accepts heredoc-wrapped patch text', () => {
+  const wrappedWithCat = parseApplyPatch(`cat <<'EOF'
+*** Begin Patch
+*** Add File: src/cat.txt
++cat
+*** End Patch
+EOF`)
+  assert.equal(wrappedWithCat.hunks.length, 1)
+  assert.equal(wrappedWithCat.hunks[0]?.type, 'add')
+
+  const wrappedRaw = parseApplyPatch(`<<PATCH
+*** Begin Patch
+*** Add File: src/raw.txt
++raw
+*** End Patch
+PATCH`)
+  assert.equal(wrappedRaw.hunks.length, 1)
+  assert.equal(wrappedRaw.hunks[0]?.type, 'add')
+})
+
 test('applyPatchInWorkspace applies add, update, move, and delete operations', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-patch-'))
   await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })

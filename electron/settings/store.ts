@@ -237,6 +237,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
       ? input.lastActiveConversationId.trim()
       : DEFAULT_APP_SETTINGS.lastActiveConversationId
+  const openEmptyConversationOnLaunch =
+    typeof input?.openEmptyConversationOnLaunch === 'boolean'
+      ? input.openEmptyConversationOnLaunch
+      : DEFAULT_APP_SETTINGS.openEmptyConversationOnLaunch
   const revertEditSessionsByConversation = sanitizeRevertEditSessionsByConversation(
     input?.revertEditSessionsByConversation,
   )
@@ -265,6 +269,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     editSessionsByConversation,
     language,
     lastActiveConversationId,
+    openEmptyConversationOnLaunch,
     revertEditSessionsByConversation,
     sendMessageOnEnter,
     workspaceFileEditorWordWrap,
