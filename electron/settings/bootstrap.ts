@@ -82,22 +82,10 @@ function sanitizeSourceControlSectionOpen(value: unknown): AppSettings['sourceCo
 }
 
 function sanitizeTerminalOpenByWorkspace(value: unknown): AppSettings['terminalOpenByWorkspace'] {
-  if (!value || typeof value !== 'object') {
-    return { ...DEFAULT_APP_SETTINGS.terminalOpenByWorkspace }
-  }
-
-  const candidateEntries = Object.entries(value as Record<string, unknown>)
-  const sanitizedValue: AppSettings['terminalOpenByWorkspace'] = {}
-  for (const [workspaceKey, workspaceIsOpen] of candidateEntries) {
-    const normalizedWorkspaceKey = workspaceKey.trim()
-    if (normalizedWorkspaceKey.length === 0 || typeof workspaceIsOpen !== 'boolean') {
-      continue
-    }
-
-    sanitizedValue[normalizedWorkspaceKey] = workspaceIsOpen
-  }
-
-  return sanitizedValue
+  // Terminal visibility is runtime-only UI state. Starting with an empty map
+  // avoids stale persisted sessions reopening the panel during bootstrap.
+  void value
+  return { ...DEFAULT_APP_SETTINGS.terminalOpenByWorkspace }
 }
 
 function sanitizeTerminalPanelHeightsByWorkspace(value: unknown): AppSettings['terminalPanelHeightsByWorkspace'] {
