@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_APP_SETTINGS } from '../lib/defaultAppSettings'
+import { resetLaunchOnlyAppSettings } from './appSettingsLaunchState'
 import { getCachedAppearancePreference } from '../lib/theme'
 import type { AppSettings } from '../types/chat'
 
@@ -15,10 +16,10 @@ function getInitialAppSettings(): AppSettings {
     return fallbackSettings
   }
 
-  return {
+  return resetLaunchOnlyAppSettings({
     ...fallbackSettings,
     ...window.echosphereSettings.getInitialSettings(),
-  }
+  })
 }
 
 export function useAppSettings() {
@@ -46,7 +47,9 @@ export function useAppSettings() {
 
     async function loadSettings() {
       try {
-        const nextSettings = await window.echosphereSettings.getSettings()
+        const nextSettings = resetLaunchOnlyAppSettings(
+          await window.echosphereSettings.getSettings(),
+        )
         if (!isMounted) {
           return
         }

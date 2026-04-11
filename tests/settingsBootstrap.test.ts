@@ -27,7 +27,7 @@ test('parseInitialSettingsArg sanitizes persisted edit sessions by conversation'
   })
 })
 
-test('parseInitialSettingsArg resets terminal open state on app launch', () => {
+test('parseInitialSettingsArg preserves persisted terminal open state', () => {
   const parsedSettings = parseInitialSettingsArg([
     'echosphere.exe',
     serializeInitialSettingsArg({
@@ -39,5 +39,8 @@ test('parseInitialSettingsArg resets terminal open state on app launch', () => {
     }),
   ])
 
-  assert.deepEqual(parsedSettings.terminalOpenByWorkspace, {})
+  assert.deepEqual(parsedSettings.terminalOpenByWorkspace, {
+    '__global__': true,
+    workspaceA: true,
+  })
 })

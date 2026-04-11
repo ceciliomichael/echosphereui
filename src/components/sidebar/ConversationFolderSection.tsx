@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
@@ -67,59 +67,77 @@ export function ConversationFolderSection({
     visibility: 'hidden',
   })
 
+  const updateActionsMenuPosition = useCallback(() => {
+    const buttonElement = actionsMenuButtonRef.current
+    const menuElement = actionsMenuRef.current
+    const buttonRect = buttonElement?.getBoundingClientRect()
+    const menuRect = menuElement?.getBoundingClientRect()
+
+    if (!buttonRect || !menuElement) {
+      return
+    }
+
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const menuWidth = menuRect?.width ?? menuElement.scrollWidth
+    const menuHeight = menuElement.scrollHeight
+    const offset = 6
+    const edgePadding = 8
+    const settingsButtonRect =
+      document.querySelector<HTMLButtonElement>('button[aria-label="Open settings"]')?.getBoundingClientRect() ?? null
+    const menuBottomLimit = settingsButtonRect
+      ? Math.max(settingsButtonRect.top - edgePadding, edgePadding)
+      : viewportHeight - edgePadding
+    const availableBelow = Math.max(menuBottomLimit - buttonRect.bottom - offset, 0)
+    const availableAbove = Math.max(buttonRect.top - offset - edgePadding, 0)
+    const shouldOpenAbove = availableBelow < menuHeight && availableAbove > 0
+    const maxHeight = shouldOpenAbove ? availableAbove : availableBelow
+    const top = shouldOpenAbove
+      ? Math.max(edgePadding, buttonRect.top - Math.min(menuHeight, maxHeight) - offset)
+      : buttonRect.bottom + offset
+
+    const unclampedLeft = buttonRect.right - menuWidth
+    const maxLeft = Math.max(viewportWidth - menuWidth - edgePadding, edgePadding)
+    const left = Math.min(Math.max(unclampedLeft, edgePadding), maxLeft)
+
+    setActionsMenuStyle((currentValue) => {
+      if (
+        currentValue.left === left &&
+        currentValue.maxHeight === maxHeight &&
+        currentValue.top === top &&
+        currentValue.visibility === 'visible'
+      ) {
+        return currentValue
+      }
+
+      return {
+        left,
+        maxHeight,
+        top,
+        visibility: 'visible',
+      }
+    })
+  }, [])
+
   useLayoutEffect(() => {
     if (!isActionsMenuOpen) {
       return
     }
 
-    function updateMenuPosition() {
-      const buttonElement = actionsMenuButtonRef.current
-      const menuElement = actionsMenuRef.current
-      const buttonRect = buttonElement?.getBoundingClientRect()
-      const menuRect = menuElement?.getBoundingClientRect()
+    updateActionsMenuPosition()
+  })
 
-      if (!buttonRect || !menuElement) {
-        return
-      }
-
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      const menuWidth = menuRect?.width ?? menuElement.scrollWidth
-      const menuHeight = menuElement.scrollHeight
-      const offset = 6
-      const edgePadding = 8
-      const settingsButtonRect =
-        document.querySelector<HTMLButtonElement>('button[aria-label="Open settings"]')?.getBoundingClientRect() ?? null
-      const menuBottomLimit = settingsButtonRect
-        ? Math.max(settingsButtonRect.top - edgePadding, edgePadding)
-        : viewportHeight - edgePadding
-      const availableBelow = Math.max(menuBottomLimit - buttonRect.bottom - offset, 0)
-      const availableAbove = Math.max(buttonRect.top - offset - edgePadding, 0)
-      const shouldOpenAbove = availableBelow < menuHeight && availableAbove > 0
-      const maxHeight = shouldOpenAbove ? availableAbove : availableBelow
-      const top = shouldOpenAbove
-        ? Math.max(edgePadding, buttonRect.top - Math.min(menuHeight, maxHeight) - offset)
-        : buttonRect.bottom + offset
-
-      // Keep the menu "pointing left" from the trigger by right-aligning with the button.
-      const unclampedLeft = buttonRect.right - menuWidth
-      const maxLeft = Math.max(viewportWidth - menuWidth - edgePadding, edgePadding)
-      const left = Math.min(Math.max(unclampedLeft, edgePadding), maxLeft)
-
-      setActionsMenuStyle({
-        left,
-        maxHeight,
-        top,
-        visibility: 'visible',
-      })
+  useLayoutEffect(() => {
+    if (!isActionsMenuOpen) {
+      return
     }
 
-    updateMenuPosition()
-    const animationFrameId = window.requestAnimationFrame(updateMenuPosition)
+    updateActionsMenuPosition()
+    const animationFrameId = window.requestAnimationFrame(updateActionsMenuPosition)
     const resizeObserver =
       typeof ResizeObserver === 'function'
         ? new ResizeObserver(() => {
-            updateMenuPosition()
+            updateActionsMenuPosition()
           })
         : null
 
@@ -127,16 +145,16 @@ export function ConversationFolderSection({
       resizeObserver.observe(actionsMenuRef.current)
     }
 
-    window.addEventListener('resize', updateMenuPosition)
-    window.addEventListener('scroll', updateMenuPosition, true)
+    window.addEventListener('resize', updateActionsMenuPosition)
+    window.addEventListener('scroll', updateActionsMenuPosition, true)
 
     return () => {
       window.cancelAnimationFrame(animationFrameId)
       resizeObserver?.disconnect()
-      window.removeEventListener('resize', updateMenuPosition)
-      window.removeEventListener('scroll', updateMenuPosition, true)
+      window.removeEventListener('resize', updateActionsMenuPosition)
+      window.removeEventListener('scroll', updateActionsMenuPosition, true)
     }
-  }, [isActionsMenuOpen])
+  }, [isActionsMenuOpen, updateActionsMenuPosition])
 
   useEffect(() => {
     return () => {
@@ -251,7 +269,6 @@ export function ConversationFolderSection({
       return
     }
 
-    setIsActionsMenuOpen(false)
     void onMoveFolder(group.folder.id, direction)
   }
 
