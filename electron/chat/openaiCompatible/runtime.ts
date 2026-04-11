@@ -72,6 +72,9 @@ async function runOpenAICompatibleChatStream(
           tools: streamInput.tools,
         }),
       onSettled,
+      promptOptions: {
+        includeAssistantReasoningParts: false,
+      },
       startInput: input,
       streamId,
       webContents,

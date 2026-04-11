@@ -29,6 +29,10 @@ interface RuntimeStreamPart {
   [key: string]: unknown
 }
 
+interface RuntimePromptOptions {
+  includeAssistantReasoningParts?: boolean
+}
+
 export interface ProviderStreamFactoryInput {
   messages: ModelMessage[]
   model: string
@@ -197,6 +201,7 @@ export async function runToolEnabledChatStream(input: {
   abortController: AbortController
   createStream: ProviderStreamFactory
   onSettled?: () => void
+  promptOptions?: RuntimePromptOptions
   startInput: StartChatStreamInput
   streamId: string
   webContents: WebContents
@@ -220,6 +225,7 @@ export async function runToolEnabledChatStream(input: {
     const prompt = buildChatPrompt({
       chatMode: input.startInput.chatMode,
       messages: input.startInput.messages,
+      options: input.promptOptions,
       workspaceRootPath: input.startInput.agentContextRootPath,
     })
     const stream = await input.createStream({

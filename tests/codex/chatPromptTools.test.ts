@@ -350,3 +350,53 @@ test('buildChatPrompt preserves assistant reasoning content alongside tool calls
     absolute_path: 'C:/repo/src/example.ts',
   })
 })
+
+test('buildChatPrompt can serialize assistant reasoning as plain text content', () => {
+  const messages: Message[] = [
+    {
+      content: 'Inspect the file',
+      id: 'user-1',
+      role: 'user',
+      timestamp: 1,
+    },
+    {
+      content: 'I will call a tool now.',
+      id: 'assistant-1',
+      reasoningCompletedAt: 3,
+      reasoningContent: 'I should inspect the file before changing it.',
+      role: 'assistant',
+      timestamp: 2,
+      toolInvocations: [
+        {
+          argumentsText: JSON.stringify({ absolute_path: 'C:/repo/src/example.ts' }),
+          completedAt: 3,
+          id: 'tool-call-1',
+          resultContent: '',
+          startedAt: 2,
+          state: 'completed',
+          toolName: 'read',
+        },
+      ],
+    },
+  ]
+
+  const prompt = buildChatPrompt({
+    chatMode: 'agent',
+    messages,
+    options: {
+      includeAssistantReasoningParts: false,
+    },
+    workspaceRootPath: 'C:/repo',
+  })
+
+  assert.equal(prompt.messages.length, 2)
+  const assistantMessage = prompt.messages[1]
+  assert.equal(assistantMessage?.role, 'assistant')
+  assert.ok(Array.isArray(assistantMessage?.content))
+  assert.equal(assistantMessage?.content[0]?.type, 'text')
+  assert.equal(
+    assistantMessage?.content[0]?.text,
+    'I should inspect the file before changing it.\n\nI will call a tool now.',
+  )
+  assert.equal(assistantMessage?.content[1]?.type, 'tool-call')
+})

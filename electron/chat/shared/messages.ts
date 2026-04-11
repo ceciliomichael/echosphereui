@@ -6,6 +6,9 @@ import { buildChatModeSystemPrompt } from './prompts/mode'
 
 type ToolModelMessage = Extract<ModelMessage, { role: 'tool' }>
 type ToolResultPart = ToolModelMessage['content'][number]
+interface BuildChatPromptOptions {
+  includeAssistantReasoningParts?: boolean
+}
 
 function toUserContent(message: Message) {
   const textAttachments = (message.attachments ?? [])
@@ -82,35 +85,43 @@ function buildToolResultParts(message: Message, validToolCallIds: Set<string>): 
   ]
 }
 
-function toAssistantMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
+function toAssistantMessage(
+  message: Message,
+  validToolCallIds: Set<string>,
+  options: Required<BuildChatPromptOptions>,
+): ModelMessage | null {
   const normalized = normalizeAssistantMessageContent(message)
   const toolCallParts = buildAssistantToolCallParts(message, validToolCallIds)
   const reasoningText = normalized.reasoningContent.trim()
   const text = normalized.content.trim()
+  const combinedAssistantText =
+    options.includeAssistantReasoningParts || reasoningText.length === 0
+      ? text
+      : [reasoningText, text].filter((part) => part.length > 0).join('\n\n')
 
   if (toolCallParts.length === 0) {
-    if (!text && !reasoningText) {
+    if (!combinedAssistantText && !reasoningText) {
       return null
     }
 
     return {
       content:
-        reasoningText.length > 0
+        options.includeAssistantReasoningParts && reasoningText.length > 0
           ? [
               {
                 text: reasoningText,
                 type: 'reasoning' as const,
               },
-              ...(text.length > 0
+              ...(combinedAssistantText.length > 0
                 ? [
                     {
-                      text,
+                      text: combinedAssistantText,
                       type: 'text' as const,
                     },
                   ]
                 : []),
             ]
-          : text,
+          : combinedAssistantText || reasoningText,
       role: 'assistant',
     }
   }
@@ -132,16 +143,16 @@ function toAssistantMessage(message: Message, validToolCallIds: Set<string>): Mo
       }
   > = []
 
-  if (reasoningText) {
+  if (options.includeAssistantReasoningParts && reasoningText) {
     contentParts.push({
       text: reasoningText,
       type: 'reasoning',
     })
   }
 
-  if (text) {
+  if (combinedAssistantText) {
     contentParts.push({
-      text,
+      text: combinedAssistantText,
       type: 'text',
     })
   }
@@ -178,7 +189,11 @@ function appendModelMessage(messages: ModelMessage[], nextMessage: ModelMessage)
   messages.push(nextMessage)
 }
 
-function toModelMessage(message: Message, validToolCallIds: Set<string>): ModelMessage | null {
+function toModelMessage(
+  message: Message,
+  validToolCallIds: Set<string>,
+  options: Required<BuildChatPromptOptions>,
+): ModelMessage | null {
   if (message.role === 'user') {
     const content = toUserContent(message)
     if (!content.trim()) {
@@ -192,7 +207,7 @@ function toModelMessage(message: Message, validToolCallIds: Set<string>): ModelM
   }
 
   if (message.role === 'assistant') {
-    return toAssistantMessage(message, validToolCallIds)
+    return toAssistantMessage(message, validToolCallIds, options)
   }
 
   if (message.role === 'tool') {
@@ -209,13 +224,17 @@ export function buildChatSystemPrompt(chatMode: ChatMode, workspaceRootPath: str
 export function buildChatPrompt(input: {
   chatMode: ChatMode
   messages: Message[]
+  options?: BuildChatPromptOptions
   workspaceRootPath: string
 }): { messages: ModelMessage[]; system: string } {
   const validToolCallIds = new Set<string>()
   const messages: ModelMessage[] = []
+  const options: Required<BuildChatPromptOptions> = {
+    includeAssistantReasoningParts: input.options?.includeAssistantReasoningParts ?? true,
+  }
 
   for (const message of input.messages) {
-    const modelMessage = toModelMessage(message, validToolCallIds)
+    const modelMessage = toModelMessage(message, validToolCallIds, options)
     if (!modelMessage) {
       continue
     }
