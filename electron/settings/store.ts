@@ -3,7 +3,7 @@ import path from 'node:path'
 import { app } from 'electron'
 import type { AppSettings } from '../../src/types/chat'
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
-import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { isAppAppearance, isAppLanguage, isFollowUpBehavior } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
@@ -232,6 +232,9 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
       ? clampStoredDiffPanelWidth(input.diffPanelWidth)
       : DEFAULT_APP_SETTINGS.diffPanelWidth
   const editSessionsByConversation = sanitizeEditSessionsByConversation(input?.editSessionsByConversation)
+  const followUpBehavior = isFollowUpBehavior(input?.followUpBehavior)
+    ? input.followUpBehavior
+    : DEFAULT_APP_SETTINGS.followUpBehavior
   const workspaceEditorWidth =
     typeof input?.workspaceEditorWidth === 'number' && Number.isFinite(input.workspaceEditorWidth)
       ? clampStoredWorkspaceEditorWidth(input.workspaceEditorWidth)
@@ -245,6 +248,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.lastActiveConversationId === 'string' && input.lastActiveConversationId.trim().length > 0
       ? input.lastActiveConversationId.trim()
       : DEFAULT_APP_SETTINGS.lastActiveConversationId
+  const lastActiveDraftFolderId =
+    typeof input?.lastActiveDraftFolderId === 'string' && input.lastActiveDraftFolderId.trim().length > 0
+      ? input.lastActiveDraftFolderId.trim()
+      : DEFAULT_APP_SETTINGS.lastActiveDraftFolderId
   const openEmptyConversationOnLaunch =
     typeof input?.openEmptyConversationOnLaunch === 'boolean'
       ? input.openEmptyConversationOnLaunch
@@ -276,8 +283,10 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     chatReasoningEffort,
     diffPanelWidth,
     editSessionsByConversation,
+    followUpBehavior,
     language,
     lastActiveConversationId,
+    lastActiveDraftFolderId,
     openEmptyConversationOnLaunch,
     revertEditSessionsByConversation,
     sendMessageOnEnter,

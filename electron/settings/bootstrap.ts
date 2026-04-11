@@ -1,5 +1,5 @@
 import { DEFAULT_APP_SETTINGS } from '../../src/lib/defaultAppSettings'
-import { isAppAppearance, isAppLanguage } from '../../src/lib/appSettings'
+import { isAppAppearance, isAppLanguage, isFollowUpBehavior } from '../../src/lib/appSettings'
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
@@ -206,11 +206,18 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
         ? clampStoredDiffPanelWidth(candidate.diffPanelWidth)
         : DEFAULT_APP_SETTINGS.diffPanelWidth,
     editSessionsByConversation: sanitizeEditSessionsByConversation(candidate?.editSessionsByConversation),
+    followUpBehavior: isFollowUpBehavior(candidate?.followUpBehavior)
+      ? candidate.followUpBehavior
+      : DEFAULT_APP_SETTINGS.followUpBehavior,
     language: isAppLanguage(candidate?.language) ? candidate.language : DEFAULT_APP_SETTINGS.language,
     lastActiveConversationId:
       typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0
         ? candidate.lastActiveConversationId.trim()
         : DEFAULT_APP_SETTINGS.lastActiveConversationId,
+    lastActiveDraftFolderId:
+      typeof candidate?.lastActiveDraftFolderId === 'string' && candidate.lastActiveDraftFolderId.trim().length > 0
+        ? candidate.lastActiveDraftFolderId.trim()
+        : DEFAULT_APP_SETTINGS.lastActiveDraftFolderId,
     openEmptyConversationOnLaunch:
       typeof candidate?.openEmptyConversationOnLaunch === 'boolean'
         ? candidate.openEmptyConversationOnLaunch

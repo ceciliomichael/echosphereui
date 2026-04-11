@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FolderTree, GitBranch, GitCommitHorizontal, GitCompareArrows, Terminal } from 'lucide-react'
 import { ChatHeader } from '../../components/ChatHeader'
 import { MessageList } from '../../components/MessageList'
@@ -111,13 +111,70 @@ export function ChatInterfaceContent({
   })
   const { candidates: refactorCandidates, isLoading: refactorCandidatesLoading } =
     useWorkspaceRefactorCandidates(activeWorkspacePath)
+  const [hasSeenActiveStreamToolInvocation, setHasSeenActiveStreamToolInvocation] = useState(false)
+  const [trackedStreamingAssistantMessageId, setTrackedStreamingAssistantMessageId] = useState<string | null>(null)
+  const streamingAssistantMessage = useMemo(
+    () =>
+      chatMessages.streamingAssistantMessageId
+        ? chatMessages.messages.find(
+            (message) =>
+              message.id === chatMessages.streamingAssistantMessageId && message.role === 'assistant',
+          ) ?? null
+        : null,
+    [chatMessages.messages, chatMessages.streamingAssistantMessageId],
+  )
+  const hasRunningToolInvocation =
+    streamingAssistantMessage?.toolInvocations?.some((invocation) => invocation.state === 'running') ?? false
+  const hasToolInvocationsInActiveStream = (streamingAssistantMessage?.toolInvocations?.length ?? 0) > 0
+
+  useEffect(() => {
+    if (!chatMessages.isSending || !chatMessages.streamingAssistantMessageId) {
+      setTrackedStreamingAssistantMessageId(null)
+      setHasSeenActiveStreamToolInvocation(false)
+      return
+    }
+
+    if (chatMessages.streamingAssistantMessageId !== trackedStreamingAssistantMessageId) {
+      setTrackedStreamingAssistantMessageId(chatMessages.streamingAssistantMessageId)
+      setHasSeenActiveStreamToolInvocation(hasToolInvocationsInActiveStream)
+      return
+    }
+
+    if (hasToolInvocationsInActiveStream) {
+      setHasSeenActiveStreamToolInvocation(true)
+    }
+  }, [
+    chatMessages.isSending,
+    chatMessages.streamingAssistantMessageId,
+    hasToolInvocationsInActiveStream,
+    trackedStreamingAssistantMessageId,
+  ])
+
+  const canSteerQueuedMessages =
+    settings.followUpBehavior === 'steer' &&
+    chatMessages.isSending &&
+    hasSeenActiveStreamToolInvocation &&
+    chatMessages.isStreamingTextActive &&
+    !hasRunningToolInvocation
+  const isQueueBlocked =
+    chatMessages.isLoading ||
+    (settings.followUpBehavior === 'queue'
+      ? chatMessages.isSending
+      : chatMessages.isSending && !canSteerQueuedMessages)
+
   const sendQueuedMessage = useCallback(
     (queuedMessage: { content: string; attachments?: ChatAttachment[] }) => {
-      return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments, {
-        resetMainComposerAfterSend: false,
-      })
+      return (async () => {
+        if (canSteerQueuedMessages) {
+          await chatMessages.abortStreamingResponse()
+        }
+
+        return chatMessages.sendNewMessage(runtimeSelection, queuedMessage.content, queuedMessage.attachments, {
+          resetMainComposerAfterSend: false,
+        })
+      })()
     },
-    [chatMessages, runtimeSelection],
+    [canSteerQueuedMessages, chatMessages, runtimeSelection],
   )
 
   const {
@@ -128,7 +185,7 @@ export function ChatInterfaceContent({
     removeQueuedMessage,
     updateQueuedMessage,
   } = useChatMessageQueue({
-    isBusy: chatMessages.isLoading || chatMessages.isSending,
+    isQueueBlocked,
     onSendMessage: sendQueuedMessage,
   })
   const selectorOptions = useMemo(

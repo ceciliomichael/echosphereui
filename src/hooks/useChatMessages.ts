@@ -15,8 +15,13 @@ const EMPTY_MESSAGES: Message[] = []
 interface UseChatMessagesInput {
   editSessionsByConversation: Record<string, ConversationEditSession>
   language: AppLanguage
-  persistConversationLaunchPreference: (conversationId: string | null, openEmptyConversationOnLaunch: boolean) => void
+  persistConversationLaunchPreference: (input: {
+    conversationId: string | null
+    draftFolderId: string | null
+    openEmptyConversationOnLaunch: boolean
+  }) => void
   persistEditSessionsByConversation: (nextValue: Record<string, ConversationEditSession>) => void
+  preferredDraftFolderId: string | null
   preferredConversationId: string | null
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   persistRevertEditSessionsByConversation: (nextValue: Record<string, RevertEditSession>) => void
@@ -31,6 +36,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     persistConversationLaunchPreference,
     persistEditSessionsByConversation,
     persistRevertEditSessionsByConversation,
+    preferredDraftFolderId,
     preferredConversationId,
     revertEditSessionsByConversation: persistedRevertEditSessionsByConversation,
     openEmptyConversationOnLaunch,
@@ -38,7 +44,6 @@ export function useChatMessages(input: UseChatMessagesInput) {
   } = input
   const sessionState = useChatSessionState(language)
   const messages = sessionState.activeConversationState?.conversation.messages ?? EMPTY_MESSAGES
-  const isSending = sessionState.activeConversationState?.isSending ?? false
   const activeWorkspacePath =
     sessionState.activeConversationState?.conversation.agentContextRootPath ?? sessionState.selectedFolderPath
   const composerState = useChatComposerState(messages)
@@ -149,6 +154,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     enabled: shouldInitializeHistory,
     initializeHistory: sessionState.initializeHistory,
     openEmptyConversationOnLaunch,
+    preferredDraftFolderId,
     preferredConversationId,
     setError: sessionState.setError,
     setIsLoading: sessionState.setIsLoading,
@@ -437,7 +443,6 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const sendActions = useChatSendActions({
     activeConversationId,
     activeConversationIdRef: streamingState.activeConversationIdRef,
-    activeConversationStateIsSending: isSending,
     applyConversation: sessionState.applyConversation,
     appendLocalMessage: sessionState.appendLocalMessage,
     beginRevertEditingMessage,
@@ -473,31 +478,54 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const createConversation = useCallback(
     async (folderId?: string | null) => {
       captureActiveEditDraftSession()
-      persistConversationLaunchPreference(null, true)
-      await conversationActions.createConversation(folderId)
+      const resolvedFolderId = await conversationActions.createConversation(folderId)
+      persistConversationLaunchPreference({
+        conversationId: null,
+        draftFolderId: resolvedFolderId,
+        openEmptyConversationOnLaunch: true,
+      })
     },
     [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
   )
 
   const createFolder = useCallback(async () => {
     captureActiveEditDraftSession()
-    await conversationActions.createFolder()
-  }, [captureActiveEditDraftSession, conversationActions])
+    const createdFolderId = await conversationActions.createFolder()
+    if (createdFolderId === undefined) {
+      return
+    }
+
+    persistConversationLaunchPreference({
+      conversationId: null,
+      draftFolderId: createdFolderId,
+      openEmptyConversationOnLaunch: true,
+    })
+  }, [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference])
 
   const selectConversation = useCallback(
     async (conversationId: string) => {
       captureActiveEditDraftSession()
+      persistConversationLaunchPreference({
+        conversationId,
+        draftFolderId: null,
+        openEmptyConversationOnLaunch: false,
+      })
       await conversationActions.selectConversation(conversationId)
     },
-    [captureActiveEditDraftSession, conversationActions],
+    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
   )
 
   const selectFolder = useCallback(
     async (folderId: string | null) => {
       captureActiveEditDraftSession()
-      await conversationActions.selectFolder(folderId)
+      const resolvedFolderId = await conversationActions.selectFolder(folderId)
+      persistConversationLaunchPreference({
+        conversationId: null,
+        draftFolderId: resolvedFolderId,
+        openEmptyConversationOnLaunch: true,
+      })
     },
-    [captureActiveEditDraftSession, conversationActions],
+    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
   )
 
   return {

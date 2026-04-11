@@ -6,6 +6,7 @@ import { buildModelProviderSections } from './modelViewUtils'
 import { getProviderModelLoadErrorMessage } from './modelLoadErrorUtils'
 import { mergeProviderModels } from './providerModelMergeUtils'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
+import { SETTINGS_SECTION_TITLE_CLASS_NAME } from '../shared/SettingsPanelPrimitives'
 import { Switch } from '../../ui/Switch'
 import type { CustomModelConfig, ProviderModelConfig, ProvidersState } from '../../../types/chat'
 
@@ -207,9 +208,12 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[780px] flex-col gap-3 py-2 md:py-3">
-      <header className="px-4 pb-0">
-        <h2 className="text-[21px] font-medium tracking-tight text-foreground md:text-[24px]">Models</h2>
+    <div className="flex w-full max-w-[780px] flex-col gap-3">
+      <header className="flex flex-col gap-1 px-1 pt-1">
+        <h2 className={SETTINGS_SECTION_TITLE_CLASS_NAME}>Models</h2>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Browse available provider models and custom models, then toggle the ones you want active in the workspace.
+        </p>
       </header>
 
       {customModelsState.errorMessage ? (
@@ -224,7 +228,7 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
         </div>
       ) : null}
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+      <section className="flex h-[520px] flex-none flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:h-[560px]">
         <div className="border-b border-border px-4 py-3 md:px-5">
           <div className="relative">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

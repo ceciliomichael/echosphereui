@@ -23,6 +23,7 @@ const TERMINAL_OUTPUT_END_PREFIX = '╰─<<-- end'
 interface TerminalThreadSessionState {
   globalToLocalSessionId: Map<number, number>
   localToGlobalSessionId: Map<number, number>
+  pendingLocalToGlobalSessionId: Map<number, Promise<number>>
   nextSessionId: number
 }
 
@@ -41,6 +42,27 @@ interface TerminalToolDependencies {
     ownerWebContents: WebContents,
     input: WriteTerminalSessionInput,
   ) => Promise<void>
+}
+
+interface DeferredValue<T> {
+  promise: Promise<T>
+  reject: (reason?: unknown) => void
+  resolve: (value: T) => void
+}
+
+function createDeferredValue<T>(): DeferredValue<T> {
+  let resolveValue!: (value: T) => void
+  let rejectValue!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveValue = resolve
+    rejectValue = reject
+  })
+
+  return {
+    promise,
+    reject: rejectValue,
+    resolve: resolveValue,
+  }
 }
 
 async function loadDefaultTerminalToolDependencies(): Promise<TerminalToolDependencies> {
@@ -161,6 +183,7 @@ function getTerminalThreadSessionState(namespace: string): TerminalThreadSession
   const nextState: TerminalThreadSessionState = {
     globalToLocalSessionId: new Map(),
     localToGlobalSessionId: new Map(),
+    pendingLocalToGlobalSessionId: new Map(),
     nextSessionId: 1,
   }
   terminalThreadSessionStates.set(namespace, nextState)
@@ -181,8 +204,40 @@ function getOrCreateThreadLocalSessionId(namespace: string, globalSessionId: num
   return localSessionId
 }
 
-function resolveThreadGlobalSessionId(namespace: string, localSessionId: number) {
-  return getTerminalThreadSessionState(namespace).localToGlobalSessionId.get(localSessionId) ?? null
+function reserveThreadLocalSessionId(namespace: string) {
+  const state = getTerminalThreadSessionState(namespace)
+  const localSessionId = state.nextSessionId
+  state.nextSessionId += 1
+  return localSessionId
+}
+
+function setPendingThreadGlobalSessionId(
+  namespace: string,
+  localSessionId: number,
+  promise: Promise<number>,
+) {
+  const state = getTerminalThreadSessionState(namespace)
+  state.pendingLocalToGlobalSessionId.set(localSessionId, promise)
+}
+
+function clearPendingThreadGlobalSessionId(namespace: string, localSessionId: number) {
+  const state = getTerminalThreadSessionState(namespace)
+  state.pendingLocalToGlobalSessionId.delete(localSessionId)
+}
+
+async function resolveThreadGlobalSessionIdWithPending(namespace: string, localSessionId: number) {
+  const state = getTerminalThreadSessionState(namespace)
+  const immediateGlobalSessionId = state.localToGlobalSessionId.get(localSessionId)
+  if (immediateGlobalSessionId !== undefined) {
+    return immediateGlobalSessionId
+  }
+
+  const pendingGlobalSessionId = state.pendingLocalToGlobalSessionId.get(localSessionId)
+  if (!pendingGlobalSessionId) {
+    return null
+  }
+
+  return pendingGlobalSessionId
 }
 
 function buildRunTerminalResult(snapshot: CreateTerminalSessionResult, command: string | null) {
@@ -295,7 +350,7 @@ export function createTerminalToolSet(
         const namespace = resolveTerminalThreadNamespace(context)
 
         try {
-          const globalSessionId = resolveThreadGlobalSessionId(namespace, localSessionId)
+          const globalSessionId = await resolveThreadGlobalSessionIdWithPending(namespace, localSessionId)
           if (globalSessionId === null) {
             return createErrorResult(
               `Unknown terminal session id: ${localSessionId}`,
@@ -362,6 +417,10 @@ export function createTerminalToolSet(
         const rows = clampInteger(inputValue.rows, 6, 200, 30)
         const command = normalizeCommand(inputValue.command)
         const namespace = resolveTerminalThreadNamespace(context)
+        const reservedLocalSessionId = reserveThreadLocalSessionId(namespace)
+        const pendingGlobalSessionId = createDeferredValue<number>()
+        pendingGlobalSessionId.promise.catch(() => undefined)
+        setPendingThreadGlobalSessionId(namespace, reservedLocalSessionId, pendingGlobalSessionId.promise)
 
         try {
           const cwd = resolveTerminalWorkspaceCwd(context, inputValue.cwd)
@@ -374,6 +433,8 @@ export function createTerminalToolSet(
             workspaceRootPath: context.workspaceRootPath,
           })
           const localSessionId = getOrCreateThreadLocalSessionId(namespace, session.sessionId)
+          clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
+          pendingGlobalSessionId.resolve(session.sessionId)
           const displaySession = {
             ...session,
             sessionId: localSessionId,
@@ -388,6 +449,8 @@ export function createTerminalToolSet(
 
           return buildRunTerminalResult(displaySession, command)
         } catch (error) {
+          clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
+          pendingGlobalSessionId.reject(error)
           return createErrorResult(
             error instanceof Error && error.message.trim().length > 0 ? error.message : 'Terminal run failed.',
           )

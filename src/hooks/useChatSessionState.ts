@@ -111,12 +111,17 @@ export function useChatSessionState(language: AppLanguage) {
   )
 
   const initializeHistory = useCallback(
-    ({ conversationSummaries: nextConversationSummaries, folderSummaries: nextFolderSummaries, initialConversation }: ChatHistorySnapshot) => {
+    ({
+      conversationSummaries: nextConversationSummaries,
+      folderSummaries: nextFolderSummaries,
+      initialConversation,
+      initialSelectedFolderId,
+    }: ChatHistorySnapshot) => {
       setConversationSummaries(nextConversationSummaries)
       setFolderSummaries(nextFolderSummaries)
 
       if (!initialConversation) {
-        clearConversationSelection(null)
+        clearConversationSelection(initialSelectedFolderId)
         return
       }
 

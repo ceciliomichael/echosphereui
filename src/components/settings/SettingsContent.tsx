@@ -1,20 +1,19 @@
-import { GeneralSettingsPanel } from './general/GeneralSettingsPanel'
+import { MemoizedGeneralSettingsPanel } from './general/GeneralSettingsPanel'
 import { McpServersSettingsPanel } from './mcp/McpServersSettingsPanel'
 import { ModelsSettingsPanel } from './models/ModelsSettingsPanel'
 import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
-import type { AppAppearance, AppLanguage } from '../../lib/appSettings'
-import type { AppSettingsSaveState } from '../../hooks/useAppSettings'
+import type { AppAppearance, AppLanguage, FollowUpBehavior } from '../../lib/appSettings'
 import type { ApiKeyProviderId, AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
 import type { McpAddServerInput, McpState } from '../../types/mcp'
 
 interface GeneralSettingsViewModel {
   isLoading: boolean
   onUpdateSettings: (input: Partial<AppSettings>) => void
-  saveState: AppSettingsSaveState
   settings: {
     appearance: AppAppearance
+    followUpBehavior: FollowUpBehavior
     language: AppLanguage
     sendMessageOnEnter: boolean
     workspaceFileEditorWordWrap: boolean
@@ -64,18 +63,20 @@ export function SettingsContent({
   const activeItem = getSettingsItem(activeItemId)
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-y-auto px-4 pb-4 md:px-5">
-      {activeItemId === 'settings-item1' ? (
-        <GeneralSettingsPanel {...generalSettings} />
-      ) : activeItemId === 'settings-item2' ? (
-        <ProvidersSettingsPanel {...providersSettings} />
-      ) : activeItemId === 'settings-item3' ? (
-        <ModelsSettingsPanel {...modelsSettings} />
-      ) : activeItemId === 'settings-item4' ? (
-        <McpServersSettingsPanel {...mcpSettings} />
-      ) : (
-        <SettingsPlaceholderPanel item={activeItem} />
-      )}
+    <div className="flex min-h-0 flex-1 overflow-y-auto px-4 pb-12 pt-12 md:px-5 md:pb-16 md:pt-16">
+      <div className="flex w-full justify-center">
+        {activeItemId === 'settings-item1' ? (
+          <MemoizedGeneralSettingsPanel {...generalSettings} />
+        ) : activeItemId === 'settings-item2' ? (
+          <ProvidersSettingsPanel {...providersSettings} />
+        ) : activeItemId === 'settings-item3' ? (
+          <ModelsSettingsPanel {...modelsSettings} />
+        ) : activeItemId === 'settings-item4' ? (
+          <McpServersSettingsPanel {...mcpSettings} />
+        ) : (
+          <SettingsPlaceholderPanel item={activeItem} />
+        )}
+      </div>
     </div>
   )
 }

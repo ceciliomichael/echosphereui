@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { McpServerDialog } from './McpAddDialog'
 import { McpServerList } from './McpServerList'
 import type { McpAddServerInput, McpServerConfig, McpState } from '../../../types/mcp'
-import { SettingsPanelLayout } from '../shared/SettingsPanelPrimitives'
+import { SETTINGS_SECTION_TITLE_CLASS_NAME, SettingsPanelLayout } from '../shared/SettingsPanelPrimitives'
 
 const ADD_MCP_BUTTON_CLASS_NAME =
   'provider-primary-action-button inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-xs font-medium leading-none transition-colors active:scale-[0.99] disabled:cursor-not-allowed'
@@ -63,8 +63,12 @@ export function McpServersSettingsPanel({
   }
 
   return (
-    <SettingsPanelLayout title="MCP Servers">
+    <SettingsPanelLayout>
       <div className="flex flex-col gap-4">
+        <header className="flex flex-col gap-1 px-1 pt-1">
+          <h2 className={SETTINGS_SECTION_TITLE_CLASS_NAME}>MCP Servers</h2>
+        </header>
+
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-sm leading-6 text-muted-foreground">

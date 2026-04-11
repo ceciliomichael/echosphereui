@@ -1,5 +1,5 @@
 import type { AppSettings } from '../types/chat'
-import { DEFAULT_APP_APPEARANCE, DEFAULT_APP_LANGUAGE } from './appSettings'
+import { DEFAULT_APP_APPEARANCE, DEFAULT_APP_LANGUAGE, DEFAULT_FOLLOW_UP_BEHAVIOR } from './appSettings'
 import { DEFAULT_DIFF_PANEL_WIDTH } from './diffPanelSizing'
 import { DEFAULT_SIDEBAR_WIDTH } from './sidebarSizing'
 import { DEFAULT_WORKSPACE_EDITOR_WIDTH } from './workspaceEditorSizing'
@@ -12,8 +12,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chatReasoningEffort: 'medium',
   diffPanelWidth: DEFAULT_DIFF_PANEL_WIDTH,
   editSessionsByConversation: {},
+  followUpBehavior: DEFAULT_FOLLOW_UP_BEHAVIOR,
   language: DEFAULT_APP_LANGUAGE,
   lastActiveConversationId: null,
+  lastActiveDraftFolderId: null,
   openEmptyConversationOnLaunch: false,
   revertEditSessionsByConversation: {},
   sendMessageOnEnter: true,

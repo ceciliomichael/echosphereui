@@ -16,6 +16,7 @@ export interface ChatHistorySnapshot {
   conversationSummaries: ConversationSummary[]
   folderSummaries: ConversationFolderSummary[]
   initialConversation: ConversationRecord | null
+  initialSelectedFolderId: string | null
 }
 
 interface PersistUserTurnInput {
@@ -141,6 +142,7 @@ async function createRunCheckpoint(agentContextRootPath: string) {
 export async function loadInitialChatHistory(
   preferredConversationId?: string | null,
   openEmptyConversationOnLaunch = false,
+  preferredDraftFolderId?: string | null,
 ): Promise<ChatHistorySnapshot> {
   const [conversationSummaries, folderSummaries] = await Promise.all([
     window.echosphereHistory.listConversations(),
@@ -148,10 +150,18 @@ export async function loadInitialChatHistory(
   ])
 
   if (conversationSummaries.length === 0 || openEmptyConversationOnLaunch) {
+    const normalizedPreferredDraftFolderId = preferredDraftFolderId?.trim() ?? ''
+    const initialSelectedFolderId =
+      normalizedPreferredDraftFolderId.length > 0 &&
+      folderSummaries.some((folderSummary) => folderSummary.id === normalizedPreferredDraftFolderId)
+        ? normalizedPreferredDraftFolderId
+        : null
+
     return {
       conversationSummaries,
       folderSummaries,
       initialConversation: null,
+      initialSelectedFolderId,
     }
   }
 
@@ -171,6 +181,7 @@ export async function loadInitialChatHistory(
     conversationSummaries,
     folderSummaries,
     initialConversation,
+    initialSelectedFolderId: initialConversation?.folderId ?? null,
   }
 }
 

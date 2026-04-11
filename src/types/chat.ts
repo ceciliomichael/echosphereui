@@ -1,4 +1,4 @@
-import type { AppAppearance, AppLanguage } from '../lib/appSettings'
+import type { AppAppearance, AppLanguage, FollowUpBehavior } from '../lib/appSettings'
 
 export type MessageRole = 'user' | 'assistant' | 'tool'
 export type ChatMode = 'agent' | 'plan'
@@ -212,8 +212,10 @@ export interface AppSettings {
   chatReasoningEffort: ReasoningEffort
   diffPanelWidth: number
   editSessionsByConversation: Record<string, ConversationEditSession>
+  followUpBehavior: FollowUpBehavior
   language: AppLanguage
   lastActiveConversationId: string | null
+  lastActiveDraftFolderId: string | null
   openEmptyConversationOnLaunch: boolean
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   sendMessageOnEnter: boolean

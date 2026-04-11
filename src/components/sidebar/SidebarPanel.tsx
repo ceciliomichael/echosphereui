@@ -39,7 +39,7 @@ export function SidebarPanel({
         <div className="h-10" aria-hidden="true" />
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pl-2">
             <p className="truncate whitespace-nowrap text-sm font-semibold text-foreground">Threads</p>
           </div>
           <div className="flex items-center gap-2">

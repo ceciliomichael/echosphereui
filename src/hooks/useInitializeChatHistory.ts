@@ -6,6 +6,7 @@ import { loadInitialChatHistory } from './chatHistoryWorkflows'
 interface UseInitializeChatHistoryInput {
   enabled: boolean
   initializeHistory: (snapshot: Awaited<ReturnType<typeof loadInitialChatHistory>>) => void
+  preferredDraftFolderId: string | null
   preferredConversationId: string | null
   openEmptyConversationOnLaunch: boolean
   setError: (errorMessage: string | null) => void
@@ -13,7 +14,15 @@ interface UseInitializeChatHistoryInput {
 }
 
 export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
-  const { enabled, initializeHistory, openEmptyConversationOnLaunch, preferredConversationId, setError, setIsLoading } = input
+  const {
+    enabled,
+    initializeHistory,
+    openEmptyConversationOnLaunch,
+    preferredConversationId,
+    preferredDraftFolderId,
+    setError,
+    setIsLoading,
+  } = input
   const didStartInitializationRef = useRef(false)
 
   useEffect(() => {
@@ -26,7 +35,11 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
 
     async function initializeConversations() {
       try {
-        const snapshot = await loadInitialChatHistory(preferredConversationId, openEmptyConversationOnLaunch)
+        const snapshot = await loadInitialChatHistory(
+          preferredConversationId,
+          openEmptyConversationOnLaunch,
+          preferredDraftFolderId,
+        )
         const initialWorkspacePath = snapshot.initialConversation?.agentContextRootPath ?? null
 
         if (initialWorkspacePath) {
@@ -61,5 +74,13 @@ export function useInitializeChatHistory(input: UseInitializeChatHistoryInput) {
     return () => {
       isMounted = false
     }
-  }, [enabled, initializeHistory, openEmptyConversationOnLaunch, preferredConversationId, setError, setIsLoading])
+  }, [
+    enabled,
+    initializeHistory,
+    openEmptyConversationOnLaunch,
+    preferredConversationId,
+    preferredDraftFolderId,
+    setError,
+    setIsLoading,
+  ])
 }

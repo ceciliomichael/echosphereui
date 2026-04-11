@@ -9,7 +9,6 @@ import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
 import type { ChatMode } from '../types/chat'
 
 interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'runtimeSelection' | 'targetEditMessageId' | 'trimmedText' | 'attachments'> {
-  activeConversationStateIsSending: boolean
   beginRevertEditingMessage: (conversationId: string, messageId: string, redoCheckpointId: string) => void
   cancelEditingMessage: () => void
   editComposerAttachments: PersistAndStreamMessageInput['attachments']
@@ -152,10 +151,15 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       attachments = input.mainComposerAttachments,
       options?: SendNewMessageOptions,
     ) => {
+      const activeConversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+      const isActiveConversationSending = activeConversationId
+        ? (getConversationState(activeConversationId)?.isSending ?? false)
+        : false
+
       if (
         actionInFlightRef.current ||
-        input.activeConversationStateIsSending ||
-        (input.activeConversationId === null && input.pendingDraftSendCount > 0)
+        isActiveConversationSending ||
+        (activeConversationId === null && input.pendingDraftSendCount > 0)
       ) {
         return false
       }
@@ -175,7 +179,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         trimmedText,
       })
     },
-    [input],
+    [getConversationState, input],
   )
 
   const sendProgrammaticMessage = useCallback(
@@ -186,10 +190,15 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         chatMode?: ChatMode
       },
     ) => {
+      const activeConversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+      const isActiveConversationSending = activeConversationId
+        ? (getConversationState(activeConversationId)?.isSending ?? false)
+        : false
+
       if (
         actionInFlightRef.current ||
-        input.activeConversationStateIsSending ||
-        (input.activeConversationId === null && input.pendingDraftSendCount > 0)
+        isActiveConversationSending ||
+        (activeConversationId === null && input.pendingDraftSendCount > 0)
       ) {
         return
       }
@@ -209,7 +218,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         trimmedText,
       })
     },
-    [input],
+    [getConversationState, input],
   )
 
   const sendEditedMessage = useCallback(

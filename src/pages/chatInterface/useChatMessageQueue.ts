@@ -8,20 +8,20 @@ import {
 } from './chatComposerQueue'
 
 interface UseChatMessageQueueInput {
-  isBusy: boolean
+  isQueueBlocked: boolean
   onSendMessage: (message: QueuedMessage) => Promise<boolean> | boolean
 }
 
-export function useChatMessageQueue({ isBusy, onSendMessage }: UseChatMessageQueueInput) {
+export function useChatMessageQueue({ isQueueBlocked, onSendMessage }: UseChatMessageQueueInput) {
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([])
   const isProcessingQueueRef = useRef(false)
   const attemptedQueueMessageIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (isBusy) {
+    if (isQueueBlocked) {
       attemptedQueueMessageIdRef.current = null
     }
-  }, [isBusy])
+  }, [isQueueBlocked])
 
   const enqueueMessage = useCallback((content: string, attachments?: ChatAttachment[]) => {
     const nextMessage = createQueuedComposerMessage({ attachments, content })
@@ -89,7 +89,7 @@ export function useChatMessageQueue({ isBusy, onSendMessage }: UseChatMessageQue
   )
 
   useEffect(() => {
-    if (isBusy || queuedMessages.length === 0 || isProcessingQueueRef.current) {
+    if (isQueueBlocked || queuedMessages.length === 0 || isProcessingQueueRef.current) {
       return undefined
     }
 
@@ -114,7 +114,7 @@ export function useChatMessageQueue({ isBusy, onSendMessage }: UseChatMessageQue
     })()
 
     return undefined
-  }, [isBusy, queuedMessages, sendQueuedMessage])
+  }, [isQueueBlocked, queuedMessages, sendQueuedMessage])
 
   return {
     clearQueuedMessages,

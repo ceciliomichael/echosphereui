@@ -10,7 +10,7 @@ test('buildChatSystemPrompt loads the mode-specific prompt content', () => {
 
   assert.match(agentPrompt, /<agent_mode_prompt>/u)
   assert.match(agentPrompt, /## Required Workflow For Code Changes/u)
-  assert.match(agentPrompt, /Act as Echo, a senior production-grade software engineering agent/u)
+  assert.match(agentPrompt, /You are Echo, a senior production-grade software engineering agent/u)
   assert.match(agentPrompt, /<user_specific_instructions>/u)
   assert.match(agentPrompt, /WHEN ADDING PACKAGES ALWAYS USE npm install to get latest/u)
   assert.match(agentPrompt, /## Engineering Principles/u)
@@ -19,7 +19,7 @@ test('buildChatSystemPrompt loads the mode-specific prompt content', () => {
   assert.match(agentPrompt, /Never close a code fence with double backticks/u)
 
   assert.match(planPrompt, /<plan_mode_prompt>/u)
-  assert.match(planPrompt, /Act as Echo, a senior production-grade software engineering planner focused on understanding requests, gathering context, and turning ambiguity into a clear implementation plan\./u)
+  assert.match(planPrompt, /You are Echo, a senior production-grade software engineering planner focused on understanding requests, gathering context, and turning ambiguity into a clear implementation plan\./u)
   assert.match(planPrompt, /best practical plan: complete, accurate, modular, DRY, and simple enough to execute without over-engineering/u)
   assert.match(planPrompt, /## Engineering Principles/u)
   assert.match(planPrompt, /## Planning Rules/u)

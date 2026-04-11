@@ -1,18 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { AppWorkspaceShell } from '../components/layout/AppWorkspaceShell'
-import { WorkspaceHeader } from '../components/layout/WorkspaceHeader'
 import { WorkspaceFloatingControls } from '../components/layout/WorkspaceFloatingControls'
 import { WorkspacePanel } from '../components/layout/WorkspacePanel'
 import { SettingsContent } from '../components/settings/SettingsContent'
 import { SettingsSidebarPanel } from '../components/settings/SettingsSidebarPanel'
 import {
   DEFAULT_SETTINGS_ITEM_ID,
-  getSettingsItem,
   type SettingsItemId,
 } from '../components/settings/settingsItems'
 import { useMcpServersState } from '../hooks/useMcpServersState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
-import type { AppSettingsSaveState } from '../hooks/useAppSettings'
 import type { AppSettings, ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../types/chat'
 
 interface SettingsInterfaceProps {
@@ -23,7 +20,6 @@ interface SettingsInterfaceProps {
   onUpdateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
   sidebarWidth: number
   settings: AppSettings
-  settingsSaveState: AppSettingsSaveState
   providersState: {
     activeOperation: string | null
     addCodexAccountWithOAuth: () => Promise<boolean>
@@ -48,17 +44,39 @@ export function SettingsInterface({
   providersState,
   sidebarWidth,
   settings,
-  settingsSaveState,
 }: SettingsInterfaceProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(DEFAULT_SETTINGS_ITEM_ID)
   const mcpSettings = useMcpServersState(activeWorkspacePath)
+  const handleUpdateSettings = useCallback((input: Partial<AppSettings>) => {
+    void onUpdateSettings(input)
+  }, [onUpdateSettings])
+  const generalSettings = useMemo(
+    () => ({
+      isLoading: isSettingsLoading,
+      onUpdateSettings: handleUpdateSettings,
+      settings: {
+        appearance: settings.appearance,
+        followUpBehavior: settings.followUpBehavior,
+        language: settings.language,
+        sendMessageOnEnter: settings.sendMessageOnEnter,
+        workspaceFileEditorWordWrap: settings.workspaceFileEditorWordWrap,
+      },
+    }),
+    [
+      handleUpdateSettings,
+      isSettingsLoading,
+      settings.appearance,
+      settings.followUpBehavior,
+      settings.language,
+      settings.sendMessageOnEnter,
+      settings.workspaceFileEditorWordWrap,
+    ],
+  )
 
   useWorkspaceKeyboardShortcuts({
     onToggleSidebar: () => setIsSidebarOpen((currentValue) => !currentValue),
   })
-
-  const activeItemLabel = getSettingsItem(activeItemId).label
 
   return (
     <AppWorkspaceShell
@@ -80,24 +98,9 @@ export function SettingsInterface({
       sidebarWidth={sidebarWidth}
     >
       <WorkspacePanel isSidebarOpen={isSidebarOpen} showRightBorder={false}>
-        <WorkspaceHeader
-          title={activeItemLabel}
-          isSidebarOpen={isSidebarOpen}
-          leadingPaddingClassName={isSidebarOpen ? '' : 'pl-[72px] md:pl-[76px]'}
-        />
         <SettingsContent
           activeItemId={activeItemId}
-          generalSettings={{
-            isLoading: isSettingsLoading,
-            onUpdateSettings: (input) => void onUpdateSettings(input),
-            saveState: settingsSaveState,
-            settings: {
-              appearance: settings.appearance,
-              language: settings.language,
-              sendMessageOnEnter: settings.sendMessageOnEnter,
-              workspaceFileEditorWordWrap: settings.workspaceFileEditorWordWrap,
-            },
-          }}
+          generalSettings={generalSettings}
           mcpSettings={{
             activeOperation: mcpSettings.activeOperation,
             onAddServer: mcpSettings.addServer,

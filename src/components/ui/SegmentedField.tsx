@@ -52,10 +52,10 @@ export function SegmentedField({
             aria-pressed={isActive}
             onClick={() => onChange(option.value)}
             className={[
-              'min-w-[56px] rounded-lg px-3 py-1.5 text-[13px] transition-colors md:text-sm',
+               'min-w-[56px] rounded-lg px-3 py-1.5 text-[13px] font-normal transition-colors md:text-sm',
               isActive
-                ? 'bg-[var(--segmented-control-active-surface)] font-medium text-foreground shadow-sm'
-                : 'bg-transparent font-normal text-muted-foreground hover:bg-[var(--segmented-control-hover-surface)] hover:text-foreground',
+                ? 'bg-[var(--segmented-control-active-surface)] text-foreground shadow-sm'
+                : 'bg-transparent text-muted-foreground hover:bg-[var(--segmented-control-hover-surface)] hover:text-foreground',
             ].join(' ')}
           >
             {option.label}

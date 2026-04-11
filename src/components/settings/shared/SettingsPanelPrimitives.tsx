@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 
+export const SETTINGS_SECTION_TITLE_CLASS_NAME =
+  'text-[18px] font-semibold tracking-tight text-foreground md:text-[20px]'
+
 interface SettingsPanelLayoutProps {
   children: ReactNode
-  title: string
 }
 
 interface SettingsSectionProps {
@@ -16,22 +18,15 @@ interface SettingsRowProps {
   title: string
 }
 
-export function SettingsPanelLayout({ children, title }: SettingsPanelLayoutProps) {
-  return (
-    <div className="mx-auto flex w-full max-w-[780px] flex-1 flex-col gap-5 py-3 md:py-4">
-      <header className="pb-3">
-        <h2 className="text-[21px] font-medium tracking-tight text-foreground md:text-[24px]">{title}</h2>
-      </header>
-      {children}
-    </div>
-  )
+export function SettingsPanelLayout({ children }: SettingsPanelLayoutProps) {
+  return <div className="flex w-full max-w-[780px] flex-col gap-5">{children}</div>
 }
 
 export function SettingsSection({ children, title }: SettingsSectionProps) {
   return (
     <section className="flex flex-col gap-3">
       <header>
-        <h3 className="text-[15px] font-medium text-foreground md:text-base">{title}</h3>
+        <h3 className={SETTINGS_SECTION_TITLE_CLASS_NAME}>{title}</h3>
       </header>
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">{children}</div>
     </section>

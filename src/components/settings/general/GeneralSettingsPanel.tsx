@@ -1,11 +1,13 @@
+import { memo, useCallback } from 'react'
 import {
   APP_APPEARANCE_OPTIONS,
   APP_LANGUAGE_OPTIONS,
+  FOLLOW_UP_BEHAVIOR_OPTIONS,
   isAppAppearance,
   isAppLanguage,
+  isFollowUpBehavior,
 } from '../../../lib/appSettings'
-import type { AppSettingsSaveState } from '../../../hooks/useAppSettings'
-import type { AppAppearance, AppLanguage } from '../../../lib/appSettings'
+import type { AppAppearance, AppLanguage, FollowUpBehavior } from '../../../lib/appSettings'
 import type { AppSettings } from '../../../types/chat'
 import { DropdownField } from '../../ui/DropdownField'
 import { SegmentedField } from '../../ui/SegmentedField'
@@ -19,9 +21,9 @@ const BOOLEAN_SEGMENT_OPTIONS = [
 interface GeneralSettingsPanelProps {
   isLoading: boolean
   onUpdateSettings: (input: Partial<AppSettings>) => void
-  saveState: AppSettingsSaveState
   settings: {
     appearance: AppAppearance
+    followUpBehavior: FollowUpBehavior
     language: AppLanguage
     sendMessageOnEnter: boolean
     workspaceFileEditorWordWrap: boolean
@@ -31,11 +33,51 @@ interface GeneralSettingsPanelProps {
 export function GeneralSettingsPanel({
   isLoading,
   onUpdateSettings,
-  saveState,
   settings,
 }: GeneralSettingsPanelProps) {
+  const handleAppearanceChange = useCallback(
+    (nextValue: string) => {
+      if (isAppAppearance(nextValue)) {
+        onUpdateSettings({ appearance: nextValue })
+      }
+    },
+    [onUpdateSettings],
+  )
+
+  const handleLanguageChange = useCallback(
+    (nextValue: string) => {
+      if (isAppLanguage(nextValue)) {
+        onUpdateSettings({ language: nextValue })
+      }
+    },
+    [onUpdateSettings],
+  )
+
+  const handleFollowUpBehaviorChange = useCallback(
+    (nextValue: string) => {
+      if (isFollowUpBehavior(nextValue)) {
+        onUpdateSettings({ followUpBehavior: nextValue })
+      }
+    },
+    [onUpdateSettings],
+  )
+
+  const handleWorkspaceWordWrapChange = useCallback(
+    (nextValue: string) => {
+      onUpdateSettings({ workspaceFileEditorWordWrap: nextValue === 'on' })
+    },
+    [onUpdateSettings],
+  )
+
+  const handleSendOnEnterChange = useCallback(
+    (nextValue: string) => {
+      onUpdateSettings({ sendMessageOnEnter: nextValue === 'on' })
+    },
+    [onUpdateSettings],
+  )
+
   return (
-    <SettingsPanelLayout title="General">
+    <SettingsPanelLayout>
       <SettingsSection title="Appearance">
         <SettingsRow
           title="Theme"
@@ -45,12 +87,8 @@ export function GeneralSettingsPanel({
             ariaLabel="App appearance"
             value={settings.appearance}
             options={APP_APPEARANCE_OPTIONS}
-            disabled={isLoading || saveState === 'saving'}
-            onChange={(nextValue) => {
-              if (isAppAppearance(nextValue)) {
-                onUpdateSettings({ appearance: nextValue })
-              }
-            }}
+            disabled={isLoading}
+            onChange={handleAppearanceChange}
           />
         </SettingsRow>
       </SettingsSection>
@@ -69,16 +107,27 @@ export function GeneralSettingsPanel({
               ariaLabel="App language"
               value={settings.language}
               options={APP_LANGUAGE_OPTIONS}
-              disabled={isLoading || saveState === 'saving'}
+              disabled={isLoading}
               className="w-full"
-              onChange={(nextValue) => {
-                if (isAppLanguage(nextValue)) {
-                  onUpdateSettings({ language: nextValue })
-                }
-              }}
+              onChange={handleLanguageChange}
             />
           </div>
         </SettingsRow>
+
+        <div className="border-t border-border">
+          <SettingsRow
+            title="Follow-up behavior"
+            description="Queue sends after the full task. Steer sends after the last tool call."
+          >
+            <SegmentedField
+              ariaLabel="Follow-up behavior"
+              value={settings.followUpBehavior}
+              options={FOLLOW_UP_BEHAVIOR_OPTIONS}
+              disabled={isLoading}
+              onChange={handleFollowUpBehaviorChange}
+            />
+          </SettingsRow>
+        </div>
 
         <div className="border-t border-border">
           <SettingsRow
@@ -89,8 +138,8 @@ export function GeneralSettingsPanel({
               ariaLabel="Workspace editor word wrap"
               value={settings.workspaceFileEditorWordWrap ? 'on' : 'off'}
               options={BOOLEAN_SEGMENT_OPTIONS}
-              disabled={isLoading || saveState === 'saving'}
-              onChange={(nextValue) => onUpdateSettings({ workspaceFileEditorWordWrap: nextValue === 'on' })}
+              disabled={isLoading}
+              onChange={handleWorkspaceWordWrapChange}
             />
           </SettingsRow>
         </div>
@@ -104,8 +153,8 @@ export function GeneralSettingsPanel({
               ariaLabel="Send on Enter"
               value={settings.sendMessageOnEnter ? 'on' : 'off'}
               options={BOOLEAN_SEGMENT_OPTIONS}
-              disabled={isLoading || saveState === 'saving'}
-              onChange={(nextValue) => onUpdateSettings({ sendMessageOnEnter: nextValue === 'on' })}
+              disabled={isLoading}
+              onChange={handleSendOnEnterChange}
             />
           </SettingsRow>
         </div>
@@ -113,3 +162,5 @@ export function GeneralSettingsPanel({
     </SettingsPanelLayout>
   )
 }
+
+export const MemoizedGeneralSettingsPanel = memo(GeneralSettingsPanel)

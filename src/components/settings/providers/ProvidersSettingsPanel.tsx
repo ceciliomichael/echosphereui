@@ -159,7 +159,7 @@ export function ProvidersSettingsPanel({
   }
 
   return (
-    <SettingsPanelLayout title="Providers">
+    <SettingsPanelLayout>
       <SettingsSection title="Provider Setup">
         <div className="overflow-hidden rounded-2xl border border-border bg-surface">
           <CodexProviderAccordion

@@ -72,6 +72,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
           : selectedFolderId ?? resolveFolderIdForWorkspacePath(activeWorkspacePath)
 
       resetDraft(nextFolderId)
+      return nextFolderId
     },
     [activeWorkspacePath, clearError, resolveFolderIdForWorkspacePath, resetDraft, selectedFolderId],
   )
@@ -87,6 +88,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
 
       addFolder(folder)
       resetDraft(folder.id)
+      return folder.id
     } catch (caughtError) {
       console.error(caughtError)
       setError('Unable to create that folder.')
@@ -98,6 +100,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     (folderId: string | null) => {
       clearError()
       resetDraft(folderId)
+      return folderId
     },
     [clearError, resetDraft],
   )
