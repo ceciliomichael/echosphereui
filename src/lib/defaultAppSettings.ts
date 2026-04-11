@@ -10,6 +10,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   chatModelId: '',
   chatReasoningEffort: 'medium',
   diffPanelWidth: DEFAULT_DIFF_PANEL_WIDTH,
+  editSessionsByConversation: {},
   language: DEFAULT_APP_LANGUAGE,
   lastActiveConversationId: null,
   revertEditSessionsByConversation: {},

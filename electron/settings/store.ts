@@ -161,6 +161,37 @@ function sanitizeRevertEditSessionsByConversation(value: unknown): AppSettings['
   return sanitizedValue
 }
 
+function sanitizeEditSessionsByConversation(value: unknown): AppSettings['editSessionsByConversation'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.editSessionsByConversation }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['editSessionsByConversation'] = {}
+
+  for (const [conversationId, candidateSession] of candidateEntries) {
+    const normalizedConversationId = conversationId.trim()
+    if (normalizedConversationId.length === 0 || !candidateSession || typeof candidateSession !== 'object') {
+      continue
+    }
+
+    const messageId =
+      typeof (candidateSession as { messageId?: unknown }).messageId === 'string'
+        ? (candidateSession as { messageId: string }).messageId.trim()
+        : ''
+
+    if (messageId.length === 0) {
+      continue
+    }
+
+    sanitizedValue[normalizedConversationId] = {
+      messageId,
+    }
+  }
+
+  return sanitizedValue
+}
+
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
 }
@@ -192,6 +223,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.diffPanelWidth === 'number' && Number.isFinite(input.diffPanelWidth)
       ? clampStoredDiffPanelWidth(input.diffPanelWidth)
       : DEFAULT_APP_SETTINGS.diffPanelWidth
+  const editSessionsByConversation = sanitizeEditSessionsByConversation(input?.editSessionsByConversation)
   const workspaceEditorWidth =
     typeof input?.workspaceEditorWidth === 'number' && Number.isFinite(input.workspaceEditorWidth)
       ? clampStoredWorkspaceEditorWidth(input.workspaceEditorWidth)
@@ -230,6 +262,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     chatModelId,
     chatReasoningEffort,
     diffPanelWidth,
+    editSessionsByConversation,
     language,
     lastActiveConversationId,
     revertEditSessionsByConversation,

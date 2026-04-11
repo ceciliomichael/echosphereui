@@ -3,6 +3,13 @@ import { isHumanUserMessage } from '../lib/chatMessageMetadata'
 import { buildChatMentionPathMap, collapseChatMentionMarkup } from '../lib/chatMentions'
 import type { ChatAttachment, Message } from '../types/chat'
 
+export interface EditComposerDraftSession {
+  attachments: ChatAttachment[]
+  mentionPathMap: ReadonlyMap<string, string>
+  messageId: string
+  value: string
+}
+
 function getAttachmentFingerprint(attachment: ChatAttachment) {
   return attachment.kind === 'image'
     ? [
@@ -30,6 +37,10 @@ function haveSameAttachments(left: readonly ChatAttachment[], right: readonly Ch
   )
 }
 
+function cloneAttachments(attachments: readonly ChatAttachment[]) {
+  return attachments.map((attachment) => ({ ...attachment }))
+}
+
 export function useChatComposerState(messages: Message[]) {
   const [mainComposerValue, setMainComposerValue] = useState('')
   const [mainComposerAttachments, setMainComposerAttachments] = useState<ChatAttachment[]>([])
@@ -46,6 +57,32 @@ export function useChatComposerState(messages: Message[]) {
     messagesRef.current = messages
   }, [messages])
 
+  const restoreEditingSession = useCallback((session: EditComposerDraftSession | { messageId: string }) => {
+    const targetMessage = messagesRef.current.find(
+      (message) => message.id === session.messageId && isHumanUserMessage(message),
+    )
+    if (!targetMessage) {
+      return false
+    }
+
+    const collapsedContent = collapseChatMentionMarkup(targetMessage.content)
+    const initialAttachments = cloneAttachments(targetMessage.attachments ?? [])
+    const initialMentionPathMap = buildChatMentionPathMap(targetMessage.content)
+
+    setEditingMessageId(session.messageId)
+    setEditComposerValue('value' in session ? session.value : collapsedContent)
+    setEditComposerAttachments(
+      'attachments' in session ? cloneAttachments(session.attachments) : initialAttachments,
+    )
+    setEditInitialValue(collapsedContent)
+    setEditInitialAttachments(initialAttachments)
+    setEditComposerMentionPathMap(
+      'mentionPathMap' in session ? new Map(session.mentionPathMap) : initialMentionPathMap,
+    )
+    setEditComposerFocusSignal((currentValue) => currentValue + 1)
+    return true
+  }, [])
+
   const resetComposerState = useCallback(() => {
     setEditingMessageId(null)
     setMainComposerValue('')
@@ -58,20 +95,8 @@ export function useChatComposerState(messages: Message[]) {
   }, [])
 
   const startEditingMessage = useCallback((messageId: string) => {
-    const targetMessage = messagesRef.current.find((message) => message.id === messageId && isHumanUserMessage(message))
-    if (!targetMessage) {
-      return
-    }
-
-    const collapsedContent = collapseChatMentionMarkup(targetMessage.content)
-    setEditingMessageId(messageId)
-    setEditComposerValue(collapsedContent)
-    setEditComposerAttachments(targetMessage.attachments ?? [])
-    setEditInitialValue(collapsedContent)
-    setEditInitialAttachments(targetMessage.attachments ?? [])
-    setEditComposerMentionPathMap(buildChatMentionPathMap(targetMessage.content))
-    setEditComposerFocusSignal((currentValue) => currentValue + 1)
-  }, [])
+    restoreEditingSession({ messageId })
+  }, [restoreEditingSession])
 
   const cancelEditingMessage = useCallback(() => {
     setEditingMessageId(null)
@@ -81,6 +106,19 @@ export function useChatComposerState(messages: Message[]) {
     setEditInitialAttachments([])
     setEditComposerMentionPathMap(new Map())
   }, [])
+
+  const captureEditingSession = useCallback((): EditComposerDraftSession | null => {
+    if (!editingMessageId) {
+      return null
+    }
+
+    return {
+      attachments: cloneAttachments(editComposerAttachments),
+      mentionPathMap: new Map(editComposerMentionPathMap),
+      messageId: editingMessageId,
+      value: editComposerValue,
+    }
+  }, [editComposerAttachments, editComposerMentionPathMap, editComposerValue, editingMessageId])
 
   const isEditComposerDirty =
     editComposerValue !== editInitialValue || !haveSameAttachments(editComposerAttachments, editInitialAttachments)
@@ -98,7 +136,9 @@ export function useChatComposerState(messages: Message[]) {
     isEditComposerDirty,
     editingMessageId,
     editComposerFocusSignal,
+    captureEditingSession,
     resetComposerState,
+    restoreEditingSession,
     startEditingMessage,
     cancelEditingMessage,
   }

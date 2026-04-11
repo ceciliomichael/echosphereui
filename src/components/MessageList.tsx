@@ -336,6 +336,7 @@ export function MessageList({
       <div className="chat-column mx-auto space-y-2.5 px-4 pb-6 pt-6">
         {visibleMessages.map((msg, index) => {
           const showCopyButton =
+            editingMessageId === null &&
             msg.role === "assistant" &&
             (index === visibleMessages.length - 1 ||
               visibleMessages[index + 1]?.role !== "assistant");

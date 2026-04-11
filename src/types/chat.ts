@@ -210,6 +210,7 @@ export interface AppSettings {
   chatModelId: string
   chatReasoningEffort: ReasoningEffort
   diffPanelWidth: number
+  editSessionsByConversation: Record<string, ConversationEditSession>
   language: AppLanguage
   lastActiveConversationId: string | null
   revertEditSessionsByConversation: Record<string, RevertEditSession>
@@ -230,6 +231,10 @@ export interface AppSettings {
 export type SourceControlSectionId = 'commit' | 'changes' | 'history'
 export type SourceControlSectionOpenId = SourceControlSectionId | 'staged' | 'unstaged'
 export type AppTerminalExecutionMode = 'full' | 'sandbox'
+
+export interface ConversationEditSession {
+  messageId: string
+}
 
 export interface RevertEditSession {
   messageId: string

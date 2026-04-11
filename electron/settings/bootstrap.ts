@@ -154,6 +154,36 @@ function sanitizeRevertEditSessionsByConversation(value: unknown): AppSettings['
   return sanitizedValue
 }
 
+function sanitizeEditSessionsByConversation(value: unknown): AppSettings['editSessionsByConversation'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.editSessionsByConversation }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['editSessionsByConversation'] = {}
+  for (const [conversationId, candidateSession] of candidateEntries) {
+    const normalizedConversationId = conversationId.trim()
+    if (normalizedConversationId.length === 0 || !candidateSession || typeof candidateSession !== 'object') {
+      continue
+    }
+
+    const messageId =
+      typeof (candidateSession as { messageId?: unknown }).messageId === 'string'
+        ? (candidateSession as { messageId: string }).messageId.trim()
+        : ''
+
+    if (messageId.length === 0) {
+      continue
+    }
+
+    sanitizedValue[normalizedConversationId] = {
+      messageId,
+    }
+  }
+
+  return sanitizedValue
+}
+
 function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   const candidate = input as Partial<AppSettings> | null | undefined
 
@@ -167,6 +197,7 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.diffPanelWidth === 'number' && Number.isFinite(candidate.diffPanelWidth)
         ? clampStoredDiffPanelWidth(candidate.diffPanelWidth)
         : DEFAULT_APP_SETTINGS.diffPanelWidth,
+    editSessionsByConversation: sanitizeEditSessionsByConversation(candidate?.editSessionsByConversation),
     language: isAppLanguage(candidate?.language) ? candidate.language : DEFAULT_APP_SETTINGS.language,
     lastActiveConversationId:
       typeof candidate?.lastActiveConversationId === 'string' && candidate.lastActiveConversationId.trim().length > 0

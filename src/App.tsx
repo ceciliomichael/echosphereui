@@ -22,7 +22,11 @@ export default function App() {
   const [bootPreferredConversationId, setBootPreferredConversationId] = useState<string | null | undefined>(undefined)
   const persistingConversationIdRef = useRef<string | null>(null)
   const chatMessages = useChatMessages({
+    editSessionsByConversation: settings.editSessionsByConversation,
     language: settings.language,
+    persistEditSessionsByConversation: (nextValue) => {
+      void updateSettings({ editSessionsByConversation: nextValue })
+    },
     persistRevertEditSessionsByConversation: (nextValue) => {
       void updateSettings({ revertEditSessionsByConversation: nextValue })
     },

@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { restoreWorkspaceCheckpointForMessage } from './chatHistoryWorkflows'
+import { buildRevertSessionKey, mergeConversationEditSessions } from './chatEditSessions'
 import type { ChatRuntimeSelection } from './chatMessageRuntime'
-import { useChatComposerState } from './useChatComposerState'
+import { useChatComposerState, type EditComposerDraftSession } from './useChatComposerState'
 import { useChatConversationActions } from './useChatConversationActions'
 import { useChatSendActions } from './useChatSendActions'
 import { useChatSessionState } from './useChatSessionState'
 import { useChatStreamingState } from './useChatStreamingState'
 import { useInitializeChatHistory } from './useInitializeChatHistory'
 import type { AppLanguage } from '../lib/appSettings'
-import type { ChatMode, Message, RevertEditSession } from '../types/chat'
+import type { ChatMode, ConversationEditSession, Message, RevertEditSession } from '../types/chat'
 
 const EMPTY_MESSAGES: Message[] = []
 
 interface UseChatMessagesInput {
+  editSessionsByConversation: Record<string, ConversationEditSession>
   language: AppLanguage
+  persistEditSessionsByConversation: (nextValue: Record<string, ConversationEditSession>) => void
   preferredConversationId: string | null
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   persistRevertEditSessionsByConversation: (nextValue: Record<string, RevertEditSession>) => void
@@ -22,7 +24,9 @@ interface UseChatMessagesInput {
 
 export function useChatMessages(input: UseChatMessagesInput) {
   const {
+    editSessionsByConversation: persistedEditSessionsByConversation,
     language,
+    persistEditSessionsByConversation,
     persistRevertEditSessionsByConversation,
     preferredConversationId,
     revertEditSessionsByConversation: persistedRevertEditSessionsByConversation,
@@ -36,27 +40,80 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const composerState = useChatComposerState(messages)
   const activeConversationId = sessionState.activeConversationId
   const setSessionError = sessionState.setError
+  const captureComposerEditingSession = composerState.captureEditingSession
   const editingMessageId = composerState.editingMessageId
+  const restoreComposerEditingSession = composerState.restoreEditingSession
   const startComposerEditingMessage = composerState.startEditingMessage
   const cancelComposerEditingMessage = composerState.cancelEditingMessage
   const [draftChatMode, setDraftChatMode] = useState<ChatMode>('agent')
   const [pendingDraftSendCount, setPendingDraftSendCount] = useState(0)
-  const [revertEditSessionsByConversation, setRevertEditSessionsByConversation] = useState<
-    Record<string, RevertEditSession>
-  >(persistedRevertEditSessionsByConversation)
+  const [editSessionsByConversation, setEditSessionsByConversation] = useState<Record<string, ConversationEditSession>>(
+    mergeConversationEditSessions(
+      persistedEditSessionsByConversation,
+      persistedRevertEditSessionsByConversation,
+    ),
+  )
+  const editSessionsRef = useRef<Record<string, ConversationEditSession>>(editSessionsByConversation)
   const revertEditSessionsRef = useRef<Record<string, RevertEditSession>>(persistedRevertEditSessionsByConversation)
+  const draftEditSessionsRef = useRef<Record<string, EditComposerDraftSession>>({})
+  const appliedRevertSessionKeysRef = useRef<Record<string, string>>({})
   const resumeSessionKeyRef = useRef<string | null>(null)
   const syncedConversationModeIdRef = useRef<string | null>(null)
 
   useEffect(() => {
+    const mergedEditSessions = mergeConversationEditSessions(
+      persistedEditSessionsByConversation,
+      persistedRevertEditSessionsByConversation,
+    )
+    editSessionsRef.current = mergedEditSessions
+    setEditSessionsByConversation(mergedEditSessions)
     revertEditSessionsRef.current = persistedRevertEditSessionsByConversation
-    setRevertEditSessionsByConversation(persistedRevertEditSessionsByConversation)
-  }, [persistedRevertEditSessionsByConversation])
+  }, [persistedEditSessionsByConversation, persistedRevertEditSessionsByConversation])
+
+  const setPersistedEditSessions = useCallback(
+    (nextValue: Record<string, ConversationEditSession>) => {
+      editSessionsRef.current = nextValue
+      setEditSessionsByConversation(nextValue)
+      persistEditSessionsByConversation(nextValue)
+    },
+    [persistEditSessionsByConversation],
+  )
+
+  const upsertEditSession = useCallback(
+    (conversationId: string, messageId: string) => {
+      const currentValue = editSessionsRef.current
+      const existingSession = currentValue[conversationId]
+      if (existingSession?.messageId === messageId) {
+        return
+      }
+
+      setPersistedEditSessions({
+        ...currentValue,
+        [conversationId]: {
+          messageId,
+        },
+      })
+    },
+    [setPersistedEditSessions],
+  )
+
+  const clearEditSession = useCallback(
+    (conversationId: string) => {
+      const currentValue = editSessionsRef.current
+      if (!(conversationId in currentValue)) {
+        return
+      }
+
+      const nextValue = { ...currentValue }
+      delete nextValue[conversationId]
+      setPersistedEditSessions(nextValue)
+    },
+    [setPersistedEditSessions],
+  )
 
   const setRevertEditSessions = useCallback(
     (nextValue: Record<string, RevertEditSession>) => {
       revertEditSessionsRef.current = nextValue
-      setRevertEditSessionsByConversation(nextValue)
       persistRevertEditSessionsByConversation(nextValue)
     },
     [persistRevertEditSessionsByConversation],
@@ -71,6 +128,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
       const nextValue = { ...currentValue }
       delete nextValue[conversationId]
+      delete appliedRevertSessionKeysRef.current[conversationId]
       setRevertEditSessions(nextValue)
     },
     [setRevertEditSessions],
@@ -133,9 +191,40 @@ export function useChatMessages(input: UseChatMessagesInput) {
     setDraftChatMode(activeConversationChatMode)
   }, [sessionState.activeConversationChatMode, sessionState.activeConversationId])
 
+  const captureActiveEditDraftSession = useCallback(() => {
+    if (!activeConversationId) {
+      return
+    }
+
+    const activeDraftSession = captureComposerEditingSession()
+    if (!activeDraftSession) {
+      return
+    }
+
+    draftEditSessionsRef.current[activeConversationId] = activeDraftSession
+    upsertEditSession(activeConversationId, activeDraftSession.messageId)
+  }, [activeConversationId, captureComposerEditingSession, upsertEditSession])
+
+  const clearDraftEditSession = useCallback((conversationId: string) => {
+    delete draftEditSessionsRef.current[conversationId]
+  }, [])
+
+  const markRevertSessionApplied = useCallback((conversationId: string, revertSession: RevertEditSession) => {
+    appliedRevertSessionKeysRef.current[conversationId] = buildRevertSessionKey(conversationId, revertSession)
+  }, [])
+
+  const hasAppliedRevertSession = useCallback((conversationId: string, revertSession: RevertEditSession) => {
+    return appliedRevertSessionKeysRef.current[conversationId] === buildRevertSessionKey(conversationId, revertSession)
+  }, [])
+
   const beginRevertEditingMessage = useCallback(
     (conversationId: string, messageId: string, redoCheckpointId: string) => {
+      clearDraftEditSession(conversationId)
       const currentValue = revertEditSessionsRef.current
+      const nextSession: RevertEditSession = {
+        messageId,
+        redoCheckpointId,
+      }
       const existingSession = currentValue[conversationId]
       if (
         !existingSession ||
@@ -144,24 +233,25 @@ export function useChatMessages(input: UseChatMessagesInput) {
       ) {
         setRevertEditSessions({
           ...currentValue,
-          [conversationId]: {
-            messageId,
-            redoCheckpointId,
-          },
+          [conversationId]: nextSession,
         })
       }
 
+      markRevertSessionApplied(conversationId, nextSession)
+      upsertEditSession(conversationId, messageId)
       startComposerEditingMessage(messageId)
     },
-    [setRevertEditSessions, startComposerEditingMessage],
+    [clearDraftEditSession, markRevertSessionApplied, setRevertEditSessions, startComposerEditingMessage, upsertEditSession],
   )
 
   const completeEditingMessage = useCallback(() => {
     cancelComposerEditingMessage()
     if (activeConversationId) {
+      clearDraftEditSession(activeConversationId)
+      clearEditSession(activeConversationId)
       clearRevertEditSession(activeConversationId)
     }
-  }, [activeConversationId, cancelComposerEditingMessage, clearRevertEditSession])
+  }, [activeConversationId, cancelComposerEditingMessage, clearDraftEditSession, clearEditSession, clearRevertEditSession])
 
   const redoRevertSession = useCallback(
     async (_conversationId: string, revertSession: RevertEditSession, failureMessage: string) => {
@@ -181,12 +271,19 @@ export function useChatMessages(input: UseChatMessagesInput) {
       return
     }
 
+    clearDraftEditSession(activeConversationId)
+    clearEditSession(activeConversationId)
     const revertSession = revertEditSessionsRef.current[activeConversationId]
     if (!revertSession || revertSession.messageId !== activeEditingMessageId) {
       return
     }
 
+    const shouldRedoRevertSession = hasAppliedRevertSession(activeConversationId, revertSession)
     clearRevertEditSession(activeConversationId)
+    if (!shouldRedoRevertSession) {
+      return
+    }
+
     try {
       await redoRevertSession(activeConversationId, revertSession, 'Unable to redo reverted workspace changes.')
     } catch (caughtError) {
@@ -199,8 +296,11 @@ export function useChatMessages(input: UseChatMessagesInput) {
   }, [
     activeConversationId,
     cancelComposerEditingMessage,
+    clearDraftEditSession,
+    clearEditSession,
     clearRevertEditSession,
     editingMessageId,
+    hasAppliedRevertSession,
     redoRevertSession,
     setSessionError,
   ])
@@ -211,59 +311,55 @@ export function useChatMessages(input: UseChatMessagesInput) {
       return
     }
 
-    const activeRevertSession = revertEditSessionsByConversation[activeConversationId]
-    if (!activeRevertSession) {
+    const activeEditSession = editSessionsByConversation[activeConversationId]
+    if (!activeEditSession) {
       resumeSessionKeyRef.current = null
       return
     }
 
-    if (editingMessageId === activeRevertSession.messageId) {
+    if (editingMessageId === activeEditSession.messageId) {
       return
     }
 
-    const resumeSessionKey = `${activeConversationId}:${activeRevertSession.messageId}:${activeRevertSession.redoCheckpointId}`
+    const activeDraftSession = draftEditSessionsRef.current[activeConversationId]
+    const resumeSessionKey = `${activeConversationId}:${activeEditSession.messageId}`
     if (resumeSessionKeyRef.current === resumeSessionKey) {
       return
     }
 
     resumeSessionKeyRef.current = resumeSessionKey
-    let isDisposed = false
 
-    void restoreWorkspaceCheckpointForMessage(activeConversationId, activeRevertSession.messageId)
-      .then(() => {
-        if (isDisposed) {
-          return
-        }
+    const restoreSucceeded = restoreComposerEditingSession(
+      activeDraftSession && activeDraftSession.messageId === activeEditSession.messageId
+        ? activeDraftSession
+        : activeEditSession,
+    )
 
-        startComposerEditingMessage(activeRevertSession.messageId)
-      })
-      .catch((caughtError) => {
-        console.error(caughtError)
-        if (isDisposed) {
-          return
-        }
-
+    if (!restoreSucceeded) {
+      clearDraftEditSession(activeConversationId)
+      clearEditSession(activeConversationId)
+      const activeRevertSession = revertEditSessionsRef.current[activeConversationId]
+      if (activeRevertSession?.messageId === activeEditSession.messageId) {
         clearRevertEditSession(activeConversationId)
-        setSessionError('Unable to resume reverted edit mode for this thread.')
-      })
-
-    return () => {
-      isDisposed = true
+      }
+      setSessionError('Unable to resume edit mode for this thread.')
     }
   }, [
+    clearDraftEditSession,
+    clearEditSession,
     clearRevertEditSession,
     activeConversationId,
+    editSessionsByConversation,
     editingMessageId,
-    revertEditSessionsByConversation,
+    restoreComposerEditingSession,
     setSessionError,
-    startComposerEditingMessage,
   ])
 
   const startEditingMessage = useCallback(
     async (messageId: string) => {
       if (activeConversationId) {
         const activeRevertSession = revertEditSessionsRef.current[activeConversationId]
-        if (activeRevertSession) {
+        if (activeRevertSession && hasAppliedRevertSession(activeConversationId, activeRevertSession)) {
           try {
             await redoRevertSession(
               activeConversationId,
@@ -281,12 +377,27 @@ export function useChatMessages(input: UseChatMessagesInput) {
           }
 
           clearRevertEditSession(activeConversationId)
+        } else if (activeRevertSession) {
+          clearRevertEditSession(activeConversationId)
         }
       }
 
+      if (activeConversationId) {
+        clearDraftEditSession(activeConversationId)
+        upsertEditSession(activeConversationId, messageId)
+      }
       conversationActions.startEditingMessage(messageId)
     },
-    [activeConversationId, clearRevertEditSession, conversationActions, redoRevertSession, setSessionError],
+    [
+      activeConversationId,
+      clearDraftEditSession,
+      clearRevertEditSession,
+      conversationActions,
+      hasAppliedRevertSession,
+      redoRevertSession,
+      setSessionError,
+      upsertEditSession,
+    ],
   )
 
   useEffect(() => {
@@ -301,12 +412,22 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
     cancelComposerEditingMessage()
     if (activeConversationId) {
+      clearDraftEditSession(activeConversationId)
+      clearEditSession(activeConversationId)
       const activeRevertSession = revertEditSessionsRef.current[activeConversationId]
       if (activeRevertSession?.messageId === editingMessageId) {
         clearRevertEditSession(activeConversationId)
       }
     }
-  }, [activeConversationId, cancelComposerEditingMessage, clearRevertEditSession, editingMessageId, messages])
+  }, [
+    activeConversationId,
+    cancelComposerEditingMessage,
+    clearDraftEditSession,
+    clearEditSession,
+    clearRevertEditSession,
+    editingMessageId,
+    messages,
+  ])
 
   const sendActions = useChatSendActions({
     activeConversationId,
@@ -344,14 +465,43 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
   const isActiveDraftSending = activeConversationId === null && pendingDraftSendCount > 0
 
+  const createConversation = useCallback(
+    async (folderId?: string | null) => {
+      captureActiveEditDraftSession()
+      await conversationActions.createConversation(folderId)
+    },
+    [captureActiveEditDraftSession, conversationActions],
+  )
+
+  const createFolder = useCallback(async () => {
+    captureActiveEditDraftSession()
+    await conversationActions.createFolder()
+  }, [captureActiveEditDraftSession, conversationActions])
+
+  const selectConversation = useCallback(
+    async (conversationId: string) => {
+      captureActiveEditDraftSession()
+      await conversationActions.selectConversation(conversationId)
+    },
+    [captureActiveEditDraftSession, conversationActions],
+  )
+
+  const selectFolder = useCallback(
+    async (folderId: string | null) => {
+      captureActiveEditDraftSession()
+      await conversationActions.selectFolder(folderId)
+    },
+    [captureActiveEditDraftSession, conversationActions],
+  )
+
   return {
     activeConversationId,
     activeConversationRootPath: sessionState.activeConversationState?.conversation.agentContextRootPath ?? null,
     activeConversationTitle: sessionState.activeConversationTitle,
     cancelEditingMessage,
     conversationGroups: sessionState.conversationGroups,
-    createConversation: conversationActions.createConversation,
-    createFolder: conversationActions.createFolder,
+    createConversation,
+    createFolder,
     moveFolder: conversationActions.moveFolder,
     deleteFolder: conversationActions.deleteFolder,
     deleteConversation: conversationActions.deleteConversation,
@@ -374,8 +524,8 @@ export function useChatMessages(input: UseChatMessagesInput) {
     selectedFolderId: sessionState.selectedFolderId,
     selectedFolderName: sessionState.selectedFolderName,
     selectedFolderPath: sessionState.selectedFolderPath,
-    selectConversation: conversationActions.selectConversation,
-    selectFolder: conversationActions.selectFolder,
+    selectConversation,
+    selectFolder,
     renameConversationTitle: conversationActions.renameConversationTitle,
     renameFolder: conversationActions.renameFolder,
     setEditComposerAttachments: composerState.setEditComposerAttachments,
