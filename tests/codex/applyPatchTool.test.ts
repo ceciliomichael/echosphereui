@@ -159,7 +159,7 @@ test('createAgentTools exposes write tools in agent mode', async () => {
   }
 })
 
-test('createAgentTools describes grep as a directory-scoped workspace search', async () => {
+test('createAgentTools describes grep as a file-or-directory scoped workspace search', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-tools-'))
 
   try {
@@ -174,7 +174,7 @@ test('createAgentTools describes grep as a directory-scoped workspace search', a
 
     assert.match(
       grepTool.description ?? '',
-      /directory path in absolute_path, or omit it to search from the workspace root; do not point it at a file/u,
+      /file or directory path in absolute_path, or omit it to search from the workspace root/u,
     )
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })

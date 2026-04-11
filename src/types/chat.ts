@@ -208,6 +208,7 @@ export interface ReplaceConversationMessagesInput {
 export interface AppSettings {
   appearance: AppAppearance
   chatModelId: string
+  chatModelProviderId: ChatProviderId | null
   chatReasoningEffort: ReasoningEffort
   diffPanelWidth: number
   editSessionsByConversation: Record<string, ConversationEditSession>

@@ -15,6 +15,11 @@ const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'config'] as const
 const SETTINGS_FILE_NAME = 'settings.json'
 let settingsUpdateQueue: Promise<void> = Promise.resolve()
 const SOURCE_CONTROL_SECTION_IDS: readonly SourceControlSectionId[] = ['commit', 'changes', 'history']
+const CHAT_PROVIDER_IDS = ['codex', 'openai', 'anthropic', 'google', 'mistral', 'openai-compatible'] as const
+
+function isChatProviderId(value: unknown): value is AppSettings['chatModelProviderId'] {
+  return typeof value === 'string' && CHAT_PROVIDER_IDS.includes(value as (typeof CHAT_PROVIDER_IDS)[number])
+}
 
 function isAppTerminalExecutionMode(value: unknown): value is AppSettings['terminalExecutionMode'] {
   return value === 'sandbox' || value === 'full'
@@ -216,6 +221,9 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
       : DEFAULT_APP_SETTINGS.sidebarWidth
   const appearance = isAppAppearance(input?.appearance) ? input.appearance : DEFAULT_APP_SETTINGS.appearance
   const chatModelId = typeof input?.chatModelId === 'string' ? input.chatModelId.trim() : DEFAULT_APP_SETTINGS.chatModelId
+  const chatModelProviderId = isChatProviderId(input?.chatModelProviderId)
+    ? input.chatModelProviderId
+    : DEFAULT_APP_SETTINGS.chatModelProviderId
   const chatReasoningEffort = isReasoningEffort(input?.chatReasoningEffort)
     ? input.chatReasoningEffort
     : DEFAULT_APP_SETTINGS.chatReasoningEffort
@@ -264,6 +272,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   return {
     appearance,
     chatModelId,
+    chatModelProviderId,
     chatReasoningEffort,
     diffPanelWidth,
     editSessionsByConversation,

@@ -10,6 +10,11 @@ import type { SourceControlSectionId } from '../../src/types/chat'
 
 const INITIAL_SETTINGS_ARG_PREFIX = '--echosphere-initial-settings='
 const SOURCE_CONTROL_SECTION_IDS: readonly SourceControlSectionId[] = ['commit', 'changes', 'history']
+const CHAT_PROVIDER_IDS = ['codex', 'openai', 'anthropic', 'google', 'mistral', 'openai-compatible'] as const
+
+function isChatProviderId(value: unknown): value is AppSettings['chatModelProviderId'] {
+  return typeof value === 'string' && CHAT_PROVIDER_IDS.includes(value as (typeof CHAT_PROVIDER_IDS)[number])
+}
 
 function isAppTerminalExecutionMode(value: unknown): value is AppSettings['terminalExecutionMode'] {
   return value === 'sandbox' || value === 'full'
@@ -190,6 +195,9 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   return {
     appearance: isAppAppearance(candidate?.appearance) ? candidate.appearance : DEFAULT_APP_SETTINGS.appearance,
     chatModelId: typeof candidate?.chatModelId === 'string' ? candidate.chatModelId.trim() : DEFAULT_APP_SETTINGS.chatModelId,
+    chatModelProviderId: isChatProviderId(candidate?.chatModelProviderId)
+      ? candidate.chatModelProviderId
+      : DEFAULT_APP_SETTINGS.chatModelProviderId,
     chatReasoningEffort: isReasoningEffort(candidate?.chatReasoningEffort)
       ? candidate.chatReasoningEffort
       : DEFAULT_APP_SETTINGS.chatReasoningEffort,

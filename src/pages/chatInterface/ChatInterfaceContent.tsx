@@ -494,12 +494,14 @@ export function ChatInterfaceContent({
                   onGitBranchRefresh={gitBranchState.refresh}
                   modelOptions={selectorOptions}
                   modelOptionsLoading={chatRuntimeConfig.isModelOptionsLoading}
+                  modelSelectorDisabled={false}
                   selectedChatMode={chatMessages.selectedChatMode}
                   selectedModelId={chatRuntimeConfig.selectedModelId}
                   onModelChange={chatRuntimeConfig.setSelectedModelId}
                   onRefactorCandidateSelect={workspaceState.handleOpenWorkspaceFile}
                   reasoningEffort={chatRuntimeConfig.reasoningEffort}
                   reasoningEffortOptions={chatRuntimeConfig.availableReasoningEfforts}
+                  reasoningEffortSelectorDisabled={false}
                   onReasoningEffortChange={chatRuntimeConfig.setReasoningEffort}
                   showRuntimeTargetSelector
                   showTerminalExecutionModeSelector

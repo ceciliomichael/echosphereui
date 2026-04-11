@@ -174,3 +174,23 @@ test('runRipgrepFallback searches file contents with ripgrep-style grep output',
     `${path.join(workspaceRootPath, 'src', 'example.ts')}|2|const bar = foo + 1;`,
   ])
 })
+
+test('runRipgrepFallback supports ripgrep-style grep output when search path is a file', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-grep-file-'))
+  await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  const filePath = path.join(workspaceRootPath, 'src', 'example.ts')
+  await fs.writeFile(filePath, 'const foo = 1;\nconst bar = foo + 1;\n')
+
+  const result = await __testOnly.runRipgrepFallback(
+    ['-nH', '--hidden', '--no-messages', '--field-match-separator=|', '--regexp', 'foo', filePath],
+    workspaceRootPath,
+  )
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, '')
+  const lines = result.stdout.split(/\r?\n/u).filter((line) => line.length > 0)
+  assert.deepEqual(lines, [
+    `${filePath}|1|const foo = 1;`,
+    `${filePath}|2|const bar = foo + 1;`,
+  ])
+})

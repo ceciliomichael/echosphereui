@@ -184,15 +184,16 @@ export async function searchVisibleFiles(
     ignoreWorkspaceRules: options?.ignoreWorkspaceRules,
   })
   let truncated = false
+  const includeMatchPattern = includePattern ?? null
 
-  await visitVisibleFiles(workspaceRootPath, searchRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
-    if (includePattern && !matchesWorkspaceGlob(fileRelativePath, includePattern)) {
-      return
+  async function searchFile(fileAbsolutePath: string, fileRelativePath: string) {
+    if (includeMatchPattern && !matchesWorkspaceGlob(fileRelativePath, includeMatchPattern)) {
+      return false
     }
 
     const fileStats = await fs.stat(fileAbsolutePath).catch(() => null)
     if (!fileStats?.isFile()) {
-      return
+      return false
     }
 
     const probe = Buffer.alloc(Math.min(fileStats.size, 1024))
@@ -206,7 +207,7 @@ export async function searchVisibleFiles(
     }
 
     if (hasBinaryContent(probe)) {
-      return
+      return false
     }
 
     const modifiedAt = fileStats.mtimeMs
@@ -246,6 +247,47 @@ export async function searchVisibleFiles(
       reader.close()
       stream.destroy()
     }
+
+    return false
+  }
+
+  const searchRootStats = await fs.stat(searchRootPath).catch(() => null)
+  if (!searchRootStats) {
+    return {
+      matches,
+      invalidPattern,
+      truncated,
+    }
+  }
+
+  if (searchRootStats.isFile()) {
+    const isVisibleFile = await isVisibleEntry(searchRootPath, false)
+    if (isVisibleFile) {
+      const fileRelativePath = path.relative(workspaceRootPath, searchRootPath)
+      await searchFile(searchRootPath, fileRelativePath)
+    }
+
+    matches.sort((left, right) => {
+      if (right.modifiedAt !== left.modifiedAt) {
+        return right.modifiedAt - left.modifiedAt
+      }
+
+      if (left.absolutePath !== right.absolutePath) {
+        return left.absolutePath.localeCompare(right.absolutePath, undefined, { sensitivity: 'base' })
+      }
+
+      return left.lineNumber - right.lineNumber
+    })
+
+    return {
+      matches,
+      invalidPattern,
+      truncated,
+    }
+  }
+
+  await visitVisibleFiles(workspaceRootPath, searchRootPath, isVisibleEntry, async (fileAbsolutePath, fileRelativePath) => {
+    return searchFile(fileAbsolutePath, fileRelativePath)
   })
 
   matches.sort((left, right) => {
@@ -321,10 +363,10 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
     }
 
     const searchPathStats = await fs.stat(searchPath).catch(() => null)
-    if (!searchPathStats?.isDirectory()) {
+    if (!searchPathStats || (!searchPathStats.isDirectory() && !searchPathStats.isFile())) {
       return {
         exitCode: 2,
-        stderr: 'Search path must be a directory.',
+        stderr: 'Search path must be a file or directory.',
         stdout: '',
       }
     }

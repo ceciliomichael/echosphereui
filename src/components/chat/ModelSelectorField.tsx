@@ -41,7 +41,6 @@ export function ModelSelectorField({
     isOpen,
     menuRef,
   })
-  const hasOptions = options.length > 0
   const selectedOption = useMemo(() => options.find((option) => option.value === value) ?? options[0], [options, value])
   const filteredOptions = useMemo(() => {
     if (normalizedSearch.length === 0) {
@@ -50,7 +49,7 @@ export function ModelSelectorField({
 
     return options.filter((option) => option.label.toLowerCase().includes(normalizedSearch))
   }, [normalizedSearch, options])
-  const isControlDisabled = disabled || isLoading || !hasOptions
+  const isControlDisabled = disabled
 
   useEffect(() => {
     if (isOpen && isControlDisabled) {

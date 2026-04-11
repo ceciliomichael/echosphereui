@@ -84,6 +84,23 @@ test('createGrepToolResult returns the ripgrep-style workspace match set', async
   }
 })
 
+test('createGrepToolResult supports searching a specific file path', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+  const filePath = path.join(workspaceRootPath, 'src', 'visible.ts')
+
+  try {
+    const result = await createGrepToolResult(workspaceRootPath, filePath, path.join('src', 'visible.ts'), 'needle', '**/*.ts')
+
+    assert.equal(result.status, 'success')
+    assert.equal(result.subject?.kind, 'file')
+    assert.equal(result.semantics?.matches, 1)
+    assert.match(result.body ?? '', /src[\\/]+visible\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /notes\.md/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
 test('createGrepToolResult sorts matches by modification time with the newest file first', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 

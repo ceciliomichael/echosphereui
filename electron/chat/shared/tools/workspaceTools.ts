@@ -488,9 +488,10 @@ export async function createGrepToolResult(
   _regex?: boolean,
 ) {
   const stats = await fs.stat(absolutePath)
-  if (!stats.isDirectory()) {
-    throw new Error(`Search path must be a directory: ${relativePath}`)
+  if (!stats.isDirectory() && !stats.isFile()) {
+    throw new Error(`Search path must be a file or directory: ${relativePath}`)
   }
+  const subjectKind = stats.isDirectory() ? 'directory' : 'file'
 
   const args = ['-nH', '--hidden', '--no-messages', '--field-match-separator=|', '--regexp', pattern]
   const effectiveInclude = include?.trim()
@@ -509,7 +510,7 @@ export async function createGrepToolResult(
         truncated: false,
       },
       subject: {
-        kind: 'directory',
+        kind: subjectKind,
         path: relativePath,
       },
       summary: 'No files found',
@@ -564,7 +565,7 @@ export async function createGrepToolResult(
       truncated: formatted.truncated,
     },
     subject: {
-      kind: 'directory',
+      kind: subjectKind,
       path: relativePath,
     },
     summary: formatted.summary,

@@ -20,8 +20,9 @@ import type {
 
 interface ChatModelOption {
   id: string
+  isCatalogBacked: boolean
   label: string
-  providerId: ChatProviderId
+  providerId: ChatProviderId | null
   providerLabel: string
   reasoningCapable: boolean
   reasoningEfforts?: readonly ReasoningEffort[]
@@ -49,6 +50,7 @@ function buildChatModelOptions(
 
     return sourceModels.map((model) => ({
       id: model.id,
+      isCatalogBacked: true,
       label: model.label,
       providerId: provider.id,
       providerLabel: provider.label,
@@ -63,16 +65,48 @@ interface UseChatRuntimeConfigInput {
   isActiveScreen: boolean
   isProvidersLoading: boolean
   providersState: ProvidersState | null
-  settings: Pick<AppSettings, 'chatModelId' | 'chatReasoningEffort'>
+  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId' | 'chatReasoningEffort'>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
 }
 
-function getDefaultReasoningEfforts(providerId: ChatProviderId) {
+function getDefaultReasoningEfforts(providerId: ChatProviderId | null) {
   if (providerId === 'openai-compatible') {
     return OPENAI_COMPATIBLE_REASONING_EFFORT_VALUES
   }
 
   return DEFAULT_REASONING_EFFORT_VALUES
+}
+
+function withSavedReasoningEffort(
+  options: readonly ReasoningEffort[],
+  savedReasoningEffort: ReasoningEffort,
+): readonly ReasoningEffort[] {
+  if (options.includes(savedReasoningEffort)) {
+    return options
+  }
+
+  return [savedReasoningEffort, ...options]
+}
+
+function findSelectedModel(
+  options: readonly ChatModelOption[],
+  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId'>,
+): ChatModelOption | null {
+  const normalizedModelId = settings.chatModelId.trim()
+  if (normalizedModelId.length === 0) {
+    return options[0] ?? null
+  }
+
+  if (settings.chatModelProviderId) {
+    const sameProviderModel = options.find(
+      (option) => option.id === normalizedModelId && option.providerId === settings.chatModelProviderId,
+    )
+    if (sameProviderModel) {
+      return sameProviderModel
+    }
+  }
+
+  return options.find((option) => option.id === normalizedModelId) ?? options[0] ?? null
 }
 
 export function useChatRuntimeConfig({
@@ -90,10 +124,51 @@ export function useChatRuntimeConfig({
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
   )
+  const missingSelectedModelOption = useMemo(() => {
+    const normalizedSavedModelId = settings.chatModelId.trim()
+    const hasExactCatalogMatch = modelOptions.some((option) => {
+      if (option.id !== normalizedSavedModelId) {
+        return false
+      }
+
+      if (settings.chatModelProviderId === null) {
+        return true
+      }
+
+      return option.providerId === settings.chatModelProviderId
+    })
+
+    if (normalizedSavedModelId.length === 0 || hasExactCatalogMatch) {
+      return null
+    }
+
+    const fallbackProviderLabel =
+      settings.chatModelProviderId === null
+        ? 'Saved model'
+        : PROVIDER_SECTIONS.find((provider) => provider.id === settings.chatModelProviderId)?.label ?? 'Saved model'
+
+    return {
+      id: normalizedSavedModelId,
+      isCatalogBacked: false,
+      label: normalizedSavedModelId,
+      providerId: settings.chatModelProviderId,
+      providerLabel: fallbackProviderLabel,
+      reasoningCapable: true,
+      reasoningEfforts: withSavedReasoningEffort(
+        getDefaultReasoningEfforts(settings.chatModelProviderId),
+        settings.chatReasoningEffort,
+      ),
+      runtimeModelId: normalizedSavedModelId,
+    } satisfies ChatModelOption
+  }, [modelOptions, settings.chatModelId, settings.chatModelProviderId, settings.chatReasoningEffort])
+  const runtimeModelOptions = useMemo(
+    () => (missingSelectedModelOption ? [missingSelectedModelOption, ...modelOptions] : modelOptions),
+    [missingSelectedModelOption, modelOptions],
+  )
 
   const selectedModel = useMemo(
-    () => modelOptions.find((model) => model.id === settings.chatModelId) ?? modelOptions[0] ?? null,
-    [modelOptions, settings.chatModelId],
+    () => findSelectedModel(runtimeModelOptions, settings),
+    [runtimeModelOptions, settings],
   )
   const availableReasoningEfforts = useMemo(() => {
     if (!selectedModel?.reasoningCapable) {
@@ -106,8 +181,11 @@ export function useChatRuntimeConfig({
     () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),
     [availableReasoningEfforts, settings.chatReasoningEffort],
   )
+  const hasSavedModelId = settings.chatModelId.trim().length > 0
   const isModelOptionsLoading =
-    isActiveScreen && (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedOpenAICompatibleModels)
+    !hasSavedModelId &&
+    isActiveScreen &&
+    (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedOpenAICompatibleModels)
 
   useEffect(() => {
     if (!isActiveScreen) {
@@ -183,28 +261,42 @@ export function useChatRuntimeConfig({
 
   useEffect(() => {
     const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
-    if (!hasLoadedRuntimeModelSources) {
+    if (!hasLoadedRuntimeModelSources || settings.chatModelId.trim().length > 0) {
       return
     }
 
-    const nextModelId = selectedModel?.id ?? ''
-    if (modelOptions.length === 0 || nextModelId === settings.chatModelId) {
+    const nextModel = modelOptions[0]
+    if (!nextModel) {
       return
     }
 
-    void updateSettings({ chatModelId: nextModelId })
+    void updateSettings({
+      chatModelId: nextModel.id,
+      chatModelProviderId: nextModel.providerId,
+    })
   }, [
     hasLoadedCustomModels,
     hasLoadedOpenAICompatibleModels,
-    modelOptions.length,
-    selectedModel?.id,
+    modelOptions,
     settings.chatModelId,
     updateSettings,
   ])
 
   useEffect(() => {
+    if (!selectedModel?.isCatalogBacked) {
+      return
+    }
+
+    if (settings.chatModelProviderId === selectedModel.providerId) {
+      return
+    }
+
+    void updateSettings({ chatModelProviderId: selectedModel.providerId })
+  }, [selectedModel, settings.chatModelProviderId, updateSettings])
+
+  useEffect(() => {
     const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
-    if (!hasLoadedRuntimeModelSources) {
+    if (!hasLoadedRuntimeModelSources || !selectedModel?.isCatalogBacked) {
       return
     }
 
@@ -218,19 +310,25 @@ export function useChatRuntimeConfig({
     hasLoadedCustomModels,
     hasLoadedOpenAICompatibleModels,
     reasoningEffort,
+    selectedModel,
     settings.chatReasoningEffort,
     updateSettings,
   ])
 
   const setSelectedModelId = useCallback(
     (chatModelId: string) => {
-      if (chatModelId === settings.chatModelId) {
+      const selectedOption = runtimeModelOptions.find((option) => option.id === chatModelId) ?? null
+      const nextProviderId = selectedOption?.providerId ?? null
+      if (chatModelId === settings.chatModelId && nextProviderId === settings.chatModelProviderId) {
         return
       }
 
-      void updateSettings({ chatModelId })
+      void updateSettings({
+        chatModelId,
+        chatModelProviderId: nextProviderId,
+      })
     },
-    [settings.chatModelId, updateSettings],
+    [runtimeModelOptions, settings.chatModelId, settings.chatModelProviderId, updateSettings],
   )
 
   const setReasoningEffort = useCallback(
@@ -248,12 +346,12 @@ export function useChatRuntimeConfig({
     availableReasoningEfforts,
     hasConfiguredProvider: modelOptions.length > 0,
     isModelOptionsLoading,
-    modelOptions,
+    modelOptions: runtimeModelOptions,
     providerId: selectedModel?.providerId ?? null,
     providerLabel: selectedModel?.providerLabel ?? null,
     reasoningEffort,
-    selectedModelId: selectedModel?.id ?? '',
-    selectedRuntimeModelId: selectedModel?.runtimeModelId ?? '',
+    selectedModelId: selectedModel?.id ?? settings.chatModelId,
+    selectedRuntimeModelId: selectedModel?.runtimeModelId ?? settings.chatModelId,
     setReasoningEffort,
     setSelectedModelId,
     showReasoningEffortSelector: availableReasoningEfforts.length > 0,

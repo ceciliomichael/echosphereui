@@ -43,6 +43,7 @@ interface ChatInputProps {
   isStreaming?: boolean
   modelOptions?: readonly ModelSelectorOption[]
   modelOptionsLoading?: boolean
+  modelSelectorDisabled?: boolean
   onAbort?: () => void
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void
   onCancelEdit?: () => void
@@ -62,6 +63,7 @@ interface ChatInputProps {
   initialMentionPathMap?: ReadonlyMap<string, string> | null
   reasoningEffort?: ReasoningEffort
   reasoningEffortOptions?: readonly ReasoningEffort[]
+  reasoningEffortSelectorDisabled?: boolean
   selectedModelId?: string
   showRuntimeTargetSelector?: boolean
   showTerminalExecutionModeSelector?: boolean
@@ -86,6 +88,7 @@ export function ChatInput({
   chatModeSelectorDisabled = false,
   modelOptions = [],
   modelOptionsLoading = false,
+  modelSelectorDisabled,
   onChatModeChange,
   onModelChange,
   onReasoningEffortChange,
@@ -97,6 +100,7 @@ export function ChatInput({
   initialMentionPathMap = null,
   reasoningEffort = 'medium',
   reasoningEffortOptions = [],
+  reasoningEffortSelectorDisabled,
   selectedModelId = '',
   showReasoningEffortSelector = false,
   terminalExecutionMode = 'sandbox',
@@ -130,6 +134,7 @@ export function ChatInput({
   const canManageAttachments = typeof onAttachmentsChange === 'function'
   const showChatModeSelector = chatModeOptions.length > 0 && typeof onChatModeChange === 'function'
   const showModelSelector = typeof onModelChange === 'function'
+  const isModelSelectorDisabled = modelSelectorDisabled ?? disabled
   const isModelSelectorLoading = modelOptionsLoading && modelOptions.length === 0
   const modelSelectorTooltipContent = isModelSelectorLoading
     ? 'Loading models...'
@@ -137,6 +142,7 @@ export function ChatInput({
       ? 'Select model'
       : 'No models available'
   const showReasoningControl = showReasoningEffortSelector && typeof onReasoningEffortChange === 'function'
+  const isReasoningEffortDisabled = reasoningEffortSelectorDisabled ?? disabled
   const showRuntimeTargetControl = variant === 'composer' && showRuntimeTargetSelector
   const showTerminalExecutionModeControl =
     variant === 'composer' &&
@@ -460,7 +466,7 @@ export function ChatInput({
                     value={selectedModelId}
                     onChange={onModelChange ?? (() => undefined)}
                     options={modelOptions}
-                    disabled={disabled}
+                    disabled={isModelSelectorDisabled}
                     isLoading={isModelSelectorLoading}
                   />
                 </Tooltip>
@@ -472,7 +478,7 @@ export function ChatInput({
                     options={reasoningEffortOptions}
                     value={reasoningEffort}
                     onChange={onReasoningEffortChange}
-                    disabled={disabled}
+                    disabled={isReasoningEffortDisabled}
                   />
                 </Tooltip>
               ) : null}
