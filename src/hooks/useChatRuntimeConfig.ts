@@ -77,17 +77,6 @@ function getDefaultReasoningEfforts(providerId: ChatProviderId | null) {
   return DEFAULT_REASONING_EFFORT_VALUES
 }
 
-function withSavedReasoningEffort(
-  options: readonly ReasoningEffort[],
-  savedReasoningEffort: ReasoningEffort,
-): readonly ReasoningEffort[] {
-  if (options.includes(savedReasoningEffort)) {
-    return options
-  }
-
-  return [savedReasoningEffort, ...options]
-}
-
 function findSelectedModel(
   options: readonly ChatModelOption[],
   settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId'>,
@@ -154,11 +143,7 @@ export function useChatRuntimeConfig({
       label: fallbackLabel,
       providerId: settings.chatModelProviderId,
       providerLabel: fallbackProviderLabel,
-      reasoningCapable: true,
-      reasoningEfforts: withSavedReasoningEffort(
-        getDefaultReasoningEfforts(settings.chatModelProviderId),
-        settings.chatReasoningEffort,
-      ),
+      reasoningCapable: false,
       runtimeModelId: normalizedSavedModelId,
     } satisfies ChatModelOption
   }, [modelOptions, settings.chatModelId, settings.chatModelLabel, settings.chatModelProviderId, settings.chatReasoningEffort])

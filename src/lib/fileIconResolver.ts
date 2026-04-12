@@ -25,6 +25,10 @@ function getExtensionFromFileName(fileName: string) {
     return basename
   }
 
+  if (basename === '.env' || basename.startsWith('.env.')) {
+    return 'env'
+  }
+
   if (basename.startsWith('.') && basename.indexOf('.', 1) < 0) {
     return basename.slice(1)
   }

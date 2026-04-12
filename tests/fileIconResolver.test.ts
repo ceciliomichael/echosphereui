@@ -9,3 +9,14 @@ test('resolveFileIconConfig maps SQL files to the database icon', () => {
   assert.equal(iconConfig.color, '#f55385')
   assert.equal(iconConfig.icon.name, 'FaDatabase')
 })
+
+test('resolveFileIconConfig maps environment files to the dotenv icon', () => {
+  const environmentFileNames = ['.env', '.env.example', '.env.local', '.env.production']
+
+  for (const fileName of environmentFileNames) {
+    const iconConfig = resolveFileIconConfig({ fileName })
+
+    assert.equal(iconConfig.label, 'Environment', `expected ${fileName} to resolve to the environment icon`)
+    assert.equal(iconConfig.icon.name, 'SiDotenv', `expected ${fileName} to use the dotenv icon`)
+  }
+})
