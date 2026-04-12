@@ -5,6 +5,7 @@ import type {
   ApiKeyProviderId,
   AppSettings,
   ChatStreamEvent,
+  CompressChatHistoryInput,
   EstimateContextUsageInput,
   EchosphereChatApi,
   EchosphereGitApi,
@@ -139,6 +140,7 @@ const modelsApi: EchosphereModelsApi = {
 
 const chatApi: EchosphereChatApi = {
   cancelStream: (streamId: string) => ipcRenderer.invoke('chat:stream:cancel', streamId),
+  compressConversation: (input: CompressChatHistoryInput) => ipcRenderer.invoke('chat:compressConversation', input),
   estimateContextUsage: (input: EstimateContextUsageInput) => ipcRenderer.invoke('chat:context-usage:estimate', input),
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => {
     const wrappedListener = (_event: unknown, payload: ChatStreamEvent) => listener(payload)

@@ -1,95 +1,132 @@
 import {
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type MouseEvent,
-} from 'react'
-import { Undo2 } from 'lucide-react'
-import { chatConversationSurfacePaddingClassName, chatMessageSurfaceClassName } from '../lib/chatStyles'
-import { Tooltip } from './Tooltip'
-import { ChatMentionText } from './chat/ChatMentionText'
+} from "react";
+import { Undo2 } from "lucide-react";
+import {
+  chatConversationSurfacePaddingClassName,
+  chatMessageSurfaceClassName,
+} from "../lib/chatStyles";
+import { Tooltip } from "./Tooltip";
+import { ChatMentionText } from "./chat/ChatMentionText";
+import { parseCompressedHistoryMessage } from "../lib/chatCompression";
+import { CompressedHistoryMessage } from "./chat/CompressedHistoryMessage";
 
 interface UserMessageProps {
-  content: string
-  onEdit?: () => void
-  onRevert?: () => void
+  content: string;
+  onEdit?: () => void;
+  onRevert?: () => void;
 }
 
 export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [isMultiline, setIsMultiline] = useState(false)
-  const trimmedContent = content.trim()
-  const contentClampClassName = 'line-clamp-10 overflow-hidden'
-  const surfaceAlignmentClassName = isMultiline ? 'items-stretch' : 'items-center'
-  const revertButtonContainerClassName = isMultiline ? 'self-stretch flex items-end' : 'self-center flex items-center'
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isMultiline, setIsMultiline] = useState(false);
+  const trimmedContent = content.trim();
+  const compressedHistoryMessage = useMemo(
+    () => parseCompressedHistoryMessage(content),
+    [content],
+  );
+  const isCompressedHistoryMessage = compressedHistoryMessage !== null;
+  const contentClampClassName = "line-clamp-10 overflow-hidden";
+  const surfaceAlignmentClassName = isMultiline
+    ? "items-stretch"
+    : "items-center";
+  const revertButtonContainerClassName = isMultiline
+    ? "self-stretch flex items-end"
+    : "self-center flex items-center";
 
   const surfaceClassName = [
     chatMessageSurfaceClassName,
     `group inline-flex w-fit min-w-0 max-w-full ${surfaceAlignmentClassName} gap-1.5 ${chatConversationSurfacePaddingClassName} text-[15px] leading-6 text-foreground align-top`,
-    onEdit ? 'cursor-pointer' : '',
-  ].join(' ')
+    onEdit ? "cursor-pointer" : "",
+  ].join(" ");
 
   useLayoutEffect(() => {
-    const contentElement = contentRef.current
+    if (isCompressedHistoryMessage) {
+      setIsMultiline(false);
+      return;
+    }
+
+    const contentElement = contentRef.current;
     if (!contentElement || trimmedContent.length === 0) {
-      setIsMultiline(false)
-      return
+      setIsMultiline(false);
+      return;
     }
 
     const updateMultilineState = () => {
-      const lineHeight = Number.parseFloat(window.getComputedStyle(contentElement).lineHeight)
+      const lineHeight = Number.parseFloat(
+        window.getComputedStyle(contentElement).lineHeight,
+      );
       if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
-        setIsMultiline(false)
-        return
+        setIsMultiline(false);
+        return;
       }
 
-      setIsMultiline(contentElement.getBoundingClientRect().height > lineHeight * 1.5)
-    }
+      setIsMultiline(
+        contentElement.getBoundingClientRect().height > lineHeight * 1.5,
+      );
+    };
 
-    updateMultilineState()
+    updateMultilineState();
 
     const resizeObserver =
-      typeof ResizeObserver === 'function'
+      typeof ResizeObserver === "function"
         ? new ResizeObserver(() => {
-            updateMultilineState()
+            updateMultilineState();
           })
-        : null
+        : null;
 
-    resizeObserver?.observe(contentElement)
+    resizeObserver?.observe(contentElement);
 
     return () => {
-      resizeObserver?.disconnect()
-    }
-  }, [trimmedContent])
+      resizeObserver?.disconnect();
+    };
+  }, [isCompressedHistoryMessage, trimmedContent]);
+
+  if (compressedHistoryMessage) {
+    return (
+      <div className="w-full min-w-0 max-w-full">
+        <CompressedHistoryMessage summary={compressedHistoryMessage.summary} />
+      </div>
+    );
+  }
 
   const handleSurfaceClick = () => {
-    onEdit?.()
-  }
+    onEdit?.();
+  };
 
   const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      onEdit?.()
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onEdit?.();
     }
-  }
+  };
 
   const handleUndoClick = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    onRevert?.()
-  }
+    event.stopPropagation();
+    onRevert?.();
+  };
 
   return (
     <div
       className={surfaceClassName}
       onClick={onEdit ? handleSurfaceClick : undefined}
       onKeyDown={onEdit ? handleSurfaceKeyDown : undefined}
-      role={onEdit ? 'button' : undefined}
+      role={onEdit ? "button" : undefined}
       tabIndex={onEdit ? 0 : undefined}
-      aria-label={onEdit ? 'Edit message' : undefined}
+      aria-label={onEdit ? "Edit message" : undefined}
     >
-      <div ref={contentRef} className={`min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] ${contentClampClassName}`}>
-        {trimmedContent.length > 0 ? <ChatMentionText text={content} variant="rendered" /> : null}
+      <div
+        ref={contentRef}
+        className={`min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] ${contentClampClassName}`}
+      >
+        {trimmedContent.length > 0 ? (
+          <ChatMentionText text={content} variant="rendered" />
+        ) : null}
       </div>
 
       {onRevert ? (
@@ -107,5 +144,5 @@ export function UserMessage({ content, onEdit, onRevert }: UserMessageProps) {
         </div>
       ) : null}
     </div>
-  )
+  );
 }

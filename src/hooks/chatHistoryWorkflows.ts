@@ -29,6 +29,7 @@ interface PersistUserTurnInput {
   targetEditMessageId: string | null
   attachments: ChatAttachment[]
   trimmedText: string
+  title?: string
 }
 
 interface PersistUserTurnResult {
@@ -216,7 +217,9 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
       conversationId: currentConversation.id,
       messages: rewrittenMessages,
       title:
-        targetMessageIndex === 0 ? getConversationTitleFromInput(input.trimmedText, input.attachments) : undefined,
+        targetMessageIndex === 0
+          ? input.title?.trim() || getConversationTitleFromInput(input.trimmedText, input.attachments)
+          : undefined,
     })
 
     return {
@@ -257,7 +260,9 @@ export async function persistUserTurn(input: PersistUserTurnInput): Promise<Pers
     chatMode: input.chatMode,
     conversationId,
     messages: [userMessage],
-    title: shouldUpdateTitle ? getConversationTitleFromInput(input.trimmedText, input.attachments) : undefined,
+    title: shouldUpdateTitle
+      ? input.title?.trim() || getConversationTitleFromInput(input.trimmedText, input.attachments)
+      : undefined,
   })
 
   return {

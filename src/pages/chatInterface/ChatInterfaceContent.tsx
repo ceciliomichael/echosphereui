@@ -28,6 +28,7 @@ import type { GitCommitController } from '../../hooks/useGitCommit'
 import type { GitDiffSnapshotController } from '../../hooks/useGitDiffSnapshot'
 import { useWorkspaceRefactorCandidates } from '../../hooks/useWorkspaceRefactorCandidates'
 import { useChatMessageQueue } from './useChatMessageQueue'
+import { useChatCompression } from './useChatCompression'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
 import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
 import type { ResolvedTheme } from '../../lib/theme'
@@ -126,6 +127,7 @@ export function ChatInterfaceContent({
   const hasRunningToolInvocation =
     streamingAssistantMessage?.toolInvocations?.some((invocation) => invocation.state === 'running') ?? false
   const hasToolInvocationsInActiveStream = (streamingAssistantMessage?.toolInvocations?.length ?? 0) > 0
+  const [isCompressingChat, setIsCompressingChat] = useState(false)
 
   useEffect(() => {
     if (!chatMessages.isSending || !chatMessages.streamingAssistantMessageId) {
@@ -158,6 +160,7 @@ export function ChatInterfaceContent({
     !hasRunningToolInvocation
   const isQueueBlocked =
     chatMessages.isLoading ||
+    isCompressingChat ||
     (settings.followUpBehavior === 'queue'
       ? chatMessages.isSending
       : chatMessages.isSending && !canSteerQueuedMessages)
@@ -187,6 +190,19 @@ export function ChatInterfaceContent({
   } = useChatMessageQueue({
     isQueueBlocked,
     onSendMessage: sendQueuedMessage,
+  })
+  const { handleCompressChat } = useChatCompression({
+    activeWorkspacePath,
+    chatMode: chatMessages.selectedChatMode,
+    clearQueuedMessages,
+    createConversation: chatMessages.createConversation,
+    isBusy: chatMessages.isLoading || chatMessages.isSending,
+    isCompressingChat,
+    messages: chatMessages.messages,
+    runtimeSelection,
+    sendProgrammaticMessage: chatMessages.sendProgrammaticMessage,
+    setError: chatMessages.setError,
+    setIsCompressingChat,
   })
   const selectorOptions = useMemo(
     () =>
@@ -277,14 +293,14 @@ export function ChatInterfaceContent({
 
   const handleSendMainMessage = useCallback(
     (value: string, attachments: ChatAttachment[]) => {
-      if (chatMessages.isLoading || chatMessages.isSending) {
+      if (chatMessages.isLoading || chatMessages.isSending || isCompressingChat) {
         enqueueMessage(value, attachments)
         return
       }
 
       void chatMessages.sendNewMessage(runtimeSelection, value, attachments)
     },
-    [chatMessages, enqueueMessage, runtimeSelection],
+    [chatMessages, enqueueMessage, isCompressingChat, runtimeSelection],
   )
 
   const handleSendEditedMessage = useCallback(
@@ -529,6 +545,8 @@ export function ChatInterfaceContent({
                 <ChatInput
                   attachments={chatMessages.mainComposerAttachments}
                   contextUsage={contextUsage}
+                  isCompressingChat={isCompressingChat}
+                  onCompressChat={handleCompressChat}
                   refactorCandidates={refactorCandidates}
                   refactorCandidatesLoading={refactorCandidatesLoading}
                   value={chatMessages.mainComposerValue}

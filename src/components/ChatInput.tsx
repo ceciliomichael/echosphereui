@@ -33,6 +33,7 @@ interface ChatInputProps {
   chatModeOptions?: readonly ChatModeOption[]
   chatModeSelectorDisabled?: boolean
   contextUsage?: ContextUsageEstimate
+  isCompressingChat?: boolean
   disabled?: boolean
   focusSignal?: number
   gitBranchError?: string | null
@@ -48,6 +49,7 @@ interface ChatInputProps {
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void
   onCancelEdit?: () => void
   onChatModeChange?: (mode: ChatMode) => void
+  onCompressChat?: () => void
   onGitBranchCreate?: (branchName: string) => void
   onGitBranchChange?: (branchName: string) => void
   onGitBranchRefresh?: () => void
@@ -110,8 +112,10 @@ export function ChatInput({
   disabled = false,
   onAbort,
   onAttachmentsChange,
+  onCompressChat,
   onQueue,
   contextUsage,
+  isCompressingChat = false,
   refactorCandidates = [],
   refactorCandidatesLoading = false,
   gitBranchError = null,
@@ -494,7 +498,15 @@ export function ChatInput({
                 onSelectCandidate={onRefactorCandidateSelect}
               />
             ) : null}
-            {contextUsage ? <ContextIndicator disabled={disabled && !canAbort} usage={contextUsage} /> : null}
+            {contextUsage ? (
+              <ContextIndicator
+                disabled={disabled && !canAbort}
+                compressDisabled={disabled || isStreaming}
+                isCompressing={isCompressingChat}
+                onCompress={onCompressChat}
+                usage={contextUsage}
+              />
+            ) : null}
 
             <Tooltip
               content={

@@ -23,6 +23,12 @@ interface SendNewMessageOptions {
   resetMainComposerAfterSend?: boolean
 }
 
+interface SendProgrammaticMessageOptions {
+  chatMode?: ChatMode
+  forceNewConversation?: boolean
+  title?: string
+}
+
 type ConversationStateSnapshot =
   | PersistAndStreamMessageInput['conversationRuntimeStatesRef']['current'][string]
   | null
@@ -186,11 +192,11 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
     async (
       runtimeSelection: ChatRuntimeSelection,
       messageText: string,
-      options?: {
-        chatMode?: ChatMode
-      },
+      options?: SendProgrammaticMessageOptions,
     ) => {
-      const activeConversationId = input.activeConversationIdRef.current ?? input.activeConversationId
+      const activeConversationId = options?.forceNewConversation
+        ? null
+        : input.activeConversationIdRef.current ?? input.activeConversationId
       const isActiveConversationSending = activeConversationId
         ? (getConversationState(activeConversationId)?.isSending ?? false)
         : false
@@ -198,7 +204,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       if (
         actionInFlightRef.current ||
         isActiveConversationSending ||
-        (activeConversationId === null && input.pendingDraftSendCount > 0)
+        (!options?.forceNewConversation && activeConversationId === null && input.pendingDraftSendCount > 0)
       ) {
         return
       }
@@ -212,10 +218,13 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         ...input,
         attachments: [],
         draftChatMode: options?.chatMode ?? input.draftChatMode,
+        activeConversationId,
+        activeConversationIdRef: options?.forceNewConversation ? { current: null } : input.activeConversationIdRef,
         resetMainComposerAfterSend: false,
         runtimeSelection,
         targetEditMessageId: null,
         trimmedText,
+        title: options?.title,
       })
     },
     [getConversationState, input],

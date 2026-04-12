@@ -5,6 +5,9 @@ import { DashedMetricCircle } from './DashedMetricCircle'
 
 interface ContextIndicatorProps {
   disabled?: boolean
+  isCompressing?: boolean
+  compressDisabled?: boolean
+  onCompress?: () => void
   usage: ContextUsageEstimate
 }
 
@@ -36,17 +39,34 @@ function getEffectiveMaxTokens(usage: ContextUsageEstimate) {
   return usage.maxTokens > 0 ? usage.maxTokens : 200_000
 }
 
-function DashedUsageCircle({ usage }: { usage: ContextUsageEstimate }) {
+function DashedUsageCircle({
+  forceAllActive = false,
+  usage,
+}: {
+  forceAllActive?: boolean
+  usage: ContextUsageEstimate
+}) {
   const estimatedTotalTokens = getEstimatedContextTokens(usage)
   const usageRatio = Math.min(estimatedTotalTokens / getEffectiveMaxTokens(usage), 1)
   const activeColor = getUsageColor(usageRatio)
 
   return (
-    <DashedMetricCircle activeColor={activeColor} inactiveColor="var(--color-border)" percent={usageRatio * 100} size={18} />
+    <DashedMetricCircle
+      activeColor={activeColor}
+      inactiveColor="var(--color-border)"
+      percent={forceAllActive ? 100 : usageRatio * 100}
+      size={18}
+    />
   )
 }
 
-export function ContextIndicator({ disabled = false, usage }: ContextIndicatorProps) {
+export function ContextIndicator({
+  compressDisabled = false,
+  disabled = false,
+  isCompressing = false,
+  onCompress,
+  usage,
+}: ContextIndicatorProps) {
   const tooltipId = useId()
   const { buttonRef, containerRef, handleBlur, isOpen, isTopTooltip, openTooltip, scheduleClose, tooltipPosition } =
     useChatInputMetricTooltip({
@@ -76,7 +96,9 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
         disabled={disabled}
         onFocus={openTooltip}
       >
-        <DashedUsageCircle usage={usage} />
+        <span className={isCompressing ? "animate-spin" : undefined}>
+          <DashedUsageCircle forceAllActive={isCompressing} usage={usage} />
+        </span>
       </button>
 
       {isOpen ? (
@@ -116,6 +138,19 @@ export function ContextIndicator({ disabled = false, usage }: ContextIndicatorPr
               </span>
             </div>
           </div>
+
+          {onCompress ? (
+            <div className="mt-3 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={onCompress}
+                disabled={compressDisabled || isCompressing}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-action px-3 text-sm font-medium text-white transition-colors hover:bg-action-hover disabled:cursor-not-allowed disabled:bg-disabled disabled:text-disabled-foreground"
+              >
+                <span>{isCompressing ? 'Compressing...' : 'Compress Chat'}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

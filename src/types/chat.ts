@@ -332,6 +332,15 @@ export interface StartChatStreamInput {
   terminalExecutionMode: AppTerminalExecutionMode
 }
 
+export interface CompressChatHistoryInput {
+  agentContextRootPath: string
+  chatMode: ChatMode
+  messages: Message[]
+  modelId: string
+  providerId: ChatProviderId
+  reasoningEffort: ReasoningEffort
+}
+
 export interface StartChatStreamResult {
   streamId: string
 }
@@ -818,6 +827,7 @@ export interface EchosphereModelsApi {
 
 export interface EchosphereChatApi {
   cancelStream: (streamId: string) => Promise<void>
+  compressConversation: (input: CompressChatHistoryInput) => Promise<string>
   estimateContextUsage: (input: EstimateContextUsageInput) => Promise<ContextUsageEstimate>
   onStreamEvent: (listener: (event: ChatStreamEvent) => void) => () => void
   submitToolDecision: (input: SubmitToolDecisionInput) => Promise<SubmitToolDecisionResult>

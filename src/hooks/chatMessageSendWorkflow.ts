@@ -184,6 +184,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       selectedFolderId: initiatingFolderId,
       targetEditMessageId: input.targetEditMessageId,
       trimmedText: input.trimmedText,
+      title: input.title,
     })
     const conversationForRun =
       conversation.chatMode === input.draftChatMode

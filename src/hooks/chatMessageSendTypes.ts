@@ -45,6 +45,7 @@ export interface PersistAndStreamMessageInput {
   stopTextStreaming: (conversationId: string) => void
   targetEditMessageId: string | null
   trimmedText: string
+  title?: string
   updateConversationRuntimeState: (conversationId: string, input: ConversationRuntimeStatePatch) => void
   updateConversationSummary: (conversation: ConversationRecord) => void
   updateLocalMessage: (conversationId: string, messageId: string, updater: (message: Message) => Message) => void

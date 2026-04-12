@@ -19,6 +19,7 @@ import type {
   CheckoutGitBranchInput,
   CloseTerminalSessionInput,
   CreateGitBranchInput,
+  CompressChatHistoryInput,
   CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
   FolderMoveDirection,
@@ -73,12 +74,14 @@ import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNat
 import {
   cancelCodexChatStream,
   estimateCodexContextUsage,
+  compressCodexChatHistory,
   startCodexChatStream,
   submitCodexToolDecision,
 } from './chat/codex/runtime'
 import {
   cancelOpenAICompatibleChatStream,
   estimateOpenAICompatibleContextUsage,
+  compressOpenAICompatibleChatHistory,
   startOpenAICompatibleChatStream,
   submitOpenAICompatibleToolDecision,
 } from './chat/openaiCompatible/runtime'
@@ -415,6 +418,17 @@ function registerHistoryHandlers() {
     }
 
     await Promise.all([cancelCodexChatStream(streamId), cancelOpenAICompatibleChatStream(streamId)])
+  })
+  ipcMain.handle('chat:compressConversation', async (_event, input: CompressChatHistoryInput) => {
+    if (input.providerId === 'codex') {
+      return compressCodexChatHistory(input)
+    }
+
+    if (input.providerId === 'openai-compatible') {
+      return compressOpenAICompatibleChatHistory(input)
+    }
+
+    throw new Error(`Chat compression is not implemented for provider "${input.providerId}".`)
   })
   ipcMain.handle('chat:stream:submitToolDecision', async (_event, input: SubmitToolDecisionInput) => {
     const providerId = activeChatStreamProviders.get(input.streamId)
