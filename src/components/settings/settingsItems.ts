@@ -21,8 +21,8 @@ export const SETTINGS_ITEMS = [
   },
   {
     id: 'settings-item5',
-    label: 'settings-item5',
-    description: 'Reserved for the fifth settings surface.',
+    label: 'Configuration',
+    description: 'Set default models for Agent, Plan, summarization, and Git/PR flows.',
   },
 ] as const
 

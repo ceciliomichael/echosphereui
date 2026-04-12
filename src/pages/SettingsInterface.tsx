@@ -100,6 +100,7 @@ export function SettingsInterface({
       <WorkspacePanel isSidebarOpen={isSidebarOpen} showRightBorder={false}>
         <SettingsContent
           activeItemId={activeItemId}
+          appSettings={settings}
           generalSettings={generalSettings}
           mcpSettings={{
             activeOperation: mcpSettings.activeOperation,

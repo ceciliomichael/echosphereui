@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { ChatInterfaceContent } from './chatInterface/ChatInterfaceContent'
 import { useChatRuntimeConfig } from '../hooks/useChatRuntimeConfig'
 import type { ChatMessagesController } from '../hooks/useChatMessages'
@@ -14,6 +14,7 @@ import { getTerminalWorkspaceKey } from './chatInterface/chatWorkspaceUiState.ut
 import type { AppSettings, ProvidersState } from '../types/chat'
 import type { DiffPanelScope } from '../components/chat/ConversationDiffPanel'
 import type { ResolvedTheme } from '../lib/theme'
+import { resolveTaskModelSelection } from '../lib/taskModelSelection'
 
 export type RightPanelTab = ChatInterfaceRightPanelTab
 
@@ -68,6 +69,7 @@ export function ChatInterface({
   sidebarWidth,
 }: ChatInterfaceProps) {
   const chatRuntimeConfig = useChatRuntimeConfig({
+    activeChatMode: chatMessages.selectedChatMode,
     isActiveScreen,
     isProvidersLoading: providersState.isLoading,
     providersState: providersState.providersState,
@@ -77,10 +79,33 @@ export function ChatInterface({
   const activeWorkspacePath = chatMessages.activeConversationRootPath ?? chatMessages.selectedFolderPath
   const gitBranchState = useGitBranchState(activeWorkspacePath)
   const hasRepository = gitBranchState.branchState.hasRepository
+  const gitTaskModelSelection = useMemo(
+    () =>
+      resolveTaskModelSelection({
+        defaultSelection: {
+          hasConfiguredProvider: chatRuntimeConfig.hasConfiguredProvider,
+          modelId: chatRuntimeConfig.selectedRuntimeModelId,
+          providerId: chatRuntimeConfig.providerId,
+          providerLabel: chatRuntimeConfig.providerLabel,
+        },
+        modelOptions: chatRuntimeConfig.modelOptions,
+        taskModelId: settings.gitCommitModelId,
+        taskModelProviderId: settings.gitCommitModelProviderId,
+      }),
+    [
+      chatRuntimeConfig.hasConfiguredProvider,
+      chatRuntimeConfig.modelOptions,
+      chatRuntimeConfig.providerLabel,
+      chatRuntimeConfig.providerId,
+      chatRuntimeConfig.selectedRuntimeModelId,
+      settings.gitCommitModelId,
+      settings.gitCommitModelProviderId,
+    ],
+  )
   const gitCommitState = useGitCommit({
     hasRepository,
-    modelId: chatRuntimeConfig.selectedRuntimeModelId,
-    providerId: chatRuntimeConfig.providerId,
+    modelId: gitTaskModelSelection.modelId,
+    providerId: gitTaskModelSelection.providerId,
     reasoningEffort: chatRuntimeConfig.reasoningEffort,
     workspacePath: activeWorkspacePath,
   })

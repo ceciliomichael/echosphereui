@@ -3,10 +3,18 @@ import type { ChatMode, Message } from "../../types/chat";
 import type { ChatRuntimeSelection } from "../../hooks/chatMessageRuntime";
 import { buildCompressedHistoryMessage } from "../../lib/chatCompression";
 
+interface CompressionSelection {
+  hasConfiguredProvider: boolean;
+  modelId: string;
+  providerId: ChatRuntimeSelection["providerId"];
+  reasoningEffort: ChatRuntimeSelection["reasoningEffort"];
+}
+
 interface UseChatCompressionInput {
   activeWorkspacePath: string | null;
   chatMode: ChatMode;
   clearQueuedMessages: () => void;
+  compressionSelection: CompressionSelection;
   createConversation: () => Promise<void>;
   isBusy: boolean;
   messages: Message[];
@@ -38,6 +46,7 @@ export function useChatCompression(input: UseChatCompressionInput) {
     activeWorkspacePath,
     chatMode,
     clearQueuedMessages,
+    compressionSelection,
     createConversation,
     isBusy,
     isCompressingChat,
@@ -70,15 +79,12 @@ export function useChatCompression(input: UseChatCompressionInput) {
       return;
     }
 
-    if (
-      !runtimeSelection.hasConfiguredProvider ||
-      !runtimeSelection.providerId
-    ) {
+    if (!compressionSelection.hasConfiguredProvider || !compressionSelection.providerId) {
       setError("Configure a provider before compressing this chat.");
       return;
     }
 
-    if (runtimeSelection.modelId.trim().length === 0) {
+    if (compressionSelection.modelId.trim().length === 0) {
       setError("Select a model before compressing this chat.");
       return;
     }
@@ -92,9 +98,9 @@ export function useChatCompression(input: UseChatCompressionInput) {
         agentContextRootPath: activeWorkspacePath,
         chatMode,
         messages,
-        modelId: runtimeSelection.modelId,
-        providerId: runtimeSelection.providerId,
-        reasoningEffort: runtimeSelection.reasoningEffort,
+        modelId: compressionSelection.modelId,
+        providerId: compressionSelection.providerId,
+        reasoningEffort: compressionSelection.reasoningEffort,
       });
 
       await createConversation();
@@ -115,6 +121,7 @@ export function useChatCompression(input: UseChatCompressionInput) {
     activeWorkspacePath,
     chatMode,
     clearQueuedMessages,
+    compressionSelection,
     createConversation,
     isBusy,
     isCompressingChat,

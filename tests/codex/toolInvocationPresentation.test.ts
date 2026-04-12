@@ -282,3 +282,18 @@ test('terminal tool header labels prefer the queued command and fall back to the
     'Polling session 7',
   )
 })
+
+test('terminal tool header labels preserve the full queued command text for UI truncation', () => {
+  const command = 'Remove-Item -Force .git\\index.lock if (Test-Path .git\\index.lock) { Write-Host done }'
+  const invocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      command,
+    }),
+    id: 'tool-terminal-3',
+    startedAt: 0,
+    state: 'completed',
+    toolName: 'run_terminal',
+  }
+
+  assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), `Ran ${command}`)
+})

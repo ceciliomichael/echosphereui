@@ -33,6 +33,7 @@ import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
 import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
 import type { ResolvedTheme } from '../../lib/theme'
 import { getNextChatMode, isChatModeToggleShortcut } from '../../components/chat/chatModeShortcut'
+import { resolveTaskModelSelection } from '../../lib/taskModelSelection'
 
 const CHAT_MODE_OPTIONS: readonly ChatModeOption[] = [
   {
@@ -105,6 +106,27 @@ export function ChatInterfaceContent({
     () => buildRuntimeSelection(chatRuntimeConfig, settings.terminalExecutionMode),
     [chatRuntimeConfig, settings.terminalExecutionMode],
   )
+  const compressionSelection = useMemo(
+    () => {
+      const resolvedSelection = resolveTaskModelSelection({
+        defaultSelection: runtimeSelection,
+        modelOptions: chatRuntimeConfig.modelOptions,
+        taskModelId: settings.summarizationModelId,
+        taskModelProviderId: settings.summarizationModelProviderId,
+      })
+
+      return {
+        ...resolvedSelection,
+        reasoningEffort: runtimeSelection.reasoningEffort,
+      }
+    },
+    [
+      chatRuntimeConfig.modelOptions,
+      runtimeSelection,
+      settings.summarizationModelId,
+      settings.summarizationModelProviderId,
+    ],
+  )
   const contextUsage = useChatContextUsage({
     agentContextRootPath: activeWorkspacePath,
     chatMode: chatMessages.selectedChatMode,
@@ -113,8 +135,6 @@ export function ChatInterfaceContent({
   })
   const { candidates: refactorCandidates, isLoading: refactorCandidatesLoading } =
     useWorkspaceRefactorCandidates(activeWorkspacePath)
-  const [hasSeenActiveStreamToolInvocation, setHasSeenActiveStreamToolInvocation] = useState(false)
-  const [trackedStreamingAssistantMessageId, setTrackedStreamingAssistantMessageId] = useState<string | null>(null)
   const streamingAssistantMessage = useMemo(
     () =>
       chatMessages.streamingAssistantMessageId
@@ -125,40 +145,14 @@ export function ChatInterfaceContent({
         : null,
     [chatMessages.messages, chatMessages.streamingAssistantMessageId],
   )
-  const hasRunningToolInvocation =
-    streamingAssistantMessage?.toolInvocations?.some((invocation) => invocation.state === 'running') ?? false
-  const hasToolInvocationsInActiveStream = (streamingAssistantMessage?.toolInvocations?.length ?? 0) > 0
+  const hasCompletedToolInvocationInActiveStream =
+    streamingAssistantMessage?.toolInvocations?.some((invocation) => invocation.state === 'completed') ?? false
   const [isCompressingChat, setIsCompressingChat] = useState(false)
-
-  useEffect(() => {
-    if (!chatMessages.isSending || !chatMessages.streamingAssistantMessageId) {
-      setTrackedStreamingAssistantMessageId(null)
-      setHasSeenActiveStreamToolInvocation(false)
-      return
-    }
-
-    if (chatMessages.streamingAssistantMessageId !== trackedStreamingAssistantMessageId) {
-      setTrackedStreamingAssistantMessageId(chatMessages.streamingAssistantMessageId)
-      setHasSeenActiveStreamToolInvocation(hasToolInvocationsInActiveStream)
-      return
-    }
-
-    if (hasToolInvocationsInActiveStream) {
-      setHasSeenActiveStreamToolInvocation(true)
-    }
-  }, [
-    chatMessages.isSending,
-    chatMessages.streamingAssistantMessageId,
-    hasToolInvocationsInActiveStream,
-    trackedStreamingAssistantMessageId,
-  ])
 
   const canSteerQueuedMessages =
     settings.followUpBehavior === 'steer' &&
     chatMessages.isSending &&
-    hasSeenActiveStreamToolInvocation &&
-    chatMessages.isStreamingTextActive &&
-    !hasRunningToolInvocation
+    hasCompletedToolInvocationInActiveStream
   const isQueueBlocked =
     chatMessages.isLoading ||
     isCompressingChat ||
@@ -196,6 +190,7 @@ export function ChatInterfaceContent({
     activeWorkspacePath,
     chatMode: chatMessages.selectedChatMode,
     clearQueuedMessages,
+    compressionSelection,
     createConversation: chatMessages.createConversation,
     isBusy: chatMessages.isLoading || chatMessages.isSending,
     isCompressingChat,

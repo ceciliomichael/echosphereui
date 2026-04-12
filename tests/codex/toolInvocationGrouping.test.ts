@@ -45,6 +45,18 @@ test('buildToolInvocationGroupSummary aggregates run_terminal and get_terminal_o
   assert.equal(summary, 'Explored ran 2 commands')
 })
 
+test('buildToolInvocationGroupSummary switches to exploring while a child invocation is active', () => {
+  const summary = buildToolInvocationGroupSummary([
+    {
+      ...createInvocation('run_terminal'),
+      state: 'running',
+    },
+    createInvocation('get_terminal_output'),
+  ])
+
+  assert.equal(summary, 'Exploring ran 2 commands')
+})
+
 test('buildToolInvocationGroupSummary includes uncategorized tools by name', () => {
   const summary = buildToolInvocationGroupSummary([createInvocation('ready_implement')])
   assert.equal(summary, 'Explored 1 ready implement')

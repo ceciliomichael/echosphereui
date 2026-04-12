@@ -111,16 +111,6 @@ function getReadToolTarget(path: string, workspaceRootPath?: string | null) {
   return getBasename(workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, path) : path)
 }
 
-const MAX_TERMINAL_COMMAND_LABEL_LENGTH = 64
-
-function truncateDisplayText(value: string, maxLength: number) {
-  if (value.length <= maxLength) {
-    return value
-  }
-
-  return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
-}
-
 function readFirstText(value: unknown): string | null {
   if (Array.isArray(value)) {
     for (const entry of value) {
@@ -152,7 +142,7 @@ function readFirstText(value: unknown): string | null {
 function getSearchTarget(argumentsText: string): string | null {
   const parsedArguments = parseCompleteToolArguments(argumentsText)
   const searchText = readFirstText([parsedArguments?.pattern, parsedArguments?.query])
-  return searchText ? truncateDisplayText(searchText, MAX_TERMINAL_COMMAND_LABEL_LENGTH) : null
+  return searchText
 }
 
 function readSessionId(value: unknown): string | null {
@@ -400,7 +390,7 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   if (invocation.toolName === 'run_terminal') {
     const commandText = readFirstText([parsedArguments?.command, parsedArguments?.cmd])
     if (commandText) {
-      return truncateDisplayText(commandText, MAX_TERMINAL_COMMAND_LABEL_LENGTH)
+      return commandText
     }
 
     const sessionIdText = readSessionId(parsedArguments?.session_id)

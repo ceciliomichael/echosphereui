@@ -47,9 +47,9 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}
-        className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="group flex w-full min-w-0 items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span>{summaryLabel}</span>
+        <span className="min-w-0 truncate">{summaryLabel}</span>
         <ChevronRight
           className={[
             'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',

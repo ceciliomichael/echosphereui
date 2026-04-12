@@ -203,6 +203,50 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
     chatReasoningEffort: isReasoningEffort(candidate?.chatReasoningEffort)
       ? candidate.chatReasoningEffort
       : DEFAULT_APP_SETTINGS.chatReasoningEffort,
+    agentModelId:
+      typeof candidate?.agentModelId === 'string'
+        ? candidate.agentModelId.trim()
+        : DEFAULT_APP_SETTINGS.agentModelId,
+    agentModelProviderId: isChatProviderId(candidate?.agentModelProviderId)
+      ? candidate.agentModelProviderId
+      : DEFAULT_APP_SETTINGS.agentModelProviderId,
+    agentModelLabel:
+      typeof candidate?.agentModelLabel === 'string'
+        ? candidate.agentModelLabel.trim()
+        : DEFAULT_APP_SETTINGS.agentModelLabel,
+    planModelId:
+      typeof candidate?.planModelId === 'string'
+        ? candidate.planModelId.trim()
+        : DEFAULT_APP_SETTINGS.planModelId,
+    planModelProviderId: isChatProviderId(candidate?.planModelProviderId)
+      ? candidate.planModelProviderId
+      : DEFAULT_APP_SETTINGS.planModelProviderId,
+    planModelLabel:
+      typeof candidate?.planModelLabel === 'string'
+        ? candidate.planModelLabel.trim()
+        : DEFAULT_APP_SETTINGS.planModelLabel,
+    summarizationModelId:
+      typeof candidate?.summarizationModelId === 'string'
+        ? candidate.summarizationModelId.trim()
+        : DEFAULT_APP_SETTINGS.summarizationModelId,
+    summarizationModelProviderId: isChatProviderId(candidate?.summarizationModelProviderId)
+      ? candidate.summarizationModelProviderId
+      : DEFAULT_APP_SETTINGS.summarizationModelProviderId,
+    summarizationModelLabel:
+      typeof candidate?.summarizationModelLabel === 'string'
+        ? candidate.summarizationModelLabel.trim()
+        : DEFAULT_APP_SETTINGS.summarizationModelLabel,
+    gitCommitModelId:
+      typeof candidate?.gitCommitModelId === 'string'
+        ? candidate.gitCommitModelId.trim()
+        : DEFAULT_APP_SETTINGS.gitCommitModelId,
+    gitCommitModelProviderId: isChatProviderId(candidate?.gitCommitModelProviderId)
+      ? candidate.gitCommitModelProviderId
+      : DEFAULT_APP_SETTINGS.gitCommitModelProviderId,
+    gitCommitModelLabel:
+      typeof candidate?.gitCommitModelLabel === 'string'
+        ? candidate.gitCommitModelLabel.trim()
+        : DEFAULT_APP_SETTINGS.gitCommitModelLabel,
     diffPanelWidth:
       typeof candidate?.diffPanelWidth === 'number' && Number.isFinite(candidate.diffPanelWidth)
         ? clampStoredDiffPanelWidth(candidate.diffPanelWidth)

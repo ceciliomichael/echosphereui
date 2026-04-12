@@ -228,6 +228,40 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   const chatReasoningEffort = isReasoningEffort(input?.chatReasoningEffort)
     ? input.chatReasoningEffort
     : DEFAULT_APP_SETTINGS.chatReasoningEffort
+  const agentModelId = typeof input?.agentModelId === 'string' ? input.agentModelId.trim() : DEFAULT_APP_SETTINGS.agentModelId
+  const agentModelProviderId = isChatProviderId(input?.agentModelProviderId)
+    ? input.agentModelProviderId
+    : DEFAULT_APP_SETTINGS.agentModelProviderId
+  const agentModelLabel =
+    typeof input?.agentModelLabel === 'string' ? input.agentModelLabel.trim() : DEFAULT_APP_SETTINGS.agentModelLabel
+  const planModelId = typeof input?.planModelId === 'string' ? input.planModelId.trim() : DEFAULT_APP_SETTINGS.planModelId
+  const planModelProviderId = isChatProviderId(input?.planModelProviderId)
+    ? input.planModelProviderId
+    : DEFAULT_APP_SETTINGS.planModelProviderId
+  const planModelLabel =
+    typeof input?.planModelLabel === 'string' ? input.planModelLabel.trim() : DEFAULT_APP_SETTINGS.planModelLabel
+  const summarizationModelId =
+    typeof input?.summarizationModelId === 'string'
+      ? input.summarizationModelId.trim()
+      : DEFAULT_APP_SETTINGS.summarizationModelId
+  const summarizationModelProviderId = isChatProviderId(input?.summarizationModelProviderId)
+    ? input.summarizationModelProviderId
+    : DEFAULT_APP_SETTINGS.summarizationModelProviderId
+  const summarizationModelLabel =
+    typeof input?.summarizationModelLabel === 'string'
+      ? input.summarizationModelLabel.trim()
+      : DEFAULT_APP_SETTINGS.summarizationModelLabel
+  const gitCommitModelId =
+    typeof input?.gitCommitModelId === 'string'
+      ? input.gitCommitModelId.trim()
+      : DEFAULT_APP_SETTINGS.gitCommitModelId
+  const gitCommitModelProviderId = isChatProviderId(input?.gitCommitModelProviderId)
+    ? input.gitCommitModelProviderId
+    : DEFAULT_APP_SETTINGS.gitCommitModelProviderId
+  const gitCommitModelLabel =
+    typeof input?.gitCommitModelLabel === 'string'
+      ? input.gitCommitModelLabel.trim()
+      : DEFAULT_APP_SETTINGS.gitCommitModelLabel
   const diffPanelWidth =
     typeof input?.diffPanelWidth === 'number' && Number.isFinite(input.diffPanelWidth)
       ? clampStoredDiffPanelWidth(input.diffPanelWidth)
@@ -283,6 +317,18 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     chatModelProviderId,
     chatModelLabel,
     chatReasoningEffort,
+    agentModelId,
+    agentModelProviderId,
+    agentModelLabel,
+    planModelId,
+    planModelProviderId,
+    planModelLabel,
+    summarizationModelId,
+    summarizationModelProviderId,
+    summarizationModelLabel,
+    gitCommitModelId,
+    gitCommitModelProviderId,
+    gitCommitModelLabel,
     diffPanelWidth,
     editSessionsByConversation,
     followUpBehavior,

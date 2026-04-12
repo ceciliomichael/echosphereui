@@ -2,6 +2,7 @@ import { MemoizedGeneralSettingsPanel } from './general/GeneralSettingsPanel'
 import { McpServersSettingsPanel } from './mcp/McpServersSettingsPanel'
 import { ModelsSettingsPanel } from './models/ModelsSettingsPanel'
 import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
+import { MemoizedTaskModelsSettingsPanel } from './taskModels/TaskModelsSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
 import type { AppAppearance, AppLanguage, FollowUpBehavior } from '../../lib/appSettings'
@@ -22,6 +23,7 @@ interface GeneralSettingsViewModel {
 
 interface SettingsContentProps {
   activeItemId: SettingsItemId
+  appSettings: AppSettings
   generalSettings: GeneralSettingsViewModel
   mcpSettings: {
     activeOperation: string | null
@@ -55,6 +57,7 @@ interface SettingsContentProps {
 
 export function SettingsContent({
   activeItemId,
+  appSettings,
   generalSettings,
   mcpSettings,
   modelsSettings,
@@ -73,6 +76,26 @@ export function SettingsContent({
           <ModelsSettingsPanel {...modelsSettings} />
         ) : activeItemId === 'settings-item4' ? (
           <McpServersSettingsPanel {...mcpSettings} />
+        ) : activeItemId === 'settings-item5' ? (
+          <MemoizedTaskModelsSettingsPanel
+            isLoading={generalSettings.isLoading}
+            onUpdateSettings={generalSettings.onUpdateSettings}
+            providersState={providersSettings.providersState}
+            settings={{
+              agentModelId: appSettings.agentModelId,
+              agentModelLabel: appSettings.agentModelLabel,
+              agentModelProviderId: appSettings.agentModelProviderId,
+              gitCommitModelId: appSettings.gitCommitModelId,
+              gitCommitModelLabel: appSettings.gitCommitModelLabel,
+              gitCommitModelProviderId: appSettings.gitCommitModelProviderId,
+              planModelId: appSettings.planModelId,
+              planModelLabel: appSettings.planModelLabel,
+              planModelProviderId: appSettings.planModelProviderId,
+              summarizationModelId: appSettings.summarizationModelId,
+              summarizationModelLabel: appSettings.summarizationModelLabel,
+              summarizationModelProviderId: appSettings.summarizationModelProviderId,
+            }}
+          />
         ) : (
           <SettingsPlaceholderPanel item={activeItem} />
         )}

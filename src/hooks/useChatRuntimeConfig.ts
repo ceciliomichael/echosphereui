@@ -11,6 +11,7 @@ import {
 } from '../lib/reasoningEffort'
 import type {
   AppSettings,
+  ChatMode,
   ChatProviderId,
   CustomModelConfig,
   ProviderModelConfig,
@@ -62,10 +63,23 @@ function buildChatModelOptions(
 }
 
 interface UseChatRuntimeConfigInput {
+  activeChatMode: ChatMode
   isActiveScreen: boolean
   isProvidersLoading: boolean
   providersState: ProvidersState | null
-  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId' | 'chatModelLabel' | 'chatReasoningEffort'>
+  settings: Pick<
+    AppSettings,
+    | 'agentModelId'
+    | 'agentModelLabel'
+    | 'agentModelProviderId'
+    | 'chatModelId'
+    | 'chatModelLabel'
+    | 'chatModelProviderId'
+    | 'chatReasoningEffort'
+    | 'planModelId'
+    | 'planModelLabel'
+    | 'planModelProviderId'
+  >
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
 }
 
@@ -79,16 +93,19 @@ function getDefaultReasoningEfforts(providerId: ChatProviderId | null) {
 
 function findSelectedModel(
   options: readonly ChatModelOption[],
-  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId'>,
+  selection: {
+    modelId: string
+    providerId: ChatProviderId | null
+  },
 ): ChatModelOption | null {
-  const normalizedModelId = settings.chatModelId.trim()
+  const normalizedModelId = selection.modelId.trim()
   if (normalizedModelId.length === 0) {
     return options[0] ?? null
   }
 
-  if (settings.chatModelProviderId) {
+  if (selection.providerId) {
     const sameProviderModel = options.find(
-      (option) => option.id === normalizedModelId && option.providerId === settings.chatModelProviderId,
+      (option) => option.id === normalizedModelId && option.providerId === selection.providerId,
     )
     if (sameProviderModel) {
       return sameProviderModel
@@ -98,7 +115,48 @@ function findSelectedModel(
   return options.find((option) => option.id === normalizedModelId) ?? options[0] ?? null
 }
 
+function getModeSelectionFields(
+  activeChatMode: ChatMode,
+  settings: Pick<
+    AppSettings,
+    | 'agentModelId'
+    | 'agentModelLabel'
+    | 'agentModelProviderId'
+    | 'chatModelId'
+    | 'chatModelLabel'
+    | 'chatModelProviderId'
+    | 'planModelId'
+    | 'planModelLabel'
+    | 'planModelProviderId'
+  >,
+) {
+  if (activeChatMode === 'plan') {
+    return {
+      modelId: settings.planModelId.trim().length > 0 ? settings.planModelId : settings.chatModelId,
+      modelLabel: settings.planModelLabel.trim().length > 0 ? settings.planModelLabel : settings.chatModelLabel,
+      providerId: settings.planModelProviderId ?? settings.chatModelProviderId,
+      updateKeys: {
+        modelId: 'planModelId',
+        modelLabel: 'planModelLabel',
+        providerId: 'planModelProviderId',
+      } as const,
+    }
+  }
+
+  return {
+    modelId: settings.agentModelId.trim().length > 0 ? settings.agentModelId : settings.chatModelId,
+    modelLabel: settings.agentModelLabel.trim().length > 0 ? settings.agentModelLabel : settings.chatModelLabel,
+    providerId: settings.agentModelProviderId ?? settings.chatModelProviderId,
+    updateKeys: {
+      modelId: 'agentModelId',
+      modelLabel: 'agentModelLabel',
+      providerId: 'agentModelProviderId',
+    } as const,
+  }
+}
+
 export function useChatRuntimeConfig({
+  activeChatMode,
   isActiveScreen,
   isProvidersLoading,
   providersState,
@@ -113,18 +171,22 @@ export function useChatRuntimeConfig({
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
   )
+  const modeSelection = useMemo(
+    () => getModeSelectionFields(activeChatMode, settings),
+    [activeChatMode, settings],
+  )
   const missingSelectedModelOption = useMemo(() => {
-    const normalizedSavedModelId = settings.chatModelId.trim()
+    const normalizedSavedModelId = modeSelection.modelId.trim()
     const hasExactCatalogMatch = modelOptions.some((option) => {
       if (option.id !== normalizedSavedModelId) {
         return false
       }
 
-      if (settings.chatModelProviderId === null) {
+      if (modeSelection.providerId === null) {
         return true
       }
 
-      return option.providerId === settings.chatModelProviderId
+      return option.providerId === modeSelection.providerId
     })
 
     if (normalizedSavedModelId.length === 0 || hasExactCatalogMatch) {
@@ -132,29 +194,33 @@ export function useChatRuntimeConfig({
     }
 
     const fallbackProviderLabel =
-      settings.chatModelProviderId === null
+      modeSelection.providerId === null
         ? 'Saved model'
-        : PROVIDER_SECTIONS.find((provider) => provider.id === settings.chatModelProviderId)?.label ?? 'Saved model'
-    const fallbackLabel = settings.chatModelLabel.trim().length > 0 ? settings.chatModelLabel.trim() : normalizedSavedModelId
+        : PROVIDER_SECTIONS.find((provider) => provider.id === modeSelection.providerId)?.label ?? 'Saved model'
+    const fallbackLabel = modeSelection.modelLabel.trim().length > 0 ? modeSelection.modelLabel.trim() : normalizedSavedModelId
 
     return {
       id: normalizedSavedModelId,
       isCatalogBacked: false,
       label: fallbackLabel,
-      providerId: settings.chatModelProviderId,
+      providerId: modeSelection.providerId,
       providerLabel: fallbackProviderLabel,
       reasoningCapable: false,
       runtimeModelId: normalizedSavedModelId,
     } satisfies ChatModelOption
-  }, [modelOptions, settings.chatModelId, settings.chatModelLabel, settings.chatModelProviderId, settings.chatReasoningEffort])
+  }, [modeSelection.modelId, modeSelection.modelLabel, modeSelection.providerId, modelOptions])
   const runtimeModelOptions = useMemo(
     () => (missingSelectedModelOption ? [missingSelectedModelOption, ...modelOptions] : modelOptions),
     [missingSelectedModelOption, modelOptions],
   )
 
   const selectedModel = useMemo(
-    () => findSelectedModel(runtimeModelOptions, settings),
-    [runtimeModelOptions, settings],
+    () =>
+      findSelectedModel(runtimeModelOptions, {
+        modelId: modeSelection.modelId,
+        providerId: modeSelection.providerId,
+      }),
+    [modeSelection.modelId, modeSelection.providerId, runtimeModelOptions],
   )
   const availableReasoningEfforts = useMemo(() => {
     if (!selectedModel?.reasoningCapable) {
@@ -167,7 +233,7 @@ export function useChatRuntimeConfig({
     () => normalizeReasoningEffort(settings.chatReasoningEffort, availableReasoningEfforts),
     [availableReasoningEfforts, settings.chatReasoningEffort],
   )
-  const hasSavedModelId = settings.chatModelId.trim().length > 0
+  const hasSavedModelId = modeSelection.modelId.trim().length > 0
   const isModelOptionsLoading =
     !hasSavedModelId &&
     isActiveScreen &&
@@ -247,7 +313,7 @@ export function useChatRuntimeConfig({
 
   useEffect(() => {
     const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
-    if (!hasLoadedRuntimeModelSources || settings.chatModelId.trim().length > 0) {
+    if (!hasLoadedRuntimeModelSources || modeSelection.modelId.trim().length > 0) {
       return
     }
 
@@ -257,6 +323,9 @@ export function useChatRuntimeConfig({
     }
 
     void updateSettings({
+      [modeSelection.updateKeys.modelId]: nextModel.id,
+      [modeSelection.updateKeys.providerId]: nextModel.providerId,
+      [modeSelection.updateKeys.modelLabel]: nextModel.label,
       chatModelId: nextModel.id,
       chatModelProviderId: nextModel.providerId,
       chatModelLabel: nextModel.label,
@@ -265,7 +334,10 @@ export function useChatRuntimeConfig({
     hasLoadedCustomModels,
     hasLoadedOpenAICompatibleModels,
     modelOptions,
-    settings.chatModelId,
+    modeSelection.modelId,
+    modeSelection.updateKeys.modelId,
+    modeSelection.updateKeys.modelLabel,
+    modeSelection.updateKeys.providerId,
     updateSettings,
   ])
 
@@ -274,12 +346,15 @@ export function useChatRuntimeConfig({
       return
     }
 
-    if (settings.chatModelProviderId === selectedModel.providerId) {
+    if (modeSelection.providerId === selectedModel.providerId) {
       return
     }
 
-    void updateSettings({ chatModelProviderId: selectedModel.providerId })
-  }, [selectedModel, settings.chatModelProviderId, updateSettings])
+    void updateSettings({
+      [modeSelection.updateKeys.providerId]: selectedModel.providerId,
+      chatModelProviderId: selectedModel.providerId,
+    })
+  }, [modeSelection.providerId, modeSelection.updateKeys.providerId, selectedModel, updateSettings])
 
   useEffect(() => {
     const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
@@ -306,17 +381,28 @@ export function useChatRuntimeConfig({
     (chatModelId: string) => {
       const selectedOption = runtimeModelOptions.find((option) => option.id === chatModelId) ?? null
       const nextProviderId = selectedOption?.providerId ?? null
-      if (chatModelId === settings.chatModelId && nextProviderId === settings.chatModelProviderId) {
+      if (chatModelId === modeSelection.modelId && nextProviderId === modeSelection.providerId) {
         return
       }
 
       void updateSettings({
+        [modeSelection.updateKeys.modelId]: chatModelId,
+        [modeSelection.updateKeys.providerId]: nextProviderId,
+        [modeSelection.updateKeys.modelLabel]: selectedOption?.label ?? chatModelId,
         chatModelId,
         chatModelProviderId: nextProviderId,
         chatModelLabel: selectedOption?.label ?? chatModelId,
       })
     },
-    [runtimeModelOptions, settings.chatModelId, settings.chatModelProviderId, updateSettings],
+    [
+      modeSelection.modelId,
+      modeSelection.providerId,
+      modeSelection.updateKeys.modelId,
+      modeSelection.updateKeys.modelLabel,
+      modeSelection.updateKeys.providerId,
+      runtimeModelOptions,
+      updateSettings,
+    ],
   )
 
   const setReasoningEffort = useCallback(
@@ -338,8 +424,8 @@ export function useChatRuntimeConfig({
     providerId: selectedModel?.providerId ?? null,
     providerLabel: selectedModel?.providerLabel ?? null,
     reasoningEffort,
-    selectedModelId: selectedModel?.id ?? settings.chatModelId,
-    selectedRuntimeModelId: selectedModel?.runtimeModelId ?? settings.chatModelId,
+    selectedModelId: selectedModel?.id ?? modeSelection.modelId,
+    selectedRuntimeModelId: selectedModel?.runtimeModelId ?? modeSelection.modelId,
     setReasoningEffort,
     setSelectedModelId,
     showReasoningEffortSelector: availableReasoningEfforts.length > 0,

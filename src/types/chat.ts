@@ -211,6 +211,18 @@ export interface AppSettings {
   chatModelProviderId: ChatProviderId | null
   chatModelLabel: string
   chatReasoningEffort: ReasoningEffort
+  agentModelId: string
+  agentModelProviderId: ChatProviderId | null
+  agentModelLabel: string
+  planModelId: string
+  planModelProviderId: ChatProviderId | null
+  planModelLabel: string
+  summarizationModelId: string
+  summarizationModelProviderId: ChatProviderId | null
+  summarizationModelLabel: string
+  gitCommitModelId: string
+  gitCommitModelProviderId: ChatProviderId | null
+  gitCommitModelLabel: string
   diffPanelWidth: number
   editSessionsByConversation: Record<string, ConversationEditSession>
   followUpBehavior: FollowUpBehavior

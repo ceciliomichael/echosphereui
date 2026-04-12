@@ -130,6 +130,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     parsedStructuredResult?.metadata?.summary ??
     invocation.resultContent ??
     ''
+  const shouldLimitResultHeight = invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch'
 
   return (
     <div className="w-full">
@@ -144,12 +145,12 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
           setIsOpen((currentValue) => !currentValue)
         }}
         className={[
-          'group flex items-center gap-1 text-sm text-muted-foreground transition-colors',
+          'group flex w-full min-w-0 items-center gap-1 text-left text-sm text-muted-foreground transition-colors',
           disableHeaderToggle ? 'cursor-default opacity-90' : 'hover:text-foreground',
         ].join(' ')}
       >
-        <span className={`inline-flex items-center gap-1.5 ${isRunning ? 'thinking-shimmer' : ''}`}>
-          <span>{headerLabel}</span>
+        <span className={`flex min-w-0 flex-1 items-center gap-1.5 ${isRunning ? 'thinking-shimmer' : ''}`}>
+          <span className="min-w-0 truncate">{headerLabel}</span>
           {diffCountSummary ? <span className="inline-flex items-center gap-1">{diffCountSummary}</span> : null}
         </span>
         {!disableHeaderToggle ? (
@@ -163,7 +164,12 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
       </button>
 
       {isOpen && invocation.resultContent ? (
-        <div className="mt-1.5 w-full text-sm text-muted-foreground/90">
+        <div
+          className={[
+            'mt-1.5 w-full text-sm text-muted-foreground/90',
+            shouldLimitResultHeight ? 'max-h-80 overflow-y-auto pr-1' : '',
+          ].join(' ')}
+        >
           {diffResultPresentation ? (
             <DiffViewer
               contextLines={diffResultPresentation.contextLines}
@@ -194,7 +200,7 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
       ) : null}
 
       {isOpen && invocation.decisionRequest ? (
-        <div className="mt-1.5 w-full text-sm text-muted-foreground/90">
+        <div className="mt-1.5 max-h-80 w-full overflow-y-auto pr-1 text-sm text-muted-foreground/90">
           <ToolDecisionRequestCard
             onSubmit={(submission) => {
               if (!onToolDecisionSubmit) {
