@@ -12,6 +12,8 @@ import { resolveWorkspaceTargetPath } from './workspaceTools'
 
 const MAX_TERMINAL_OUTPUT_BODY_LENGTH = 100_000
 const DEFAULT_TERMINAL_POLLING_MS = 15_000
+const TERMINAL_SESSION_LOOKUP_RETRY_MS = 25
+const TERMINAL_SESSION_LOOKUP_TIMEOUT_MS = 1_500
 const ANSI_ESCAPE = '\\u001B'
 const TERMINAL_BELL = '\\u0007'
 const ANSI_CSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-?]*[ -/]*[@-~]`, 'g')
@@ -21,7 +23,6 @@ const TERMINAL_OUTPUT_BEGIN_PREFIX = '╭─<<-- begin'
 const TERMINAL_OUTPUT_END_PREFIX = '╰─<<-- end'
 
 interface TerminalThreadSessionState {
-  globalToLocalSessionId: Map<number, number>
   localToGlobalSessionId: Map<number, number>
   pendingLocalToGlobalSessionId: Map<number, Promise<number>>
   nextSessionId: number
@@ -181,7 +182,6 @@ function getTerminalThreadSessionState(namespace: string): TerminalThreadSession
   }
 
   const nextState: TerminalThreadSessionState = {
-    globalToLocalSessionId: new Map(),
     localToGlobalSessionId: new Map(),
     pendingLocalToGlobalSessionId: new Map(),
     nextSessionId: 1,
@@ -190,18 +190,9 @@ function getTerminalThreadSessionState(namespace: string): TerminalThreadSession
   return nextState
 }
 
-function getOrCreateThreadLocalSessionId(namespace: string, globalSessionId: number) {
+function setThreadGlobalSessionId(namespace: string, localSessionId: number, globalSessionId: number) {
   const state = getTerminalThreadSessionState(namespace)
-  const existingLocalSessionId = state.globalToLocalSessionId.get(globalSessionId)
-  if (existingLocalSessionId !== undefined) {
-    return existingLocalSessionId
-  }
-
-  const localSessionId = state.nextSessionId
-  state.nextSessionId += 1
-  state.globalToLocalSessionId.set(globalSessionId, localSessionId)
   state.localToGlobalSessionId.set(localSessionId, globalSessionId)
-  return localSessionId
 }
 
 function reserveThreadLocalSessionId(namespace: string) {
@@ -225,19 +216,31 @@ function clearPendingThreadGlobalSessionId(namespace: string, localSessionId: nu
   state.pendingLocalToGlobalSessionId.delete(localSessionId)
 }
 
+function delayMilliseconds(durationMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs)
+  })
+}
+
 async function resolveThreadGlobalSessionIdWithPending(namespace: string, localSessionId: number) {
-  const state = getTerminalThreadSessionState(namespace)
-  const immediateGlobalSessionId = state.localToGlobalSessionId.get(localSessionId)
-  if (immediateGlobalSessionId !== undefined) {
-    return immediateGlobalSessionId
+  const deadlineMs = Date.now() + TERMINAL_SESSION_LOOKUP_TIMEOUT_MS
+
+  while (Date.now() <= deadlineMs) {
+    const state = getTerminalThreadSessionState(namespace)
+    const immediateGlobalSessionId = state.localToGlobalSessionId.get(localSessionId)
+    if (immediateGlobalSessionId !== undefined) {
+      return immediateGlobalSessionId
+    }
+
+    const pendingGlobalSessionId = state.pendingLocalToGlobalSessionId.get(localSessionId)
+    if (pendingGlobalSessionId) {
+      return pendingGlobalSessionId
+    }
+
+    await delayMilliseconds(TERMINAL_SESSION_LOOKUP_RETRY_MS)
   }
 
-  const pendingGlobalSessionId = state.pendingLocalToGlobalSessionId.get(localSessionId)
-  if (!pendingGlobalSessionId) {
-    return null
-  }
-
-  return pendingGlobalSessionId
+  return null
 }
 
 function buildRunTerminalResult(snapshot: CreateTerminalSessionResult, command: string | null) {
@@ -432,12 +435,12 @@ export function createTerminalToolSet(
             sessionKey: inputValue.session_key,
             workspaceRootPath: context.workspaceRootPath,
           })
-          const localSessionId = getOrCreateThreadLocalSessionId(namespace, session.sessionId)
+          setThreadGlobalSessionId(namespace, reservedLocalSessionId, session.sessionId)
           clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
           pendingGlobalSessionId.resolve(session.sessionId)
           const displaySession = {
             ...session,
-            sessionId: localSessionId,
+            sessionId: reservedLocalSessionId,
           }
 
           if (command) {

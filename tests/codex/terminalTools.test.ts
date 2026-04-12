@@ -147,6 +147,95 @@ test('run_terminal starts at session 1 in a different conversation thread', asyn
   }
 })
 
+test('run_terminal increments local session ids sequentially', async () => {
+  let nextGlobalSessionId = 30
+  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
+  const tools = createTerminalToolSet(
+    {
+      conversationId: 'conversation-sequential',
+      webContents: webContentsStub,
+      workspaceRootPath: '/workspace',
+    },
+    {
+      createSession: async () => ({
+        bufferedOutput: '',
+        cwd: '/workspace',
+        isReused: false,
+        sessionId: nextGlobalSessionId++,
+        shell: 'pwsh',
+      }),
+      getSessionOutput: async (_owner, input) => {
+        getSessionOutputCalls.push(input)
+        return {
+          cwd: '/workspace',
+          exitCode: null,
+          hasExited: false,
+          outputBuffer: 'global session ' + input.sessionId + '\n',
+          shellLabel: 'pwsh',
+          signal: null,
+          sessionId: input.sessionId,
+        }
+      },
+      writeToSession: async () => undefined,
+    },
+  )
+
+  const firstRunResult = await (
+    tools.run_terminal as unknown as {
+      execute: (input: {
+        cols: number
+        command: string
+        cwd?: string
+        rows: number
+        session_key?: string
+      }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    cols: 120,
+    command: '',
+    cwd: '.',
+    rows: 30,
+    session_key: 'first',
+  })
+
+  const secondRunResult = await (
+    tools.run_terminal as unknown as {
+      execute: (input: {
+        cols: number
+        command: string
+        cwd?: string
+        rows: number
+        session_key?: string
+      }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    cols: 120,
+    command: '',
+    cwd: '.',
+    rows: 30,
+    session_key: 'second',
+  })
+
+  const secondOutputResult = await (
+    tools.get_terminal_output as unknown as {
+      execute: (input: { session_id: number }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    session_id: 2,
+  })
+
+  assert.match(firstRunResult.body ?? '', /Started session 1/u)
+  assert.match(secondRunResult.body ?? '', /Started session 2/u)
+  assert.match(secondOutputResult.body ?? '', /global session 31/u)
+  assert.deepEqual(getSessionOutputCalls, [
+    {
+      pollingMs: 15000,
+      sessionId: 31,
+      workspaceRootPath: '/workspace',
+    },
+  ])
+})
+
 test('get_terminal_output uses the fixed polling window and returns cleaned output', async () => {
   const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
   const tools = createTerminalToolSet(
@@ -356,6 +445,90 @@ test('get_terminal_output waits for a parallel run_terminal session creation', a
     {
       pollingMs: 15000,
       sessionId: 19,
+      workspaceRootPath: '/workspace',
+    },
+  ])
+})
+
+test('get_terminal_output waits when invoked before run_terminal reserves the local session id', async () => {
+  let allowSessionCreation: (() => void) | null = null
+  const allowSessionCreationPromise = new Promise<void>((resolve) => {
+    allowSessionCreation = resolve
+  })
+  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
+  const tools = createTerminalToolSet(
+    {
+      conversationId: 'conversation-f',
+      webContents: webContentsStub,
+      workspaceRootPath: '/workspace',
+    },
+    {
+      createSession: async () => {
+        await allowSessionCreationPromise
+        return {
+          bufferedOutput: '',
+          cwd: '/workspace',
+          isReused: false,
+          sessionId: 21,
+          shell: 'pwsh',
+        }
+      },
+      getSessionOutput: async (_owner, input) => {
+        getSessionOutputCalls.push(input)
+        return {
+          cwd: '/workspace',
+          exitCode: null,
+          hasExited: false,
+          outputBuffer: 'pre-registered output\n',
+          shellLabel: 'pwsh',
+          signal: null,
+          sessionId: input.sessionId,
+        }
+      },
+      writeToSession: async () => undefined,
+    },
+  )
+
+  const outputPromise = (
+    tools.get_terminal_output as unknown as {
+      execute: (input: { session_id: number }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    session_id: 1,
+  })
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 50)
+  })
+
+  const runPromise = (
+    tools.run_terminal as unknown as {
+      execute: (input: {
+        cols: number
+        command: string
+        cwd?: string
+        rows: number
+        session_key?: string
+      }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    cols: 120,
+    command: '',
+    cwd: '.',
+    rows: 30,
+    session_key: 'late-start',
+  })
+
+  allowSessionCreation?.()
+
+  const [outputResult, runResult] = await Promise.all([outputPromise, runPromise])
+
+  assert.match(runResult.body ?? '', /Started session 1/u)
+  assert.match(outputResult.body ?? '', /pre-registered output/u)
+  assert.deepEqual(getSessionOutputCalls, [
+    {
+      pollingMs: 15000,
+      sessionId: 21,
       workspaceRootPath: '/workspace',
     },
   ])

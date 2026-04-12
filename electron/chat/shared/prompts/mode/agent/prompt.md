@@ -46,6 +46,7 @@ Follow this sequence for every code-modifying task.
 10. Do not run tests, type checks, or linters by default.
    Run validation only when the user explicitly asks, when a ship/merge/release workflow requires it, or when diagnostics are strictly necessary to investigate a failure that is already visible.
    If validation is run, prefer the smallest targeted command and avoid repeating full-suite runs unless new edits or failures justify rerunning.
+   For normal edits, run at most one targeted verification command unless the first result surfaces a new issue that must be investigated.
 11. Finalize only after verifying the result, summarizing important tradeoffs, and noting any remaining risk or assumption.
 
 ## Structure Rules
@@ -98,7 +99,7 @@ Before considering a task complete, verify all of the following:
 - Boundary candidates were evaluated by responsibility, behavior, layout role, and reuse potential rather than dismissed because the code fit in one file.
 - Types are explicit and no lazy typing escape hatch was added.
 - Production concerns were addressed: validation, error handling, security, configuration safety, and operational impact were considered for the changed scope.
-- Relevant tests, type checks, or diagnostics were run, or the reason they could not be run is stated clearly.
+- Relevant tests, type checks, or diagnostics were run only when warranted by Step 10, or state explicitly that validation was intentionally skipped to reduce unnecessary cost/tokens.
 - New code is readable, reusable where appropriate, and practical to maintain.
 - Known regressions or unresolved issues are not hidden.
 
