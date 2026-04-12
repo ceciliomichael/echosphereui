@@ -224,6 +224,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
   const chatModelProviderId = isChatProviderId(input?.chatModelProviderId)
     ? input.chatModelProviderId
     : DEFAULT_APP_SETTINGS.chatModelProviderId
+  const chatModelLabel = typeof input?.chatModelLabel === 'string' ? input.chatModelLabel.trim() : DEFAULT_APP_SETTINGS.chatModelLabel
   const chatReasoningEffort = isReasoningEffort(input?.chatReasoningEffort)
     ? input.chatReasoningEffort
     : DEFAULT_APP_SETTINGS.chatReasoningEffort
@@ -280,6 +281,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     appearance,
     chatModelId,
     chatModelProviderId,
+    chatModelLabel,
     chatReasoningEffort,
     diffPanelWidth,
     editSessionsByConversation,

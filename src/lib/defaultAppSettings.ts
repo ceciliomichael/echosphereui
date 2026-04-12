@@ -9,6 +9,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   appearance: DEFAULT_APP_APPEARANCE,
   chatModelId: '',
   chatModelProviderId: null,
+  chatModelLabel: '',
   chatReasoningEffort: 'medium',
   diffPanelWidth: DEFAULT_DIFF_PANEL_WIDTH,
   editSessionsByConversation: {},

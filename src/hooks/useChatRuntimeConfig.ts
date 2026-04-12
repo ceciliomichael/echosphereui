@@ -65,7 +65,7 @@ interface UseChatRuntimeConfigInput {
   isActiveScreen: boolean
   isProvidersLoading: boolean
   providersState: ProvidersState | null
-  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId' | 'chatReasoningEffort'>
+  settings: Pick<AppSettings, 'chatModelId' | 'chatModelProviderId' | 'chatModelLabel' | 'chatReasoningEffort'>
   updateSettings: (input: Partial<AppSettings>) => Promise<AppSettings | null>
 }
 
@@ -146,11 +146,12 @@ export function useChatRuntimeConfig({
       settings.chatModelProviderId === null
         ? 'Saved model'
         : PROVIDER_SECTIONS.find((provider) => provider.id === settings.chatModelProviderId)?.label ?? 'Saved model'
+    const fallbackLabel = settings.chatModelLabel.trim().length > 0 ? settings.chatModelLabel.trim() : normalizedSavedModelId
 
     return {
       id: normalizedSavedModelId,
       isCatalogBacked: false,
-      label: normalizedSavedModelId,
+      label: fallbackLabel,
       providerId: settings.chatModelProviderId,
       providerLabel: fallbackProviderLabel,
       reasoningCapable: true,
@@ -160,7 +161,7 @@ export function useChatRuntimeConfig({
       ),
       runtimeModelId: normalizedSavedModelId,
     } satisfies ChatModelOption
-  }, [modelOptions, settings.chatModelId, settings.chatModelProviderId, settings.chatReasoningEffort])
+  }, [modelOptions, settings.chatModelId, settings.chatModelLabel, settings.chatModelProviderId, settings.chatReasoningEffort])
   const runtimeModelOptions = useMemo(
     () => (missingSelectedModelOption ? [missingSelectedModelOption, ...modelOptions] : modelOptions),
     [missingSelectedModelOption, modelOptions],
@@ -273,6 +274,7 @@ export function useChatRuntimeConfig({
     void updateSettings({
       chatModelId: nextModel.id,
       chatModelProviderId: nextModel.providerId,
+      chatModelLabel: nextModel.label,
     })
   }, [
     hasLoadedCustomModels,
@@ -326,6 +328,7 @@ export function useChatRuntimeConfig({
       void updateSettings({
         chatModelId,
         chatModelProviderId: nextProviderId,
+        chatModelLabel: selectedOption?.label ?? chatModelId,
       })
     },
     [runtimeModelOptions, settings.chatModelId, settings.chatModelProviderId, updateSettings],

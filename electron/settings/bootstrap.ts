@@ -198,6 +198,8 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
     chatModelProviderId: isChatProviderId(candidate?.chatModelProviderId)
       ? candidate.chatModelProviderId
       : DEFAULT_APP_SETTINGS.chatModelProviderId,
+    chatModelLabel:
+      typeof candidate?.chatModelLabel === 'string' ? candidate.chatModelLabel.trim() : DEFAULT_APP_SETTINGS.chatModelLabel,
     chatReasoningEffort: isReasoningEffort(candidate?.chatReasoningEffort)
       ? candidate.chatReasoningEffort
       : DEFAULT_APP_SETTINGS.chatReasoningEffort,

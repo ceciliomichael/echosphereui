@@ -209,6 +209,7 @@ export interface AppSettings {
   appearance: AppAppearance
   chatModelId: string
   chatModelProviderId: ChatProviderId | null
+  chatModelLabel: string
   chatReasoningEffort: ReasoningEffort
   diffPanelWidth: number
   editSessionsByConversation: Record<string, ConversationEditSession>
