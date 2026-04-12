@@ -31,14 +31,14 @@ export function CommitHistoryTooltipContent({ details, entry, isLoadingDetails }
   const bodyLines = getBodyLines(details)
 
   return (
-    <div className="max-w-[min(42rem,calc(100vw-24px))] overflow-hidden rounded-xl border border-border bg-surface text-foreground shadow-soft">
+    <div className="max-w-[min(42rem,calc(100vw-24px))] overflow-hidden rounded-xl border border-tooltip-border bg-tooltip-surface text-tooltip-foreground shadow-soft">
       <div className="border-b border-border/80 px-3.5 py-2.5">
-        <p className="text-[13px] font-semibold leading-5">{entry.authorName}</p>
+        <p className="text-[13px] font-semibold leading-5 text-foreground">{entry.authorName}</p>
         <p className="text-[12px] text-muted-foreground">{entry.authoredRelativeTime}</p>
       </div>
 
       <div className="space-y-2.5 px-3.5 py-3">
-        <p className="text-[14px] font-medium leading-5">{entry.subject.length > 0 ? entry.subject : '(no subject)'}</p>
+        <p className="text-[14px] font-medium leading-5 text-foreground">{entry.subject.length > 0 ? entry.subject : '(no subject)'}</p>
 
         {isLoadingDetails ? <p className="text-[12px] text-muted-foreground">Loading commit details...</p> : null}
 

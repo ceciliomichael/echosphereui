@@ -73,7 +73,7 @@ function SourceControlHistoryItemComponent({
 
   return (
     <div key={entry.hash}>
-      <Tooltip content={<CommitHistoryTooltipContent entry={entry} details={commitDetails} isLoadingDetails={isLoadingDetails} />} side="right" fullWidthTrigger interactive panelClassName="!max-w-[min(42rem,calc(100vw-24px))] !border-0 !bg-transparent !p-0 !text-left !shadow-none">
+      <Tooltip content={<CommitHistoryTooltipContent entry={entry} details={commitDetails} isLoadingDetails={isLoadingDetails} />} side="left" lockSide fullWidthTrigger interactive panelClassName="!max-w-[min(42rem,calc(100vw-24px))] !border-0 !bg-transparent !p-0 !text-left !shadow-none">
         <button
           type="button"
           ref={(node) => {

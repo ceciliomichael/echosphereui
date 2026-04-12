@@ -10,6 +10,7 @@ import { MarkdownRenderer } from "./chat/MarkdownRenderer";
 import { ThinkingBlock } from "./chat/ThinkingBlock";
 import { ThinkingIndicator } from "./chat/ThinkingIndicator";
 import { ToolInvocationBlock } from "./chat/ToolInvocationBlock";
+import { ToolInvocationGroup } from "./chat/ToolInvocationGroup";
 import { getToolInvocationDisplayEntries } from "./chat/toolInvocationPresentation";
 import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
@@ -70,6 +71,9 @@ export function AssistantMessage({
   const canShowCopyButton =
     showCopyButton && !isStreaming && copyableText.length > 0;
   const messagePaddingClassName = canShowCopyButton ? "pb-5 pr-5" : "";
+  const toolDisplayEntries = toolInvocations.flatMap((invocation) =>
+    getToolInvocationDisplayEntries(invocation),
+  );
 
   useEffect(() => {
     if (!isCopied) {
@@ -130,15 +134,21 @@ export function AssistantMessage({
         />
       ) : null}
 
-      {toolInvocations.flatMap((invocation) =>
-        getToolInvocationDisplayEntries(invocation).map((displayEntry) => (
+      {toolDisplayEntries.length > 1 ? (
+        <ToolInvocationGroup
+          entries={toolDisplayEntries}
+          onToolDecisionSubmit={onToolDecisionSubmit}
+          workspaceRootPath={workspaceRootPath}
+        />
+      ) : (
+        toolDisplayEntries.map((displayEntry) => (
           <ToolInvocationBlock
             key={displayEntry.key}
             invocation={displayEntry.invocation}
             onToolDecisionSubmit={onToolDecisionSubmit}
             workspaceRootPath={workspaceRootPath}
           />
-        )),
+        ))
       )}
 
       {shouldShowWaitingIndicator ? (

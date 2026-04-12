@@ -64,16 +64,18 @@ export function CommitFileRow({ file, indentPx }: { file: GitHistoryCommitFile; 
   return (
     <Tooltip
       content={
-        <div className="flex w-full max-w-full flex-col gap-1 font-sans">
-          <p className="break-words whitespace-normal text-[13px] leading-5 text-tooltip-foreground">
+        <div className="flex w-max max-w-[calc(100vw-24px)] flex-col justify-center gap-0.5 font-sans">
+          <p className="max-w-[calc(100vw-24px)] overflow-x-auto whitespace-nowrap text-[13px] leading-5 text-tooltip-foreground [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {normalizedPath}
           </p>
-          <p className="text-[13px] leading-5 text-tooltip-foreground">{getStatusLabel(file.status)}</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">{getStatusLabel(file.status)}</p>
         </div>
       }
       side="right"
       fullWidthTrigger
       interactive
+      noWrap
+      panelClassName="!w-max !max-w-[calc(100vw-24px)] !rounded-2xl !px-4 !py-2.5 !text-left"
     >
       <div
         className="group flex h-[50px] w-full items-center transition-colors hover:bg-surface-muted/50"
