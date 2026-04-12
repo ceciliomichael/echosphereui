@@ -68,6 +68,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
   const appliedRevertSessionKeysRef = useRef<Record<string, string>>({})
   const resumeSessionKeyRef = useRef<string | null>(null)
   const syncedConversationModeIdRef = useRef<string | null>(null)
+  const draftChatModeByConversationRef = useRef<Record<string, ChatMode>>({})
 
   useEffect(() => {
     const mergedEditSessions = mergeConversationEditSessions(
@@ -194,6 +195,12 @@ export function useChatMessages(input: UseChatMessagesInput) {
     }
 
     syncedConversationModeIdRef.current = activeConversationId
+    const draftModeForConversation = draftChatModeByConversationRef.current[activeConversationId]
+    if (draftModeForConversation) {
+      setDraftChatMode(draftModeForConversation)
+      return
+    }
+
     const activeConversationChatMode = sessionState.activeConversationChatMode
     if (!activeConversationChatMode) {
       return
@@ -201,6 +208,24 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
     setDraftChatMode(activeConversationChatMode)
   }, [sessionState.activeConversationChatMode, sessionState.activeConversationId])
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      return
+    }
+
+    draftChatModeByConversationRef.current[activeConversationId] = draftChatMode
+  }, [activeConversationId, draftChatMode])
+
+  const setSelectedChatMode = useCallback(
+    (nextMode: ChatMode) => {
+      setDraftChatMode(nextMode)
+      if (activeConversationId) {
+        draftChatModeByConversationRef.current[activeConversationId] = nextMode
+      }
+    },
+    [activeConversationId],
+  )
 
   const captureActiveEditDraftSession = useCallback(() => {
     if (!activeConversationId) {
@@ -567,7 +592,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
     setEditComposerValue: composerState.setEditComposerValue,
     setMainComposerAttachments: composerState.setMainComposerAttachments,
     setMainComposerValue: composerState.setMainComposerValue,
-    setSelectedChatMode: setDraftChatMode,
+    setSelectedChatMode,
     startEditingMessage,
     streamingAssistantMessageId: sessionState.activeConversationState?.streamingAssistantMessageId ?? null,
     streamingWaitingIndicatorVariant: sessionState.activeConversationState?.streamingWaitingIndicatorVariant ?? null,

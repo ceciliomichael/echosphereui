@@ -32,6 +32,7 @@ import { useChatCompression } from './useChatCompression'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
 import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
 import type { ResolvedTheme } from '../../lib/theme'
+import { getNextChatMode, isChatModeToggleShortcut } from '../../components/chat/chatModeShortcut'
 
 const CHAT_MODE_OPTIONS: readonly ChatModeOption[] = [
   {
@@ -310,6 +311,21 @@ export function ChatInterfaceContent({
     [chatMessages, runtimeSelection],
   )
 
+  const isAiBusy = chatMessages.isLoading || chatMessages.isSending || chatMessages.isStreamingResponse || isCompressingChat
+  const hasConversationMessages = chatMessages.messages.length > 0
+  const showImplementPlanButton = chatMessages.selectedChatMode === 'plan' && hasConversationMessages && !isAiBusy
+
+  const handleImplementPlan = useCallback(() => {
+    if (isAiBusy || chatMessages.selectedChatMode !== 'plan') {
+      return
+    }
+
+    chatMessages.setSelectedChatMode('agent')
+    void chatMessages.sendProgrammaticMessage(runtimeSelection, 'Implement the plan', {
+      chatMode: 'agent',
+    })
+  }, [chatMessages, isAiBusy, runtimeSelection])
+
   const showQueueBlock =
     queuedMessages.length > 0 &&
     typeof removeQueuedMessage === 'function' &&
@@ -346,6 +362,40 @@ export function ChatInterfaceContent({
     },
     [chatMessages],
   )
+
+  const handleCycleChatMode = useCallback(() => {
+    const nextChatMode = getNextChatMode(chatMessages.selectedChatMode, chatModeOptions)
+    if (!nextChatMode) {
+      return
+    }
+
+    chatMessages.setSelectedChatMode(nextChatMode)
+  }, [chatMessages, chatModeOptions])
+
+  useEffect(() => {
+    function handleWindowKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) {
+        return
+      }
+
+      const isImplementPlanShortcut = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.code === 'KeyI'
+      if (isImplementPlanShortcut) {
+        event.preventDefault()
+        handleImplementPlan()
+        return
+      }
+
+      if (!isChatModeToggleShortcut(event)) {
+        return
+      }
+
+      event.preventDefault()
+      handleCycleChatMode()
+    }
+
+    window.addEventListener('keydown', handleWindowKeyDown)
+    return () => window.removeEventListener('keydown', handleWindowKeyDown)
+  }, [handleCycleChatMode, handleImplementPlan])
 
   return (
     <AppWorkspaceShell
@@ -541,7 +591,19 @@ export function ChatInterfaceContent({
                 </div>
               ) : null}
 
-              <div className="chat-input-shell">
+              <div className="chat-input-shell relative">
+                {showImplementPlanButton ? (
+                  <button
+                    type="button"
+                    onClick={handleImplementPlan}
+                    className="absolute -top-[3.25rem] left-1/2 z-10 inline-flex h-11 w-auto max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-border bg-surface px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-surface-muted active:scale-95"
+                  >
+                    <span className="truncate">Implement the plan</span>
+                    <span className="rounded-lg border border-border bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      Ctrl + I
+                    </span>
+                  </button>
+                ) : null}
                 <ChatInput
                   attachments={chatMessages.mainComposerAttachments}
                   contextUsage={contextUsage}
