@@ -157,6 +157,7 @@ export function ChatInput({
   const canToggleChatMode = showChatModeSelector && !chatModeSelectorDisabled
   const showDetachedFooterControls =
     showRuntimeTargetControl || showTerminalExecutionModeControl || showGitBranchSelector
+  const showRefactorCandidatesIndicator = workspaceRootPath && !isEditing
   const mentionMenu = useChatFileMentionMenu({
     disabled,
     initialMentionPathMap,
@@ -490,7 +491,7 @@ export function ChatInput({
           ) : null}
 
           <div className="flex shrink-0 items-center justify-end gap-2 self-end">
-            {workspaceRootPath ? (
+            {showRefactorCandidatesIndicator ? (
               <RefactorCandidatesIndicator
                 candidates={refactorCandidates}
                 disabled={disabled && !canAbort}

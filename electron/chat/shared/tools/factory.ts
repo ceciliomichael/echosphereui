@@ -27,7 +27,8 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
   const isPlanMode = options?.chatMode === 'plan'
   const tools: ToolSet = {
     list: tool({
-      description: 'List the immediate contents of a workspace directory. Prefer this before reading when you need orientation.',
+      description:
+        'List the immediate contents of a workspace directory. Use this to orient yourself, discover nearby files, and decide what to read next. Treat it as a discovery step, not a substitute for reading source.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -50,7 +51,8 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
       },
     }),
     read: tool({
-      description: 'Read a UTF-8 text file with numbered lines. Use offset to continue large files.',
+      description:
+        'Read a UTF-8 text file with numbered lines. Use this after locating candidate files with list, glob, or grep, and read the actual file before patching. Use offset to continue large files.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -86,7 +88,8 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
       },
     }),
     glob: tool({
-      description: 'Find files by glob pattern within the workspace. Use this when you know filename shape but not the exact location.',
+      description:
+        'Find files by glob pattern within the workspace. Use this to discover likely file paths when you know the naming shape or directory layout, then read the matched files before editing.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -118,7 +121,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
     }),
     grep: tool({
       description:
-        'Fast content search tool for files beneath a workspace path. Pass a file or directory path in absolute_path, or omit it to search from the workspace root. Searches file contents with regular expressions and uses include to narrow by filename glob.',
+        'Fast content search tool for files beneath a workspace path. Use it to locate relevant files, symbols, or strings, then read the matching files before editing or patching. Treat grep results as pointers only. Pass a file or directory path in absolute_path, or omit it to search from the workspace root. Searches file contents with regular expressions and uses include to narrow by filename glob.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -181,7 +184,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
     apply: wholeFileApplyTool,
     apply_patch: tool({
       description:
-        'Apply a structured patch using the Codex-style *** Begin Patch format. Prefer this for targeted edits to existing files.',
+        'Apply a structured patch using the Codex-style *** Begin Patch format. Use this after reading the target file(s) and confirming the exact edit. Prefer this for targeted changes to existing files.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {

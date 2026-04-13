@@ -18,6 +18,7 @@ interface ComputeDiffOptions {
 }
 
 const DIFF_LOOKAHEAD_LIMIT = 48
+const EXACT_DIFF_CELL_LIMIT = 250_000
 
 export function normalizeEscapedSequences(content: string) {
   if (!content) {
@@ -34,31 +35,111 @@ export function normalizeEscapedSequences(content: string) {
   return content
 }
 
-export function computeDiffLines(
-  oldContent: string | null | undefined,
-  newContent: string,
-  { isStreaming = false, startLineNumber = 1 }: ComputeDiffOptions = {},
-) {
-  const normalizedNewContent = normalizeEscapedSequences(newContent)
-  const normalizedOldContent = oldContent ? normalizeEscapedSequences(oldContent) : oldContent
+function createAddedLine(content: string, lineNumber: number) {
+  return {
+    content,
+    lineNumber,
+    newLineNumber: lineNumber,
+    oldLineNumber: undefined,
+    type: 'added' as const,
+  }
+}
 
-  if (normalizedOldContent === null || normalizedOldContent === undefined) {
-    return normalizedNewContent.split('\n').map((line, index) => ({
-      content: line,
-      lineNumber: index + startLineNumber,
-      newLineNumber: index + startLineNumber,
-      oldLineNumber: undefined,
-      type: 'added' as const,
-    }))
+function createRemovedLine(content: string, lineNumber: number) {
+  return {
+    content,
+    lineNumber,
+    newLineNumber: undefined,
+    oldLineNumber: lineNumber,
+    type: 'removed' as const,
+  }
+}
+
+function createUnchangedLine(content: string, lineNumber: number) {
+  return {
+    content,
+    lineNumber,
+    newLineNumber: lineNumber,
+    oldLineNumber: lineNumber,
+    type: 'unchanged' as const,
+  }
+}
+
+function computeExactDiffLines(
+  oldLines: readonly string[],
+  newLines: readonly string[],
+  startLineNumber: number,
+) {
+  const columnCount = newLines.length + 1
+  const matrix = new Uint32Array((oldLines.length + 1) * columnCount)
+
+  for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+      const currentIndex = oldIndex * columnCount + newIndex
+      if (oldLines[oldIndex] === newLines[newIndex]) {
+        matrix[currentIndex] = matrix[(oldIndex + 1) * columnCount + newIndex + 1] + 1
+        continue
+      }
+
+      matrix[currentIndex] = Math.max(
+        matrix[(oldIndex + 1) * columnCount + newIndex],
+        matrix[oldIndex * columnCount + newIndex + 1],
+      )
+    }
   }
 
-  const oldLines = normalizedOldContent.split('\n')
-  const newLines = normalizedNewContent.split('\n')
+  const diff: DiffLine[] = []
+  let oldIndex = 0
+  let newIndex = 0
+
+  while (oldIndex < oldLines.length && newIndex < newLines.length) {
+    const oldLine = oldLines[oldIndex]
+    const newLine = newLines[newIndex]
+
+    if (oldLine === newLine) {
+      diff.push(createUnchangedLine(oldLine, oldIndex + startLineNumber))
+      oldIndex += 1
+      newIndex += 1
+      continue
+    }
+
+    const removeScore = matrix[(oldIndex + 1) * columnCount + newIndex]
+    const addScore = matrix[oldIndex * columnCount + newIndex + 1]
+
+    if (removeScore >= addScore) {
+      diff.push(createRemovedLine(oldLine, oldIndex + startLineNumber))
+      oldIndex += 1
+      continue
+    }
+
+    diff.push(createAddedLine(newLine, newIndex + startLineNumber))
+    newIndex += 1
+  }
+
+  while (oldIndex < oldLines.length) {
+    diff.push(createRemovedLine(oldLines[oldIndex], oldIndex + startLineNumber))
+    oldIndex += 1
+  }
+
+  while (newIndex < newLines.length) {
+    diff.push(createAddedLine(newLines[newIndex], newIndex + startLineNumber))
+    newIndex += 1
+  }
+
+  return diff
+}
+
+function computeGreedyDiffLines(
+  oldLines: readonly string[],
+  newLines: readonly string[],
+  isStreaming: boolean,
+  startLineNumber: number,
+) {
   const diff: DiffLine[] = []
   const maxOldIndex = oldLines.length - 1
   const maxNewIndex = newLines.length - 1
 
-  function findLookaheadIndex(lines: string[], startIndex: number, targetLine: string) {
+  function findLookaheadIndex(lines: readonly string[], startIndex: number, targetLine: string) {
     const endIndex = Math.min(lines.length, startIndex + DIFF_LOOKAHEAD_LIMIT)
     for (let index = startIndex; index < endIndex; index += 1) {
       if (lines[index] === targetLine) {
@@ -77,39 +158,21 @@ export function computeDiffLines(
     const newLine = newLines[newIndex]
 
     if (oldIndex >= oldLines.length) {
-      diff.push({
-        content: newLine,
-        lineNumber: newIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: undefined,
-        type: 'added',
-      })
+      diff.push(createAddedLine(newLine, newIndex + startLineNumber))
       newIndex += 1
       continue
     }
 
     if (newIndex >= newLines.length) {
       if (!isStreaming) {
-        diff.push({
-          content: oldLine,
-          lineNumber: oldIndex + startLineNumber,
-          newLineNumber: undefined,
-          oldLineNumber: oldIndex + startLineNumber,
-          type: 'removed',
-        })
+        diff.push(createRemovedLine(oldLine, oldIndex + startLineNumber))
       }
       oldIndex += 1
       continue
     }
 
     if (oldLine === newLine) {
-      diff.push({
-        content: oldLine,
-        lineNumber: oldIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: oldIndex + startLineNumber,
-        type: 'unchanged',
-      })
+      diff.push(createUnchangedLine(oldLine, oldIndex + startLineNumber))
       oldIndex += 1
       newIndex += 1
       continue
@@ -119,48 +182,47 @@ export function computeDiffLines(
     const foundInNew = newIndex < maxNewIndex ? findLookaheadIndex(newLines, newIndex + 1, oldLine) : -1
 
     if (foundInOld !== -1 && (foundInNew === -1 || foundInOld <= foundInNew)) {
-      diff.push({
-        content: oldLine,
-        lineNumber: oldIndex + startLineNumber,
-        newLineNumber: undefined,
-        oldLineNumber: oldIndex + startLineNumber,
-        type: 'removed',
-      })
+      diff.push(createRemovedLine(oldLine, oldIndex + startLineNumber))
       oldIndex += 1
       continue
     }
 
     if (foundInNew !== -1) {
-      diff.push({
-        content: newLine,
-        lineNumber: newIndex + startLineNumber,
-        newLineNumber: newIndex + startLineNumber,
-        oldLineNumber: undefined,
-        type: 'added',
-      })
+      diff.push(createAddedLine(newLine, newIndex + startLineNumber))
       newIndex += 1
       continue
     }
 
-    diff.push({
-      content: oldLine,
-      lineNumber: oldIndex + startLineNumber,
-      newLineNumber: undefined,
-      oldLineNumber: oldIndex + startLineNumber,
-      type: 'removed',
-    })
-    diff.push({
-      content: newLine,
-      lineNumber: newIndex + startLineNumber,
-      newLineNumber: newIndex + startLineNumber,
-      oldLineNumber: undefined,
-      type: 'added',
-    })
+    diff.push(createRemovedLine(oldLine, oldIndex + startLineNumber))
+    diff.push(createAddedLine(newLine, newIndex + startLineNumber))
     oldIndex += 1
     newIndex += 1
   }
 
   return diff
+}
+
+export function computeDiffLines(
+  oldContent: string | null | undefined,
+  newContent: string,
+  { isStreaming = false, startLineNumber = 1 }: ComputeDiffOptions = {},
+) {
+  const normalizedNewContent = normalizeEscapedSequences(newContent)
+  const normalizedOldContent = oldContent ? normalizeEscapedSequences(oldContent) : oldContent
+
+  if (normalizedOldContent === null || normalizedOldContent === undefined) {
+    return normalizedNewContent.split('\n').map((line, index) => createAddedLine(line, index + startLineNumber))
+  }
+
+  const oldLines = normalizedOldContent.split('\n')
+  const newLines = normalizedNewContent.split('\n')
+  const shouldUseExactDiff = !isStreaming && oldLines.length * newLines.length <= EXACT_DIFF_CELL_LIMIT
+
+  if (shouldUseExactDiff) {
+    return computeExactDiffLines(oldLines, newLines, startLineNumber)
+  }
+
+  return computeGreedyDiffLines(oldLines, newLines, isStreaming, startLineNumber)
 }
 
 export function summarizeDiffLines(diffLines: DiffLine[]): DiffSummary {

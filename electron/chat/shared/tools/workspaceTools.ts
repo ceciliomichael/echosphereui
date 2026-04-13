@@ -665,7 +665,7 @@ export async function createToolContext(input: AgentToolContext) {
 export function createWholeFileApplyTool(context: WorkspaceToolContext) {
   return tool({
     description:
-      'Create, replace, or delete entire files. Prefer this for whole-file writes or file creation; prefer apply_patch for surgical edits.',
+      'Create, replace, or delete entire files. Use this after reading the target file(s) when a full file write is the right shape for the change. Prefer apply_patch for surgical edits and smaller diffs.',
     inputSchema: jsonSchema({
       additionalProperties: false,
       properties: {

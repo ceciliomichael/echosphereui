@@ -29,20 +29,30 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       ),
     [entries],
   )
-  const [isOpen, setIsOpen] = useState(hasActiveInvocation && !hasAssistantText)
-  const previousHasAssistantTextRef = useRef(hasAssistantText)
-  const summaryLabel = useMemo(
-    () => buildToolInvocationGroupSummary(entries.map((entry) => entry.invocation)),
-    [entries],
-  )
+  const isExploring = !hasAssistantText
+  const [isOpen, setIsOpen] = useState(hasActiveInvocation && isExploring)
+  const previousIsExploringRef = useRef(isExploring)
 
   useEffect(() => {
-    if (!previousHasAssistantTextRef.current && hasAssistantText) {
-      setIsOpen(false)
+    const wasExploring = previousIsExploringRef.current
+
+    if (wasExploring !== isExploring) {
+      setIsOpen(isExploring)
+      previousIsExploringRef.current = isExploring
+      return
     }
 
-    previousHasAssistantTextRef.current = hasAssistantText
-  }, [hasAssistantText])
+    previousIsExploringRef.current = isExploring
+  }, [isExploring])
+
+  const summaryLabel = useMemo(
+    () =>
+      buildToolInvocationGroupSummary(
+        entries.map((entry) => entry.invocation),
+        isExploring ? 'Exploring' : 'Explored',
+      ),
+    [entries, isExploring],
+  )
 
   return (
     <div className="w-full">
@@ -52,7 +62,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
         className="group flex w-full min-w-0 items-center text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="min-w-0 truncate">{summaryLabel}</span>
+          <span className={['min-w-0 truncate', isExploring ? 'thinking-shimmer' : ''].join(' ')}>{summaryLabel}</span>
           <ChevronRight
             className={[
               'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',

@@ -18,6 +18,7 @@ If the request spans multiple categories, handle them in the order: understand, 
 
 ## Autonomy Rules
 - Be autonomous by default. Discover as much as possible from the repository, code patterns, configs, and existing utilities before asking the user anything.
+- Use discovery tools like `list`, `glob`, and `grep` to locate relevant files, but always read the actual target files before editing or patching.
 - Ask the user only when a missing answer materially affects correctness, scope, architecture, or cannot be discovered locally.
 - Do not ask for confirmation of obvious next steps. Make reasonable assumptions, proceed, and state the assumption when it matters.
 - Match existing repository conventions unless they clearly conflict with correctness, maintainability, or the user request.
@@ -35,7 +36,7 @@ If the request spans multiple categories, handle them in the order: understand, 
 Follow this sequence for every code-modifying task.
 
 1. Classify the task and restate the implementation goal internally.
-2. Inspect the relevant files, modules, patterns, and reusable helpers before editing.
+2. Inspect the relevant files, modules, patterns, and reusable helpers by reading the actual source or content files before editing; use search tools only to locate candidates.
 3. Map responsibilities that will be affected: entrypoint, domain logic, data access, presentation, validation, shared types, utilities, tests, and configuration as applicable.
 4. Detect boundary candidates before editing. Identify parts that differ by responsibility, lifecycle, reuse potential, data source, interaction logic, or layout role, and decide whether they belong in separate modules.
 5. If the task adds or changes a page, route, screen, or other entrypoint, decide the composition split before editing: what stays in the entrypoint, what becomes local components or modules, and what belongs in shared styling, types, utilities, or data logic.

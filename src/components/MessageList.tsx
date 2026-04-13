@@ -1,5 +1,6 @@
-import { memo, useLayoutEffect, useRef, type RefObject } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { isVisibleTranscriptMessage } from "../lib/chatMessageMetadata";
+import { normalizeAssistantMessageContent } from "../lib/chatMessageContent";
 import { useAutoScroll } from "../hooks/useAutoScroll";
 import type {
   AssistantWaitingIndicatorVariant,
@@ -65,6 +66,7 @@ interface MessageRowProps {
   editComposerDirty: boolean;
   editComposerMentionPathMap?: ReadonlyMap<string, string>;
   isEditing: boolean;
+  hasSubsequentAssistantText: boolean;
   isSending: boolean;
   isStreaming: boolean;
   message: Message;
@@ -106,6 +108,7 @@ const MessageRow = memo(
     composerValue,
     editComposerDirty,
     editComposerMentionPathMap,
+    hasSubsequentAssistantText,
     isEditing,
     isSending: _isSending,
     isStreaming,
@@ -201,6 +204,7 @@ const MessageRow = memo(
         ) : (
           <AssistantMessage
             content={message.content}
+            hasSubsequentAssistantText={hasSubsequentAssistantText}
             isStreaming={isStreaming}
             onToolDecisionSubmit={(invocation, submission) => {
               onToolDecisionSubmit?.(invocation, submission);
@@ -221,6 +225,7 @@ const MessageRow = memo(
   (previousProps, nextProps) => {
     if (
       previousProps.message !== nextProps.message ||
+      previousProps.hasSubsequentAssistantText !== nextProps.hasSubsequentAssistantText ||
       previousProps.isEditing !== nextProps.isEditing ||
       previousProps.isStreaming !== nextProps.isStreaming ||
       previousProps.showCopyButton !== nextProps.showCopyButton ||
@@ -299,6 +304,30 @@ export function MessageList({
   const visibleMessages = messages.filter((message) =>
     isVisibleTranscriptMessage(message),
   );
+  const subsequentAssistantTextByMessageId = useMemo(() => {
+    const map = new Map<string, boolean>();
+    let hasAssistantTextLaterInTranscript = false;
+
+    for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+      const message = visibleMessages[index];
+      map.set(message.id, hasAssistantTextLaterInTranscript);
+
+      if (message.role !== 'assistant') {
+        continue;
+      }
+
+      const normalizedAssistantContent = normalizeAssistantMessageContent(message);
+      const hasAssistantTextInMessage =
+        normalizedAssistantContent.content.trim().length > 0 ||
+        normalizedAssistantContent.reasoningContent.trim().length > 0;
+
+      if (hasAssistantTextInMessage) {
+        hasAssistantTextLaterInTranscript = true;
+      }
+    }
+
+    return map;
+  }, [visibleMessages]);
 
   useAutoScroll(scrollContainerRef, visibleMessages, {
     resetKey: conversationId,
@@ -351,6 +380,9 @@ export function MessageList({
               composerValue={composerValue}
               editComposerDirty={editComposerDirty}
               editComposerMentionPathMap={editComposerMentionPathMap}
+              hasSubsequentAssistantText={
+                subsequentAssistantTextByMessageId.get(msg.id) ?? false
+              }
               isEditing={editingMessageId === msg.id}
               isSending={isSending}
               isStreaming={streamingAssistantMessageId === msg.id}

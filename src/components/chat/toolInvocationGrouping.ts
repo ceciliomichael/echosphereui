@@ -53,7 +53,10 @@ function normalizeToolLabel(toolName: string) {
   return toolName.replace(/_/g, ' ')
 }
 
-export function buildToolInvocationGroupSummary(invocations: readonly ToolInvocationTrace[]) {
+export function buildToolInvocationGroupSummary(
+  invocations: readonly ToolInvocationTrace[],
+  summaryVerbOverride?: 'Exploring' | 'Explored',
+) {
   const hasActiveInvocation = invocations.some(
     (invocation) => invocation.state === 'running' || invocation.decisionRequest !== undefined,
   )
@@ -98,6 +101,6 @@ export function buildToolInvocationGroupSummary(invocations: readonly ToolInvoca
     summaryParts.push(pluralize(count, toolLabel))
   }
 
-  const summaryVerb = hasActiveInvocation ? 'Exploring' : 'Explored'
+  const summaryVerb = summaryVerbOverride ?? (hasActiveInvocation ? 'Exploring' : 'Explored')
   return summaryParts.length > 0 ? `${summaryVerb} ${summaryParts.join(', ')}` : `${summaryVerb} actions`
 }

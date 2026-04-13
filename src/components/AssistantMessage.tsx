@@ -19,6 +19,7 @@ import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
 interface AssistantMessageProps {
   content: string;
+  hasSubsequentAssistantText?: boolean;
   isStreaming?: boolean;
   isTextStreaming?: boolean;
   reasoningCompletedAt?: number;
@@ -83,6 +84,7 @@ function buildRenderedToolBlocks(entries: readonly ToolInvocationDisplayEntry[])
 
 export function AssistantMessage({
   content,
+  hasSubsequentAssistantText = false,
   isStreaming = false,
   isTextStreaming = false,
   reasoningCompletedAt,
@@ -102,16 +104,22 @@ export function AssistantMessage({
   const hasContent = normalizedContent.content.trim().length > 0;
   const hasReasoningContent =
     normalizedContent.reasoningContent.trim().length > 0;
-  const hasAssistantText = hasContent || hasReasoningContent;
+  const hasVisibleAssistantText =
+    hasContent || hasReasoningContent || hasSubsequentAssistantText;
   const hasActiveReasoningBlock =
     hasReasoningContent && reasoningCompletedAt === undefined;
   const hasRunningToolInvocation = toolInvocations.some(
     (invocation) => invocation.state === "running",
   );
+  const shouldSuppressSplashIndicator =
+    waitingIndicatorVariant === 'splash' &&
+    toolInvocations.length > 0 &&
+    !hasVisibleAssistantText;
   const shouldShowWaitingIndicator =
     isStreaming &&
     !isTextStreaming &&
     !hasRunningToolInvocation &&
+    !shouldSuppressSplashIndicator &&
     !hasActiveReasoningBlock;
   const copyableText = [
     normalizedContent.reasoningContent.trim(),
@@ -191,7 +199,7 @@ export function AssistantMessage({
           <ToolInvocationGroup
             key={block.key}
             entries={block.entries}
-            hasAssistantText={hasAssistantText}
+            hasAssistantText={hasVisibleAssistantText}
             onToolDecisionSubmit={onToolDecisionSubmit}
             workspaceRootPath={workspaceRootPath}
           />

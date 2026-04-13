@@ -66,6 +66,12 @@ test('buildToolInvocationGroupSummary switches to exploring while a child invoca
   assert.equal(summary, 'Exploring ran 2 commands')
 })
 
+test('buildToolInvocationGroupSummary allows the explored label to be overridden', () => {
+  const summary = buildToolInvocationGroupSummary([createInvocation('run_terminal')], 'Explored')
+
+  assert.equal(summary, 'Explored ran 1 command')
+})
+
 test('buildToolInvocationGroupSummary includes uncategorized tools by name', () => {
   const summary = buildToolInvocationGroupSummary([createInvocation('ready_implement')])
   assert.equal(summary, 'Explored 1 ready implement')
