@@ -145,22 +145,22 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
           setIsOpen((currentValue) => !currentValue)
         }}
         className={[
-          'group flex w-full min-w-0 items-center gap-1 text-left text-sm text-muted-foreground transition-colors',
+          'group flex w-full min-w-0 items-center text-left text-sm text-muted-foreground transition-colors',
           disableHeaderToggle ? 'cursor-default opacity-90' : 'hover:text-foreground',
         ].join(' ')}
       >
         <span className={`flex min-w-0 flex-1 items-center gap-1.5 ${isRunning ? 'thinking-shimmer' : ''}`}>
           <span className="min-w-0 truncate">{headerLabel}</span>
           {diffCountSummary ? <span className="inline-flex items-center gap-1">{diffCountSummary}</span> : null}
+          {!disableHeaderToggle ? (
+            <ChevronRight
+              className={[
+                'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
+                isOpen ? 'rotate-90' : '',
+              ].join(' ')}
+            />
+          ) : null}
         </span>
-        {!disableHeaderToggle ? (
-          <ChevronRight
-            className={[
-              'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
-              isOpen ? 'rotate-90' : '',
-            ].join(' ')}
-          />
-        ) : null}
       </button>
 
       {isOpen && invocation.resultContent ? (

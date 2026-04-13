@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/modelCatalog'
+import { useSettingsModelCatalog } from '../components/settings/models/settingsModelCatalogStore'
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
 import { toProviderModelCatalogItems } from '../components/settings/models/providerModelUtils'
 import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
@@ -18,6 +19,7 @@ import type {
   ProvidersState,
   ReasoningEffort,
 } from '../types/chat'
+import type { ModelCatalogItem } from '../components/settings/models/modelTypes'
 
 interface ChatModelOption {
   id: string
@@ -64,7 +66,6 @@ function buildChatModelOptions(
 
 interface UseChatRuntimeConfigInput {
   activeChatMode: ChatMode
-  isActiveScreen: boolean
   isProvidersLoading: boolean
   providersState: ProvidersState | null
   settings: Pick<
@@ -115,6 +116,38 @@ function findSelectedModel(
   return options.find((option) => option.id === normalizedModelId) ?? options[0] ?? null
 }
 
+function findExactSelectedModel(
+  options: readonly ChatModelOption[],
+  selection: {
+    modelId: string
+    providerId: ChatProviderId | null
+  },
+): ChatModelOption | null {
+  const normalizedModelId = selection.modelId.trim()
+  if (normalizedModelId.length === 0) {
+    return null
+  }
+
+  if (selection.providerId) {
+    return options.find((option) => option.id === normalizedModelId && option.providerId === selection.providerId) ?? null
+  }
+
+  return options.find((option) => option.id === normalizedModelId) ?? null
+}
+
+function toStaticChatModelOption(model: ModelCatalogItem): ChatModelOption {
+  return {
+    id: model.id,
+    isCatalogBacked: true,
+    label: model.label,
+    providerId: model.providerId,
+    providerLabel: PROVIDER_SECTIONS.find((provider) => provider.id === model.providerId)?.label ?? 'Saved model',
+    reasoningCapable: model.reasoningCapable ?? false,
+    reasoningEfforts: model.reasoningEfforts,
+    runtimeModelId: model.apiModelId ?? model.id,
+  }
+}
+
 function getModeSelectionFields(
   activeChatMode: ChatMode,
   settings: Pick<
@@ -157,16 +190,13 @@ function getModeSelectionFields(
 
 export function useChatRuntimeConfig({
   activeChatMode,
-  isActiveScreen,
   isProvidersLoading,
   providersState,
   settings,
   updateSettings,
 }: UseChatRuntimeConfigInput) {
-  const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
-  const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
-  const [hasLoadedCustomModels, setHasLoadedCustomModels] = useState(false)
-  const [hasLoadedOpenAICompatibleModels, setHasLoadedOpenAICompatibleModels] = useState(false)
+  const { customModels, customModelsLoading, providerModels, providerModelsLoading } = useSettingsModelCatalog(providersState)
+  const staticModelOptions = useMemo(() => MODEL_CATALOG.map(toStaticChatModelOption), [])
   const modelOptions = useMemo(
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
@@ -214,14 +244,21 @@ export function useChatRuntimeConfig({
     [missingSelectedModelOption, modelOptions],
   )
 
-  const selectedModel = useMemo(
-    () =>
-      findSelectedModel(runtimeModelOptions, {
-        modelId: modeSelection.modelId,
-        providerId: modeSelection.providerId,
-      }),
-    [modeSelection.modelId, modeSelection.providerId, runtimeModelOptions],
-  )
+  const selectedModel = useMemo(() => {
+    const selectedModelSelection = {
+      modelId: modeSelection.modelId,
+      providerId: modeSelection.providerId,
+    }
+
+    const exactRuntimeModel = findExactSelectedModel(runtimeModelOptions, selectedModelSelection)
+    const exactStaticModel = findExactSelectedModel(staticModelOptions, selectedModelSelection)
+
+    if (exactStaticModel) {
+      return exactStaticModel
+    }
+
+    return exactRuntimeModel ?? findSelectedModel(runtimeModelOptions, selectedModelSelection)
+  }, [modeSelection.modelId, modeSelection.providerId, runtimeModelOptions, staticModelOptions])
   const availableReasoningEfforts = useMemo(() => {
     if (!selectedModel?.reasoningCapable) {
       return [] as readonly ReasoningEffort[]
@@ -235,85 +272,10 @@ export function useChatRuntimeConfig({
   )
   const hasSavedModelId = modeSelection.modelId.trim().length > 0
   const isModelOptionsLoading =
-    !hasSavedModelId &&
-    isActiveScreen &&
-    (isProvidersLoading || !hasLoadedCustomModels || !hasLoadedOpenAICompatibleModels)
+    !hasSavedModelId && (isProvidersLoading || customModelsLoading || providerModelsLoading)
 
   useEffect(() => {
-    if (!isActiveScreen) {
-      return
-    }
-
-    let isMounted = true
-
-    void window.echosphereModels
-      .listCustomModels()
-      .then((nextModels) => {
-        if (!isMounted) {
-          return
-        }
-
-        setCustomModels(nextModels)
-      })
-      .catch((error) => {
-        console.error('Failed to load custom models for chat runtime', error)
-      })
-      .finally(() => {
-        if (!isMounted) {
-          return
-        }
-
-        setHasLoadedCustomModels(true)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [isActiveScreen])
-
-  useEffect(() => {
-    if (!isActiveScreen || !isProviderConfigured('openai-compatible', providersState)) {
-      setHasLoadedOpenAICompatibleModels(true)
-      setProviderModels((currentValue) =>
-        currentValue.filter((model) => model.providerId !== 'openai-compatible'),
-      )
-      return
-    }
-
-    let isMounted = true
-    setHasLoadedOpenAICompatibleModels(false)
-
-    void window.echosphereModels
-      .listProviderModels('openai-compatible')
-      .then((fetchedModels) => {
-        if (!isMounted) {
-          return
-        }
-
-        setProviderModels((currentValue) => {
-          const remainingModels = currentValue.filter((model) => model.providerId !== 'openai-compatible')
-          return [...remainingModels, ...fetchedModels]
-        })
-      })
-      .catch((error) => {
-        console.error('Failed to load OpenAI-compatible models for chat runtime', error)
-      })
-      .finally(() => {
-        if (!isMounted) {
-          return
-        }
-
-        setHasLoadedOpenAICompatibleModels(true)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [isActiveScreen, providersState])
-
-  useEffect(() => {
-    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
-    if (!hasLoadedRuntimeModelSources || modeSelection.modelId.trim().length > 0) {
+    if (modeSelection.modelId.trim().length > 0) {
       return
     }
 
@@ -331,8 +293,6 @@ export function useChatRuntimeConfig({
       chatModelLabel: nextModel.label,
     })
   }, [
-    hasLoadedCustomModels,
-    hasLoadedOpenAICompatibleModels,
     modelOptions,
     modeSelection.modelId,
     modeSelection.updateKeys.modelId,
@@ -357,8 +317,7 @@ export function useChatRuntimeConfig({
   }, [modeSelection.providerId, modeSelection.updateKeys.providerId, selectedModel, updateSettings])
 
   useEffect(() => {
-    const hasLoadedRuntimeModelSources = hasLoadedCustomModels && hasLoadedOpenAICompatibleModels
-    if (!hasLoadedRuntimeModelSources || !selectedModel?.isCatalogBacked) {
+    if (!selectedModel?.isCatalogBacked) {
       return
     }
 
@@ -369,8 +328,6 @@ export function useChatRuntimeConfig({
     void updateSettings({ chatReasoningEffort: reasoningEffort })
   }, [
     availableReasoningEfforts.length,
-    hasLoadedCustomModels,
-    hasLoadedOpenAICompatibleModels,
     reasoningEffort,
     selectedModel,
     settings.chatReasoningEffort,

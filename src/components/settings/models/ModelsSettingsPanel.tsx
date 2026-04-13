@@ -1,20 +1,14 @@
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CustomModelFormSection } from './CustomModelFormSection'
+import { PROVIDER_SECTIONS } from './modelCatalog'
 import type { ModelToggleState } from './modelTypes'
-import { buildModelProviderSections } from './modelViewUtils'
-import { getProviderModelLoadErrorMessage } from './modelLoadErrorUtils'
-import { mergeProviderModels } from './providerModelMergeUtils'
+import { buildModelProviderSections, isProviderConfigured } from './modelViewUtils'
 import { readStoredModelToggleState, writeStoredModelToggleState } from './modelStorage'
+import { replaceCustomModels, useSettingsModelCatalog } from './settingsModelCatalogStore'
 import { SETTINGS_SECTION_TITLE_CLASS_NAME } from '../shared/SettingsPanelPrimitives'
 import { Switch } from '../../ui/Switch'
-import type { CustomModelConfig, ProviderModelConfig, ProvidersState } from '../../../types/chat'
-
-interface LoadedModelState<T> {
-  errorMessage: string | null
-  isLoading: boolean
-  models: T[]
-}
+import type { ProvidersState } from '../../../types/chat'
 
 interface ModelsSettingsPanelProps {
   providersState: ProvidersState | null
@@ -24,63 +18,22 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function getLoadErrorMessage(error: unknown, fallbackMessage: string): string {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    return message.length > 0 ? message : fallbackMessage
-  }
-
-  if (typeof error === 'string') {
-    const message = error.trim()
-    return message.length > 0 ? message : fallbackMessage
-  }
-
-  return fallbackMessage
-}
-
-function mergeCustomModels(
-  existingModels: readonly CustomModelConfig[],
-  incomingModels: readonly CustomModelConfig[],
-): CustomModelConfig[] {
-  const seenModelIds = new Set(existingModels.map((model) => model.id))
-  const mergedModels = [...existingModels]
-
-  for (const model of incomingModels) {
-    if (seenModelIds.has(model.id)) {
-      continue
-    }
-
-    seenModelIds.add(model.id)
-    mergedModels.push(model)
-  }
-
-  return mergedModels.sort((left, right) => left.label.localeCompare(right.label))
-}
-
 export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps) {
   const [searchValue, setSearchValue] = useState('')
   const [toggleState, setToggleState] = useState<ModelToggleState>(() => readStoredModelToggleState())
-  const [providerModelsState, setProviderModelsState] = useState<LoadedModelState<ProviderModelConfig>>({
-    errorMessage: null,
-    isLoading: false,
-    models: [],
-  })
-  const [customModelsState, setCustomModelsState] = useState<LoadedModelState<CustomModelConfig>>({
-    errorMessage: null,
-    isLoading: false,
-    models: [],
-  })
+  const {
+    customModels,
+    customModelsErrorMessage,
+    customModelsLoading,
+    providerModels,
+    providerModelsErrorMessage,
+    providerModelsLoading,
+  } = useSettingsModelCatalog(providersState)
 
   const normalizedSearchValue = normalizeSearchValue(searchValue)
   const providerSections = useMemo(
-    () =>
-      buildModelProviderSections(
-        normalizedSearchValue,
-        providersState,
-        customModelsState.models,
-        providerModelsState.models,
-      ),
-    [customModelsState.models, normalizedSearchValue, providerModelsState.models, providersState],
+    () => buildModelProviderSections(normalizedSearchValue, providersState, customModels, providerModels),
+    [customModels, normalizedSearchValue, providerModels, providersState],
   )
   const mixedModels = useMemo(
     () =>
@@ -92,120 +45,12 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
       ),
     [providerSections],
   )
-  const hasConfiguredProvider = providerSections.length > 0
-  const isAnyModelsLoading = providerModelsState.isLoading || customModelsState.isLoading
+  const hasConfiguredProvider = PROVIDER_SECTIONS.some((provider) => isProviderConfigured(provider.id, providersState))
+  const isAnyModelsLoading = customModelsLoading || providerModelsLoading
 
   useEffect(() => {
     writeStoredModelToggleState(toggleState)
   }, [toggleState])
-
-  useEffect(() => {
-    let isMounted = true
-
-    setCustomModelsState((currentValue) => ({
-      ...currentValue,
-      errorMessage: null,
-      isLoading: true,
-    }))
-
-    void window.echosphereModels
-      .listCustomModels()
-      .then((models) => {
-        if (!isMounted) {
-          return
-        }
-
-        setCustomModelsState((currentValue) => ({
-          errorMessage: null,
-          isLoading: false,
-          models: mergeCustomModels(currentValue.models, models),
-        }))
-      })
-      .catch((error) => {
-        if (!isMounted) {
-          return
-        }
-
-        console.error('Failed to load custom models', error)
-        setCustomModelsState((currentValue) => ({
-          ...currentValue,
-          errorMessage: getLoadErrorMessage(error, 'Unable to load saved custom models.'),
-          isLoading: false,
-        }))
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    const isOpenAICompatibleConfigured = Boolean(
-      providersState?.apiKeyProviders.find((provider) => provider.id === 'openai-compatible')?.configured,
-    )
-
-    if (!isOpenAICompatibleConfigured) {
-      setProviderModelsState((currentValue) => ({
-        errorMessage: null,
-        isLoading: false,
-        models: currentValue.models,
-      }))
-      return
-    }
-
-    let isMounted = true
-
-    setProviderModelsState((currentValue) => ({
-      ...currentValue,
-      errorMessage: null,
-      isLoading: true,
-    }))
-
-    void window.echosphereModels
-      .listProviderModels('openai-compatible')
-      .then((models) => {
-        if (!isMounted) {
-          return
-        }
-
-        setProviderModelsState((currentValue) => ({
-          errorMessage: null,
-          isLoading: false,
-          models: mergeProviderModels(currentValue.models, models),
-        }))
-      })
-      .catch((error) => {
-        if (!isMounted) {
-          return
-        }
-
-        console.error('Failed to load OpenAI-compatible models', error)
-        setProviderModelsState((currentValue) => ({
-          ...currentValue,
-          errorMessage: getProviderModelLoadErrorMessage(error),
-          isLoading: false,
-        }))
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [providersState])
-
-  function handleToggleModel(modelId: string) {
-    setToggleState((currentValue) => ({
-      ...currentValue,
-      [modelId]: !(currentValue[modelId] ?? mixedModels.find((item) => item.model.id === modelId)?.model.enabledByDefault ?? true),
-    }))
-  }
-
-  function handleCustomModelsChanged(models: CustomModelConfig[]) {
-    setCustomModelsState({
-      errorMessage: null,
-      isLoading: false,
-      models,
-    })
-  }
 
   return (
     <div className="flex w-full max-w-[780px] flex-col gap-3">
@@ -216,22 +61,25 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
         </p>
       </header>
 
-      {customModelsState.errorMessage ? (
+      {customModelsErrorMessage ? (
         <div className="rounded-2xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
-          {customModelsState.errorMessage}
+          {customModelsErrorMessage}
         </div>
       ) : null}
 
-      {providerModelsState.errorMessage ? (
+      {providerModelsErrorMessage ? (
         <div className="rounded-2xl border border-danger-border bg-danger-surface px-4 py-3 text-sm text-danger-foreground">
-          {providerModelsState.errorMessage}
+          {providerModelsErrorMessage}
         </div>
       ) : null}
 
       <section className="flex h-[520px] flex-none flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:h-[560px]">
         <div className="border-b border-border px-4 py-3 md:px-5">
           <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <input
               type="text"
               value={searchValue}
@@ -276,7 +124,14 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
                   <Switch
                     checked={isEnabled}
                     label={`Enable ${model.label}`}
-                    onChange={() => handleToggleModel(model.id)}
+                    onChange={() => {
+                      setToggleState((currentValue) => ({
+                        ...currentValue,
+                        [model.id]: !(
+                          currentValue[model.id] ?? model.enabledByDefault ?? true
+                        ),
+                      }))
+                    }}
                   />
                 </div>
               )
@@ -285,7 +140,7 @@ export function ModelsSettingsPanel({ providersState }: ModelsSettingsPanelProps
         </div>
       </section>
 
-      <CustomModelFormSection onModelsChanged={handleCustomModelsChanged} />
+      <CustomModelFormSection onModelsChanged={replaceCustomModels} />
     </div>
   )
 }

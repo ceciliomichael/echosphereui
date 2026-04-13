@@ -11,7 +11,10 @@ import { ThinkingBlock } from "./chat/ThinkingBlock";
 import { ThinkingIndicator } from "./chat/ThinkingIndicator";
 import { ToolInvocationBlock } from "./chat/ToolInvocationBlock";
 import { ToolInvocationGroup } from "./chat/ToolInvocationGroup";
-import { getToolInvocationDisplayEntries } from "./chat/toolInvocationPresentation";
+import {
+  getToolInvocationDisplayEntries,
+  type ToolInvocationDisplayEntry,
+} from "./chat/toolInvocationPresentation";
 import type { ToolDecisionSubmission } from "./chat/ToolDecisionRequestCard";
 
 interface AssistantMessageProps {
@@ -29,6 +32,53 @@ interface AssistantMessageProps {
   ) => void;
   waitingIndicatorVariant?: AssistantWaitingIndicatorVariant;
   workspaceRootPath?: string | null;
+}
+
+function isStandaloneToolInvocation(toolName: string) {
+  return toolName === 'apply' || toolName === 'apply_patch'
+}
+
+interface RenderedToolBlock {
+  entries: readonly ToolInvocationDisplayEntry[]
+  key: string
+  kind: 'block' | 'group'
+}
+
+function buildRenderedToolBlocks(entries: readonly ToolInvocationDisplayEntry[]) {
+  const renderedBlocks: RenderedToolBlock[] = []
+  let groupedEntries: ToolInvocationDisplayEntry[] = []
+
+  const flushGroupedEntries = () => {
+    if (groupedEntries.length === 0) {
+      return
+    }
+
+    renderedBlocks.push({
+      entries: groupedEntries,
+      key: groupedEntries.map((entry) => entry.key).join(':'),
+      kind: 'group',
+    })
+
+    groupedEntries = []
+  }
+
+  for (const entry of entries) {
+    if (isStandaloneToolInvocation(entry.invocation.toolName)) {
+      flushGroupedEntries()
+      renderedBlocks.push({
+        entries: [entry],
+        key: entry.key,
+        kind: 'block',
+      })
+      continue
+    }
+
+    groupedEntries.push(entry)
+  }
+
+  flushGroupedEntries()
+
+  return renderedBlocks
 }
 
 export function AssistantMessage({
@@ -52,6 +102,7 @@ export function AssistantMessage({
   const hasContent = normalizedContent.content.trim().length > 0;
   const hasReasoningContent =
     normalizedContent.reasoningContent.trim().length > 0;
+  const hasAssistantText = hasContent || hasReasoningContent;
   const hasActiveReasoningBlock =
     hasReasoningContent && reasoningCompletedAt === undefined;
   const hasRunningToolInvocation = toolInvocations.some(
@@ -74,6 +125,7 @@ export function AssistantMessage({
   const toolDisplayEntries = toolInvocations.flatMap((invocation) =>
     getToolInvocationDisplayEntries(invocation),
   );
+  const renderedToolBlocks = buildRenderedToolBlocks(toolDisplayEntries);
 
   useEffect(() => {
     if (!isCopied) {
@@ -134,21 +186,25 @@ export function AssistantMessage({
         />
       ) : null}
 
-      {toolDisplayEntries.length > 1 ? (
-        <ToolInvocationGroup
-          entries={toolDisplayEntries}
-          onToolDecisionSubmit={onToolDecisionSubmit}
-          workspaceRootPath={workspaceRootPath}
-        />
-      ) : (
-        toolDisplayEntries.map((displayEntry) => (
-          <ToolInvocationBlock
-            key={displayEntry.key}
-            invocation={displayEntry.invocation}
+      {renderedToolBlocks.map((block) =>
+        block.kind === 'group' ? (
+          <ToolInvocationGroup
+            key={block.key}
+            entries={block.entries}
+            hasAssistantText={hasAssistantText}
             onToolDecisionSubmit={onToolDecisionSubmit}
             workspaceRootPath={workspaceRootPath}
           />
-        ))
+        ) : (
+          block.entries.map((displayEntry) => (
+            <ToolInvocationBlock
+              key={displayEntry.key}
+              invocation={displayEntry.invocation}
+              onToolDecisionSubmit={onToolDecisionSubmit}
+              workspaceRootPath={workspaceRootPath}
+            />
+          ))
+        ),
       )}
 
       {shouldShowWaitingIndicator ? (

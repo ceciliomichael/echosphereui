@@ -3,6 +3,7 @@ import { isAppAppearance, isAppLanguage, isFollowUpBehavior } from '../../src/li
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
+import { resetLaunchOnlyAppSettings } from '../../src/hooks/appSettingsLaunchState'
 import { clampStoredWorkspaceEditorWidth } from '../../src/lib/workspaceEditorSizing'
 import { clampStoredWorkspaceExplorerWidth } from '../../src/lib/workspaceExplorerSizing'
 import type { AppSettings } from '../../src/types/chat'
@@ -315,8 +316,8 @@ export function parseInitialSettingsArg(argv: readonly string[]): AppSettings {
   }
 
   try {
-    return sanitizeBootstrappedSettings(
-      JSON.parse(decodeURIComponent(serializedSettings.slice(INITIAL_SETTINGS_ARG_PREFIX.length))),
+    return resetLaunchOnlyAppSettings(
+      sanitizeBootstrappedSettings(JSON.parse(decodeURIComponent(serializedSettings.slice(INITIAL_SETTINGS_ARG_PREFIX.length)))),
     )
   } catch (error) {
     console.error('Failed to parse initial settings payload', error)

@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { PROVIDER_SECTIONS } from '../models/modelCatalog'
 import { buildModelProviderSections } from '../models/modelViewUtils'
 import { ModelSelectorField, type ModelSelectorOption } from '../../chat/ModelSelectorField'
 import { SettingsPanelLayout, SettingsRow, SettingsSection } from '../shared/SettingsPanelPrimitives'
-import type { AppSettings, ChatProviderId, CustomModelConfig, ProviderModelConfig, ProvidersState } from '../../../types/chat'
+import type { AppSettings, ChatProviderId, ProvidersState } from '../../../types/chat'
+import { useSettingsModelCatalog } from '../models/settingsModelCatalogStore'
 
 interface ModelOption {
   label: string
@@ -120,47 +121,7 @@ export function TaskModelsSettingsPanel({
   providersState,
   settings,
 }: TaskModelsSettingsPanelProps) {
-  const [customModels, setCustomModels] = useState<CustomModelConfig[]>([])
-  const [providerModels, setProviderModels] = useState<ProviderModelConfig[]>([])
-  const [isModelsLoading, setIsModelsLoading] = useState(true)
-
-  useEffect(() => {
-    let isMounted = true
-    setIsModelsLoading(true)
-
-    void Promise.all([
-      window.echosphereModels.listCustomModels(),
-      providersState?.apiKeyProviders.find((provider) => provider.id === 'openai-compatible')?.configured
-        ? window.echosphereModels.listProviderModels('openai-compatible')
-        : Promise.resolve([] as ProviderModelConfig[]),
-    ])
-      .then(([nextCustomModels, nextProviderModels]) => {
-        if (!isMounted) {
-          return
-        }
-
-        setCustomModels(nextCustomModels)
-        setProviderModels(nextProviderModels)
-      })
-      .catch((error) => {
-        console.error('Failed to load task model options', error)
-        if (!isMounted) {
-          return
-        }
-
-        setCustomModels([])
-        setProviderModels([])
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsModelsLoading(false)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [providersState])
+  const { customModels, customModelsLoading, providerModels, providerModelsLoading } = useSettingsModelCatalog(providersState)
 
   const configuredModelOptions = useMemo(() => {
     const providerSections = buildModelProviderSections('', providersState, customModels, providerModels)
@@ -198,6 +159,7 @@ export function TaskModelsSettingsPanel({
   )
 
   const isSelectorDisabled = isLoading
+  const isModelsLoading = customModelsLoading || providerModelsLoading
   const sharedOptions = configuredModelOptions
 
   const agentOptions = useMemo(() => buildSelectorOptions(sharedOptions, agentMissingOption), [agentMissingOption, sharedOptions])

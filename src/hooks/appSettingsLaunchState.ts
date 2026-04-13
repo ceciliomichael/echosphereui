@@ -6,3 +6,7 @@ export function resetLaunchOnlyAppSettings(input: AppSettings): AppSettings {
     terminalOpenByWorkspace: {},
   }
 }
+
+export function hasLaunchOnlyAppSettings(input: AppSettings): boolean {
+  return Object.keys(input.terminalOpenByWorkspace).length > 0
+}

@@ -7,6 +7,7 @@ import { isAppAppearance, isAppLanguage, isFollowUpBehavior } from '../../src/li
 import { clampStoredDiffPanelWidth } from '../../src/lib/diffPanelSizing'
 import { clampStoredTerminalPanelHeight } from '../../src/lib/terminalPanelSizing'
 import { isReasoningEffort } from '../../src/lib/reasoningEffort'
+import { hasLaunchOnlyAppSettings, resetLaunchOnlyAppSettings } from '../../src/hooks/appSettingsLaunchState'
 import { clampStoredWorkspaceEditorWidth } from '../../src/lib/workspaceEditorSizing'
 import { clampStoredWorkspaceExplorerWidth } from '../../src/lib/workspaceExplorerSizing'
 import type { SourceControlSectionId } from '../../src/types/chat'
@@ -214,6 +215,22 @@ async function writeSettingsFile(settings: AppSettings) {
   await fs.writeFile(getSettingsFilePath(), JSON.stringify(settings, null, 2), 'utf8')
 }
 
+async function readStoredSettingsFile() {
+  try {
+    await ensureConfigDirectory()
+    const raw = await fs.readFile(getSettingsFilePath(), 'utf8')
+    return sanitizeSettings(JSON.parse(raw) as Partial<AppSettings>)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      await writeSettingsFile(DEFAULT_APP_SETTINGS)
+      return DEFAULT_APP_SETTINGS
+    }
+
+    console.error('Failed to load app settings', error)
+    throw error
+  }
+}
+
 function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSettings {
   const sidebarWidth =
     typeof input?.sidebarWidth === 'number' && Number.isFinite(input.sidebarWidth)
@@ -353,19 +370,14 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 }
 
 export async function getStoredSettings() {
-  try {
-    await ensureConfigDirectory()
-    const raw = await fs.readFile(getSettingsFilePath(), 'utf8')
-    return sanitizeSettings(JSON.parse(raw) as Partial<AppSettings>)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      await writeSettingsFile(DEFAULT_APP_SETTINGS)
-      return DEFAULT_APP_SETTINGS
-    }
-
-    console.error('Failed to load app settings', error)
-    throw error
+  const storedSettings = await readStoredSettingsFile()
+  if (!hasLaunchOnlyAppSettings(storedSettings)) {
+    return storedSettings
   }
+
+  const launchSafeSettings = resetLaunchOnlyAppSettings(storedSettings)
+  await writeSettingsFile(launchSafeSettings)
+  return launchSafeSettings
 }
 
 export async function updateStoredSettings(input: Partial<AppSettings>) {
@@ -374,7 +386,7 @@ export async function updateStoredSettings(input: Partial<AppSettings>) {
   settingsUpdateQueue = settingsUpdateQueue
     .catch(() => undefined)
     .then(async () => {
-      const currentSettings = await getStoredSettings().catch(() => DEFAULT_APP_SETTINGS)
+      const currentSettings = await readStoredSettingsFile().catch(() => DEFAULT_APP_SETTINGS)
       nextSettings = sanitizeSettings({
         ...currentSettings,
         ...input,

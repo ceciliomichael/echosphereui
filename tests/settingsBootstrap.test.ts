@@ -27,7 +27,7 @@ test('parseInitialSettingsArg sanitizes persisted edit sessions by conversation'
   })
 })
 
-test('parseInitialSettingsArg preserves persisted terminal open state', () => {
+test('parseInitialSettingsArg resets launch-only terminal open state', () => {
   const parsedSettings = parseInitialSettingsArg([
     'echosphere.exe',
     serializeInitialSettingsArg({
@@ -39,10 +39,7 @@ test('parseInitialSettingsArg preserves persisted terminal open state', () => {
     }),
   ])
 
-  assert.deepEqual(parsedSettings.terminalOpenByWorkspace, {
-    '__global__': true,
-    workspaceA: true,
-  })
+  assert.deepEqual(parsedSettings.terminalOpenByWorkspace, {})
 })
 
 test('parseInitialSettingsArg preserves empty chat launch preference', () => {

@@ -19,6 +19,10 @@ function pluralize(count: number, singular: string) {
   return `${count} ${singular}s`
 }
 
+function shouldExcludeFromSummary(toolName: string) {
+  return toolName === 'apply' || toolName === 'apply_patch'
+}
+
 function classifyInvocation(toolName: string): keyof ToolInvocationSummaryCounts | null {
   if (toolName === 'list') {
     return 'listCount'
@@ -38,7 +42,7 @@ function classifyInvocation(toolName: string): keyof ToolInvocationSummaryCounts
     return 'commandCount'
   }
 
-  if (toolName === 'read' || toolName === 'apply' || toolName === 'apply_patch') {
+  if (toolName === 'read') {
     return 'fileCount'
   }
 
@@ -62,6 +66,10 @@ export function buildToolInvocationGroupSummary(invocations: readonly ToolInvoca
   const otherToolCounts = new Map<string, number>()
 
   for (const invocation of invocations) {
+    if (shouldExcludeFromSummary(invocation.toolName)) {
+      continue
+    }
+
     const classifiedBucket = classifyInvocation(invocation.toolName)
     if (classifiedBucket) {
       counts[classifiedBucket] += 1

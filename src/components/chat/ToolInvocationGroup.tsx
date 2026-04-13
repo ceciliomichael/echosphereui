@@ -8,6 +8,7 @@ import { buildToolInvocationGroupSummary } from './toolInvocationGrouping'
 
 interface ToolInvocationGroupProps {
   entries: readonly ToolInvocationDisplayEntry[]
+  hasAssistantText: boolean
   onToolDecisionSubmit?: (
     invocation: ToolInvocationTrace,
     submission: ToolDecisionSubmission,
@@ -17,6 +18,7 @@ interface ToolInvocationGroupProps {
 
 export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   entries,
+  hasAssistantText,
   onToolDecisionSubmit,
   workspaceRootPath = null,
 }: ToolInvocationGroupProps) {
@@ -27,35 +29,37 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       ),
     [entries],
   )
-  const [isOpen, setIsOpen] = useState(hasActiveInvocation)
-  const previousHasActiveInvocationRef = useRef(hasActiveInvocation)
+  const [isOpen, setIsOpen] = useState(hasActiveInvocation && !hasAssistantText)
+  const previousHasAssistantTextRef = useRef(hasAssistantText)
   const summaryLabel = useMemo(
     () => buildToolInvocationGroupSummary(entries.map((entry) => entry.invocation)),
     [entries],
   )
 
   useEffect(() => {
-    if (previousHasActiveInvocationRef.current && !hasActiveInvocation) {
+    if (!previousHasAssistantTextRef.current && hasAssistantText) {
       setIsOpen(false)
     }
 
-    previousHasActiveInvocationRef.current = hasActiveInvocation
-  }, [hasActiveInvocation])
+    previousHasAssistantTextRef.current = hasAssistantText
+  }, [hasAssistantText])
 
   return (
     <div className="w-full">
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}
-        className="group flex w-full min-w-0 items-center gap-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="group flex w-full min-w-0 items-center text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className="min-w-0 truncate">{summaryLabel}</span>
-        <ChevronRight
-          className={[
-            'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
-            isOpen ? 'rotate-90' : '',
-          ].join(' ')}
-        />
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          <span className="min-w-0 truncate">{summaryLabel}</span>
+          <ChevronRight
+            className={[
+              'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
+              isOpen ? 'rotate-90' : '',
+            ].join(' ')}
+          />
+        </span>
       </button>
 
       {isOpen ? (

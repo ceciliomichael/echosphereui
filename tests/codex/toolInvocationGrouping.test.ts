@@ -30,10 +30,19 @@ test('buildToolInvocationGroupSummary pluralizes grouped categories', () => {
     createInvocation('search_query'),
     createInvocation('exec_command'),
     createInvocation('read'),
-    createInvocation('apply_patch'),
+    createInvocation('read'),
   ])
 
   assert.equal(summary, 'Explored 2 searches, ran 1 command, 2 files')
+})
+
+test('buildToolInvocationGroupSummary excludes apply tools from the explored summary', () => {
+  const summary = buildToolInvocationGroupSummary([
+    createInvocation('apply'),
+    createInvocation('apply_patch'),
+  ])
+
+  assert.equal(summary, 'Explored actions')
 })
 
 test('buildToolInvocationGroupSummary aggregates run_terminal and get_terminal_output as commands', () => {
