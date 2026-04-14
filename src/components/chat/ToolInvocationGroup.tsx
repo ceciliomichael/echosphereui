@@ -29,8 +29,8 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       ),
     [entries],
   )
-  const isExploring = !hasAssistantText
-  const [isOpen, setIsOpen] = useState(hasActiveInvocation && isExploring)
+  const isExploring = hasActiveInvocation && !hasAssistantText
+  const [isOpen, setIsOpen] = useState(isExploring)
   const previousIsExploringRef = useRef(isExploring)
 
   useEffect(() => {

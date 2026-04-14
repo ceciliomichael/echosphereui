@@ -220,6 +220,36 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       input.setMainComposerAttachments([])
     }
 
+    if (input.syntheticAssistantMessage) {
+      const finalizedConversationMessages = [
+        ...conversationForRun.messages,
+        input.syntheticAssistantMessage,
+      ]
+      const savedConversation =
+        (await persistConversationSnapshot(conversationForRun.id, finalizedConversationMessages)) ?? conversationForRun
+      const savedConversationForRun =
+        savedConversation.chatMode === input.draftChatMode
+          ? savedConversation
+          : {
+              ...savedConversation,
+              chatMode: input.draftChatMode,
+            }
+
+      input.upsertConversation(savedConversationForRun)
+      if (shouldKeepSelected) {
+        input.applyConversation(savedConversationForRun)
+      }
+      input.updateConversationRuntimeState(savedConversationForRun.id, {
+        activeStreamId: null,
+        isSending: false,
+        isStreamingTextActive: false,
+        streamingAssistantMessageId: null,
+        streamingWaitingIndicatorVariant: null,
+      })
+      input.clearTextStreamingIdleTimeout(savedConversationForRun.id)
+      return requestAccepted
+    }
+
     streamProgressPersistence = createStreamProgressPersistenceController({
       conversationId: conversationForRun.id,
       setError: input.setError,

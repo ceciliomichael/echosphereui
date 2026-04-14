@@ -42,6 +42,7 @@ export interface PersistAndStreamMessageInput {
   setMainComposerValue: (value: string) => void
   setPendingDraftSendCount: (updater: (currentValue: number) => number) => void
   resetMainComposerAfterSend?: boolean
+  syntheticAssistantMessage?: Message
   stopTextStreaming: (conversationId: string) => void
   targetEditMessageId: string | null
   trimmedText: string

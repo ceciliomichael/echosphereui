@@ -1,7 +1,11 @@
 import { useCallback } from "react";
+import { v4 as uuidv4 } from "uuid";
 import type { ChatMode, Message } from "../../types/chat";
 import type { ChatRuntimeSelection } from "../../hooks/chatMessageRuntime";
-import { buildCompressedHistoryMessage } from "../../lib/chatCompression";
+import {
+  buildCompressedHistoryAcknowledgementMessage,
+  buildCompressedHistoryMessage,
+} from "../../lib/chatCompression";
 
 interface CompressionSelection {
   hasConfiguredProvider: boolean;
@@ -23,7 +27,12 @@ interface UseChatCompressionInput {
   sendProgrammaticMessage: (
     runtimeSelection: ChatRuntimeSelection,
     messageText: string,
-    options?: { chatMode?: ChatMode; forceNewConversation?: boolean; title?: string },
+    options?: {
+      chatMode?: ChatMode
+      forceNewConversation?: boolean
+      syntheticAssistantMessage?: Message
+      title?: string
+    },
   ) => Promise<void>;
   setError: (errorMessage: string | null) => void;
   setIsCompressingChat: (nextValue: boolean) => void;
@@ -31,6 +40,10 @@ interface UseChatCompressionInput {
 
 function buildCompressionSeedMessage(summary: string) {
   return buildCompressedHistoryMessage(summary);
+}
+
+function buildCompressionAcknowledgementMessage() {
+  return buildCompressedHistoryAcknowledgementMessage(uuidv4());
 }
 
 function toErrorMessage(error: unknown, fallbackMessage: string) {
@@ -107,7 +120,12 @@ export function useChatCompression(input: UseChatCompressionInput) {
       await sendProgrammaticMessage(
         runtimeSelection,
         buildCompressionSeedMessage(summary),
-        { chatMode, forceNewConversation: true, title: "Compressed text" },
+        {
+          chatMode,
+          forceNewConversation: true,
+          syntheticAssistantMessage: buildCompressionAcknowledgementMessage(),
+          title: "Compressed text",
+        },
       );
     } catch (caughtError) {
       console.error("Failed to compress chat history", caughtError);

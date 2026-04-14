@@ -33,7 +33,6 @@ export function useWorkspaceTerminalPanelState({
     activeTerminalTabKey: sessionState.activeTerminalTabKey,
     closeTerminalTab: sessionState.closeTerminalTab,
     handleResizePointerDown: sizingState.handleResizePointerDown,
-    handleTransitionEnd: sizingState.handleTransitionEnd,
     isOpen: sizingState.isOpen,
     isResizing: sizingState.isResizing,
     openTerminalTab: sessionState.openTerminalTab,

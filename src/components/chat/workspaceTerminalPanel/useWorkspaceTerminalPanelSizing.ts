@@ -5,7 +5,6 @@ import {
   useState,
   type RefObject,
   type PointerEvent as ReactPointerEvent,
-  type TransitionEvent as ReactTransitionEvent,
 } from "react";
 import {
   MAX_TERMINAL_PANEL_HEIGHT,
@@ -21,7 +20,6 @@ interface UseWorkspaceTerminalPanelSizingArgs {
 
 interface WorkspaceTerminalPanelSizingState {
   handleResizePointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  handleTransitionEnd: (event: ReactTransitionEvent<HTMLElement>) => void;
   isOpen: boolean;
   isResizing: boolean;
   panelHeight: number;
@@ -193,21 +191,8 @@ export function useWorkspaceTerminalPanelSizing({
     [isOpen, panelHeight],
   );
 
-  const handleTransitionEnd = useCallback(
-    (event: ReactTransitionEvent<HTMLElement>) => {
-      if (event.propertyName === "height") {
-        const maxHeightLimit = getMaxPanelHeight();
-        setPanelHeight((currentValue) =>
-          clampPanelHeight(currentValue, maxHeightLimit),
-        );
-      }
-    },
-    [getMaxPanelHeight],
-  );
-
   return {
     handleResizePointerDown,
-    handleTransitionEnd,
     isOpen,
     isResizing,
     panelHeight,

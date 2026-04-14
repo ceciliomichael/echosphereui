@@ -1,7 +1,6 @@
 import type {
   RefObject,
   PointerEvent as ReactPointerEvent,
-  TransitionEvent as ReactTransitionEvent,
 } from "react";
 import type { ResolvedTheme } from "../../../lib/theme";
 
@@ -31,7 +30,6 @@ export interface WorkspaceTerminalPanelState {
   activeTerminalTabKey: string | null;
   closeTerminalTab: (tabKey: string) => void;
   handleResizePointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  handleTransitionEnd: (event: ReactTransitionEvent<HTMLElement>) => void;
   isOpen: boolean;
   isResizing: boolean;
   openTerminalTab: () => void;

@@ -1,3 +1,5 @@
+import type { Message } from '../types/chat'
+
 const COMPRESSION_MESSAGE_NAMESPACE = "echosphere";
 const COMPRESSION_MESSAGE_ROOT = "compressed_history";
 const COMPRESSION_SUMMARY_TAG = "summary";
@@ -11,8 +13,8 @@ const CAMP_SECTION_ORDER = [
   "Next Step",
 ] as const;
 
-const COMPRESSION_ACKNOWLEDGEMENT_PROMPT =
-  "Acknowledge in one sentence that you loaded this compressed context and are ready to continue. Do not restate the summary.";
+export const COMPRESSION_ACKNOWLEDGEMENT_TEXT =
+  "Loaded the compressed context and I'm ready to continue.";
 
 function escapeXml(value: string) {
   return value
@@ -55,7 +57,16 @@ export function buildCompressedHistoryMessage(summary: string) {
     `</${COMPRESSION_MESSAGE_NAMESPACE}:${COMPRESSION_MESSAGE_ROOT}>`,
   ].join("\n");
 
-  return `${compressedHistoryBlock}\n\n${COMPRESSION_ACKNOWLEDGEMENT_PROMPT}`;
+  return compressedHistoryBlock;
+}
+
+export function buildCompressedHistoryAcknowledgementMessage(messageId: string, timestamp = Date.now()): Message {
+  return {
+    content: COMPRESSION_ACKNOWLEDGEMENT_TEXT,
+    id: messageId,
+    role: 'assistant',
+    timestamp,
+  };
 }
 
 export function parseCompressedHistoryMessage(

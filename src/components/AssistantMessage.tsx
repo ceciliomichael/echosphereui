@@ -111,15 +111,10 @@ export function AssistantMessage({
   const hasRunningToolInvocation = toolInvocations.some(
     (invocation) => invocation.state === "running",
   );
-  const shouldSuppressSplashIndicator =
-    waitingIndicatorVariant === 'splash' &&
-    toolInvocations.length > 0 &&
-    !hasVisibleAssistantText;
   const shouldShowWaitingIndicator =
     isStreaming &&
     !isTextStreaming &&
     !hasRunningToolInvocation &&
-    !shouldSuppressSplashIndicator &&
     !hasActiveReasoningBlock;
   const copyableText = [
     normalizedContent.reasoningContent.trim(),

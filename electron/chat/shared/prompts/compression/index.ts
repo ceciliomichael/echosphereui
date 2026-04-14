@@ -4,7 +4,6 @@ import type { ChatMode } from '../../../../../src/types/chat'
 
 const PROMPT_REPO_PATH = 'electron/chat/shared/prompts/compression'
 const SUMMARY_PROMPT_FILE_NAME = 'prompt.md'
-const ACKNOWLEDGEMENT_PROMPT_FILE_NAME = 'acknowledgement.md'
 
 function readPromptFile(fileName: string) {
   const appRoot = process.env.APP_ROOT?.trim()
@@ -28,8 +27,7 @@ function getPrompt() {
   }
 
   const summaryPrompt = readPromptFile(SUMMARY_PROMPT_FILE_NAME)
-  const acknowledgementPrompt = readPromptFile(ACKNOWLEDGEMENT_PROMPT_FILE_NAME)
-  cachedPrompt = [summaryPrompt, acknowledgementPrompt].join('\n\n')
+  cachedPrompt = summaryPrompt
   return cachedPrompt
 }
 

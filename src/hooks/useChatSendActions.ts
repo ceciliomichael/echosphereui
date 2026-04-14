@@ -26,6 +26,7 @@ interface SendNewMessageOptions {
 interface SendProgrammaticMessageOptions {
   chatMode?: ChatMode
   forceNewConversation?: boolean
+  syntheticAssistantMessage?: PersistAndStreamMessageInput['syntheticAssistantMessage']
   title?: string
 }
 
@@ -224,6 +225,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         runtimeSelection,
         targetEditMessageId: null,
         trimmedText,
+        syntheticAssistantMessage: options?.syntheticAssistantMessage,
         title: options?.title,
       })
     },

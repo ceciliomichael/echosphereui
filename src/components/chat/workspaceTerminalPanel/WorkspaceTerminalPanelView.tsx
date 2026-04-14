@@ -37,15 +37,11 @@ export function WorkspaceTerminalPanelView({
       ref={panelState.panelRef}
       className={[
         "relative flex min-h-0 w-full shrink-0 self-stretch flex-col overflow-hidden border-t border-border bg-[var(--workspace-panel-surface)]",
-        panelState.isResizing
-          ? ""
-          : "transition-[height,border-color] duration-150 ease-out",
       ].join(" ")}
       style={{
         borderTopColor: panelState.isOpen ? "var(--color-border)" : "transparent",
         height: panelState.isOpen ? panelState.panelHeight : 0,
       }}
-      onTransitionEnd={panelState.handleTransitionEnd}
     >
       <button
         type="button"
