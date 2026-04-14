@@ -41,6 +41,65 @@ PATCH`)
   assert.equal(wrappedRaw.hunks[0]?.type, 'add')
 })
 
+test('applyPatchInWorkspace can re-anchor an update when the file already has a matching inserted line', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-patch-reanchor-'))
+  const targetFilePath = path.join(workspaceRootPath, 'src', 'accountService.ts')
+  await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  await fs.writeFile(
+    targetFilePath,
+    [
+      "import * as fs from 'node:fs/promises';",
+      "import * as path from 'node:path';",
+      "import {",
+      '\tACCOUNTS_DIR,',
+      '\tAUTH_FILE_PATHS,',
+      '\tCODEX_AUTH_FILE_PATH,',
+      '\tdecodeIdTokenClaims,',
+      '\tWORKSPACE_AUTH_FILE_PATH,',
+      '\tdeleteAuthJsonFile,',
+      '\treadAuthJsonFile,',
+      '\twriteAuthJsonFile',
+      "} from './authService';",
+      '',
+      'function isStoredCodexAuthFile(candidate: unknown) {',
+      '  return Boolean(candidate)',
+      '}',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+
+  try {
+    const result = await applyPatchInWorkspace(
+      workspaceRootPath,
+      `*** Begin Patch
+*** Update File: ${targetFilePath}
+@@
+ import * as fs from 'node:fs/promises';
++import { createHash } from 'node:crypto';
+ import * as path from 'node:path';
+ import {
+ \tACCOUNTS_DIR,
+ \tAUTH_FILE_PATHS,
+ \tCODEX_AUTH_FILE_PATH,
++\tdecodeIdTokenClaims,
+ \tWORKSPACE_AUTH_FILE_PATH,
+ \tdeleteAuthJsonFile,
+ \treadAuthJsonFile,
+ \twriteAuthJsonFile
+ } from './authService';
+*** End Patch`,
+    )
+
+    assert.equal(result.changes.length, 1)
+    const updatedContent = await fs.readFile(targetFilePath, 'utf8')
+    assert.match(updatedContent, /import \{ createHash \} from 'node:crypto';/u)
+    assert.match(updatedContent, /decodeIdTokenClaims/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
 test('applyPatchInWorkspace applies add, update, move, and delete operations', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-patch-'))
   await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })

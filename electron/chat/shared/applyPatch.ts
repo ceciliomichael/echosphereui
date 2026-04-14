@@ -256,6 +256,22 @@ function normalizeUnicode(value: string) {
     .replace(/\u00A0/g, ' ')
 }
 
+function areComparableLinesEqual(left: string, right: string) {
+  if (left === right) {
+    return true
+  }
+
+  if (left.trimEnd() === right.trimEnd()) {
+    return true
+  }
+
+  if (left.trim() === right.trim()) {
+    return true
+  }
+
+  return normalizeUnicode(left.trim()) === normalizeUnicode(right.trim())
+}
+
 function tryMatchSequence(
   lines: readonly string[],
   pattern: readonly string[],
@@ -313,35 +329,135 @@ function seekSequence(
     return exact
   }
 
-  const trimEndMatch = tryMatchSequence(
-    lines,
-    pattern,
-    startIndex,
-    (left, right) => left.trimEnd() === right.trimEnd(),
-    isEndOfFile,
-  )
+  const trimEndMatch = tryMatchSequence(lines, pattern, startIndex, (left, right) => left.trimEnd() === right.trimEnd(), isEndOfFile)
   if (trimEndMatch !== -1) {
     return trimEndMatch
   }
 
-  const trimMatch = tryMatchSequence(
-    lines,
-    pattern,
-    startIndex,
-    (left, right) => left.trim() === right.trim(),
-    isEndOfFile,
-  )
+  const trimMatch = tryMatchSequence(lines, pattern, startIndex, (left, right) => left.trim() === right.trim(), isEndOfFile)
   if (trimMatch !== -1) {
     return trimMatch
   }
 
-  return tryMatchSequence(
-    lines,
-    pattern,
-    startIndex,
-    (left, right) => normalizeUnicode(left.trim()) === normalizeUnicode(right.trim()),
-    isEndOfFile,
-  )
+  return tryMatchSequence(lines, pattern, startIndex, (left, right) => normalizeUnicode(left.trim()) === normalizeUnicode(right.trim()), isEndOfFile)
+}
+
+function comparableLineKey(value: string) {
+  return normalizeUnicode(value.trimEnd())
+}
+
+function countComparableLines(lines: readonly string[]) {
+  const counts = new Map<string, number>()
+
+  for (const line of lines) {
+    const key = comparableLineKey(line)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  return counts
+}
+
+function canCoverExtraLinesWithReplacement(extraLines: readonly string[], replacementLines: readonly string[]) {
+  if (extraLines.length === 0) {
+    return true
+  }
+
+  const replacementCounts = countComparableLines(replacementLines)
+
+  for (const extraLine of extraLines) {
+    const key = comparableLineKey(extraLine)
+    const remainingCount = replacementCounts.get(key) ?? 0
+    if (remainingCount <= 0) {
+      return false
+    }
+
+    replacementCounts.set(key, remainingCount - 1)
+  }
+
+  return true
+}
+
+interface FuzzyReplacementMatch {
+  deleteCount: number
+  startIndex: number
+}
+
+function findFuzzyReplacementMatch(
+  lines: readonly string[],
+  pattern: readonly string[],
+  replacementLines: readonly string[],
+  startIndex: number,
+) {
+  const maxExtraLines = 3
+  let bestMatch: FuzzyReplacementMatch | null = null
+  let bestSpanLength = Number.POSITIVE_INFINITY
+
+  for (let candidateStart = startIndex; candidateStart < lines.length; candidateStart += 1) {
+    const matchedIndices: number[] = []
+    let searchIndex = candidateStart
+
+    for (const patternLine of pattern) {
+      let foundIndex = -1
+      for (let lineIndex = searchIndex; lineIndex < lines.length; lineIndex += 1) {
+        if (areComparableLinesEqual(lines[lineIndex], patternLine)) {
+          foundIndex = lineIndex
+          break
+        }
+      }
+
+      if (foundIndex === -1) {
+        matchedIndices.length = 0
+        break
+      }
+
+      matchedIndices.push(foundIndex)
+      searchIndex = foundIndex + 1
+    }
+
+    if (matchedIndices.length !== pattern.length) {
+      continue
+    }
+
+    const spanStart = matchedIndices[0]
+    const spanEnd = matchedIndices[matchedIndices.length - 1]
+    const spanLength = spanEnd - spanStart + 1
+    const extraLineCount = spanLength - pattern.length
+
+    if (spanStart < startIndex) {
+      continue
+    }
+
+    if (extraLineCount < 0 || extraLineCount > maxExtraLines) {
+      continue
+    }
+
+    const matchedIndexSet = new Set(matchedIndices)
+    const extraLines = lines.slice(spanStart, spanEnd + 1).filter((_line, lineIndex) => !matchedIndexSet.has(spanStart + lineIndex))
+    if (!canCoverExtraLinesWithReplacement(extraLines, replacementLines)) {
+      continue
+    }
+
+    const candidate: FuzzyReplacementMatch = {
+      deleteCount: spanLength,
+      startIndex: spanStart,
+    }
+
+    if (spanLength < bestSpanLength) {
+      bestMatch = candidate
+      bestSpanLength = spanLength
+      continue
+    }
+
+    if (spanLength === bestSpanLength && bestMatch && spanStart < bestMatch.startIndex) {
+      bestMatch = candidate
+    }
+  }
+
+  if (bestMatch) {
+    return bestMatch
+  }
+
+  return null
 }
 
 function applyUpdateChunks(filePath: string, originalContent: string, chunks: readonly ApplyPatchUpdateChunk[]) {
@@ -373,15 +489,27 @@ function applyUpdateChunks(filePath: string, originalContent: string, chunks: re
       continue
     }
 
-    const foundIndex = seekSequence(
-      originalLines,
-      chunk.oldLines,
-      searchStartIndex,
-      Boolean(chunk.isEndOfFile),
-    )
+    const foundIndex = seekSequence(originalLines, chunk.oldLines, searchStartIndex, Boolean(chunk.isEndOfFile))
 
     if (foundIndex === -1) {
-      throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join('\n')}`)
+      const fuzzyMatch = findFuzzyReplacementMatch(
+        originalLines,
+        chunk.oldLines,
+        chunk.newLines,
+        searchStartIndex,
+      )
+
+      if (!fuzzyMatch) {
+        throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.oldLines.join('\n')}`)
+      }
+
+      replacements.push({
+        deleteCount: fuzzyMatch.deleteCount,
+        newLines: [...chunk.newLines],
+        startIndex: fuzzyMatch.startIndex,
+      })
+      searchStartIndex = fuzzyMatch.startIndex + chunk.newLines.length
+      continue
     }
 
     replacements.push({
