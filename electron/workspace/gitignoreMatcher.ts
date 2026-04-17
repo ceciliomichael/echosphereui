@@ -11,12 +11,13 @@ export type WorkspaceEntryVisibility = 'explorer' | 'workspace'
 
 const WORKSPACE_IGNORED_ENTRY_NAMES = new Set(['node_modules', '.next', '.DS_Store', 'Thumbs.db'])
 const EXPLORER_IGNORED_ENTRY_NAMES = new Set(['.git'])
+const gitignoreMatcherCache = new Map<string, Promise<GitignoreMatcherEntry[]>>()
 
 function toPosixRelativePath(fromPath: string, toPath: string) {
   return path.relative(fromPath, toPath).split(path.sep).join('/')
 }
 
-async function loadGitignoreMatcher(basePath: string) {
+async function loadGitignoreMatcher(basePath: string): Promise<GitignoreMatcherEntry | null> {
   const gitignorePath = path.join(basePath, '.gitignore')
 
   try {
@@ -38,20 +39,35 @@ async function loadGitignoreMatcher(basePath: string) {
   }
 }
 
-export async function loadGitignoreMatchers(rootPath: string, directoryPath: string) {
+export async function loadGitignoreMatchers(
+  rootPath: string,
+  directoryPath: string,
+): Promise<GitignoreMatcherEntry[]> {
   const normalizedRootPath = path.resolve(rootPath)
   const normalizedDirectoryPath = path.resolve(directoryPath)
-  const relativeDirectoryPath = path.relative(normalizedRootPath, normalizedDirectoryPath)
-  const directorySegments =
-    relativeDirectoryPath.length === 0 ? [] : relativeDirectoryPath.split(path.sep).filter((segment) => segment.length > 0)
+  const cacheKey = `${normalizedRootPath}\0${normalizedDirectoryPath}`
 
-  const candidatePaths = [normalizedRootPath]
-  for (let index = 0; index < directorySegments.length; index += 1) {
-    candidatePaths.push(path.join(normalizedRootPath, ...directorySegments.slice(0, index + 1)))
+  let matchersPromise: Promise<GitignoreMatcherEntry[]> | undefined = gitignoreMatcherCache.get(cacheKey)
+  if (!matchersPromise) {
+    matchersPromise = (async () => {
+      const relativePath = path.relative(normalizedRootPath, normalizedDirectoryPath)
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return []
+      }
+
+      const parentPath = normalizedDirectoryPath === normalizedRootPath ? null : path.dirname(normalizedDirectoryPath)
+      const parentMatchers: GitignoreMatcherEntry[] = parentPath
+        ? await loadGitignoreMatchers(normalizedRootPath, parentPath)
+        : []
+      const localMatcher = await loadGitignoreMatcher(normalizedDirectoryPath)
+
+      return localMatcher ? [...parentMatchers, localMatcher] : parentMatchers
+    })()
+
+    gitignoreMatcherCache.set(cacheKey, matchersPromise)
   }
 
-  const matcherEntries = await Promise.all(candidatePaths.map((candidatePath) => loadGitignoreMatcher(candidatePath)))
-  return matcherEntries.filter((entry): entry is GitignoreMatcherEntry => entry !== null)
+  return matchersPromise
 }
 
 export function isGitignored(

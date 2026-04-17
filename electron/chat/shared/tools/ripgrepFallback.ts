@@ -6,17 +6,16 @@ import { minimatch } from 'minimatch'
 import {
   isGitignored,
   loadGitignoreMatchers,
-  shouldAlwaysShowEntry,
   shouldIgnoreWorkspaceEntry,
 } from '../../../workspace/gitignoreMatcher'
 
 const MAX_LINE_LENGTH = 2000
+const ALL_FILES_GLOBS = new Set(['**/*', '**/{*,.*}', '**'])
 
 interface SearchMatch {
   absolutePath: string
   lineNumber: number
   lineText: string
-  modifiedAt: number
   relativePath: string
 }
 
@@ -49,6 +48,19 @@ function matchesWorkspaceGlob(candidatePath: string, globPattern: string) {
   return minimatch(normalizedCandidatePath, normalizedPattern, { dot: true })
 }
 
+function normalizeSearchIncludePattern(includePattern: string | null) {
+  const trimmedIncludePattern = includePattern?.trim()
+  if (!trimmedIncludePattern) {
+    return null
+  }
+
+  if (ALL_FILES_GLOBS.has(trimmedIncludePattern)) {
+    return null
+  }
+
+  return trimmedIncludePattern
+}
+
 function createWorkspaceEntryVisibilityFilter(
   workspaceRootPath: string,
   options?: {
@@ -57,9 +69,10 @@ function createWorkspaceEntryVisibilityFilter(
 ) {
   const matcherCache = new Map<string, Promise<Awaited<ReturnType<typeof loadGitignoreMatchers>>>>()
 
-  function loadCachedMatchers(directoryPath: string) {
+  function loadCachedMatchers(directoryPath: string): Promise<Awaited<ReturnType<typeof loadGitignoreMatchers>>> {
     const normalizedDirectoryPath = path.resolve(directoryPath)
-    let matchersPromise = matcherCache.get(normalizedDirectoryPath)
+    let matchersPromise: Promise<Awaited<ReturnType<typeof loadGitignoreMatchers>>> | undefined =
+      matcherCache.get(normalizedDirectoryPath)
     if (!matchersPromise) {
       matchersPromise = loadGitignoreMatchers(workspaceRootPath, normalizedDirectoryPath)
       matcherCache.set(normalizedDirectoryPath, matchersPromise)
@@ -69,19 +82,18 @@ function createWorkspaceEntryVisibilityFilter(
   }
 
   return async (entryAbsolutePath: string, isDirectory: boolean) => {
-    const entryName = path.basename(entryAbsolutePath)
-    if (!options?.ignoreWorkspaceRules) {
-      const workspaceRelativeSegments = path
-        .relative(workspaceRootPath, entryAbsolutePath)
-        .split(path.sep)
-        .filter((segment) => segment.length > 0)
+    const workspaceRelativeSegments = path
+      .relative(workspaceRootPath, entryAbsolutePath)
+      .split(path.sep)
+      .filter((segment) => segment.length > 0)
 
+    if (workspaceRelativeSegments.some((segment) => shouldIgnoreWorkspaceEntry(segment, 'explorer'))) {
+      return false
+    }
+
+    if (!options?.ignoreWorkspaceRules) {
       if (workspaceRelativeSegments.some((segment) => shouldIgnoreWorkspaceEntry(segment))) {
         return false
-      }
-
-      if (shouldAlwaysShowEntry(entryName)) {
-        return true
       }
     }
 
@@ -133,7 +145,7 @@ async function visitVisibleFiles(
 }
 
 async function collectVisibleFilePaths(workspaceRootPath: string) {
-    const filePaths: string[] = []
+  const filePaths: string[] = []
   const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
   await visitVisibleFiles(workspaceRootPath, workspaceRootPath, isVisibleEntry, async (_, fileRelativePath) => {
     filePaths.push(fileRelativePath)
@@ -210,7 +222,6 @@ export async function searchVisibleFiles(
       return false
     }
 
-    const modifiedAt = fileStats.mtimeMs
     const stream = createReadStream(fileAbsolutePath, { encoding: 'utf8' })
     const reader = createInterface({
       crlfDelay: Infinity,
@@ -234,7 +245,6 @@ export async function searchVisibleFiles(
           absolutePath: fileAbsolutePath,
           lineNumber,
           lineText: line.trimEnd().slice(0, MAX_LINE_LENGTH),
-          modifiedAt,
           relativePath: fileRelativePath,
         })
 
@@ -267,18 +277,6 @@ export async function searchVisibleFiles(
       await searchFile(searchRootPath, fileRelativePath)
     }
 
-    matches.sort((left, right) => {
-      if (right.modifiedAt !== left.modifiedAt) {
-        return right.modifiedAt - left.modifiedAt
-      }
-
-      if (left.absolutePath !== right.absolutePath) {
-        return left.absolutePath.localeCompare(right.absolutePath, undefined, { sensitivity: 'base' })
-      }
-
-      return left.lineNumber - right.lineNumber
-    })
-
     return {
       matches,
       invalidPattern,
@@ -291,10 +289,6 @@ export async function searchVisibleFiles(
   })
 
   matches.sort((left, right) => {
-    if (right.modifiedAt !== left.modifiedAt) {
-      return right.modifiedAt - left.modifiedAt
-    }
-
     if (left.absolutePath !== right.absolutePath) {
       return left.absolutePath.localeCompare(right.absolutePath, undefined, { sensitivity: 'base' })
     }
@@ -309,13 +303,38 @@ export async function searchVisibleFiles(
   }
 }
 
-function getArgumentValue(args: string[], flagName: string) {
-  const flagIndex = args.indexOf(flagName)
-  if (flagIndex === -1 || flagIndex + 1 >= args.length) {
-    return null
+function getArgumentValues(args: string[], flagName: string) {
+  const values: string[] = []
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== flagName || index + 1 >= args.length) {
+      continue
+    }
+
+    values.push(args[index + 1])
   }
 
-  return args[flagIndex + 1]
+  return values
+}
+
+function getFirstArgumentValue(args: string[], flagName: string) {
+  return getArgumentValues(args, flagName)[0] ?? null
+}
+
+function getPrimaryGlobPattern(args: string[]) {
+  const globPatterns = getArgumentValues(args, '--glob')
+    .map((pattern) => pattern.trim())
+    .filter((pattern) => pattern.length > 0)
+
+  return globPatterns.find((pattern) => !pattern.startsWith('!')) ?? null
+}
+
+function getExcludedGlobPatterns(args: string[]) {
+  return new Set(
+    getArgumentValues(args, '--glob')
+      .map((pattern) => pattern.trim())
+      .filter((pattern) => pattern.startsWith('!')),
+  )
 }
 
 function getSearchPatternArg(args: string[]) {
@@ -337,22 +356,26 @@ function getSearchPathArg(args: string[]) {
 export async function runRipgrepFallback(args: string[], cwd: string): Promise<RipgrepFallbackResult> {
   if (args.includes('--files')) {
     const files = await collectVisibleFilePaths(cwd)
-    const globPattern = getArgumentValue(args, '--glob')
-    const normalizedGlobPattern = globPattern?.trim()
+    const globPattern = getPrimaryGlobPattern(args)
+    const excludedGlobPatterns = getExcludedGlobPatterns(args)
+    const normalizedGlobPattern = normalizeSearchIncludePattern(globPattern)
     const filteredFiles =
       normalizedGlobPattern && normalizedGlobPattern.length > 0
         ? files.filter((filePath) => matchesWorkspaceGlob(filePath, normalizedGlobPattern))
         : files
+    const visibleFiles = filteredFiles.filter(
+      (filePath) => ![...excludedGlobPatterns].some((globPattern) => matchesWorkspaceGlob(filePath, globPattern.slice(1))),
+    )
 
     return {
       exitCode: 0,
       stderr: '',
-      stdout: filteredFiles.join('\n'),
+      stdout: visibleFiles.join('\n'),
     }
   }
 
   if (args.includes('--regexp')) {
-    const searchPattern = getArgumentValue(args, '--regexp')
+    const searchPattern = getFirstArgumentValue(args, '--regexp')
     const searchPath = getSearchPathArg(args)
     if (searchPattern === null || searchPath === null) {
       return {
@@ -371,9 +394,9 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
       }
     }
 
-    const include = getArgumentValue(args, '--glob') ?? undefined
+    const include = normalizeSearchIncludePattern(getPrimaryGlobPattern(args)) ?? undefined
     const result = await searchVisibleFiles(cwd, searchPath, searchPattern, include, undefined, {
-      ignoreWorkspaceRules: true,
+      ignoreWorkspaceRules: false,
       literalFallback: false,
       regex: true,
     })
@@ -410,7 +433,7 @@ export async function runRipgrepFallback(args: string[], cwd: string): Promise<R
       }
     }
 
-    const include = getArgumentValue(args, '--glob') ?? undefined
+    const include = normalizeSearchIncludePattern(getPrimaryGlobPattern(args)) ?? undefined
     const result = await searchVisibleFiles(cwd, cwd, searchPattern, include)
     if (result.matches.length === 0) {
       return {

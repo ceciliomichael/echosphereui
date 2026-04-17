@@ -67,6 +67,7 @@ interface MessageRowProps {
   editComposerMentionPathMap?: ReadonlyMap<string, string>;
   isEditing: boolean;
   hasSubsequentAssistantText: boolean;
+  isConversationStreaming: boolean;
   isSending: boolean;
   isStreaming: boolean;
   message: Message;
@@ -109,6 +110,7 @@ const MessageRow = memo(
     editComposerDirty,
     editComposerMentionPathMap,
     hasSubsequentAssistantText,
+    isConversationStreaming,
     isEditing,
     isSending: _isSending,
     isStreaming,
@@ -205,6 +207,7 @@ const MessageRow = memo(
           <AssistantMessage
             content={message.content}
             hasSubsequentAssistantText={hasSubsequentAssistantText}
+            isConversationStreaming={isConversationStreaming}
             isStreaming={isStreaming}
             onToolDecisionSubmit={(invocation, submission) => {
               onToolDecisionSubmit?.(invocation, submission);
@@ -226,6 +229,7 @@ const MessageRow = memo(
     if (
       previousProps.message !== nextProps.message ||
       previousProps.hasSubsequentAssistantText !== nextProps.hasSubsequentAssistantText ||
+      previousProps.isConversationStreaming !== nextProps.isConversationStreaming ||
       previousProps.isEditing !== nextProps.isEditing ||
       previousProps.isStreaming !== nextProps.isStreaming ||
       previousProps.showCopyButton !== nextProps.showCopyButton ||
@@ -301,6 +305,7 @@ export function MessageList({
   workspaceRootPath = null,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isConversationStreaming = streamingAssistantMessageId !== null;
   const visibleMessages = messages.filter((message) =>
     isVisibleTranscriptMessage(message),
   );
@@ -383,6 +388,7 @@ export function MessageList({
               hasSubsequentAssistantText={
                 subsequentAssistantTextByMessageId.get(msg.id) ?? false
               }
+              isConversationStreaming={isConversationStreaming}
               isEditing={editingMessageId === msg.id}
               isSending={isSending}
               isStreaming={streamingAssistantMessageId === msg.id}

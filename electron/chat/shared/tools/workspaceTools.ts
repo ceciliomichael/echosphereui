@@ -22,6 +22,8 @@ const SEARCH_LIMIT = 100
 const MAX_LINE_LENGTH = 2000
 const MAX_READ_BYTES = 50 * 1024
 const MAX_READ_BYTES_LABEL = `${MAX_READ_BYTES / 1024} KB`
+const RIPGREP_EXCLUDE_GLOBS = ['!**/.git', '!**/.git/**', '!**/node_modules', '!**/node_modules/**', '!**/.next', '!**/.next/**']
+const RIPGREP_ALL_FILES_GLOBS = new Set(['**/*', '**/{*,.*}', '**'])
 
 type WorkspaceToolContext = Pick<AgentToolContext, 'checkpointId' | 'workspaceRootPath'>
 type GitignoreMatchers = Awaited<ReturnType<typeof loadGitignoreMatchers>>
@@ -126,7 +128,6 @@ interface GrepMatch {
   filePath: string
   lineNumber: number
   lineText: string
-  modTime: number
 }
 
 function parseRipgrepOutputLine(line: string) {
@@ -227,9 +228,9 @@ async function listImmediateDirectoryEntries(workspaceRootPath: string, director
 function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
   const matcherCache = new Map<string, Promise<GitignoreMatchers>>()
 
-  function loadCachedMatchers(directoryPath: string) {
+  function loadCachedMatchers(directoryPath: string): Promise<GitignoreMatchers> {
     const normalizedDirectoryPath = path.resolve(directoryPath)
-    let matchersPromise = matcherCache.get(normalizedDirectoryPath)
+    let matchersPromise: Promise<GitignoreMatchers> | undefined = matcherCache.get(normalizedDirectoryPath)
     if (!matchersPromise) {
       matchersPromise = loadGitignoreMatchers(workspaceRootPath, normalizedDirectoryPath)
       matcherCache.set(normalizedDirectoryPath, matchersPromise)
@@ -239,7 +240,6 @@ function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
   }
 
   return async (entryAbsolutePath: string, isDirectory: boolean) => {
-    const entryName = path.basename(entryAbsolutePath)
     const workspaceRelativeSegments = path
       .relative(workspaceRootPath, entryAbsolutePath)
       .split(path.sep)
@@ -249,13 +249,22 @@ function createWorkspaceEntryVisibilityFilter(workspaceRootPath: string) {
       return false
     }
 
-    if (shouldAlwaysShowEntry(entryName)) {
-      return true
-    }
-
     const gitignoreMatchers = await loadCachedMatchers(path.dirname(entryAbsolutePath))
     return !isGitignored(entryAbsolutePath, isDirectory, gitignoreMatchers)
   }
+}
+
+function normalizeSearchIncludePattern(include: string | undefined) {
+  const trimmedInclude = include?.trim()
+  if (!trimmedInclude) {
+    return null
+  }
+
+  if (RIPGREP_ALL_FILES_GLOBS.has(trimmedInclude)) {
+    return null
+  }
+
+  return trimmedInclude
 }
 
 async function filterVisibleRelativeFileEntries(
@@ -437,7 +446,12 @@ export async function createGlobToolResult(
   relativePath: string,
   pattern: string,
 ) {
-  const result = await runRipgrep(['--files', '--hidden', '--glob', pattern], absolutePath)
+  const args = ['--files', '--hidden', '--glob', pattern]
+  for (const globPattern of RIPGREP_EXCLUDE_GLOBS) {
+    args.push('--glob', globPattern)
+  }
+
+  const result = await runRipgrep(args, absolutePath)
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     return createErrorResult(`Glob failed for ${relativePath}`, {
       body: result.stderr.trim() || `ripgrep exited with code ${result.exitCode}`,
@@ -480,7 +494,7 @@ export async function createGlobToolResult(
 }
 
 export async function createGrepToolResult(
-  _workspaceRootPath: string,
+  workspaceRootPath: string,
   absolutePath: string,
   relativePath: string,
   pattern: string,
@@ -494,13 +508,18 @@ export async function createGrepToolResult(
   const subjectKind = stats.isDirectory() ? 'directory' : 'file'
 
   const args = ['-nH', '--hidden', '--no-messages', '--field-match-separator=|', '--regexp', pattern]
-  const effectiveInclude = include?.trim()
+  const effectiveInclude = normalizeSearchIncludePattern(include)
   if (effectiveInclude) {
     args.push('--glob', effectiveInclude)
   }
+
+  for (const globPattern of RIPGREP_EXCLUDE_GLOBS) {
+    args.push('--glob', globPattern)
+  }
+
   args.push(absolutePath)
 
-  const result = await runRipgrep(args, _workspaceRootPath)
+  const result = await runRipgrep(args, workspaceRootPath)
   const output = result.stdout.trim()
   if (result.exitCode === 1 || (result.exitCode === 2 && output.length === 0)) {
     return createSuccessResult({
@@ -522,6 +541,7 @@ export async function createGrepToolResult(
   }
 
   const parsedMatches: GrepMatch[] = []
+  const isVisibleEntry = createWorkspaceEntryVisibilityFilter(workspaceRootPath)
   for (const line of output.split(/\r?\n/u)) {
     if (!line) {
       continue
@@ -532,8 +552,7 @@ export async function createGrepToolResult(
       continue
     }
 
-    const fileStats = await fs.stat(parsedLine.filePath).catch(() => null)
-    if (!fileStats) {
+    if (!(await isVisibleEntry(parsedLine.filePath, false))) {
       continue
     }
 
@@ -541,15 +560,10 @@ export async function createGrepToolResult(
       filePath: parsedLine.filePath,
       lineNumber: parsedLine.lineNumber,
       lineText: parsedLine.lineText,
-      modTime: fileStats.mtime.getTime(),
     })
   }
 
   parsedMatches.sort((left, right) => {
-    if (right.modTime !== left.modTime) {
-      return right.modTime - left.modTime
-    }
-
     if (left.filePath !== right.filePath) {
       return left.filePath.localeCompare(right.filePath, undefined, { sensitivity: 'base' })
     }

@@ -121,7 +121,7 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
     }),
     grep: tool({
       description:
-        'Fast content search tool for files beneath a workspace path. Use it to locate relevant files, symbols, or strings, then read the matching files before editing or patching. Treat grep results as pointers only. Pass a file or directory path in absolute_path, or omit it to search from the workspace root. Searches file contents with regular expressions and uses include to narrow by filename glob.',
+        'Fast content search tool for visible workspace files. Use it to locate relevant files, symbols, or strings, then read the matching files before editing or patching. Treat grep results as pointers only. Prefer a narrow absolute_path, keep patterns specific, and use include to narrow by filename glob. Searches file contents with regular expressions and skips repository metadata such as .git.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {

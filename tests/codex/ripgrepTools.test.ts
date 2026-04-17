@@ -22,16 +22,21 @@ test('resolveCanonicalRipgrepPath uses the repo resources directory in developme
   assert.equal(canonicalPath, path.join('C:', 'repo', 'resources', 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg'))
 })
 
-test('buildRipgrepCommandCandidates only returns the canonical dev ripgrep path', async () => {
+test('buildRipgrepCommandCandidates returns the available development candidates before the PATH fallback', async () => {
   const canonicalPath = path.join('C:', 'repo', 'resources', 'ripgrep', process.platform === 'win32' ? 'rg.exe' : 'rg')
+  const packagePath = path.join('C:', 'repo', 'node_modules', '@vscode', 'ripgrep', 'bin', process.platform === 'win32' ? 'rg.exe' : 'rg')
   const candidates = await __testOnly.buildRipgrepCommandCandidates({
     currentWorkingDirectory: path.join('C:', 'repo'),
     isPackagedApp: false,
-    pathExistsImpl: async (candidatePath) => candidatePath === canonicalPath,
+    pathExistsImpl: async (candidatePath) => [canonicalPath, packagePath].includes(candidatePath),
+    requireResolveImpl: (specifier: string) => {
+      assert.equal(specifier, '@vscode/ripgrep/package.json')
+      return path.join('C:', 'repo', 'node_modules', '@vscode', 'ripgrep', 'package.json')
+    },
     resourcesPath: null,
   })
 
-  assert.deepEqual(candidates, [canonicalPath])
+  assert.deepEqual(candidates, [canonicalPath, packagePath, process.platform === 'win32' ? 'rg.exe' : 'rg'])
 })
 
 test('buildRipgrepCommandCandidates resolves packaged ripgrep from an app.asar resources root', async () => {
@@ -44,7 +49,7 @@ test('buildRipgrepCommandCandidates resolves packaged ripgrep from an app.asar r
     resourcesPath: path.join(packagedResourcesRoot, 'app.asar'),
   })
 
-  assert.deepEqual(candidates, [packagedBinaryPath])
+  assert.deepEqual(candidates, [packagedBinaryPath, process.platform === 'win32' ? 'rg.exe' : 'rg'])
 })
 
 test('buildRipgrepCommandCandidates infers packaged mode from process resources path', async () => {
@@ -55,7 +60,7 @@ test('buildRipgrepCommandCandidates infers packaged mode from process resources 
     resourcesPath: path.join(packagedResourcesRoot, 'app.asar'),
   })
 
-  assert.deepEqual(candidates, [packagedBinaryPath])
+  assert.deepEqual(candidates, [packagedBinaryPath, process.platform === 'win32' ? 'rg.exe' : 'rg'])
 })
 
 test('runRipgrepWithCandidates retries another executable after ENOENT', async () => {
@@ -97,10 +102,15 @@ test('runRipgrepWithCandidates retries another executable after ENOENT', async (
 test('runRipgrepFallback lists files recursively when ripgrep is unavailable', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-list-'))
   await fs.mkdir(path.join(workspaceRootPath, 'src', 'nested'), { recursive: true })
+  await fs.mkdir(path.join(workspaceRootPath, 'node_modules', 'pkg'), { recursive: true })
   await fs.writeFile(path.join(workspaceRootPath, 'src', 'nested', 'file.ts'), 'export const value = 1;\n')
+  await fs.writeFile(path.join(workspaceRootPath, 'node_modules', 'pkg', 'index.ts'), 'export const ignored = 1;\n')
   await fs.writeFile(path.join(workspaceRootPath, 'README.md'), '# Readme\n')
 
-  const result = await __testOnly.runRipgrepFallback(['--files', '--hidden'], workspaceRootPath)
+  const result = await __testOnly.runRipgrepFallback(
+    ['--files', '--hidden', '--glob', '!**/node_modules', '--glob', '!**/node_modules/**'],
+    workspaceRootPath,
+  )
 
   assert.equal(result.exitCode, 0)
   assert.equal(result.stderr, '')
@@ -159,7 +169,9 @@ test('runRipgrepFallback searches file contents and emits json match lines', asy
 test('runRipgrepFallback searches file contents with ripgrep-style grep output', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'echosphere-ripgrep-grep-'))
   await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  await fs.mkdir(path.join(workspaceRootPath, '.git'), { recursive: true })
   await fs.writeFile(path.join(workspaceRootPath, 'src', 'example.ts'), 'const foo = 1;\nconst bar = foo + 1;\n')
+  await fs.writeFile(path.join(workspaceRootPath, '.git', 'config'), 'const foo = 3;\n')
 
   const result = await __testOnly.runRipgrepFallback(
     ['-nH', '--hidden', '--no-messages', '--field-match-separator=|', '--regexp', 'foo', workspaceRootPath],

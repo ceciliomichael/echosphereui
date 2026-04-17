@@ -9,6 +9,7 @@ import { buildToolInvocationGroupSummary } from './toolInvocationGrouping'
 interface ToolInvocationGroupProps {
   entries: readonly ToolInvocationDisplayEntry[]
   hasAssistantText: boolean
+  isConversationStreaming: boolean
   onToolDecisionSubmit?: (
     invocation: ToolInvocationTrace,
     submission: ToolDecisionSubmission,
@@ -19,6 +20,7 @@ interface ToolInvocationGroupProps {
 export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   entries,
   hasAssistantText,
+  isConversationStreaming,
   onToolDecisionSubmit,
   workspaceRootPath = null,
 }: ToolInvocationGroupProps) {
@@ -29,7 +31,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       ),
     [entries],
   )
-  const isExploring = hasActiveInvocation && !hasAssistantText
+  const isExploring = !hasAssistantText && (hasActiveInvocation || isConversationStreaming)
   const [isOpen, setIsOpen] = useState(isExploring)
   const previousIsExploringRef = useRef(isExploring)
 

@@ -31,6 +31,7 @@ If the request spans multiple categories, handle them in the order: understand, 
 - Reuse existing code, types, and helpers before introducing new abstractions.
 - Keep the implementation DRY by avoiding duplicate logic and redundant code paths.
 - Avoid over-engineering; add complexity only when it clearly improves correctness, maintainability, or reuse.
+- Keep `grep` searches narrow: prefer one precise literal or regex at a time, and start from the smallest known folder instead of searching the workspace root unless that is necessary.
 
 ## Required Workflow For Code Changes
 Follow this sequence for every code-modifying task.

@@ -9,17 +9,31 @@ async function createWorkspaceFixture() {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-workspace-tools-'))
 
   await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  await fs.mkdir(path.join(workspaceRootPath, 'nested', 'package-a', 'src'), { recursive: true })
   await fs.mkdir(path.join(workspaceRootPath, 'ignored'), { recursive: true })
+  await fs.mkdir(path.join(workspaceRootPath, '.git', 'objects'), { recursive: true })
   await fs.mkdir(path.join(workspaceRootPath, 'node_modules', 'pkg'), { recursive: true })
   await fs.writeFile(path.join(workspaceRootPath, '.gitignore'), 'ignored/\n*.secret\n.env\n', 'utf8')
+  await fs.writeFile(path.join(workspaceRootPath, 'nested', 'package-a', '.gitignore'), 'src/generated.ts\n', 'utf8')
   await fs.writeFile(
     path.join(workspaceRootPath, 'src', 'visible.ts'),
     'export const visible = "needle"\nconst clearMpinValue = clearMpin(\n',
     'utf8',
   )
+  await fs.writeFile(
+    path.join(workspaceRootPath, 'nested', 'package-a', 'src', 'generated.ts'),
+    'export const generated = "needle"\n',
+    'utf8',
+  )
+  await fs.writeFile(
+    path.join(workspaceRootPath, 'nested', 'package-a', 'src', 'kept.ts'),
+    'export const kept = "needle"\n',
+    'utf8',
+  )
   await fs.writeFile(path.join(workspaceRootPath, 'src', 'listable.ts'), 'export const listable = "list"\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'notes.md'), 'This note mentions list and needle.\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'ignored', 'hidden.ts'), 'export const hidden = "needle"\n', 'utf8')
+  await fs.writeFile(path.join(workspaceRootPath, '.git', 'config'), 'needle\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'plain.secret'), 'needle\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, '.env'), 'SECRET=needle\n', 'utf8')
   await fs.writeFile(path.join(workspaceRootPath, 'node_modules', 'pkg', 'index.ts'), 'export const dependency = "needle"\n', 'utf8')
@@ -65,6 +79,34 @@ test('createGlobToolResult excludes matches from gitignored directories, even wh
   }
 })
 
+test('createGlobToolResult respects nested .gitignore files anywhere in the workspace tree', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+
+  try {
+    const result = await createGlobToolResult(workspaceRootPath, workspaceRootPath, '.', '**/*.ts')
+
+    assert.equal(result.status, 'success')
+    assert.match(result.body ?? '', /nested[\\/]package-a[\\/]src[\\/]kept\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /nested[\\/]package-a[\\/]src[\\/]generated\.ts/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createGlobToolResult excludes .git metadata even for broad git-like filename patterns', async () => {
+  const workspaceRootPath = await createWorkspaceFixture()
+
+  try {
+    const result = await createGlobToolResult(workspaceRootPath, workspaceRootPath, '.', '**/*git*')
+
+    assert.equal(result.status, 'success')
+    assert.match(result.body ?? '', /\.gitignore/u)
+    assert.doesNotMatch(result.body ?? '', /[\\/]?\.git[\\/]+config/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
 test('createGrepToolResult returns the ripgrep-style workspace match set', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
@@ -72,13 +114,15 @@ test('createGrepToolResult returns the ripgrep-style workspace match set', async
     const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '**/{*,.*}')
 
     assert.equal(result.status, 'success')
-    assert.equal(result.semantics?.matches, 6)
+    assert.equal(result.semantics?.matches, 3)
     assert.match(result.body ?? '', /visible\.ts/u)
     assert.match(result.body ?? '', /notes\.md/u)
-    assert.match(result.body ?? '', /node_modules[\\/]+pkg[\\/]+index\.ts/u)
-    assert.match(result.body ?? '', /ignored[\\/]+hidden\.ts/u)
-    assert.match(result.body ?? '', /plain\.secret/u)
-    assert.match(result.body ?? '', /\.env/u)
+    assert.match(result.body ?? '', /nested[\\/]package-a[\\/]src[\\/]kept\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /node_modules[\\/]+pkg[\\/]+index\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /ignored[\\/]+hidden\.ts/u)
+    assert.doesNotMatch(result.body ?? '', /plain\.secret/u)
+    assert.doesNotMatch(result.body ?? '', /\.env/u)
+    assert.doesNotMatch(result.body ?? '', /[\\/]?\.git[\\/]+config/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
@@ -101,26 +145,22 @@ test('createGrepToolResult supports searching a specific file path', async () =>
   }
 })
 
-test('createGrepToolResult sorts matches by modification time with the newest file first', async () => {
+test('createGrepToolResult sorts matches by file path and line number', async () => {
   const workspaceRootPath = await createWorkspaceFixture()
 
   try {
-    const olderFilePath = path.join(workspaceRootPath, 'src', 'older.ts')
-    const newerFilePath = path.join(workspaceRootPath, 'src', 'newer.ts')
-    await fs.writeFile(olderFilePath, 'export const older = "needle"\n', 'utf8')
-    await fs.writeFile(newerFilePath, 'export const newer = "needle"\n', 'utf8')
-    const olderTimestamp = new Date(Date.now() - 10_000)
-    const newerTimestamp = new Date()
-    await fs.utimes(olderFilePath, olderTimestamp, olderTimestamp)
-    await fs.utimes(newerFilePath, newerTimestamp, newerTimestamp)
+    const alphaFilePath = path.join(workspaceRootPath, 'src', 'alpha.ts')
+    const betaFilePath = path.join(workspaceRootPath, 'src', 'beta.ts')
+    await fs.writeFile(alphaFilePath, 'export const alpha = "needle"\n', 'utf8')
+    await fs.writeFile(betaFilePath, 'export const beta = "needle"\n', 'utf8')
 
     const result = await createGrepToolResult(workspaceRootPath, workspaceRootPath, '.', 'needle', '**/*.ts')
 
     assert.equal(result.status, 'success')
     const body = result.body ?? ''
-    assert.ok(body.indexOf(newerFilePath) !== -1)
-    assert.ok(body.indexOf(olderFilePath) !== -1)
-    assert.ok(body.indexOf(newerFilePath) < body.indexOf(olderFilePath))
+    assert.ok(body.indexOf(alphaFilePath) !== -1)
+    assert.ok(body.indexOf(betaFilePath) !== -1)
+    assert.ok(body.indexOf(alphaFilePath) < body.indexOf(betaFilePath))
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

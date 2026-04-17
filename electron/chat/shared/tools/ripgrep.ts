@@ -1,9 +1,13 @@
 import { promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { runRipgrepFallback } from './ripgrepFallback'
 
 const RIPGREP_EXECUTABLE_NAME = process.platform === 'win32' ? 'rg.exe' : 'rg'
+const require = createRequire(import.meta.url)
+const MODULE_DIRECTORY_PATH = path.dirname(fileURLToPath(import.meta.url))
 
 let ripgrepCommandCandidatesPromise: Promise<string[]> | null = null
 
@@ -23,6 +27,7 @@ interface ResolveRipgrepCommandCandidatesOptions {
   isPackagedApp?: boolean
   executablePath?: string | null
   pathExistsImpl?: typeof pathExists
+  requireResolveImpl?: typeof require.resolve
   resourcesPath?: string | null
 }
 
@@ -99,14 +104,37 @@ function resolveCanonicalRipgrepPath(options: ResolveRipgrepCommandCandidatesOpt
   return currentWorkingDirectory ? path.join(currentWorkingDirectory, 'resources', 'ripgrep', RIPGREP_EXECUTABLE_NAME) : null
 }
 
+function resolveBundledRipgrepPath() {
+  return path.resolve(MODULE_DIRECTORY_PATH, '../../../../resources/ripgrep', RIPGREP_EXECUTABLE_NAME)
+}
+
+function resolvePackageRipgrepPath(resolveImpl: typeof require.resolve = require.resolve) {
+  try {
+    return path.join(path.dirname(resolveImpl('@vscode/ripgrep/package.json')), 'bin', RIPGREP_EXECUTABLE_NAME)
+  } catch {
+    return null
+  }
+}
+
 async function buildRipgrepCommandCandidates(options: ResolveRipgrepCommandCandidatesOptions = {}) {
   const pathExistsImpl = options.pathExistsImpl ?? pathExists
-  const candidatePath = resolveCanonicalRipgrepPath(options)
-  if (!candidatePath) {
-    return []
+  const requireResolveImpl = options.requireResolveImpl ?? require.resolve
+  const candidatePaths = [
+    resolveCanonicalRipgrepPath(options),
+    resolveBundledRipgrepPath(),
+    resolvePackageRipgrepPath(requireResolveImpl),
+  ].filter((candidatePath): candidatePath is string => Boolean(candidatePath))
+  const uniqueCandidatePaths = [...new Set(candidatePaths)]
+  const commands: string[] = []
+
+  for (const candidatePath of uniqueCandidatePaths) {
+    if (await pathExistsImpl(candidatePath)) {
+      commands.push(candidatePath)
+    }
   }
 
-  return (await pathExistsImpl(candidatePath)) ? [candidatePath] : []
+  commands.push(RIPGREP_EXECUTABLE_NAME)
+  return [...new Set(commands)]
 }
 
 async function resolveRipgrepCommandCandidates() {
