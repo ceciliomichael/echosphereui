@@ -9,7 +9,7 @@ import type {
 import { MarkdownRenderer } from "./chat/MarkdownRenderer";
 import { ThinkingBlock } from "./chat/ThinkingBlock";
 import { ThinkingIndicator } from "./chat/ThinkingIndicator";
-import { ToolInvocationBlock } from "./chat/ToolInvocationBlock";
+import { resolveAssistantWaitingIndicatorVariant } from "./chat/assistantWaitingIndicator";
 import { ToolInvocationGroup } from "./chat/ToolInvocationGroup";
 import {
   getToolInvocationDisplayEntries,
@@ -36,45 +36,45 @@ interface AssistantMessageProps {
   workspaceRootPath?: string | null;
 }
 
-function isStandaloneToolInvocation(toolName: string) {
-  return toolName === 'apply' || toolName === 'apply_patch'
-}
-
 interface RenderedToolBlock {
   entries: readonly ToolInvocationDisplayEntry[]
   key: string
-  kind: 'block' | 'group'
+  groupType: 'exploring' | 'editing'
+}
+
+function isEditingToolInvocation(toolName: string) {
+  return toolName === 'apply' || toolName === 'apply_patch'
 }
 
 function buildRenderedToolBlocks(entries: readonly ToolInvocationDisplayEntry[]) {
   const renderedBlocks: RenderedToolBlock[] = []
   let groupedEntries: ToolInvocationDisplayEntry[] = []
+  let currentGroupType: RenderedToolBlock['groupType'] | null = null
 
   const flushGroupedEntries = () => {
-    if (groupedEntries.length === 0) {
+    if (groupedEntries.length === 0 || currentGroupType === null) {
       return
     }
 
     renderedBlocks.push({
       entries: groupedEntries,
       key: groupedEntries.map((entry) => entry.key).join(':'),
-      kind: 'group',
+      groupType: currentGroupType,
     })
 
     groupedEntries = []
+    currentGroupType = null
   }
 
   for (const entry of entries) {
-    if (isStandaloneToolInvocation(entry.invocation.toolName)) {
+    const nextGroupType: RenderedToolBlock['groupType'] = isEditingToolInvocation(entry.invocation.toolName)
+      ? 'editing'
+      : 'exploring'
+    if (currentGroupType !== null && currentGroupType !== nextGroupType) {
       flushGroupedEntries()
-      renderedBlocks.push({
-        entries: [entry],
-        key: entry.key,
-        kind: 'block',
-      })
-      continue
     }
 
+    currentGroupType = nextGroupType
     groupedEntries.push(entry)
   }
 
@@ -113,13 +113,16 @@ export function AssistantMessage({
   const hasRunningToolInvocation = toolInvocations.some(
     (invocation) => invocation.state === "running",
   );
-  const hasToolInvocations = toolInvocations.length > 0;
   const shouldShowWaitingIndicator =
     isStreaming &&
     !isTextStreaming &&
-    !hasToolInvocations &&
     !hasRunningToolInvocation &&
     !hasActiveReasoningBlock;
+  const effectiveWaitingIndicatorVariant = resolveAssistantWaitingIndicatorVariant({
+    hasVisibleAssistantText,
+    toolInvocations,
+    waitingIndicatorVariant,
+  });
   const copyableText = [
     normalizedContent.reasoningContent.trim(),
     normalizedContent.content.trim(),
@@ -193,30 +196,20 @@ export function AssistantMessage({
         />
       ) : null}
 
-      {renderedToolBlocks.map((block) =>
-        block.kind === 'group' ? (
-          <ToolInvocationGroup
-            key={block.key}
-            entries={block.entries}
-            hasAssistantText={hasVisibleAssistantText}
-            isConversationStreaming={isConversationStreaming}
-            onToolDecisionSubmit={onToolDecisionSubmit}
-            workspaceRootPath={workspaceRootPath}
-          />
-        ) : (
-          block.entries.map((displayEntry) => (
-            <ToolInvocationBlock
-              key={displayEntry.key}
-              invocation={displayEntry.invocation}
-              onToolDecisionSubmit={onToolDecisionSubmit}
-              workspaceRootPath={workspaceRootPath}
-            />
-          ))
-        ),
-      )}
+      {renderedToolBlocks.map((block) => (
+        <ToolInvocationGroup
+          key={block.key}
+          entries={block.entries}
+          groupType={block.groupType}
+          hasAssistantText={hasVisibleAssistantText}
+          isConversationStreaming={isConversationStreaming}
+          onToolDecisionSubmit={onToolDecisionSubmit}
+          workspaceRootPath={workspaceRootPath}
+        />
+      ))}
 
       {shouldShowWaitingIndicator ? (
-        <ThinkingIndicator variant={waitingIndicatorVariant} />
+        <ThinkingIndicator variant={effectiveWaitingIndicatorVariant} />
       ) : null}
 
       {canShowCopyButton ? (

@@ -355,6 +355,11 @@ export async function runToolEnabledChatStream(input: {
         typeof part.toolCallId === 'string' &&
         typeof part.toolName === 'string'
       ) {
+        if (input.abortController.signal.aborted) {
+          invocationStateById.delete(part.toolCallId)
+          continue
+        }
+
         const currentState = invocationStateById.get(part.toolCallId) ?? {
           argumentsText: stringifyToolArguments(part.input),
           startedAt: Date.now(),
@@ -404,6 +409,11 @@ export async function runToolEnabledChatStream(input: {
         typeof part.toolCallId === 'string' &&
         typeof part.toolName === 'string'
       ) {
+        if (input.abortController.signal.aborted) {
+          invocationStateById.delete(part.toolCallId)
+          continue
+        }
+
         const currentState = invocationStateById.get(part.toolCallId)
         const completedAt = Date.now()
         const errorMessage =

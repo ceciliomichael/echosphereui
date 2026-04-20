@@ -37,6 +37,8 @@ export interface PersistAndStreamMessageInput {
   runtimeSelection: ChatRuntimeSelection
   selectedFolderId: string | null
   selectedFolderIdRef: { current: string | null }
+  hasPendingAbortRequest: () => boolean
+  consumePendingAbortBeforeStreamStart: () => boolean
   setError: (errorMessage: string | null) => void
   setMainComposerAttachments: (attachments: ChatAttachment[]) => void
   setMainComposerValue: (value: string) => void
@@ -45,6 +47,7 @@ export interface PersistAndStreamMessageInput {
   syntheticAssistantMessage?: Message
   stopTextStreaming: (conversationId: string) => void
   targetEditMessageId: string | null
+  originalText: string
   trimmedText: string
   title?: string
   updateConversationRuntimeState: (conversationId: string, input: ConversationRuntimeStatePatch) => void

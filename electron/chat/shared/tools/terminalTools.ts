@@ -19,9 +19,6 @@ const TERMINAL_BELL = '\\u0007'
 const ANSI_CSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-?]*[ -/]*[@-~]`, 'g')
 const ANSI_OSC_PATTERN = new RegExp(`${ANSI_ESCAPE}\\][^${TERMINAL_BELL}${ANSI_ESCAPE}]*(?:${TERMINAL_BELL}|${ANSI_ESCAPE}\\\\)`, 'g')
 const ANSI_SINGLE_ESCAPE_PATTERN = new RegExp(`${ANSI_ESCAPE}[@-Z\\-_]`, 'g')
-const TERMINAL_OUTPUT_BEGIN_PREFIX = '╭─<<-- begin'
-const TERMINAL_OUTPUT_END_PREFIX = '╰─<<-- end'
-
 interface TerminalThreadSessionState {
   localToGlobalSessionId: Map<number, number>
   pendingLocalToGlobalSessionId: Map<number, Promise<number>>
@@ -64,6 +61,52 @@ function createDeferredValue<T>(): DeferredValue<T> {
     reject: rejectValue,
     resolve: resolveValue,
   }
+}
+
+function toAbortError(abortSignal: AbortSignal | undefined) {
+  const reason = abortSignal?.reason
+  if (reason instanceof Error) {
+    return reason
+  }
+
+  return new Error('Terminal tool execution aborted.')
+}
+
+function throwIfAborted(abortSignal: AbortSignal | undefined) {
+  if (!abortSignal?.aborted) {
+    return
+  }
+
+  throw toAbortError(abortSignal)
+}
+
+function raceWithAbort<T>(promise: Promise<T>, abortSignal: AbortSignal | undefined) {
+  if (!abortSignal) {
+    return promise
+  }
+
+  if (abortSignal.aborted) {
+    return Promise.reject(toAbortError(abortSignal))
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const handleAbort = () => {
+      abortSignal.removeEventListener('abort', handleAbort)
+      reject(toAbortError(abortSignal))
+    }
+
+    abortSignal.addEventListener('abort', handleAbort, { once: true })
+    promise.then(
+      (value) => {
+        abortSignal.removeEventListener('abort', handleAbort)
+        resolve(value)
+      },
+      (error) => {
+        abortSignal.removeEventListener('abort', handleAbort)
+        reject(error)
+      },
+    )
+  })
 }
 
 async function loadDefaultTerminalToolDependencies(): Promise<TerminalToolDependencies> {
@@ -145,12 +188,8 @@ function getSessionIdLabel(sessionId: number) {
   return `session ${sessionId}`
 }
 
-function formatTerminalOutputEnvelope(label: string, bodyLines: string[]) {
-  return [
-    `${TERMINAL_OUTPUT_BEGIN_PREFIX} ${label} -->>─╮`,
-    ...bodyLines,
-    `${TERMINAL_OUTPUT_END_PREFIX} ${label} -->>─╯`,
-  ].join('\n')
+function formatTerminalOutputBody(bodyLines: string[]) {
+  return bodyLines.join('\n')
 }
 
 function normalizeCommand(command: string | undefined) {
@@ -257,7 +296,7 @@ function buildRunTerminalResult(snapshot: CreateTerminalSessionResult, command: 
   }
 
   return createSuccessResult({
-    body: formatTerminalOutputEnvelope(`terminal ${getSessionIdLabel(snapshot.sessionId)}`, bodyLines),
+    body: formatTerminalOutputBody(bodyLines),
     semantics: {
       command,
       session_id: snapshot.sessionId,
@@ -284,10 +323,7 @@ function buildGetTerminalOutputResult(snapshot: TerminalSessionSnapshot) {
   }
 
   return createSuccessResult({
-    body: formatTerminalOutputEnvelope(
-      `terminal output ${getSessionIdLabel(snapshot.sessionId)}`,
-      bodyLines,
-    ),
+    body: formatTerminalOutputBody(bodyLines),
     semantics: {
       exit_code: snapshot.exitCode,
       has_exited: snapshot.hasExited,
@@ -332,7 +368,7 @@ export function createTerminalToolSet(
   return {
     get_terminal_output: tool({
       description:
-        'Fetch the buffered output for an existing workspace-scoped terminal session.',
+        'Fetch the buffered output for an existing workspace-scoped terminal session. An empty buffer is a valid result; treat it as a normal snapshot with no visible output and use the tool metadata for session state instead of inferring a failure. For example, a successful `go build` may return only the prompt again, with no additional terminal text.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -344,16 +380,21 @@ export function createTerminalToolSet(
         required: ['session_id'],
         type: 'object',
       }),
-      execute: async (rawInput) => {
+      execute: async (rawInput, options) => {
         const inputValue = rawInput as {
           session_id: number
         }
+        const abortSignal = options?.abortSignal
         const localSessionId = clampInteger(inputValue.session_id, 1, Number.MAX_SAFE_INTEGER, 1)
         const pollingMs = DEFAULT_TERMINAL_POLLING_MS
         const namespace = resolveTerminalThreadNamespace(context)
 
         try {
-          const globalSessionId = await resolveThreadGlobalSessionIdWithPending(namespace, localSessionId)
+          throwIfAborted(abortSignal)
+          const globalSessionId = await raceWithAbort(
+            resolveThreadGlobalSessionIdWithPending(namespace, localSessionId),
+            abortSignal,
+          )
           if (globalSessionId === null) {
             return createErrorResult(
               `Unknown terminal session id: ${localSessionId}`,
@@ -361,11 +402,16 @@ export function createTerminalToolSet(
             )
           }
           const resolvedDependencies = await getResolvedDependencies()
-          const snapshot = await resolvedDependencies.getSessionOutput(ownerWebContents, {
-            pollingMs,
-            sessionId: globalSessionId,
-            workspaceRootPath: context.workspaceRootPath,
-          })
+          throwIfAborted(abortSignal)
+          const snapshot = await raceWithAbort(
+            resolvedDependencies.getSessionOutput(ownerWebContents, {
+              pollingMs,
+              sessionId: globalSessionId,
+              workspaceRootPath: context.workspaceRootPath,
+            }),
+            abortSignal,
+          )
+          throwIfAborted(abortSignal)
           return buildGetTerminalOutputResult(
             {
               ...snapshot,
@@ -373,6 +419,10 @@ export function createTerminalToolSet(
             },
           )
         } catch (error) {
+          if (abortSignal?.aborted) {
+            throw toAbortError(abortSignal)
+          }
+
           return createErrorResult(
             error instanceof Error && error.message.trim().length > 0 ? error.message : 'Terminal output fetch failed.',
           )
@@ -408,7 +458,7 @@ export function createTerminalToolSet(
         required: ['cols', 'rows'],
         type: 'object',
       }),
-      execute: async (rawInput) => {
+      execute: async (rawInput, options) => {
         const inputValue = rawInput as {
           cols: number
           command?: string
@@ -416,6 +466,7 @@ export function createTerminalToolSet(
           rows: number
           session_key?: string
         }
+        const abortSignal = options?.abortSignal
         const cols = clampInteger(inputValue.cols, 20, 400, 120)
         const rows = clampInteger(inputValue.rows, 6, 200, 30)
         const command = normalizeCommand(inputValue.command)
@@ -428,13 +479,17 @@ export function createTerminalToolSet(
         try {
           const cwd = resolveTerminalWorkspaceCwd(context, inputValue.cwd)
           const resolvedDependencies = await getResolvedDependencies()
-          const session = await resolvedDependencies.createSession(ownerWebContents, {
-            cols,
-            cwd,
-            rows,
-            sessionKey: inputValue.session_key,
-            workspaceRootPath: context.workspaceRootPath,
-          })
+          throwIfAborted(abortSignal)
+          const session = await raceWithAbort(
+            resolvedDependencies.createSession(ownerWebContents, {
+              cols,
+              cwd,
+              rows,
+              sessionKey: inputValue.session_key,
+              workspaceRootPath: context.workspaceRootPath,
+            }),
+            abortSignal,
+          )
           setThreadGlobalSessionId(namespace, reservedLocalSessionId, session.sessionId)
           clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
           pendingGlobalSessionId.resolve(session.sessionId)
@@ -444,16 +499,24 @@ export function createTerminalToolSet(
           }
 
           if (command) {
-            await resolvedDependencies.writeToSession(ownerWebContents, {
-              data: command.endsWith('\n') || command.endsWith('\r') ? command : `${command}\r`,
-              sessionId: session.sessionId,
-            })
+            throwIfAborted(abortSignal)
+            await raceWithAbort(
+              resolvedDependencies.writeToSession(ownerWebContents, {
+                data: command.endsWith('\n') || command.endsWith('\r') ? command : `${command}\r`,
+                sessionId: session.sessionId,
+              }),
+              abortSignal,
+            )
           }
 
           return buildRunTerminalResult(displaySession, command)
         } catch (error) {
           clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
           pendingGlobalSessionId.reject(error)
+          if (abortSignal?.aborted) {
+            throw toAbortError(abortSignal)
+          }
+
           return createErrorResult(
             error instanceof Error && error.message.trim().length > 0 ? error.message : 'Terminal run failed.',
           )

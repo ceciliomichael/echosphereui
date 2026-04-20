@@ -36,13 +36,25 @@ test('buildToolInvocationGroupSummary pluralizes grouped categories', () => {
   assert.equal(summary, 'Explored 2 searches, ran 1 command, 2 files')
 })
 
-test('buildToolInvocationGroupSummary excludes apply tools from the explored summary', () => {
+test('buildToolInvocationGroupSummary uses edited labels for completed editing groups', () => {
   const summary = buildToolInvocationGroupSummary([
     createInvocation('apply'),
     createInvocation('apply_patch'),
-  ])
+  ], 'Edited')
 
-  assert.equal(summary, 'Explored actions')
+  assert.equal(summary, 'Edited 2 files')
+})
+
+test('buildToolInvocationGroupSummary uses editing labels for active editing groups', () => {
+  const summary = buildToolInvocationGroupSummary([
+    {
+      ...createInvocation('apply'),
+      state: 'running',
+    },
+    createInvocation('apply_patch'),
+  ], 'Editing')
+
+  assert.equal(summary, 'Editing 2 files')
 })
 
 test('buildToolInvocationGroupSummary aggregates run_terminal and get_terminal_output as commands', () => {

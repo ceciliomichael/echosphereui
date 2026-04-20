@@ -28,6 +28,7 @@ import type { GitCommitController } from '../../hooks/useGitCommit'
 import type { GitDiffSnapshotController } from '../../hooks/useGitDiffSnapshot'
 import { useWorkspaceRefactorCandidates } from '../../hooks/useWorkspaceRefactorCandidates'
 import { useChatMessageQueue } from './useChatMessageQueue'
+import { canInterruptStreamForSteer } from './chatSteerFollowUp'
 import { useChatCompression } from './useChatCompression'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
 import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
@@ -145,14 +146,13 @@ export function ChatInterfaceContent({
         : null,
     [chatMessages.messages, chatMessages.streamingAssistantMessageId],
   )
-  const hasCompletedToolInvocationInActiveStream =
-    streamingAssistantMessage?.toolInvocations?.some((invocation) => invocation.state === 'completed') ?? false
+  const activeStreamToolInvocations = streamingAssistantMessage?.toolInvocations ?? []
   const [isCompressingChat, setIsCompressingChat] = useState(false)
 
   const canSteerQueuedMessages =
     settings.followUpBehavior === 'steer' &&
     chatMessages.isSending &&
-    hasCompletedToolInvocationInActiveStream
+    canInterruptStreamForSteer(activeStreamToolInvocations)
   const isQueueBlocked =
     chatMessages.isLoading ||
     isCompressingChat ||

@@ -8,7 +8,17 @@ import type { ChatRuntimeSelection } from './chatMessageRuntime'
 import type { PersistAndStreamMessageInput } from './chatMessageSendTypes'
 import type { ChatMode } from '../types/chat'
 
-interface UseChatSendActionsInput extends Omit<PersistAndStreamMessageInput, 'runtimeSelection' | 'targetEditMessageId' | 'trimmedText' | 'attachments'> {
+interface UseChatSendActionsInput
+  extends Omit<
+    PersistAndStreamMessageInput,
+    | 'runtimeSelection'
+    | 'targetEditMessageId'
+    | 'trimmedText'
+    | 'originalText'
+    | 'attachments'
+    | 'hasPendingAbortRequest'
+    | 'consumePendingAbortBeforeStreamStart'
+  > {
   beginRevertEditingMessage: (conversationId: string, messageId: string, redoCheckpointId: string) => void
   cancelEditingMessage: () => void
   editComposerAttachments: PersistAndStreamMessageInput['attachments']
@@ -58,6 +68,7 @@ function sleep(milliseconds: number) {
 
 export function useChatSendActions(input: UseChatSendActionsInput) {
   const actionInFlightRef = useRef(false)
+  const pendingAbortBeforeStreamStartRef = useRef(false)
 
   const getConversationState = useCallback(
     (conversationId: string) => input.conversationRuntimeStatesRef.current[conversationId] ?? null,
@@ -177,9 +188,21 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         return false
       }
 
+      pendingAbortBeforeStreamStartRef.current = false
+
       return persistAndStreamMessage({
         ...input,
         attachments,
+        hasPendingAbortRequest: () => pendingAbortBeforeStreamStartRef.current,
+        consumePendingAbortBeforeStreamStart: () => {
+          if (!pendingAbortBeforeStreamStartRef.current) {
+            return false
+          }
+
+          pendingAbortBeforeStreamStartRef.current = false
+          return true
+        },
+        originalText: nextMessageText,
         resetMainComposerAfterSend: options?.resetMainComposerAfterSend,
         runtimeSelection,
         targetEditMessageId: null,
@@ -215,9 +238,21 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
         return
       }
 
+      pendingAbortBeforeStreamStartRef.current = false
+
       await persistAndStreamMessage({
         ...input,
         attachments: [],
+        hasPendingAbortRequest: () => pendingAbortBeforeStreamStartRef.current,
+        consumePendingAbortBeforeStreamStart: () => {
+          if (!pendingAbortBeforeStreamStartRef.current) {
+            return false
+          }
+
+          pendingAbortBeforeStreamStartRef.current = false
+          return true
+        },
+        originalText: messageText,
         draftChatMode: options?.chatMode ?? input.draftChatMode,
         activeConversationId,
         activeConversationIdRef: options?.forceNewConversation ? { current: null } : input.activeConversationIdRef,
@@ -307,9 +342,21 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
       }
 
       if (setupSuccessful) {
+        pendingAbortBeforeStreamStartRef.current = false
+
         await persistAndStreamMessage({
           ...input,
           attachments,
+          hasPendingAbortRequest: () => pendingAbortBeforeStreamStartRef.current,
+          consumePendingAbortBeforeStreamStart: () => {
+            if (!pendingAbortBeforeStreamStartRef.current) {
+              return false
+            }
+
+            pendingAbortBeforeStreamStartRef.current = false
+            return true
+          },
+          originalText: nextMessageText,
           runtimeSelection,
           targetEditMessageId: input.editingMessageId,
           trimmedText,
@@ -325,6 +372,7 @@ export function useChatSendActions(input: UseChatSendActionsInput) {
     }
 
     try {
+      pendingAbortBeforeStreamStartRef.current = true
       await abortActiveStreamIfNeeded()
     } catch (caughtError) {
       console.error(caughtError)

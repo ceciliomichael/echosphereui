@@ -150,3 +150,38 @@ test('chat assistant drafts preserve streamed triple-backtick closers across sin
   assert.equal(latestDraftAssistantMessage?.role, 'assistant')
   assert.equal(latestDraftAssistantMessage?.content, '```ts\nconst value = 1\n```')
 })
+
+test('chat assistant drafts remove incomplete tool calls when a stream is aborted', () => {
+  const { draftManager, getMessages } = createDraftManager()
+
+  draftManager.appendPlaceholderDraft()
+  draftManager.handleToolInvocationStarted('tool-call-1', {
+    argumentsText: '{"session_id":1}',
+    startedAt: 10,
+    toolName: 'get_terminal_output',
+  })
+
+  const streamedMessages = draftManager.finalizeStreamedMessages(true)
+
+  assert.equal(streamedMessages, null)
+  assert.equal(getMessages().length, 0)
+})
+
+test('chat assistant drafts keep failure text but drop incomplete tool calls after an interrupted run', () => {
+  const { draftManager } = createDraftManager()
+
+  draftManager.appendPlaceholderDraft()
+  draftManager.handleToolInvocationStarted('tool-call-1', {
+    argumentsText: '{"session_id":1}',
+    startedAt: 10,
+    toolName: 'get_terminal_output',
+  })
+
+  const streamedMessages = draftManager.finalizeStreamedMessages(false, 'Request failed before the tool completed.')
+
+  assert.ok(streamedMessages)
+  assert.equal(streamedMessages.length, 1)
+  assert.equal(streamedMessages[0]?.role, 'assistant')
+  assert.equal(streamedMessages[0]?.content, 'Request failed before the tool completed.')
+  assert.equal(streamedMessages[0]?.toolInvocations?.length ?? 0, 0)
+})

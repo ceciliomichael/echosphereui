@@ -19,10 +19,6 @@ function pluralize(count: number, singular: string) {
   return `${count} ${singular}s`
 }
 
-function shouldExcludeFromSummary(toolName: string) {
-  return toolName === 'apply' || toolName === 'apply_patch'
-}
-
 function classifyInvocation(toolName: string): keyof ToolInvocationSummaryCounts | null {
   if (toolName === 'list') {
     return 'listCount'
@@ -55,11 +51,17 @@ function normalizeToolLabel(toolName: string) {
 
 export function buildToolInvocationGroupSummary(
   invocations: readonly ToolInvocationTrace[],
-  summaryVerbOverride?: 'Exploring' | 'Explored',
+  summaryVerbOverride?: 'Exploring' | 'Explored' | 'Editing' | 'Edited',
 ) {
   const hasActiveInvocation = invocations.some(
     (invocation) => invocation.state === 'running' || invocation.decisionRequest !== undefined,
   )
+  if (summaryVerbOverride === 'Editing' || summaryVerbOverride === 'Edited') {
+    const summaryVerb = summaryVerbOverride
+    return `${summaryVerb} ${pluralize(invocations.length, 'file')}`
+  }
+
+  const isExploring = summaryVerbOverride === 'Exploring' || (summaryVerbOverride === undefined && hasActiveInvocation)
   const counts: ToolInvocationSummaryCounts = {
     listCount: 0,
     commandCount: 0,
@@ -69,10 +71,6 @@ export function buildToolInvocationGroupSummary(
   const otherToolCounts = new Map<string, number>()
 
   for (const invocation of invocations) {
-    if (shouldExcludeFromSummary(invocation.toolName)) {
-      continue
-    }
-
     const classifiedBucket = classifyInvocation(invocation.toolName)
     if (classifiedBucket) {
       counts[classifiedBucket] += 1
@@ -101,6 +99,6 @@ export function buildToolInvocationGroupSummary(
     summaryParts.push(pluralize(count, toolLabel))
   }
 
-  const summaryVerb = summaryVerbOverride ?? (hasActiveInvocation ? 'Exploring' : 'Explored')
+  const summaryVerb = summaryVerbOverride ?? (isExploring ? 'Exploring' : 'Explored')
   return summaryParts.length > 0 ? `${summaryVerb} ${summaryParts.join(', ')}` : `${summaryVerb} actions`
 }

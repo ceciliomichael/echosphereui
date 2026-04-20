@@ -85,10 +85,8 @@ test('run_terminal queues a command and returns the created session metadata', a
         sessionId: 7,
       },
     ])
-    assert.match(result.body ?? '', /╭─<<-- begin terminal session 1 -->>─╮/u)
     assert.match(result.body ?? '', /Started session 1/u)
     assert.match(result.body ?? '', /Command queued: npm test/u)
-    assert.match(result.body ?? '', /╰─<<-- end terminal session 1 -->>─╯/u)
     assert.doesNotMatch(result.body ?? '', /CWD:/u)
     assert.doesNotMatch(result.body ?? '', /Shell:/u)
     assert.doesNotMatch(result.body ?? '', /Reused:/u)
@@ -140,8 +138,6 @@ test('run_terminal starts at session 1 in a different conversation thread', asyn
     })
 
     assert.match(result.body ?? '', /Started session 1/u)
-    assert.match(result.body ?? '', /╭─<<-- begin terminal session 1 -->>─╮/u)
-    assert.match(result.body ?? '', /╰─<<-- end terminal session 1 -->>─╯/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
@@ -301,17 +297,15 @@ test('get_terminal_output uses the fixed polling window and returns cleaned outp
       workspaceRootPath: '/workspace',
     },
   ])
-  assert.match(result.body ?? '', /╭─<<-- begin terminal output session 1 -->>─╮/u)
   assert.match(result.body ?? '', /line 1/u)
   assert.match(result.body ?? '', /line 2/u)
-  assert.match(result.body ?? '', /╰─<<-- end terminal output session 1 -->>─╯/u)
   assert.ok(!(result.body ?? '').includes('\u001B'))
   assert.doesNotMatch(result.body ?? '', /CWD:/u)
   assert.doesNotMatch(result.body ?? '', /Shell:/u)
   assert.doesNotMatch(result.body ?? '', /Polling:/u)
 })
 
-test('get_terminal_output wraps empty output in a terminal envelope', async () => {
+test('get_terminal_output returns a plain empty-output status', async () => {
   const tools = createTerminalToolSet(
     {
       conversationId: 'conversation-d',
@@ -365,9 +359,7 @@ test('get_terminal_output wraps empty output in a terminal envelope', async () =
     session_id: 1,
   })
 
-  assert.match(result.body ?? '', /╭─<<-- begin terminal output session 1 -->>─╮/u)
   assert.match(result.body ?? '', /No terminal output yet\./u)
-  assert.match(result.body ?? '', /╰─<<-- end terminal output session 1 -->>─╯/u)
 })
 
 test('get_terminal_output waits for a parallel run_terminal session creation', async () => {
@@ -532,6 +524,82 @@ test('get_terminal_output waits when invoked before run_terminal reserves the lo
       workspaceRootPath: '/workspace',
     },
   ])
+})
+
+test('get_terminal_output aborts promptly when the request is canceled', async () => {
+  let releaseOutput: (() => void) | null = null
+  const outputPromiseGate = new Promise<void>((resolve) => {
+    releaseOutput = resolve
+  })
+  const tools = createTerminalToolSet(
+    {
+      conversationId: 'conversation-g',
+      webContents: webContentsStub,
+      workspaceRootPath: '/workspace',
+    },
+    {
+      createSession: async () => ({
+        bufferedOutput: '',
+        cwd: '/workspace',
+        isReused: false,
+        sessionId: 41,
+        shell: 'pwsh',
+      }),
+      getSessionOutput: async (_owner, input) => {
+        await outputPromiseGate
+        return {
+          cwd: '/workspace',
+          exitCode: null,
+          hasExited: false,
+          outputBuffer: 'late output\n',
+          shellLabel: 'pwsh',
+          signal: null,
+          sessionId: input.sessionId,
+        }
+      },
+      writeToSession: async () => undefined,
+    },
+  )
+
+  await (
+    tools.run_terminal as unknown as {
+      execute: (input: {
+        cols: number
+        command: string
+        cwd?: string
+        rows: number
+        session_key?: string
+      }) => Promise<{ body?: string }>
+    }
+  ).execute({
+    cols: 120,
+    command: '',
+    cwd: '.',
+    rows: 30,
+    session_key: 'abortable-poll',
+  })
+
+  const abortController = new AbortController()
+  const outputPromise = (
+    tools.get_terminal_output as unknown as {
+      execute: (
+        input: { session_id: number },
+        options?: { abortSignal?: AbortSignal },
+      ) => Promise<{ body?: string }>
+    }
+  ).execute(
+    {
+      session_id: 1,
+    },
+    {
+      abortSignal: abortController.signal,
+    },
+  )
+
+  abortController.abort(new Error('Canceled by test'))
+
+  await assert.rejects(outputPromise, /Canceled by test/u)
+  releaseOutput?.()
 })
 
 test('createAgentTools exposes terminal tools only in agent mode when a webContents owner is available', async () => {

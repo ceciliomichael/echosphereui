@@ -76,28 +76,16 @@ function buildToolInvocationState(
 
 function finalizeIncompleteToolInvocations(
   message: Message,
-  input: {
-    completedAt: number
-    failureMessage: string
-  },
 ) {
   if (message.role !== 'assistant' || !message.toolInvocations?.some((invocation) => invocation.state === 'running')) {
     return message
   }
 
+  const finalizedToolInvocations = message.toolInvocations.filter((invocation) => invocation.state !== 'running')
+
   return {
     ...message,
-    toolInvocations: message.toolInvocations.map((invocation) =>
-      invocation.state !== 'running'
-        ? invocation
-        : ({
-            ...invocation,
-            completedAt: input.completedAt,
-            decisionRequest: undefined,
-            resultContent: invocation.resultContent ?? input.failureMessage,
-            state: 'failed',
-          } satisfies ToolInvocationTrace),
-    ),
+    toolInvocations: finalizedToolInvocations.length > 0 ? finalizedToolInvocations : undefined,
   }
 }
 
@@ -588,15 +576,10 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
         streamingWaitingIndicatorVariant: null,
       })
       input.stopTextStreaming(input.conversationId)
-      const finalizedAt = Date.now()
       const normalizedFailureMessage = typeof failureMessage === 'string' ? failureMessage.trim() : ''
       if (!wasAborted && normalizedFailureMessage.length > 0) {
         updateActiveDraftWithFailureMessage(normalizedFailureMessage)
       }
-
-      const incompleteToolFailureMessage =
-        failureMessage ??
-        (wasAborted ? 'Tool execution aborted before completion.' : 'Tool execution ended before completion.')
 
       const streamedMessages = streamedMessageOrder.flatMap((entry) => {
         if (entry.kind === 'message') {
@@ -609,22 +592,13 @@ export function createChatAssistantDraftManager(input: CreateChatAssistantDraftM
         }
 
         return [
-          normalizeAssistantMessage(
-            finalizeIncompleteToolInvocations(draftAssistantMessage, {
-              completedAt: finalizedAt,
-              failureMessage: incompleteToolFailureMessage,
-            }),
-          ),
+          normalizeAssistantMessage(finalizeIncompleteToolInvocations(draftAssistantMessage)),
         ]
       })
 
       if (streamedMessages.every((message) => !hasMeaningfulAssistantOutput(message))) {
-        if (wasAborted) {
-          removeInsertedMessages()
-          return null
-        }
-
-        throw new Error('The assistant returned an empty response.')
+        removeInsertedMessages()
+        return null
       }
 
       return streamedMessages

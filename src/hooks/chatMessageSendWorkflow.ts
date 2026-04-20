@@ -138,6 +138,85 @@ function createStreamProgressPersistenceController(input: {
   }
 }
 
+async function rollbackAbortedUserMessage(input: {
+  chatMode: PersistAndStreamMessageInput['draftChatMode']
+  conversationId: string
+  userMessageId: string
+}) {
+  const currentConversation = await window.echosphereHistory.getConversation(input.conversationId)
+  if (!currentConversation) {
+    return null
+  }
+
+  const nextMessages = currentConversation.messages.filter((message) => message.id !== input.userMessageId)
+  if (nextMessages.length === currentConversation.messages.length) {
+    return currentConversation
+  }
+
+  return window.echosphereHistory.replaceMessages({
+    chatMode: input.chatMode,
+    conversationId: currentConversation.id,
+    messages: nextMessages,
+  })
+}
+
+function buildLocallyRolledBackConversation(input: {
+  chatMode: PersistAndStreamMessageInput['draftChatMode']
+  conversationRuntimeStatesRef: PersistAndStreamMessageInput['conversationRuntimeStatesRef']
+  conversationId: string
+  fallbackConversation: ConversationRecord
+  userMessageId: string
+}) {
+  const runtimeConversation =
+    input.conversationRuntimeStatesRef.current[input.conversationId]?.conversation ?? input.fallbackConversation
+
+  return {
+    ...runtimeConversation,
+    chatMode: input.chatMode,
+    messages: runtimeConversation.messages.filter((message) => message.id !== input.userMessageId),
+    updatedAt: Date.now(),
+  }
+}
+
+async function rollbackAndRestoreComposer(input: PersistAndStreamMessageInput, options: {
+  conversationId: string
+  fallbackConversation: ConversationRecord
+  shouldKeepSelected: boolean
+  userMessageId: string | null
+}) {
+  if (options.userMessageId) {
+    const localRolledBackConversation = buildLocallyRolledBackConversation({
+      chatMode: input.draftChatMode,
+      conversationRuntimeStatesRef: input.conversationRuntimeStatesRef,
+      conversationId: options.conversationId,
+      fallbackConversation: options.fallbackConversation,
+      userMessageId: options.userMessageId,
+    })
+
+    input.upsertConversation(localRolledBackConversation)
+    if (options.shouldKeepSelected) {
+      input.applyConversation(localRolledBackConversation)
+    }
+    input.updateConversationSummary(localRolledBackConversation)
+
+    const rolledBackConversation = await rollbackAbortedUserMessage({
+      chatMode: input.draftChatMode,
+      conversationId: options.conversationId,
+      userMessageId: options.userMessageId,
+    })
+    if (rolledBackConversation) {
+      input.upsertConversation(rolledBackConversation)
+      if (options.shouldKeepSelected) {
+        input.applyConversation(rolledBackConversation)
+      }
+      input.updateConversationSummary(rolledBackConversation)
+    }
+  }
+
+  input.setMainComposerValue(input.originalText)
+  input.setMainComposerAttachments(input.attachments)
+}
+
 export async function persistAndStreamMessage(input: PersistAndStreamMessageInput): Promise<boolean> {
   const providerId = validateRuntimeSelection(input)
   if (!providerId) {
@@ -152,6 +231,9 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   let shouldKeepWaitingIndicatorActive = false
   let hasPendingDraftReservation = false
   let requestAccepted = false
+  let persistedUserMessage: Message | null = null
+  let fallbackConversationForRollback: ConversationRecord | null = null
+  const shouldRestoreMainComposerOnAbort = input.targetEditMessageId === null
 
   const releasePendingDraftReservation = () => {
     if (!hasPendingDraftReservation) {
@@ -174,7 +256,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
   }
 
   try {
-    const { conversation } = await persistUserTurn({
+    const { conversation, userMessage } = await persistUserTurn({
       activeConversationId: initiatingConversationId,
       attachments: input.attachments,
       chatMode: input.draftChatMode,
@@ -186,6 +268,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
       trimmedText: input.trimmedText,
       title: input.title,
     })
+    persistedUserMessage = userMessage
     const conversationForRun =
       conversation.chatMode === input.draftChatMode
         ? conversation
@@ -193,6 +276,7 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
             ...conversation,
             chatMode: input.draftChatMode,
           }
+    fallbackConversationForRollback = conversationForRun
 
     conversationIdForCleanup = conversationForRun.id
     const shouldKeepSelected =
@@ -209,6 +293,19 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
 
     if (shouldKeepSelected) {
       input.applyConversation(conversationForRun)
+    }
+
+    if (input.consumePendingAbortBeforeStreamStart()) {
+      if (shouldRestoreMainComposerOnAbort) {
+        await rollbackAndRestoreComposer(input, {
+          conversationId: conversationForRun.id,
+          fallbackConversation: conversationForRun,
+          shouldKeepSelected,
+          userMessageId: persistedUserMessage?.id ?? null,
+        })
+      }
+
+      return requestAccepted
     }
 
     if (input.targetEditMessageId !== null) {
@@ -295,6 +392,16 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
 
     const streamedMessages = draftManager.finalizeStreamedMessages(streamedAssistant.wasAborted)
     if (streamedMessages === null) {
+      const shouldRollbackForAbort = streamedAssistant.wasAborted || input.hasPendingAbortRequest()
+      if (shouldRollbackForAbort && shouldRestoreMainComposerOnAbort) {
+        await rollbackAndRestoreComposer(input, {
+          conversationId: conversationForRun.id,
+          fallbackConversation: conversationForRun,
+          shouldKeepSelected,
+          userMessageId: persistedUserMessage?.id ?? null,
+        })
+      }
+
       if (streamProgressPersistence) {
         await streamProgressPersistence.flush()
       }
@@ -335,6 +442,20 @@ export async function persistAndStreamMessage(input: PersistAndStreamMessageInpu
     input.updateConversationSummary(savedConversationForRun)
   } catch (caughtError) {
     console.error(caughtError)
+    const stopWasRequested = input.hasPendingAbortRequest()
+    if (stopWasRequested && shouldRestoreMainComposerOnAbort && conversationIdForCleanup && requestAccepted) {
+      await rollbackAndRestoreComposer(input, {
+        conversationId: conversationIdForCleanup,
+        fallbackConversation:
+          input.conversationRuntimeStatesRef.current[conversationIdForCleanup]?.conversation ??
+          fallbackConversationForRollback ??
+          input.conversationRuntimeStatesRef.current[conversationIdForCleanup]?.conversation,
+        shouldKeepSelected: input.activeConversationIdRef.current === conversationIdForCleanup,
+        userMessageId: persistedUserMessage?.id ?? null,
+      })
+      return requestAccepted
+    }
+
     if (input.targetEditMessageId !== null && isMessageNotFoundError(caughtError)) {
       input.completeEditingMessage()
       input.setError('This message is no longer available to edit.')

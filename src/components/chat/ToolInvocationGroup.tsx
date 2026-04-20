@@ -8,6 +8,7 @@ import { buildToolInvocationGroupSummary } from './toolInvocationGrouping'
 
 interface ToolInvocationGroupProps {
   entries: readonly ToolInvocationDisplayEntry[]
+  groupType: 'exploring' | 'editing'
   hasAssistantText: boolean
   isConversationStreaming: boolean
   onToolDecisionSubmit?: (
@@ -19,6 +20,7 @@ interface ToolInvocationGroupProps {
 
 export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   entries,
+  groupType,
   hasAssistantText,
   isConversationStreaming,
   onToolDecisionSubmit,
@@ -31,29 +33,35 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       ),
     [entries],
   )
-  const isExploring = !hasAssistantText && (hasActiveInvocation || isConversationStreaming)
-  const [isOpen, setIsOpen] = useState(isExploring)
-  const previousIsExploringRef = useRef(isExploring)
+  const isActiveGroup = !hasAssistantText && (hasActiveInvocation || isConversationStreaming)
+  const [isOpen, setIsOpen] = useState(isActiveGroup)
+  const previousIsOpenStateRef = useRef(isActiveGroup)
 
   useEffect(() => {
-    const wasExploring = previousIsExploringRef.current
+    const wasOpenState = previousIsOpenStateRef.current
 
-    if (wasExploring !== isExploring) {
-      setIsOpen(isExploring)
-      previousIsExploringRef.current = isExploring
+    if (wasOpenState !== isActiveGroup) {
+      setIsOpen(isActiveGroup)
+      previousIsOpenStateRef.current = isActiveGroup
       return
     }
 
-    previousIsExploringRef.current = isExploring
-  }, [isExploring])
+    previousIsOpenStateRef.current = isActiveGroup
+  }, [isActiveGroup])
 
   const summaryLabel = useMemo(
     () =>
       buildToolInvocationGroupSummary(
         entries.map((entry) => entry.invocation),
-        isExploring ? 'Exploring' : 'Explored',
+        groupType === 'editing'
+          ? isActiveGroup
+            ? 'Editing'
+            : 'Edited'
+          : isActiveGroup
+            ? 'Exploring'
+            : 'Explored',
       ),
-    [entries, isExploring],
+    [entries, groupType, isActiveGroup],
   )
 
   return (
@@ -64,7 +72,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
         className="group flex w-full min-w-0 items-center text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">
-          <span className={['min-w-0 truncate', isExploring ? 'thinking-shimmer' : ''].join(' ')}>{summaryLabel}</span>
+          <span className={['min-w-0 truncate', isActiveGroup ? 'thinking-shimmer' : ''].join(' ')}>{summaryLabel}</span>
           <ChevronRight
             className={[
               'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
