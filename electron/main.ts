@@ -71,6 +71,7 @@ import {
 import { flushStoredSettingsUpdates, getStoredSettings, updateStoredSettings } from './settings/store'
 import { serializeInitialSettingsArg } from './settings/bootstrap'
 import { applyWindowTheme, getTitleBarOverlay, getWindowBackgroundColor, syncNativeThemeSource } from './window/theme'
+import { listAvailableSkills } from './skills/service'
 import {
   cancelCodexChatStream,
   estimateCodexContextUsage,
@@ -371,6 +372,7 @@ function registerHistoryHandlers() {
 
     return nextSettings
   })
+  ipcMain.handle('skills:list', async (_event, workspacePath?: string | null) => listAvailableSkills(workspacePath))
   ipcMain.handle('providers:state', async () => getProvidersState())
   ipcMain.handle('providers:codex:addAccountOauth', async () => addCodexAccountWithOAuth((url) => shell.openExternal(url)))
   ipcMain.handle('providers:codex:connectOauth', async () => connectCodexWithOAuth((url) => shell.openExternal(url)))

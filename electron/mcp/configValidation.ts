@@ -27,6 +27,7 @@ const MCP_ADD_SERVER_INPUT_SCHEMA = z.object({
   command: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  saveScope: z.enum(['global', 'project']).optional(),
   serverName: z.string(),
   type: z.enum(['stdio', 'streamable-http']),
   url: z.string().optional(),
@@ -184,6 +185,7 @@ function normalizeOptionalTrimmedString(value: unknown) {
 }
 
 function normalizeMcpAddServerInput(data: z.infer<typeof MCP_ADD_SERVER_INPUT_SCHEMA>): McpAddServerInput {
+  const saveScope = data.saveScope ?? 'global'
   const serverName = data.serverName.trim()
   const type = data.type
 
@@ -206,6 +208,7 @@ function normalizeMcpAddServerInput(data: z.infer<typeof MCP_ADD_SERVER_INPUT_SC
       ...(typeof data.args !== 'undefined' ? { args: data.args.filter((item) => item.trim().length > 0) } : {}),
       ...(normalizeOptionalTrimmedString(data.command) ? { command: normalizeOptionalTrimmedString(data.command) } : {}),
       ...(normalizeStringRecord(data.env) ? { env: normalizeStringRecord(data.env) } : {}),
+      saveScope,
       serverName,
       type,
     }
@@ -214,6 +217,7 @@ function normalizeMcpAddServerInput(data: z.infer<typeof MCP_ADD_SERVER_INPUT_SC
   return {
     ...(normalizeStringRecord(data.headers) ? { headers: normalizeStringRecord(data.headers) } : {}),
     ...(normalizeOptionalTrimmedString(data.url) ? { url: normalizeOptionalTrimmedString(data.url) } : {}),
+    saveScope,
     serverName,
     type,
   }

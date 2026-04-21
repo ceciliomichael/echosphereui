@@ -198,6 +198,26 @@ function sanitizeEditSessionsByConversation(value: unknown): AppSettings['editSe
   return sanitizedValue
 }
 
+function sanitizeDisabledSkillsByPath(value: unknown): AppSettings['disabledSkillsByPath'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.disabledSkillsByPath }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['disabledSkillsByPath'] = {}
+
+  for (const [skillPath, disabled] of candidateEntries) {
+    const normalizedSkillPath = skillPath.trim()
+    if (normalizedSkillPath.length === 0 || disabled !== true) {
+      continue
+    }
+
+    sanitizedValue[normalizedSkillPath] = true
+  }
+
+  return sanitizedValue
+}
+
 function getConfigDirectoryPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
 }
@@ -319,6 +339,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.workspaceFileEditorWordWrap === 'boolean'
       ? input.workspaceFileEditorWordWrap
       : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap
+  const disabledSkillsByPath = sanitizeDisabledSkillsByPath(input?.disabledSkillsByPath)
   const sourceControlSectionOrder = sanitizeSourceControlSectionOrder(input?.sourceControlSectionOrder)
   const sourceControlSectionOpen = sanitizeSourceControlSectionOpen(input?.sourceControlSectionOpen)
   const sourceControlSectionSizes = sanitizeSourceControlSectionSizes(input?.sourceControlSectionSizes)
@@ -356,6 +377,7 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     revertEditSessionsByConversation,
     sendMessageOnEnter,
     workspaceFileEditorWordWrap,
+    disabledSkillsByPath,
     sidebarWidth,
 
     workspaceEditorWidth,

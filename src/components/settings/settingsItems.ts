@@ -21,6 +21,11 @@ export const SETTINGS_ITEMS = [
   },
   {
     id: 'settings-item5',
+    label: 'Skills',
+    description: 'Control which discovered skills the assistant can load dynamically.',
+  },
+  {
+    id: 'settings-item6',
     label: 'Configuration',
     description: 'Set default models for Agent, Plan, summarization, and Git/PR flows.',
   },

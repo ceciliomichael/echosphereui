@@ -1,5 +1,6 @@
 export type McpTransportType = 'stdio' | 'streamable-http'
 export type McpConfigSource = 'global' | 'project'
+export type McpConfigOwner = 'echosphere' | 'codex' | 'agents' | 'claude'
 export type McpServerConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 export type McpAddServerTransportType = 'stdio' | 'streamable-http'
 
@@ -8,6 +9,7 @@ export interface McpAddServerInput {
   command?: string
   env?: Record<string, string>
   headers?: Record<string, string>
+  saveScope?: McpConfigSource
   serverName: string
   type: McpAddServerTransportType
   url?: string
@@ -29,12 +31,14 @@ export interface McpTool {
 
 export interface McpServerConfig {
   autoConnect: boolean
+  owner: McpConfigOwner
   command?: string
   description?: string
   enabled: boolean
   env?: Record<string, string>
   headers?: Record<string, string>
   id: string
+  isReadOnly: boolean
   name: string
   projectPath?: string
   source: McpConfigSource

@@ -1,5 +1,7 @@
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import type { ChatMode } from '../../../../src/types/chat'
+import type { SkillSummary } from '../../../../src/types/skills'
+import { buildLoadedSkillResult, buildSkillToolDescription, loadEnabledSkillByName } from '../../../skills/service'
 import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import {
   createApplyPatchToolResult,
@@ -21,10 +23,14 @@ function createToolErrorResult(summary: string, body?: string): AgentToolExecuti
   }
 }
 
-export async function createAgentTools(input: AgentToolContext, options?: { chatMode?: ChatMode }): Promise<ToolSet> {
+export async function createAgentTools(
+  input: AgentToolContext,
+  options?: { chatMode?: ChatMode; enabledSkills?: SkillSummary[] },
+): Promise<ToolSet> {
   const context = await createToolContext(input)
   const wholeFileApplyTool = createWholeFileApplyTool(context)
   const isPlanMode = options?.chatMode === 'plan'
+  const enabledSkills = options?.enabledSkills ?? []
   const tools: ToolSet = {
     list: tool({
       description:
@@ -161,6 +167,41 @@ export async function createAgentTools(input: AgentToolContext, options?: { chat
         }
       },
     }),
+  }
+
+  if (enabledSkills.length > 0) {
+    tools.skill = tool({
+      description: buildSkillToolDescription(enabledSkills),
+      inputSchema: jsonSchema({
+        additionalProperties: false,
+        properties: {
+          name: {
+            enum: enabledSkills.map((skill) => skill.name),
+            type: 'string',
+          },
+        },
+        required: ['name'],
+        type: 'object',
+      }),
+      execute: async (rawInput) => {
+        const inputValue = rawInput as { name: string }
+        try {
+          const loadedSkill = await loadEnabledSkillByName(inputValue.name, context.workspaceRootPath, enabledSkills)
+          if (!loadedSkill) {
+            return createToolErrorResult(
+              `Skill "${inputValue.name}" is unavailable.`,
+              `Available skills: ${enabledSkills.map((skill) => skill.name).join(', ') || 'none'}`,
+            )
+          }
+
+          return buildLoadedSkillResult(loadedSkill)
+        } catch (error) {
+          return createToolErrorResult(
+            error instanceof Error && error.message.trim().length > 0 ? error.message : 'Unable to load the skill.',
+          )
+        }
+      },
+    })
   }
 
   try {

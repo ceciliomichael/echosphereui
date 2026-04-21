@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronUp, Loader2, PencilLine, Power, Server, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, PencilLine, Power, Server, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { McpServerConfig, McpServerStatus } from '../../../types/mcp'
+import { McpRemoveDialog } from './McpRemoveDialog'
 
 interface McpServerCardProps {
   config: McpServerConfig
@@ -73,6 +74,7 @@ export function McpServerCard({
     isUpdateBusy
   const isToolBusy = activeOperation?.startsWith(`toggle:${config.id}:`) ?? false
   const toolCount = status?.tools?.length ?? 0
+  const isReadOnly = config.isReadOnly
 
   const statusColor = getStatusColor(status)
 
@@ -144,8 +146,9 @@ export function McpServerCard({
           <button
             type="button"
             onClick={() => setIsRemoveConfirmationOpen((currentValue) => !currentValue)}
-            disabled={isBusy}
+            disabled={isBusy || isReadOnly}
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-danger-border bg-danger-surface px-2.5 text-xs font-medium leading-none text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
+            title={isReadOnly ? 'This server is managed outside EchoSphere.' : undefined}
           >
             <Trash2 className="block h-3.5 w-3.5 shrink-0 self-center" />
             <span className="relative top-px flex items-center leading-none">Remove</span>
@@ -154,13 +157,14 @@ export function McpServerCard({
           <button
             type="button"
             onClick={() => onEdit(config)}
-            disabled={isBusy}
+            disabled={isBusy || isReadOnly}
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium leading-none transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               backgroundColor: 'var(--color-foreground)',
               borderColor: 'transparent',
               color: 'var(--color-background)',
             }}
+            title={isReadOnly ? 'This server is managed outside EchoSphere.' : undefined}
           >
             <PencilLine className="block h-3.5 w-3.5 shrink-0 self-center" />
             <span className="relative top-px flex items-center leading-none">Edit</span>
@@ -169,42 +173,22 @@ export function McpServerCard({
       </div>
 
       {isRemoveConfirmationOpen ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-danger-border bg-danger-surface px-4 py-3">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-medium text-danger-foreground">Remove this server?</p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              This deletes the MCP config from disk and disconnects any active session for {config.name}.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsRemoveConfirmationOpen(false)}
-              disabled={isRemoveBusy}
-              className="inline-flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleRemove()}
-              disabled={isRemoveBusy}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-danger-border bg-danger-surface px-3 text-xs font-medium leading-none text-danger-foreground transition-colors hover:text-danger-foreground-hover disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isRemoveBusy ? (
-                <Loader2 className="block h-3.5 w-3.5 shrink-0 self-center animate-spin" />
-              ) : (
-                <Trash2 className="block h-3.5 w-3.5 shrink-0 self-center" />
-              )}
-              <span className="relative top-px flex items-center leading-none">{isRemoveBusy ? 'Removing...' : 'Remove server'}</span>
-            </button>
-          </div>
-        </div>
+        <McpRemoveDialog
+          isSubmitting={isRemoveBusy}
+          onClose={() => setIsRemoveConfirmationOpen(false)}
+          onConfirm={() => void handleRemove()}
+          serverName={config.name}
+        />
       ) : null}
 
       {isExpanded ? (
         <div className="flex min-w-0 flex-col gap-2 border-t border-border pt-2 text-xs text-muted-foreground">
+          {isReadOnly ? (
+            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-muted-foreground">
+              Imported from another app. Connect and inspect it here, but edit or remove it in the owning app’s
+              `mcp.json`.
+            </div>
+          ) : null}
           <div className="flex items-center gap-2">
             <span className="shrink-0">Type:</span>
             <span className="rounded px-2 py-0.5 text-xs font-medium bg-surface-muted text-foreground">
@@ -253,7 +237,7 @@ export function McpServerCard({
                         type="button"
                         aria-pressed={enabled}
                         onClick={() => void onToggleTool(config.id, tool.name, !enabled)}
-                        disabled={isToolBusy || isBusy}
+                        disabled={isToolBusy || isBusy || isReadOnly}
                         className={[
                           'rounded-lg border px-3 py-1 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60',
                           enabled ? '' : '',
@@ -263,7 +247,11 @@ export function McpServerCard({
                           borderColor: enabled ? 'var(--color-foreground)' : 'transparent',
                           color: enabled ? 'var(--color-background)' : 'var(--color-muted-foreground)',
                         }}
-                        title={`${tool.description ?? tool.name} (${enabled ? 'click to disable' : 'click to enable'})`}
+                        title={
+                          isReadOnly
+                            ? `${tool.description ?? tool.name} (managed outside EchoSphere)`
+                            : `${tool.description ?? tool.name} (${enabled ? 'click to disable' : 'click to enable'})`
+                        }
                       >
                         {tool.name}
                       </button>

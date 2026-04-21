@@ -135,7 +135,7 @@ export function ModelSelectorField({
           setIsOpen((currentValue) => !currentValue)
         }}
         className={[
-          'chat-runtime-control-trigger max-w-full disabled:cursor-not-allowed',
+          'chat-runtime-control-trigger max-w-full disabled:cursor-not-allowed hover:bg-[var(--dropdown-control-hover-surface)] hover:border-[var(--dropdown-control-hover-border)] hover:text-foreground',
           fullWidth ? 'w-full' : 'w-auto',
           triggerSizeClassName,
         ].join(' ')}

@@ -19,7 +19,7 @@ interface SettingsRowProps {
 }
 
 export function SettingsPanelLayout({ children }: SettingsPanelLayoutProps) {
-  return <div className="flex w-full max-w-[780px] flex-col gap-5">{children}</div>
+  return <div className="mb-8 flex w-full max-w-[780px] flex-col gap-5 md:mb-10">{children}</div>
 }
 
 export function SettingsSection({ children, title }: SettingsSectionProps) {

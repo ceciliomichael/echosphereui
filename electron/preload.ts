@@ -42,6 +42,7 @@ import type {
   WriteTerminalSessionInput,
 } from '../src/types/chat'
 import type { EchosphereMcpApi, McpAddServerInput, McpState } from '../src/types/mcp'
+import type { EchosphereSkillsApi } from '../src/types/skills'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -118,6 +119,10 @@ const mcpApi: EchosphereMcpApi = {
     ipcRenderer.invoke('mcp:updateServer', serverId, input, workspacePath),
   toggleTool: (serverId: string, toolName: string, enabled: boolean, workspacePath?: string | null) =>
     ipcRenderer.invoke('mcp:toggleTool', serverId, toolName, enabled, workspacePath),
+}
+
+const skillsApi: EchosphereSkillsApi = {
+  listSkills: (workspacePath?: string | null) => ipcRenderer.invoke('skills:list', workspacePath),
 }
 
 const providersApi: EchosphereProvidersApi = {
@@ -230,6 +235,7 @@ contextBridge.exposeInMainWorld('echosphereModels', modelsApi)
 contextBridge.exposeInMainWorld('echosphereMcp', mcpApi)
 contextBridge.exposeInMainWorld('echosphereSettings', settingsApi)
 contextBridge.exposeInMainWorld('echosphereProviders', providersApi)
+contextBridge.exposeInMainWorld('echosphereSkills', skillsApi)
 contextBridge.exposeInMainWorld('echosphereChat', chatApi)
 contextBridge.exposeInMainWorld('echosphereGit', gitApi)
 contextBridge.exposeInMainWorld('echosphereWorkspace', workspaceApi)

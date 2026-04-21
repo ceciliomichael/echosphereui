@@ -233,6 +233,7 @@ export interface AppSettings {
   revertEditSessionsByConversation: Record<string, RevertEditSession>
   sendMessageOnEnter: boolean
   workspaceFileEditorWordWrap: boolean
+  disabledSkillsByPath: Record<string, boolean>
   sidebarWidth: number
 
   workspaceEditorWidth: number

@@ -55,7 +55,12 @@ function createNamespacedToolName(serverId: string, toolName: string) {
 
 function createToolDescription(config: McpServerConfig, tool: McpTool) {
   const baseDescription = tool.description?.trim() ?? ''
-  const sourceLabel = config.source === 'project' ? 'project' : 'global'
+  const sourceLabel =
+    config.owner === 'echosphere'
+      ? config.source === 'project'
+        ? 'project'
+        : 'global'
+      : `${config.owner} ${config.source}`
   return baseDescription.length > 0 ? `[${sourceLabel}] ${baseDescription}` : `[${sourceLabel}] MCP tool`
 }
 

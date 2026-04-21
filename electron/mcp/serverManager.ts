@@ -329,6 +329,10 @@ class McpWorkspaceSession {
       throw new Error(`MCP server not found: ${serverId}`)
     }
 
+    if (config.isReadOnly || config.owner !== 'echosphere') {
+      throw new Error(`MCP server "${config.name}" is managed by ${config.owner} and is read-only in EchoSphere.`)
+    }
+
     const nextConfig = buildUpdatedConfig(config, input)
     const shouldReconnect = runtime.status.status === 'connected' || runtime.status.status === 'connecting'
 
@@ -410,6 +414,10 @@ class McpWorkspaceSession {
       throw new Error(`MCP server not found: ${serverId}`)
     }
 
+    if (config.isReadOnly || config.owner !== 'echosphere') {
+      throw new Error(`MCP server "${config.name}" is managed by ${config.owner} and cannot be removed from EchoSphere.`)
+    }
+
     await this.disconnectRuntime(serverId, runtime, true)
     await deleteMcpConfig(serverId, this.workspacePath)
     await this.stateStore.removeServer(config.name, this.workspacePath)
@@ -442,6 +450,10 @@ class McpWorkspaceSession {
 
     if (!config) {
       throw new Error(`MCP server not found: ${serverId}`)
+    }
+
+    if (config.isReadOnly || config.owner !== 'echosphere') {
+      throw new Error(`MCP server "${config.name}" is managed by ${config.owner} and its tool overrides are read-only in EchoSphere.`)
     }
 
     const currentDisabledTools = new Set(config.toolConfiguration?.disabledTools ?? [])

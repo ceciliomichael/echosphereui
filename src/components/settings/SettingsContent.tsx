@@ -2,12 +2,14 @@ import { MemoizedGeneralSettingsPanel } from './general/GeneralSettingsPanel'
 import { McpServersSettingsPanel } from './mcp/McpServersSettingsPanel'
 import { ModelsSettingsPanel } from './models/ModelsSettingsPanel'
 import { ProvidersSettingsPanel } from './providers/ProvidersSettingsPanel'
+import { SkillsSettingsPanel } from './skills/SkillsSettingsPanel'
 import { MemoizedTaskModelsSettingsPanel } from './taskModels/TaskModelsSettingsPanel'
 import { SettingsPlaceholderPanel } from './SettingsPlaceholderPanel'
 import { getSettingsItem, type SettingsItemId } from './settingsItems'
 import type { AppAppearance, AppLanguage, FollowUpBehavior } from '../../lib/appSettings'
 import type { ApiKeyProviderId, AppSettings, ProvidersState, SaveApiKeyProviderInput } from '../../types/chat'
 import type { McpAddServerInput, McpState } from '../../types/mcp'
+import type { SkillsState } from '../../types/skills'
 
 interface GeneralSettingsViewModel {
   isLoading: boolean
@@ -36,6 +38,14 @@ interface SettingsContentProps {
     onUpdateServer: (serverId: string, input: McpAddServerInput) => Promise<boolean>
     onToggleTool: (serverId: string, toolName: string, enabled: boolean) => Promise<boolean>
     state: McpState | null
+    workspacePath: string | null
+  }
+  skillsSettings: {
+    errorMessage: string | null
+    isLoading: boolean
+    onUpdateSettings: (input: Partial<AppSettings>) => void
+    settings: Pick<AppSettings, 'disabledSkillsByPath'>
+    state: SkillsState | null
   }
   modelsSettings: {
     providersState: ProvidersState | null
@@ -60,13 +70,14 @@ export function SettingsContent({
   appSettings,
   generalSettings,
   mcpSettings,
+  skillsSettings,
   modelsSettings,
   providersSettings,
 }: SettingsContentProps) {
   const activeItem = getSettingsItem(activeItemId)
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-y-auto px-4 pb-12 pt-12 md:px-5 md:pb-16 md:pt-16">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-12 md:px-5 md:pt-16">
       <div className="flex w-full justify-center">
         {activeItemId === 'settings-item1' ? (
           <MemoizedGeneralSettingsPanel {...generalSettings} />
@@ -77,6 +88,8 @@ export function SettingsContent({
         ) : activeItemId === 'settings-item4' ? (
           <McpServersSettingsPanel {...mcpSettings} />
         ) : activeItemId === 'settings-item5' ? (
+          <SkillsSettingsPanel {...skillsSettings} />
+        ) : activeItemId === 'settings-item6' ? (
           <MemoizedTaskModelsSettingsPanel
             isLoading={generalSettings.isLoading}
             onUpdateSettings={generalSettings.onUpdateSettings}
@@ -100,6 +113,7 @@ export function SettingsContent({
           <SettingsPlaceholderPanel item={activeItem} />
         )}
       </div>
+      <div className="h-12 shrink-0 md:h-16" aria-hidden="true" />
     </div>
   )
 }

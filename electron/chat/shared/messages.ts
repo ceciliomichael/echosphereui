@@ -7,6 +7,7 @@ import { buildChatModeSystemPrompt } from './prompts/mode'
 type ToolModelMessage = Extract<ModelMessage, { role: 'tool' }>
 type ToolResultPart = ToolModelMessage['content'][number]
 interface BuildChatPromptOptions {
+  availableSkillsBlock?: string | null
   includeAssistantReasoningParts?: boolean
 }
 
@@ -217,8 +218,10 @@ function toModelMessage(
   return null
 }
 
-export function buildChatSystemPrompt(chatMode: ChatMode, workspaceRootPath: string) {
-  return buildChatModeSystemPrompt(chatMode, workspaceRootPath)
+export function buildChatSystemPrompt(chatMode: ChatMode, workspaceRootPath: string, options?: BuildChatPromptOptions) {
+  return buildChatModeSystemPrompt(chatMode, workspaceRootPath, {
+    availableSkillsBlock: options?.availableSkillsBlock,
+  })
 }
 
 export function buildChatPrompt(input: {
@@ -230,6 +233,7 @@ export function buildChatPrompt(input: {
   const validToolCallIds = new Set<string>()
   const messages: ModelMessage[] = []
   const options: Required<BuildChatPromptOptions> = {
+    availableSkillsBlock: input.options?.availableSkillsBlock ?? null,
     includeAssistantReasoningParts: input.options?.includeAssistantReasoningParts ?? true,
   }
 
@@ -244,6 +248,6 @@ export function buildChatPrompt(input: {
 
   return {
     messages,
-    system: buildChatSystemPrompt(input.chatMode, input.workspaceRootPath),
+    system: buildChatSystemPrompt(input.chatMode, input.workspaceRootPath, options),
   }
 }

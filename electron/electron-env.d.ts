@@ -30,6 +30,7 @@ interface Window {
   echosphereModels: import('../src/types/chat').EchosphereModelsApi
   echosphereMcp: import('../src/types/mcp').EchosphereMcpApi
   echosphereProviders: import('../src/types/chat').EchosphereProvidersApi
+  echosphereSkills: import('../src/types/skills').EchosphereSkillsApi
   echosphereSettings: import('../src/types/chat').EchosphereSettingsApi
   echosphereTerminal: import('../src/types/chat').EchosphereTerminalApi
   echosphereWorkspace: import('../src/types/chat').EchosphereWorkspaceApi

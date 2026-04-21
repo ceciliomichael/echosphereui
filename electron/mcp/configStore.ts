@@ -1,11 +1,27 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
-import type { McpAddServerInput, McpConfigSource, McpServerConfig } from '../../src/types/mcp'
+import type { McpAddServerInput, McpConfigOwner, McpConfigSource, McpServerConfig } from '../../src/types/mcp'
 import { type McpSettingsFile, parseMcpAddServerInput, parseMcpSettings, type RawMcpServerConfig } from './configValidation'
 
 const CONFIG_ROOT_SEGMENTS = ['.echosphere', 'mcp'] as const
 const GLOBAL_CONFIG_FILENAME = 'mcp.json'
+const EXTERNAL_PROVIDER_CONFIGS = [
+  { owner: 'codex', directoryName: '.codex' },
+  { owner: 'agents', directoryName: '.agents' },
+  { owner: 'claude', directoryName: '.claude' },
+] as const
+
+interface McpConfigCandidate {
+  owner: McpConfigOwner
+  path: string
+  scope: McpConfigSource
+}
+
+interface McpConfigWriteTarget {
+  path: string
+  scope: McpConfigSource
+}
 
 function getConfigRootPath() {
   return path.join(app.getPath('home'), ...CONFIG_ROOT_SEGMENTS)
@@ -19,12 +35,21 @@ function getProjectConfigPath(workspacePath: string) {
   return path.join(path.resolve(workspacePath), ...CONFIG_ROOT_SEGMENTS, GLOBAL_CONFIG_FILENAME)
 }
 
+function getExternalConfigPath(basePath: string, directoryName: string) {
+  return path.join(basePath, directoryName, GLOBAL_CONFIG_FILENAME)
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function normalizeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeWorkspacePath(workspacePath?: string | null) {
+  const normalizedWorkspacePath = normalizeString(workspacePath)
+  return normalizedWorkspacePath.length > 0 ? normalizedWorkspacePath : null
 }
 
 function generateServerId(name: string) {
@@ -74,10 +99,12 @@ export function buildMcpServerConfig(
   serverName: string,
   rawConfig: RawMcpServerConfig,
   source: McpConfigSource,
+  owner: McpConfigOwner,
   workspacePath?: string | null,
 ): McpServerConfig {
   return {
     autoConnect: false,
+    owner,
     ...(typeof rawConfig.args !== 'undefined' ? { args: rawConfig.args } : {}),
     ...(typeof rawConfig.command === 'string' ? { command: rawConfig.command } : {}),
     ...(typeof rawConfig.description === 'string' && rawConfig.description.trim().length > 0
@@ -87,6 +114,7 @@ export function buildMcpServerConfig(
     ...(typeof rawConfig.env !== 'undefined' ? { env: toRecordOfStrings(rawConfig.env) } : {}),
     ...(typeof rawConfig.headers !== 'undefined' ? { headers: toRecordOfStrings(rawConfig.headers) } : {}),
     id: generateServerId(serverName),
+    isReadOnly: owner !== 'echosphere',
     name: serverName,
     ...(source === 'project' && workspacePath ? { projectPath: path.resolve(workspacePath) } : {}),
     source,
@@ -161,20 +189,61 @@ async function ensureConfigFileExists(configPath: string) {
 }
 
 export async function loadMergedMcpConfigs(workspacePath?: string | null): Promise<McpServerConfig[]> {
-  const globalConfig = await readConfigFile(getGlobalConfigPath())
-  const projectConfig = workspacePath?.trim() ? await readConfigFile(getProjectConfigPath(workspacePath)) : null
-
   const configsByName = new Map<string, McpServerConfig>()
+  const candidates: McpConfigCandidate[] = []
+  const normalizedWorkspacePath = normalizeString(workspacePath)
 
-  if (globalConfig) {
-    for (const [serverName, rawConfig] of Object.entries(globalConfig.mcpServers)) {
-      configsByName.set(serverName, buildMcpServerConfig(serverName, rawConfig, 'global'))
+  if (normalizedWorkspacePath.length > 0) {
+    candidates.push({
+      owner: 'echosphere',
+      path: getProjectConfigPath(normalizedWorkspacePath),
+      scope: 'project',
+    })
+
+    for (const provider of EXTERNAL_PROVIDER_CONFIGS) {
+      candidates.push({
+        owner: provider.owner,
+        path: getExternalConfigPath(path.resolve(normalizedWorkspacePath), provider.directoryName),
+        scope: 'project',
+      })
     }
   }
 
-  if (projectConfig && workspacePath?.trim()) {
-    for (const [serverName, rawConfig] of Object.entries(projectConfig.mcpServers)) {
-      configsByName.set(serverName, buildMcpServerConfig(serverName, rawConfig, 'project', workspacePath))
+  candidates.push({
+    owner: 'echosphere',
+    path: getGlobalConfigPath(),
+    scope: 'global',
+  })
+
+  for (const provider of EXTERNAL_PROVIDER_CONFIGS) {
+    candidates.push({
+      owner: provider.owner,
+      path: getExternalConfigPath(app.getPath('home'), provider.directoryName),
+      scope: 'global',
+    })
+  }
+
+  for (const candidate of candidates) {
+    const configFile = await readConfigFile(candidate.path)
+    if (!configFile) {
+      continue
+    }
+
+    for (const [serverName, rawConfig] of Object.entries(configFile.mcpServers)) {
+      if (configsByName.has(serverName)) {
+        continue
+      }
+
+      configsByName.set(
+        serverName,
+        buildMcpServerConfig(
+          serverName,
+          rawConfig,
+          candidate.scope,
+          candidate.owner,
+          candidate.scope === 'project' ? normalizedWorkspacePath : undefined,
+        ),
+      )
     }
   }
 
@@ -184,19 +253,15 @@ export async function loadMergedMcpConfigs(workspacePath?: string | null): Promi
 export async function ensureMcpConfigExists(workspacePath?: string | null) {
   await ensureConfigFileExists(getGlobalConfigPath())
 
-  const normalizedWorkspacePath = normalizeString(workspacePath)
-  if (normalizedWorkspacePath.length > 0) {
+  const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+  if (normalizedWorkspacePath) {
     await ensureConfigFileExists(getProjectConfigPath(normalizedWorkspacePath))
   }
 }
 
 export function getPreferredMcpConfigPath(workspacePath?: string | null) {
-  const normalizedWorkspacePath = normalizeString(workspacePath)
-  if (normalizedWorkspacePath.length === 0) {
-    return getGlobalConfigPath()
-  }
-
-  return getProjectConfigPath(normalizedWorkspacePath)
+  const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+  return normalizedWorkspacePath ? getProjectConfigPath(normalizedWorkspacePath) : getGlobalConfigPath()
 }
 
 export function getMcpGlobalConfigPath() {
@@ -205,6 +270,30 @@ export function getMcpGlobalConfigPath() {
 
 export function getMcpProjectConfigPath(workspacePath: string) {
   return getProjectConfigPath(workspacePath)
+}
+
+export function resolveMcpWriteTarget(
+  requestedScope: McpConfigSource | undefined,
+  workspacePath?: string | null,
+): McpConfigWriteTarget {
+  const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+  const scope = requestedScope ?? 'global'
+
+  if (scope === 'project') {
+    if (!normalizedWorkspacePath) {
+      throw new Error('A workspace path is required to save an MCP server to this workspace.')
+    }
+
+    return {
+      path: getProjectConfigPath(normalizedWorkspacePath),
+      scope,
+    }
+  }
+
+  return {
+    path: getGlobalConfigPath(),
+    scope: 'global',
+  }
 }
 
 export async function appendMcpServerConfig(
@@ -217,10 +306,8 @@ export async function appendMcpServerConfig(
   }
 
   const { serverName, type } = parsed.data
-  const source: McpConfigSource = workspacePath?.trim() ? 'project' : 'global'
-  const targetPath =
-    source === 'project' && workspacePath?.trim() ? getProjectConfigPath(workspacePath) : getGlobalConfigPath()
-  const existing = (await readConfigFile(targetPath)) ?? { mcpServers: {} }
+  const target = resolveMcpWriteTarget(parsed.data.saveScope, workspacePath)
+  const existing = (await readConfigFile(target.path)) ?? { mcpServers: {} }
   const rawConfig: RawMcpServerConfig =
     type === 'stdio'
       ? {
@@ -241,11 +328,14 @@ export async function appendMcpServerConfig(
     },
   }
 
-  await writeConfigFile(targetPath, nextConfig)
+  await writeConfigFile(target.path, nextConfig)
 }
 
 export async function saveMcpConfig(config: McpServerConfig, workspacePath?: string | null) {
-  const targetPath = config.source === 'project' && workspacePath?.trim() ? getProjectConfigPath(workspacePath) : getGlobalConfigPath()
+  if (config.isReadOnly || config.owner !== 'echosphere') {
+    throw new Error(`MCP server "${config.name}" is managed by ${config.owner} and cannot be edited from EchoSphere.`)
+  }
+  const targetPath = resolveMcpWriteTarget(config.source, workspacePath).path
   const existing = (await readConfigFile(targetPath)) ?? { mcpServers: {} }
   const nextConfig: McpSettingsFile = {
     mcpServers: {
@@ -262,7 +352,10 @@ export async function replaceMcpServerConfig(
   config: McpServerConfig,
   workspacePath?: string | null,
 ) {
-  const targetPath = config.source === 'project' && workspacePath?.trim() ? getProjectConfigPath(workspacePath) : getGlobalConfigPath()
+  if (config.isReadOnly || config.owner !== 'echosphere') {
+    throw new Error(`MCP server "${config.name}" is managed by ${config.owner} and cannot be edited from EchoSphere.`)
+  }
+  const targetPath = resolveMcpWriteTarget(config.source, workspacePath).path
   const existing = (await readConfigFile(targetPath)) ?? { mcpServers: {} }
   const nextServers: Record<string, RawMcpServerConfig> = {}
 
@@ -310,8 +403,8 @@ export async function deleteMcpConfig(serverId: string, workspacePath?: string |
 }
 
 export async function loadMcpConfigPath(workspacePath?: string | null) {
-  const normalizedWorkspacePath = normalizeString(workspacePath)
-  if (normalizedWorkspacePath.length === 0) {
+  const normalizedWorkspacePath = normalizeWorkspacePath(workspacePath)
+  if (!normalizedWorkspacePath) {
     return getGlobalConfigPath()
   }
 

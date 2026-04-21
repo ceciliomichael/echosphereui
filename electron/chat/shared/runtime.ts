@@ -9,6 +9,7 @@ import type {
   StartChatStreamInput,
   ToolInvocationResultPresentation,
 } from '../../../src/types/chat'
+import { buildSkillsSystemPromptBlock, listEnabledSkills } from '../../skills/service'
 import { buildChatPrompt, buildChatSystemPrompt } from './messages'
 import { createAgentTools } from './tools'
 import type { AgentToolExecutionResult } from './toolTypes'
@@ -172,7 +173,10 @@ export async function estimateToolEnabledContextUsage(input: {
   messages: Message[]
 }): Promise<ContextUsageEstimate> {
   const workspaceRootPath = input.agentContextRootPath?.trim() || 'No workspace selected'
-  const systemPrompt = buildChatSystemPrompt(input.chatMode, workspaceRootPath)
+  const enabledSkills = await listEnabledSkills(input.agentContextRootPath)
+  const systemPrompt = buildChatSystemPrompt(input.chatMode, workspaceRootPath, {
+    availableSkillsBlock: buildSkillsSystemPromptBlock(enabledSkills),
+  })
   let historyTokens = 0
   let toolResultsTokens = 0
 
@@ -211,6 +215,7 @@ export async function runToolEnabledChatStream(input: {
   let lastFinishReason: string | null = null
 
   try {
+    const enabledSkills = await listEnabledSkills(input.startInput.agentContextRootPath)
     const tools = await createAgentTools(
       {
         checkpointId: resolveActiveCheckpointId(input.startInput.messages),
@@ -220,12 +225,16 @@ export async function runToolEnabledChatStream(input: {
       },
       {
         chatMode: input.startInput.chatMode,
+        enabledSkills,
       },
     )
     const prompt = buildChatPrompt({
       chatMode: input.startInput.chatMode,
       messages: input.startInput.messages,
-      options: input.promptOptions,
+      options: {
+        ...input.promptOptions,
+        availableSkillsBlock: buildSkillsSystemPromptBlock(enabledSkills),
+      },
       workspaceRootPath: input.startInput.agentContextRootPath,
     })
     const stream = await input.createStream({

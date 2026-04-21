@@ -76,6 +76,18 @@ function getSharedPrompt() {
   return cachedSharedPrompt
 }
 
-export function buildChatModeSystemPrompt(chatMode: ChatMode, workspaceRootPath: string) {
-  return `${getModePrompt(chatMode)}\n\n${getSharedPrompt()}\n\n${buildWorkspaceInstructionsBlock()}\n\nWorkspace root: ${workspaceRootPath}`
+export function buildChatModeSystemPrompt(
+  chatMode: ChatMode,
+  workspaceRootPath: string,
+  options?: { availableSkillsBlock?: string | null },
+) {
+  return [
+    getModePrompt(chatMode),
+    getSharedPrompt(),
+    options?.availableSkillsBlock?.trim() ? options.availableSkillsBlock.trim() : null,
+    buildWorkspaceInstructionsBlock(),
+    `Workspace root: ${workspaceRootPath}`,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join('\n\n')
 }

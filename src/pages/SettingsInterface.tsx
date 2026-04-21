@@ -9,6 +9,7 @@ import {
   type SettingsItemId,
 } from '../components/settings/settingsItems'
 import { useMcpServersState } from '../hooks/useMcpServersState'
+import { useSkillsState } from '../hooks/useSkillsState'
 import { useWorkspaceKeyboardShortcuts } from '../hooks/useWorkspaceKeyboardShortcuts'
 import type { AppSettings, ApiKeyProviderId, ProvidersState, SaveApiKeyProviderInput } from '../types/chat'
 
@@ -48,6 +49,7 @@ export function SettingsInterface({
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [activeItemId, setActiveItemId] = useState<SettingsItemId>(DEFAULT_SETTINGS_ITEM_ID)
   const mcpSettings = useMcpServersState(activeWorkspacePath)
+  const skillsState = useSkillsState(activeWorkspacePath)
   const handleUpdateSettings = useCallback((input: Partial<AppSettings>) => {
     void onUpdateSettings(input)
   }, [onUpdateSettings])
@@ -113,6 +115,16 @@ export function SettingsInterface({
             onToggleTool: mcpSettings.toggleTool,
             onUpdateServer: mcpSettings.updateServer,
             state: mcpSettings.state,
+            workspacePath: activeWorkspacePath,
+          }}
+          skillsSettings={{
+            errorMessage: skillsState.errorMessage,
+            isLoading: skillsState.isLoading,
+            onUpdateSettings: handleUpdateSettings,
+            settings: {
+              disabledSkillsByPath: settings.disabledSkillsByPath,
+            },
+            state: skillsState.state,
           }}
           modelsSettings={{
             providersState: providersState.providersState,

@@ -55,3 +55,21 @@ test('parseInitialSettingsArg preserves empty chat launch preference', () => {
   assert.equal(parsedSettings.lastActiveConversationId, null)
   assert.equal(parsedSettings.openEmptyConversationOnLaunch, true)
 })
+
+test('parseInitialSettingsArg sanitizes disabled skill paths', () => {
+  const parsedSettings = parseInitialSettingsArg([
+    'echosphere.exe',
+    serializeInitialSettingsArg({
+      ...DEFAULT_APP_SETTINGS,
+      disabledSkillsByPath: {
+        ' C:/skills/docx/SKILL.md ': true,
+        'C:/skills/imagegen/SKILL.md': false,
+        '': true,
+      },
+    }),
+  ])
+
+  assert.deepEqual(parsedSettings.disabledSkillsByPath, {
+    'C:/skills/docx/SKILL.md': true,
+  })
+})

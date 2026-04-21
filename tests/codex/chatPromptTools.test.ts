@@ -3,6 +3,7 @@ import test from 'node:test'
 import { formatStructuredToolResultContent } from '../../src/lib/toolResultContent'
 import type { Message } from '../../src/types/chat'
 import { buildChatPrompt, buildChatSystemPrompt } from '../../electron/chat/shared/messages'
+import { buildSkillsSystemPromptBlock } from '../../electron/skills/service'
 
 test('buildChatSystemPrompt loads the mode-specific prompt content', () => {
   const agentPrompt = buildChatSystemPrompt('agent', 'C:/repo')
@@ -110,6 +111,26 @@ test('buildChatPrompt preserves assistant tool calls and matching tool results',
     type: 'text',
     value: 'Read result\nPath: src/example.ts\nAbsolute path: C:/repo/src/example.ts\nType: file\nLine count: 1\n\n1: export const value = 1;',
   })
+})
+
+test('buildChatSystemPrompt includes enabled skill metadata when provided', () => {
+  const prompt = buildChatSystemPrompt('agent', 'C:/repo', {
+    availableSkillsBlock: buildSkillsSystemPromptBlock([
+      {
+        baseDirectory: 'C:/skills/docx',
+        description: 'Work with Word documents.',
+        id: 'C:/skills/docx/SKILL.md',
+        location: 'C:/skills/docx/SKILL.md',
+        name: 'docx',
+        source: 'global',
+        sourceLabel: 'Global',
+      },
+    ]),
+  })
+
+  assert.match(prompt, /<available_skills>/u)
+  assert.match(prompt, /<name>docx<\/name>/u)
+  assert.match(prompt, /Work with Word documents\./u)
 })
 
 test('buildChatPrompt formats list tool results with structured directory metadata', () => {

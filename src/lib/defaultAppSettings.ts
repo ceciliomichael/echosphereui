@@ -33,6 +33,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   revertEditSessionsByConversation: {},
   sendMessageOnEnter: true,
   workspaceFileEditorWordWrap: true,
+  disabledSkillsByPath: {},
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 
   workspaceEditorWidth: DEFAULT_WORKSPACE_EDITOR_WIDTH,

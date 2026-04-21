@@ -499,7 +499,6 @@ export async function createGrepToolResult(
   relativePath: string,
   pattern: string,
   include: string | undefined,
-  _regex?: boolean,
 ) {
   const stats = await fs.stat(absolutePath)
   if (!stats.isDirectory() && !stats.isFile()) {

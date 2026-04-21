@@ -190,6 +190,25 @@ function sanitizeEditSessionsByConversation(value: unknown): AppSettings['editSe
   return sanitizedValue
 }
 
+function sanitizeDisabledSkillsByPath(value: unknown): AppSettings['disabledSkillsByPath'] {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_APP_SETTINGS.disabledSkillsByPath }
+  }
+
+  const candidateEntries = Object.entries(value as Record<string, unknown>)
+  const sanitizedValue: AppSettings['disabledSkillsByPath'] = {}
+  for (const [skillPath, disabled] of candidateEntries) {
+    const normalizedSkillPath = skillPath.trim()
+    if (normalizedSkillPath.length === 0 || disabled !== true) {
+      continue
+    }
+
+    sanitizedValue[normalizedSkillPath] = true
+  }
+
+  return sanitizedValue
+}
+
 function sanitizeBootstrappedSettings(input: unknown): AppSettings {
   const candidate = input as Partial<AppSettings> | null | undefined
 
@@ -280,6 +299,7 @@ function sanitizeBootstrappedSettings(input: unknown): AppSettings {
       typeof candidate?.workspaceFileEditorWordWrap === 'boolean'
         ? candidate.workspaceFileEditorWordWrap
         : DEFAULT_APP_SETTINGS.workspaceFileEditorWordWrap,
+    disabledSkillsByPath: sanitizeDisabledSkillsByPath(candidate?.disabledSkillsByPath),
     sidebarWidth:
 
       typeof candidate?.sidebarWidth === 'number' && Number.isFinite(candidate.sidebarWidth)
