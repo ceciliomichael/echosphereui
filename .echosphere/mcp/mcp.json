@@ -1,11 +1,3 @@
 {
-  "mcpServers": {
-    "read_mcp": {
-      "args": [
-        "C:\\Users\\Administrator\\Desktop\\read_mcp\\dist\\index.js"
-      ],
-      "command": "node",
-      "type": "stdio"
-    }
-  }
+  "mcpServers": {}
 }

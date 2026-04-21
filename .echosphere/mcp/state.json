@@ -1,7 +1,3 @@
 {
-  "servers": {
-    "read_mcp": {
-      "autoConnect": false
-    }
-  }
+  "servers": {}
 }
