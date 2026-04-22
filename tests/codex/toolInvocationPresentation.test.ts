@@ -131,7 +131,7 @@ test('write tool header labels keep mixed changes on the edit fallback', () => {
         schema: 'echosphere.tool_result/v1',
         semantics: {
           added_path_count: 1,
-          deleted_path_count: 0,
+          deleted_path_count: 0,XCcx 
           operation: 'edit',
           updated_path_count: 1,
         },
