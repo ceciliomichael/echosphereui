@@ -102,17 +102,17 @@ export function AssistantMessage({
     normalizedContent.reasoningContent.trim().length > 0;
   const hasVisibleAssistantText =
     hasContent || hasReasoningContent || hasSubsequentAssistantText;
-  const hasToolInvocations = toolInvocations.length > 0;
   const hasActiveReasoningBlock =
     hasReasoningContent && reasoningCompletedAt === undefined;
-  const hasRunningToolInvocation = toolInvocations.some(
-    (invocation) => invocation.state === "running",
+  const toolDisplayEntries = toolInvocations.flatMap((invocation) =>
+    getToolInvocationDisplayEntries(invocation),
   );
+  const renderedToolBlocks = buildRenderedToolBlocks(toolDisplayEntries);
+  const hasVisibleToolBlocks = renderedToolBlocks.length > 0;
   const shouldShowWaitingIndicator =
     isStreaming &&
     !isTextStreaming &&
-    !hasToolInvocations &&
-    !hasRunningToolInvocation &&
+    !hasVisibleToolBlocks &&
     !hasActiveReasoningBlock;
   const effectiveWaitingIndicatorVariant = resolveAssistantWaitingIndicatorVariant({
     hasVisibleAssistantText,
@@ -128,10 +128,6 @@ export function AssistantMessage({
   const canShowCopyButton =
     showCopyButton && !isStreaming && copyableText.length > 0;
   const messagePaddingClassName = canShowCopyButton ? "pb-5 pr-5" : "";
-  const toolDisplayEntries = toolInvocations.flatMap((invocation) =>
-    getToolInvocationDisplayEntries(invocation),
-  );
-  const renderedToolBlocks = buildRenderedToolBlocks(toolDisplayEntries);
 
   useEffect(() => {
     if (!isCopied) {

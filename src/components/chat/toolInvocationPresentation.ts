@@ -7,6 +7,7 @@ interface ToolArgumentsValue {
   absolute_path?: unknown
   command?: unknown
   cmd?: unknown
+  patchText?: unknown
   pattern?: unknown
   polling_ms?: unknown
   query?: unknown
@@ -111,6 +112,48 @@ function getBasename(absolutePath: string) {
 
 function getReadToolTarget(path: string, workspaceRootPath?: string | null) {
   return getBasename(workspaceRootPath ? getRelativeDisplayPath(workspaceRootPath, path) : path)
+}
+
+function readPatchText(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalizedValue = value.replace(/\r\n?/g, '\n').trim()
+  return normalizedValue.length > 0 ? normalizedValue : null
+}
+
+function extractPatchFilePaths(patchText: string) {
+  const filePaths: string[] = []
+  const seenPaths = new Set<string>()
+  const normalizedPatchText = patchText.replace(/\r\n?/g, '\n')
+  const patchHeaderPattern = /^\*\*\* (?:Add|Delete|Update) File:\s+(.+)$/gmu
+
+  for (const match of normalizedPatchText.matchAll(patchHeaderPattern)) {
+    const filePath = match[1]?.trim()
+    if (!filePath || seenPaths.has(filePath)) {
+      continue
+    }
+
+    seenPaths.add(filePath)
+    filePaths.push(filePath)
+  }
+
+  return filePaths
+}
+
+function getApplyPatchFileTargets(invocation: ToolInvocationTrace) {
+  if (invocation.toolName !== 'apply_patch') {
+    return []
+  }
+
+  const parsedArguments = parseCompleteToolArguments(invocation.argumentsText)
+  const patchText = readPatchText(parsedArguments?.patchText)
+  if (!patchText) {
+    return []
+  }
+
+  return extractPatchFilePaths(patchText)
 }
 
 function readFirstText(value: unknown): string | null {
@@ -230,7 +273,7 @@ function formatWriteVerb(actionKind: FileMutationActionKind, state: ToolInvocati
       return 'Creating'
     }
     if (actionKind === 'overwrite') {
-      return 'Overwriting'
+      return 'Editing'
     }
     if (actionKind === 'delete') {
       return 'Deleting'
@@ -238,7 +281,7 @@ function formatWriteVerb(actionKind: FileMutationActionKind, state: ToolInvocati
     if (actionKind === 'verify') {
       return 'Verifying'
     }
-    return 'Overwriting'
+    return 'Editing'
   }
 
   if (state === 'failed') {
@@ -246,7 +289,7 @@ function formatWriteVerb(actionKind: FileMutationActionKind, state: ToolInvocati
       return 'Create failed'
     }
     if (actionKind === 'overwrite') {
-      return 'Overwrite failed'
+      return 'Edit failed'
     }
     if (actionKind === 'delete') {
       return 'Delete failed'
@@ -254,7 +297,7 @@ function formatWriteVerb(actionKind: FileMutationActionKind, state: ToolInvocati
     if (actionKind === 'verify') {
       return 'Verify failed'
     }
-    return 'Overwrite failed'
+    return 'Edit failed'
   }
 
   if (actionKind === 'create') {
@@ -493,6 +536,10 @@ function getWholeFileChangeSingleChangeTarget(invocation: ToolInvocationTrace) {
 }
 
 export function getToolInvocationDisplayEntries(invocation: ToolInvocationTrace): ToolInvocationDisplayEntry[] {
+  if (invocation.toolName === 'apply_patch' && invocation.state === 'running') {
+    return []
+  }
+
   const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
   if (
     (isFileWriteTool(invocation.toolName) || isFileEditTool(invocation.toolName)) &&
@@ -556,6 +603,11 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
   const wholeFileChangeSingleChangeTarget = getWholeFileChangeSingleChangeTarget(invocation)
   if (wholeFileChangeSingleChangeTarget) {
     return wholeFileChangeSingleChangeTarget
+  }
+
+  const applyPatchTargets = getApplyPatchFileTargets(invocation)
+  if (applyPatchTargets.length === 1) {
+    return getBasename(applyPatchTargets[0])
   }
 
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null

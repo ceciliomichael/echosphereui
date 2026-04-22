@@ -119,9 +119,9 @@ test('write tool header labels use change-specific verbs', () => {
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Created example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Create failed example.ts')
 
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Overwriting example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Editing example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Overwrite failed example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Edit failed example.ts')
 })
 
 test('write tool header labels keep mixed changes on the edit fallback', () => {
@@ -149,6 +149,52 @@ test('write tool header labels keep mixed changes on the edit fallback', () => {
   })
 
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
+})
+
+test('running apply_patch invocations stay hidden until completion', () => {
+  const invocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      patchText: [
+        '*** Begin Patch',
+        '*** Update File: src/example.ts',
+        '@@',
+        '-const value = 1;',
+        '+const value = 2;',
+        '*** End Patch',
+      ].join('\n'),
+    }),
+    id: 'tool-apply-running-single',
+    startedAt: 0,
+    state: 'running',
+    toolName: 'apply_patch',
+  }
+
+  assert.deepEqual(getToolInvocationDisplayEntries(invocation), [])
+})
+
+test('multi-file apply_patch invocations stay hidden until they complete', () => {
+  const invocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      patchText: [
+        '*** Begin Patch',
+        '*** Update File: src/first.ts',
+        '@@',
+        '-const first = 1;',
+        '+const first = 2;',
+        '*** Update File: src/second.ts',
+        '@@',
+        '-const second = 1;',
+        '+const second = 2;',
+        '*** End Patch',
+      ].join('\n'),
+    }),
+    id: 'tool-apply-running-multi',
+    startedAt: 0,
+    state: 'running',
+    toolName: 'apply_patch',
+  }
+
+  assert.deepEqual(getToolInvocationDisplayEntries(invocation), [])
 })
 
 test('multi-file apply_patch invocations expand into separate display blocks', () => {

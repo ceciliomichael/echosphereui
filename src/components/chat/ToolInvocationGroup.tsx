@@ -51,8 +51,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   }, [isActiveGroup])
 
   const summaryLabel = useMemo(
-    () =>
-      buildToolInvocationGroupSummary(entries.map((entry) => entry.invocation), isActiveGroup ? 'Exploring' : 'Explored'),
+    () => buildToolInvocationGroupSummary(entries.map((entry) => entry.invocation), isActiveGroup ? 'Exploring' : undefined),
     [entries, isActiveGroup],
   )
 
