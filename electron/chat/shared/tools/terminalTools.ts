@@ -368,7 +368,7 @@ export function createTerminalToolSet(
   return {
     get_terminal_output: tool({
       description:
-        'Fetch the buffered output for an existing workspace-scoped terminal session. An empty buffer is a valid result; treat it as a normal snapshot with no visible output and use the tool metadata for session state instead of inferring a failure. For example, a successful `go build` may return only the prompt again, with no additional terminal text.',
+        'Get new buffered output from an existing terminal session. Input `session_id` must be a session id returned by `run_terminal` in this thread. Empty output is valid and does not mean failure.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -431,7 +431,7 @@ export function createTerminalToolSet(
     }),
     run_terminal: tool({
       description:
-        'Create or reuse a terminal session anchored to the active workspace root, optionally queueing an initial command for execution.',
+        'Start or reuse a terminal session in the active workspace, then optionally run one command. Use `cwd` only for a real path inside the workspace. Save the returned `session_id` and pass it to `get_terminal_output` for more output.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {

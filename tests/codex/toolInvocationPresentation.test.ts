@@ -48,23 +48,23 @@ function buildFileChangeInvocation(
           kind: 'file',
           path: TARGET_FILE_PATH,
         },
-        summary: 'Applied file change',
+        summary: 'Wrote file change',
         toolCallId: 'tool-1',
-        toolName: 'apply',
+        toolName: 'write',
       },
       null,
     ),
     startedAt: 0,
     state,
-    toolName: 'apply',
+    toolName: 'write',
     ...overrides,
   }
 
   return invocation
 }
 
-function buildMultiFileApplyInvocation(
-  toolName: 'apply' | 'apply_patch',
+function buildMultiFileWriteInvocation(
+  toolName: 'write' | 'apply_patch',
   state: ToolInvocationTrace['state'],
   changes: Array<{
     fileName: string
@@ -114,21 +114,17 @@ function buildMultiFileApplyInvocation(
   } satisfies ToolInvocationTrace
 }
 
-test('apply tool header labels use change-specific verbs', () => {
+test('write tool header labels use change-specific verbs', () => {
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Creating example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Created example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('add', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Create failed example.ts')
 
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Deleting example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Deleted example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('delete', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Delete failed example.ts')
-
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Editing example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'running'), undefined, WORKSPACE_ROOT_PATH), 'Overwriting example.ts')
   assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'completed'), undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
-  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Edit failed example.ts')
+  assert.equal(getToolInvocationHeaderLabel(buildFileChangeInvocation('update', 'failed'), undefined, WORKSPACE_ROOT_PATH), 'Overwrite failed example.ts')
 })
 
-test('apply tool header labels keep mixed changes on the edit fallback', () => {
+test('write tool header labels keep mixed changes on the edit fallback', () => {
   const invocation = buildFileChangeInvocation('update', 'completed', {
     resultContent: formatStructuredToolResultContent(
       {
@@ -144,9 +140,9 @@ test('apply tool header labels keep mixed changes on the edit fallback', () => {
           kind: 'workspace',
           path: '.',
         },
-        summary: 'Applied mixed file changes',
+        summary: 'Wrote mixed file changes',
         toolCallId: 'tool-1',
-        toolName: 'apply',
+        toolName: 'write',
       },
       null,
     ),
@@ -156,7 +152,7 @@ test('apply tool header labels keep mixed changes on the edit fallback', () => {
 })
 
 test('multi-file apply_patch invocations expand into separate display blocks', () => {
-  const invocation = buildMultiFileApplyInvocation('apply_patch', 'completed', [
+  const invocation = buildMultiFileWriteInvocation('apply_patch', 'completed', [
     {
       fileName: 'src/first.ts',
       kind: 'update',
@@ -188,8 +184,8 @@ test('multi-file apply_patch invocations expand into separate display blocks', (
   assert.equal(displayEntries[1].invocation.resultPresentation?.changes.length, 1)
 })
 
-test('multi-file apply invocations expand into separate display blocks', () => {
-  const invocation = buildMultiFileApplyInvocation('apply', 'completed', [
+test('multi-file write invocations expand into separate display blocks', () => {
+  const invocation = buildMultiFileWriteInvocation('write', 'completed', [
     {
       fileName: 'src/first.ts',
       kind: 'update',
@@ -296,4 +292,29 @@ test('terminal tool header labels preserve the full queued command text for UI t
   }
 
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), `Ran ${command}`)
+})
+
+test('skill tool header labels use activation wording and the skill name', () => {
+  const runningInvocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      name: 'docx',
+    }),
+    id: 'tool-skill-1',
+    startedAt: 0,
+    state: 'running',
+    toolName: 'skill',
+  }
+
+  assert.equal(
+    getToolInvocationHeaderLabel(runningInvocation, undefined, WORKSPACE_ROOT_PATH),
+    'Activating Skill docx',
+  )
+  assert.equal(
+    getToolInvocationHeaderLabel({ ...runningInvocation, state: 'completed' }, undefined, WORKSPACE_ROOT_PATH),
+    'Activated Skill docx',
+  )
+  assert.equal(
+    getToolInvocationHeaderLabel({ ...runningInvocation, state: 'failed' }, undefined, WORKSPACE_ROOT_PATH),
+    'Skill activation failed docx',
+  )
 })

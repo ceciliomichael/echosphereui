@@ -194,7 +194,7 @@ test('createAgentTools omits write tools in plan mode', async () => {
 
     assert.ok('list' in tools)
     assert.ok('read' in tools)
-    assert.ok(!('apply' in tools))
+    assert.ok(!('write' in tools))
     assert.ok(!('apply_patch' in tools))
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
@@ -211,7 +211,7 @@ test('createAgentTools exposes write tools in agent mode', async () => {
       chatMode: 'agent',
     })
 
-    assert.ok('apply' in tools)
+    assert.ok('write' in tools)
     assert.ok('apply_patch' in tools)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
@@ -231,10 +231,72 @@ test('createAgentTools describes grep as a file-or-directory scoped workspace se
     assert.ok('grep' in tools)
     const grepTool = tools.grep as { description?: string }
 
-    assert.match(
-      grepTool.description ?? '',
-      /file or directory path in absolute_path, or omit it to search from the workspace root/u,
+    assert.match(grepTool.description ?? '', /Search file contents in visible workspace files/u)
+    assert.match(grepTool.description ?? '', /read the matching files with `read`/u)
+    assert.match(grepTool.description ?? '', /Treat grep results as hints, not full context/u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createAgentTools keeps plan mode descriptions on discovery-only tools', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-tools-'))
+
+  try {
+    const tools = await createAgentTools(
+      {
+        workspaceRootPath,
+      },
+      {
+        chatMode: 'plan',
+      },
     )
+
+    const listTool = tools.list as { description?: string }
+    const readTool = tools.read as { description?: string }
+    const globTool = tools.glob as { description?: string }
+    const grepTool = tools.grep as { description?: string }
+
+    assert.match(listTool.description ?? '', /Use `read` after you find a file/u)
+    assert.match(readTool.description ?? '', /Do not guess paths/u)
+    assert.match(globTool.description ?? '', /Read the matched files with `read` before editing/u)
+    assert.match(grepTool.description ?? '', /read the matching files with `read`/u)
+    assert.doesNotMatch(readTool.description ?? '', /apply_patch|write/u)
+    assert.doesNotMatch(grepTool.description ?? '', /apply_patch|write/u)
+    assert.ok(!('write' in tools))
+    assert.ok(!('apply_patch' in tools))
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
+test('createAgentTools describes read and apply_patch with exact path guidance', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-tools-'))
+
+  try {
+    const tools = await createAgentTools(
+      {
+        workspaceRootPath,
+      },
+      {
+        chatMode: 'agent',
+      },
+    )
+
+    assert.ok('read' in tools)
+    assert.ok('apply_patch' in tools)
+    assert.ok('write' in tools)
+
+    const readTool = tools.read as { description?: string }
+    const applyPatchTool = tools.apply_patch as { description?: string }
+    const writeTool = tools.write as { description?: string }
+
+    assert.match(readTool.description ?? '', /Do not guess paths/u)
+    assert.match(readTool.description ?? '', /After reading, use `apply_patch` for small edits or `write` for a full replacement/u)
+    assert.match(applyPatchTool.description ?? '', /workspace-relative file paths like `src\/app\.ts`/u)
+    assert.match(applyPatchTool.description ?? '', /Use `write` only when you need to replace a whole file/u)
+    assert.match(applyPatchTool.description ?? '', /Do not use guessed paths/u)
+    assert.match(writeTool.description ?? '', /For small edits to an existing file, use `apply_patch` instead/u)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }

@@ -586,13 +586,12 @@ export async function createGrepToolResult(
   })
 }
 
-async function createFileChangeToolResult(
+async function createWholeFileWriteToolResult(
   context: WorkspaceToolContext,
   input: {
     changes: Array<{
       absolute_path: string
-      content?: string
-      operation: 'delete' | 'write'
+      content: string
     }>
   },
 ) {
@@ -600,32 +599,6 @@ async function createFileChangeToolResult(
 
   for (const change of input.changes) {
     const target = resolveWorkspaceTargetPath(context.workspaceRootPath, change.absolute_path)
-    if (change.operation === 'delete') {
-      const previousContent = await fs.readFile(target.absolutePath, 'utf8').catch(() => null)
-      if (previousContent === null) {
-        return createErrorResult(`Cannot delete missing file ${target.relativePath}`, {
-          subject: {
-            kind: 'file',
-            path: target.relativePath,
-          },
-        })
-      }
-
-      await captureCheckpointFileStateIfNeeded(context.checkpointId, target.absolutePath)
-      await fs.unlink(target.absolutePath)
-      fileChanges.push(toFileChangeItem(target.relativePath, 'delete', previousContent, ''))
-      continue
-    }
-
-    if (typeof change.content !== 'string') {
-      return createErrorResult(`Write operation requires content for ${target.relativePath}`, {
-        subject: {
-          kind: 'file',
-          path: target.relativePath,
-        },
-      })
-    }
-
     const previousContent = await fs.readFile(target.absolutePath, 'utf8').catch(() => null)
     await captureCheckpointFileStateIfNeeded(context.checkpointId, target.absolutePath)
     await fs.mkdir(path.dirname(target.absolutePath), { recursive: true })
@@ -637,7 +610,7 @@ async function createFileChangeToolResult(
 
   const subjectPath = fileChanges.length === 1 ? fileChanges[0].fileName : DEFAULT_WORKSPACE_RELATIVE_PATH
   return buildFileChangeResult(
-    `Applied ${fileChanges.length} file change${fileChanges.length === 1 ? '' : 's'}`,
+    `Wrote ${fileChanges.length} file change${fileChanges.length === 1 ? '' : 's'}`,
     fileChanges,
     fileChanges.length === 0 ? 'noop' : 'edit',
     subjectPath,
@@ -675,10 +648,10 @@ export async function createToolContext(input: AgentToolContext) {
   }
 }
 
-export function createWholeFileApplyTool(context: WorkspaceToolContext) {
+export function createWholeFileWriteTool(context: WorkspaceToolContext) {
   return tool({
     description:
-      'Create, replace, or delete entire files. Use this after reading the target file(s) when a full file write is the right shape for the change. Prefer apply_patch for surgical edits and smaller diffs.',
+      'Create a new file or replace a whole file. Use this when you want to write the full final content. For small edits to an existing file, use `apply_patch` instead. Do not guess `absolute_path`; use an exact workspace path. Example: `write({ changes: [{ absolute_path: "/repo/src/new.ts", content: "..." }] })`.',
     inputSchema: jsonSchema({
       additionalProperties: false,
       properties: {
@@ -692,12 +665,8 @@ export function createWholeFileApplyTool(context: WorkspaceToolContext) {
               content: {
                 type: 'string',
               },
-              operation: {
-                enum: ['delete', 'write'],
-                type: 'string',
-              },
             },
-            required: ['absolute_path', 'operation'],
+            required: ['absolute_path', 'content'],
             type: 'object',
           },
           minItems: 1,
@@ -711,12 +680,11 @@ export function createWholeFileApplyTool(context: WorkspaceToolContext) {
       const inputValue = rawInput as {
         changes: Array<{
           absolute_path: string
-          content?: string
-          operation: 'delete' | 'write'
+          content: string
         }>
       }
       try {
-        return await createFileChangeToolResult(context, inputValue)
+        return await createWholeFileWriteToolResult(context, inputValue)
       } catch (error) {
         return createErrorResult(
           error instanceof Error && error.message.trim().length > 0 ? error.message : 'File change failed.',

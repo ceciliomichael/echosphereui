@@ -39,11 +39,7 @@ interface AssistantMessageProps {
 interface RenderedToolBlock {
   entries: readonly ToolInvocationDisplayEntry[]
   key: string
-  groupType: 'exploring' | 'editing'
-}
-
-function isEditingToolInvocation(toolName: string) {
-  return toolName === 'apply' || toolName === 'apply_patch'
+  groupType: 'exploring'
 }
 
 function buildRenderedToolBlocks(entries: readonly ToolInvocationDisplayEntry[]) {
@@ -67,9 +63,7 @@ function buildRenderedToolBlocks(entries: readonly ToolInvocationDisplayEntry[])
   }
 
   for (const entry of entries) {
-    const nextGroupType: RenderedToolBlock['groupType'] = isEditingToolInvocation(entry.invocation.toolName)
-      ? 'editing'
-      : 'exploring'
+    const nextGroupType: RenderedToolBlock['groupType'] = 'exploring'
     if (currentGroupType !== null && currentGroupType !== nextGroupType) {
       flushGroupedEntries()
     }
@@ -200,7 +194,6 @@ export function AssistantMessage({
         <ToolInvocationGroup
           key={block.key}
           entries={block.entries}
-          groupType={block.groupType}
           hasAssistantText={hasVisibleAssistantText}
           isConversationStreaming={isConversationStreaming}
           onToolDecisionSubmit={onToolDecisionSubmit}

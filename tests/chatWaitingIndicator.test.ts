@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { resolveAssistantWaitingIndicatorVariant } from '../src/components/chat/assistantWaitingIndicator'
 
-test('resolveAssistantWaitingIndicatorVariant promotes apply tools to splash when no assistant text is visible', () => {
+test('resolveAssistantWaitingIndicatorVariant promotes write tools to splash when no assistant text is visible', () => {
   const variant = resolveAssistantWaitingIndicatorVariant({
     hasVisibleAssistantText: false,
-    toolInvocations: [{ toolName: 'apply' }],
+    toolInvocations: [{ toolName: 'write' }],
     waitingIndicatorVariant: 'thinking',
   })
 
@@ -22,7 +22,7 @@ test('resolveAssistantWaitingIndicatorVariant promotes apply_patch tools to spla
   assert.equal(variant, 'splash')
 })
 
-test('resolveAssistantWaitingIndicatorVariant preserves the original variant for non-apply tools', () => {
+test('resolveAssistantWaitingIndicatorVariant preserves the original variant for non-file-change tools', () => {
   const variant = resolveAssistantWaitingIndicatorVariant({
     hasVisibleAssistantText: false,
     toolInvocations: [{ toolName: 'read' }],
@@ -32,10 +32,10 @@ test('resolveAssistantWaitingIndicatorVariant preserves the original variant for
   assert.equal(variant, 'thinking')
 })
 
-test('resolveAssistantWaitingIndicatorVariant does not promote splash when apply tools are mixed with exploring tools', () => {
+test('resolveAssistantWaitingIndicatorVariant does not promote splash when write tools are mixed with exploring tools', () => {
   const variant = resolveAssistantWaitingIndicatorVariant({
     hasVisibleAssistantText: false,
-    toolInvocations: [{ toolName: 'apply' }, { toolName: 'read' }],
+    toolInvocations: [{ toolName: 'write' }, { toolName: 'read' }],
     waitingIndicatorVariant: 'thinking',
   })
 
@@ -45,7 +45,7 @@ test('resolveAssistantWaitingIndicatorVariant does not promote splash when apply
 test('resolveAssistantWaitingIndicatorVariant preserves rate limit retry state', () => {
   const variant = resolveAssistantWaitingIndicatorVariant({
     hasVisibleAssistantText: false,
-    toolInvocations: [{ toolName: 'apply' }],
+    toolInvocations: [{ toolName: 'write' }],
     waitingIndicatorVariant: 'rate_limit_retry',
   })
 

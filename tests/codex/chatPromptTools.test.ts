@@ -3,7 +3,7 @@ import test from 'node:test'
 import { formatStructuredToolResultContent } from '../../src/lib/toolResultContent'
 import type { Message } from '../../src/types/chat'
 import { buildChatPrompt, buildChatSystemPrompt } from '../../electron/chat/shared/messages'
-import { buildSkillsSystemPromptBlock } from '../../electron/skills/service'
+import { buildSkillToolDescription, buildSkillsSystemPromptBlock } from '../../electron/skills/service'
 
 test('buildChatSystemPrompt loads the mode-specific prompt content', () => {
   const agentPrompt = buildChatSystemPrompt('agent', 'C:/repo')
@@ -131,6 +131,25 @@ test('buildChatSystemPrompt includes enabled skill metadata when provided', () =
   assert.match(prompt, /<available_skills>/u)
   assert.match(prompt, /<name>docx<\/name>/u)
   assert.match(prompt, /Work with Word documents\./u)
+})
+
+test('buildSkillToolDescription uses strict skill-loading guidance', () => {
+  const description = buildSkillToolDescription([
+    {
+      baseDirectory: 'C:/skills/docx',
+      description: 'Work with Word documents.',
+      id: 'C:/skills/docx/SKILL.md',
+      location: 'C:/skills/docx/SKILL.md',
+      name: 'docx',
+      source: 'global',
+      sourceLabel: 'Global',
+    },
+  ])
+
+  assert.match(description, /Load one skill and read its full instructions\./u)
+  assert.match(description, /Use this only when the current task clearly matches a listed skill\./u)
+  assert.match(description, /Do not guess\./u)
+  assert.match(description, /- docx: Work with Word documents\./u)
 })
 
 test('buildChatPrompt formats list tool results with structured directory metadata', () => {

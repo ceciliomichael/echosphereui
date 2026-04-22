@@ -7,6 +7,7 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { TerminalToolResult } from './TerminalToolResult'
 import { ToolDecisionRequestCard, type ToolDecisionSubmission } from './ToolDecisionRequestCard'
 import { getToolInvocationHeaderLabel } from './toolInvocationPresentation'
+import { isFileEditTool, isFileWriteTool } from './toolInvocationKinds'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
 
 interface ToolInvocationBlockProps {
@@ -130,7 +131,8 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
     parsedStructuredResult?.metadata?.summary ??
     invocation.resultContent ??
     ''
-  const shouldLimitResultHeight = invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch'
+  const shouldLimitResultHeight =
+    terminalToolName === null && !isFileWriteTool(invocation.toolName) && !isFileEditTool(invocation.toolName)
 
   return (
     <div className="w-full">

@@ -8,7 +8,6 @@ import { buildToolInvocationGroupSummary } from './toolInvocationGrouping'
 
 interface ToolInvocationGroupProps {
   entries: readonly ToolInvocationDisplayEntry[]
-  groupType: 'exploring' | 'editing'
   hasAssistantText: boolean
   isConversationStreaming: boolean
   onToolDecisionSubmit?: (
@@ -20,7 +19,6 @@ interface ToolInvocationGroupProps {
 
 export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   entries,
-  groupType,
   hasAssistantText,
   isConversationStreaming,
   onToolDecisionSubmit,
@@ -51,17 +49,8 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
 
   const summaryLabel = useMemo(
     () =>
-      buildToolInvocationGroupSummary(
-        entries.map((entry) => entry.invocation),
-        groupType === 'editing'
-          ? isActiveGroup
-            ? 'Editing'
-            : 'Edited'
-          : isActiveGroup
-            ? 'Exploring'
-            : 'Explored',
-      ),
-    [entries, groupType, isActiveGroup],
+      buildToolInvocationGroupSummary(entries.map((entry) => entry.invocation), isActiveGroup ? 'Exploring' : 'Explored'),
+    [entries, isActiveGroup],
   )
 
   return (

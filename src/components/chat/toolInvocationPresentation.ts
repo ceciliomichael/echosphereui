@@ -1,6 +1,7 @@
 import type { ChangeDiffToolResultItem, ToolInvocationTrace } from '../../types/chat'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
+import { isFileEditTool, isFileWriteTool } from './toolInvocationKinds'
 
 interface ToolArgumentsValue {
   absolute_path?: unknown
@@ -10,6 +11,7 @@ interface ToolArgumentsValue {
   polling_ms?: unknown
   query?: unknown
   session_id?: unknown
+  name?: unknown
 }
 
 function parseCompleteToolArguments(argumentsText: string): ToolArgumentsValue | null {
@@ -160,7 +162,15 @@ function readSessionId(value: unknown): string | null {
   return null
 }
 
-type ApplyActionKind = 'create' | 'delete' | 'edit' | 'verify'
+function readSkillName(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim()
+  }
+
+  return null
+}
+
+type FileMutationActionKind = 'create' | 'delete' | 'overwrite' | 'verify'
 
 function readSemanticsCount(value: unknown, key: string) {
   if (typeof value !== 'object' || value === null) {
@@ -172,11 +182,11 @@ function readSemanticsCount(value: unknown, key: string) {
   return typeof countValue === 'number' && Number.isFinite(countValue) ? countValue : null
 }
 
-function detectApplyActionKind(
+function detectFileMutationActionKind(
   invocation: ToolInvocationTrace,
   operation: string | null,
   semantics: Record<string, unknown> | null,
-): ApplyActionKind {
+): FileMutationActionKind {
   const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
   if (changeResultPresentation && changeResultPresentation.changes.length === 1) {
     const [singleChange] = changeResultPresentation.changes
@@ -186,7 +196,7 @@ function detectApplyActionKind(
     if (singleChange.kind === 'delete') {
       return 'delete'
     }
-    return 'edit'
+    return 'overwrite'
   }
 
   if (operation === 'noop') {
@@ -207,14 +217,62 @@ function detectApplyActionKind(
       return 'delete'
     }
     if (updatedPathCount > 0) {
-      return 'edit'
+      return 'overwrite'
     }
   }
 
-  return 'edit'
+  return 'overwrite'
 }
 
-function formatApplyVerb(actionKind: ApplyActionKind, state: ToolInvocationTrace['state']) {
+function formatWriteVerb(actionKind: FileMutationActionKind, state: ToolInvocationTrace['state']) {
+  if (state === 'running') {
+    if (actionKind === 'create') {
+      return 'Creating'
+    }
+    if (actionKind === 'overwrite') {
+      return 'Overwriting'
+    }
+    if (actionKind === 'delete') {
+      return 'Deleting'
+    }
+    if (actionKind === 'verify') {
+      return 'Verifying'
+    }
+    return 'Overwriting'
+  }
+
+  if (state === 'failed') {
+    if (actionKind === 'create') {
+      return 'Create failed'
+    }
+    if (actionKind === 'overwrite') {
+      return 'Overwrite failed'
+    }
+    if (actionKind === 'delete') {
+      return 'Delete failed'
+    }
+    if (actionKind === 'verify') {
+      return 'Verify failed'
+    }
+    return 'Overwrite failed'
+  }
+
+  if (actionKind === 'create') {
+    return 'Created'
+  }
+  if (actionKind === 'overwrite') {
+    return 'Edited'
+  }
+  if (actionKind === 'delete') {
+    return 'Deleted'
+  }
+  if (actionKind === 'verify') {
+    return 'Verified'
+  }
+  return 'Edited'
+}
+
+function formatEditVerb(actionKind: 'create' | 'delete' | 'edit' | 'verify', state: ToolInvocationTrace['state']) {
   if (state === 'running') {
     if (actionKind === 'create') {
       return 'Creating'
@@ -280,13 +338,15 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Read failed'
   }
 
-  if (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') {
+  if (isFileWriteTool(invocation.toolName) || isFileEditTool(invocation.toolName)) {
     const semantics =
       parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics === 'object'
         ? parsedResult.metadata.semantics
         : null
-    const actionKind = detectApplyActionKind(invocation, operation, semantics)
-    return formatApplyVerb(actionKind, invocation.state)
+    const actionKind = detectFileMutationActionKind(invocation, operation, semantics)
+    return isFileWriteTool(invocation.toolName)
+      ? formatWriteVerb(actionKind, invocation.state)
+      : formatEditVerb(actionKind === 'overwrite' ? 'edit' : actionKind, invocation.state)
   }
 
   if (invocation.toolName === 'run_terminal') {
@@ -329,6 +389,14 @@ function getToolVerb(invocation: ToolInvocationTrace) {
         : 'Question failed'
   }
 
+  if (invocation.toolName === 'skill') {
+    return invocation.state === 'running'
+      ? 'Activating Skill'
+      : invocation.state === 'completed'
+        ? 'Activated Skill'
+        : 'Skill activation failed'
+  }
+
   return invocation.state === 'running'
     ? `Running ${invocation.toolName}`
     : invocation.state === 'completed'
@@ -341,8 +409,77 @@ export interface ToolInvocationDisplayEntry {
   key: string
 }
 
-function getApplyPatchSingleChangeTarget(invocation: ToolInvocationTrace) {
-  if (invocation.toolName !== 'apply' && invocation.toolName !== 'apply_patch') {
+export function getFileMutationGroupType(invocation: ToolInvocationTrace): 'creating' | 'overwriting' | 'editing' | null {
+  if (isFileEditTool(invocation.toolName)) {
+    return 'editing'
+  }
+
+  if (!isFileWriteTool(invocation.toolName)) {
+    return null
+  }
+
+  const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const operation =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
+      ? parsedResult.metadata.semantics.operation
+      : null
+  const semantics =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics === 'object'
+      ? parsedResult.metadata.semantics
+      : null
+  const actionKind = detectFileMutationActionKind(invocation, operation, semantics)
+  return actionKind === 'overwrite' ? 'overwriting' : 'creating'
+}
+
+export function getFileMutationSummaryKind(
+  invocation: ToolInvocationTrace,
+): 'created' | 'edited' | 'deleted' | 'verified' | null {
+  if (!isFileWriteTool(invocation.toolName) && !isFileEditTool(invocation.toolName)) {
+    return null
+  }
+
+  const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
+  if (changeResultPresentation && changeResultPresentation.changes.length === 1) {
+    const [singleChange] = changeResultPresentation.changes
+    if (singleChange.kind === 'add') {
+      return 'created'
+    }
+    if (singleChange.kind === 'delete') {
+      return 'deleted'
+    }
+    return 'edited'
+  }
+
+  const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
+  const operation =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics.operation === 'string'
+      ? parsedResult.metadata.semantics.operation
+      : null
+  const semantics =
+    parsedResult?.metadata?.semantics && typeof parsedResult.metadata.semantics === 'object'
+      ? parsedResult.metadata.semantics
+      : null
+  if (!parsedResult && !changeResultPresentation) {
+    return null
+  }
+
+  const actionKind = detectFileMutationActionKind(invocation, operation, semantics)
+
+  if (actionKind === 'create') {
+    return 'created'
+  }
+  if (actionKind === 'delete') {
+    return 'deleted'
+  }
+  if (actionKind === 'verify') {
+    return 'verified'
+  }
+
+  return 'edited'
+}
+
+function getWholeFileChangeSingleChangeTarget(invocation: ToolInvocationTrace) {
+  if (!isFileWriteTool(invocation.toolName) && !isFileEditTool(invocation.toolName)) {
     return null
   }
 
@@ -358,7 +495,7 @@ function getApplyPatchSingleChangeTarget(invocation: ToolInvocationTrace) {
 export function getToolInvocationDisplayEntries(invocation: ToolInvocationTrace): ToolInvocationDisplayEntry[] {
   const changeResultPresentation = invocation.resultPresentation?.kind === 'change_diff' ? invocation.resultPresentation : null
   if (
-    (invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') &&
+    (isFileWriteTool(invocation.toolName) || isFileEditTool(invocation.toolName)) &&
     invocation.state === 'completed' &&
     changeResultPresentation !== null &&
     changeResultPresentation.changes.length > 1
@@ -402,6 +539,13 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     return sessionIdText ? `session ${sessionIdText}` : null
   }
 
+  if (invocation.toolName === 'skill') {
+    const skillNameText = readSkillName(parsedArguments?.name)
+    if (skillNameText) {
+      return skillNameText
+    }
+  }
+
   if (invocation.toolName === 'glob' || invocation.toolName === 'grep') {
     const searchTarget = getSearchTarget(invocation.argumentsText)
     if (searchTarget) {
@@ -409,16 +553,16 @@ function getToolTarget(invocation: ToolInvocationTrace, workspaceRootPath?: stri
     }
   }
 
-  const applyPatchSingleChangeTarget = getApplyPatchSingleChangeTarget(invocation)
-  if (applyPatchSingleChangeTarget) {
-    return applyPatchSingleChangeTarget
+  const wholeFileChangeSingleChangeTarget = getWholeFileChangeSingleChangeTarget(invocation)
+  if (wholeFileChangeSingleChangeTarget) {
+    return wholeFileChangeSingleChangeTarget
   }
 
   const parsedResult = invocation.resultContent ? parseStructuredToolResultContent(invocation.resultContent) : null
   const structuredPath = parsedResult?.metadata?.subject?.path
   if (typeof structuredPath === 'string' && structuredPath.trim().length > 0) {
     const normalizedStructuredPath = structuredPath.trim()
-    if ((invocation.toolName === 'apply' || invocation.toolName === 'apply_patch') && normalizedStructuredPath === '.') {
+    if ((isFileWriteTool(invocation.toolName) || isFileEditTool(invocation.toolName)) && normalizedStructuredPath === '.') {
       const absolutePath = getAbsolutePath(invocation)
       return absolutePath ? getBasename(absolutePath) : null
     }

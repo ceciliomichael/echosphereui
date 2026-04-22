@@ -253,9 +253,10 @@ export function buildSkillsSystemPromptBlock(skills: SkillSummary[]) {
 
 export function buildSkillToolDescription(skills: SkillSummary[]) {
   return [
-    'Load a specialized skill that provides task-specific instructions and workflows.',
+    'Load one skill and read its full instructions.',
     '',
-    'Use this when the current task clearly matches one of the available skills listed below.',
+    'Use this only when the current task clearly matches a listed skill.',
+    'Do not guess. Pick the best matching skill by exact name from the list below.',
     '',
     'Available skills:',
     ...skills.map((skill) => `- ${skill.name}: ${skill.description}`),
