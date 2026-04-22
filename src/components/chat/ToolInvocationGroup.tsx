@@ -32,14 +32,14 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
     [entries],
   )
   const isActiveGroup = !hasAssistantText && (hasActiveInvocation || isConversationStreaming)
-  const [isOpen, setIsOpen] = useState(isActiveGroup)
+  const [isOpen, setIsOpen] = useState(!isActiveGroup)
   const previousIsOpenStateRef = useRef(isActiveGroup)
 
   useEffect(() => {
     const wasOpenState = previousIsOpenStateRef.current
 
     if (wasOpenState !== isActiveGroup) {
-      setIsOpen(isActiveGroup)
+      setIsOpen(!isActiveGroup)
       previousIsOpenStateRef.current = isActiveGroup
       return
     }
@@ -71,7 +71,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
         </span>
       </button>
 
-      {isOpen ? (
+      {!isActiveGroup && isOpen ? (
         <div className="mt-1.5 space-y-1.5">
           {entries.map((entry) => (
             <ToolInvocationBlock

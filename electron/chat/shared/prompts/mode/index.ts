@@ -40,17 +40,36 @@ function readPromptDirectory(relativeDirectory: string) {
       .map((entry) => entry.name)
       .sort((left, right) => left.localeCompare(right))
 
-    if (promptFiles.length === 0) {
+    const wrappedPromptFiles = promptFiles
+      .map((fileName) => {
+        const content = readFileSync(path.join(candidateDirectory, fileName), 'utf8').trim()
+        if (content.length === 0) {
+          return null
+        }
+
+        const extension = path.extname(fileName).slice(1).toLowerCase() || 'file'
+        const wrapperName = `${path.basename(fileName, path.extname(fileName))}_extension`
+
+        return [
+          `  <${wrapperName} description="Supplemental instruction content" file="${fileName}" format="${extension}">`,
+          content,
+          `  </${wrapperName}>`,
+        ].join('\n')
+      })
+      .filter((content): content is string => content !== null)
+
+    if (wrappedPromptFiles.length === 0) {
       continue
     }
 
-    return promptFiles
-      .map((fileName) => readFileSync(path.join(candidateDirectory, fileName), 'utf8').trim())
-      .filter((content) => content.length > 0)
-      .join('\n\n')
+    return [
+      '<instruction_extensions description="Supplemental instruction content">',
+      ...wrappedPromptFiles,
+      '</instruction_extensions>',
+    ].join('\n')
   }
 
-  throw new Error(`Unable to load chat prompt directory: ${relativeDirectory}`)
+  return ''
 }
 
 const cachedPrompts: Partial<Record<ChatMode, string>> = {}
