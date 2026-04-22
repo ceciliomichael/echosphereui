@@ -109,7 +109,20 @@ test('buildToolInvocationGroupSummary switches to exploring while a child invoca
     createInvocation('get_terminal_output'),
   ])
 
-  assert.equal(summary, 'Exploring ran 2 commands')
+  assert.equal(summary, 'Exploring')
+})
+
+test('buildToolInvocationGroupSummary returns only the exploring label for active groups even with mixed tools', () => {
+  const summary = buildToolInvocationGroupSummary([
+    {
+      ...createInvocation('read'),
+      state: 'running',
+    },
+    createInvocation('glob'),
+    createInvocation('run_terminal'),
+  ], 'Exploring')
+
+  assert.equal(summary, 'Exploring')
 })
 
 test('buildToolInvocationGroupSummary allows the explored label to be overridden', () => {

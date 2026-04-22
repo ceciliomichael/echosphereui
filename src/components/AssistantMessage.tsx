@@ -102,6 +102,7 @@ export function AssistantMessage({
     normalizedContent.reasoningContent.trim().length > 0;
   const hasVisibleAssistantText =
     hasContent || hasReasoningContent || hasSubsequentAssistantText;
+  const hasToolInvocations = toolInvocations.length > 0;
   const hasActiveReasoningBlock =
     hasReasoningContent && reasoningCompletedAt === undefined;
   const hasRunningToolInvocation = toolInvocations.some(
@@ -110,6 +111,7 @@ export function AssistantMessage({
   const shouldShowWaitingIndicator =
     isStreaming &&
     !isTextStreaming &&
+    !hasToolInvocations &&
     !hasRunningToolInvocation &&
     !hasActiveReasoningBlock;
   const effectiveWaitingIndicatorVariant = resolveAssistantWaitingIndicatorVariant({

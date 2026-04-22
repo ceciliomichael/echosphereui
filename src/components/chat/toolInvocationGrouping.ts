@@ -67,6 +67,10 @@ export function buildToolInvocationGroupSummary(
   const hasActiveInvocation = invocations.some(
     (invocation) => invocation.state === 'running' || invocation.decisionRequest !== undefined,
   )
+  if (summaryVerbOverride === 'Exploring' || (summaryVerbOverride === undefined && hasActiveInvocation)) {
+    return 'Exploring'
+  }
+
   if (
     summaryVerbOverride === 'Creating' ||
     summaryVerbOverride === 'Created' ||
@@ -76,8 +80,6 @@ export function buildToolInvocationGroupSummary(
     const summaryVerb = summaryVerbOverride
     return `${summaryVerb} ${pluralize(invocations.length, 'file')}`
   }
-
-  const isExploring = summaryVerbOverride === 'Exploring' || (summaryVerbOverride === undefined && hasActiveInvocation)
   const counts: ToolInvocationSummaryCounts = {
     listCount: 0,
     commandCount: 0,
@@ -202,6 +204,6 @@ export function buildToolInvocationGroupSummary(
     summaryParts.push(pluralize(count, toolLabel))
   }
 
-  const summaryVerb = summaryVerbOverride ?? (isExploring ? 'Exploring' : 'Explored')
+  const summaryVerb = summaryVerbOverride ?? 'Explored'
   return summaryParts.length > 0 ? `${summaryVerb} ${summaryParts.join(', ')}` : `${summaryVerb} actions`
 }

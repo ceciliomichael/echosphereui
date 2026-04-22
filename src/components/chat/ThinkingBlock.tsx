@@ -24,6 +24,7 @@ function formatDuration(seconds: number): string {
 
 export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, reasoningCompletedAt, startTime }: ThinkingBlockProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isHovering, setIsHovering] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null)
   const frozenDurationRef = useRef<number | null>(null)
   const isReasoningComplete = typeof reasoningCompletedAt === 'number'
@@ -82,9 +83,23 @@ export const ThinkingBlock = memo(function ThinkingBlock({ content, isComplete, 
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
         className="group flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className={!(isComplete || isReasoningComplete) ? 'thinking-shimmer' : ''}>{headerLabel}</span>
+        <span
+          className={[
+            isComplete || isReasoningComplete
+              ? isHovering
+                ? 'text-foreground'
+                : 'text-muted-foreground'
+              : isHovering
+                ? 'text-foreground'
+                : 'thinking-shimmer',
+          ].join(' ')}
+        >
+          {headerLabel}
+        </span>
         <ChevronRight
           className={[
             'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',

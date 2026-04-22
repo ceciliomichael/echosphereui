@@ -24,6 +24,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
   onToolDecisionSubmit,
   workspaceRootPath = null,
 }: ToolInvocationGroupProps) {
+  const [isHovering, setIsHovering] = useState(false)
   const hasActiveInvocation = useMemo(
     () =>
       entries.some(
@@ -32,19 +33,21 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
     [entries],
   )
   const isActiveGroup = !hasAssistantText && (hasActiveInvocation || isConversationStreaming)
-  const [isOpen, setIsOpen] = useState(!isActiveGroup)
-  const previousIsOpenStateRef = useRef(isActiveGroup)
+  const [isOpen, setIsOpen] = useState(isActiveGroup)
+  const previousIsActiveGroupRef = useRef(isActiveGroup)
 
   useEffect(() => {
-    const wasOpenState = previousIsOpenStateRef.current
+    const wasActiveGroup = previousIsActiveGroupRef.current
 
-    if (wasOpenState !== isActiveGroup) {
-      setIsOpen(!isActiveGroup)
-      previousIsOpenStateRef.current = isActiveGroup
-      return
+    if (!wasActiveGroup && isActiveGroup) {
+      setIsOpen(true)
     }
 
-    previousIsOpenStateRef.current = isActiveGroup
+    if (wasActiveGroup && !isActiveGroup) {
+      setIsOpen(false)
+    }
+
+    previousIsActiveGroupRef.current = isActiveGroup
   }, [isActiveGroup])
 
   const summaryLabel = useMemo(
@@ -58,10 +61,23 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
       <button
         type="button"
         onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
         className="group flex w-full min-w-0 items-center text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <span className="flex min-w-0 flex-1 items-center gap-1">
-          <span className={['min-w-0 truncate', isActiveGroup ? 'thinking-shimmer' : ''].join(' ')}>{summaryLabel}</span>
+          <span
+            className={[
+              'min-w-0 truncate',
+              isActiveGroup
+                ? isHovering
+                  ? 'text-foreground'
+                  : 'thinking-shimmer'
+                : 'text-muted-foreground',
+            ].join(' ')}
+          >
+            {summaryLabel}
+          </span>
           <ChevronRight
             className={[
               'h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:opacity-100',
@@ -71,7 +87,7 @@ export const ToolInvocationGroup = memo(function ToolInvocationGroup({
         </span>
       </button>
 
-      {!isActiveGroup && isOpen ? (
+      {isOpen ? (
         <div className="mt-1.5 space-y-1.5">
           {entries.map((entry) => (
             <ToolInvocationBlock

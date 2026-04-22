@@ -7,8 +7,8 @@ import {
   buildConversationSummary,
   createMessageLogPayload,
   type MessageLogEntry,
-  normalizeConversationRecord,
 } from './documents'
+import { readConversationRecordFromPath } from './conversationFileReader'
 import {
   ensureHistoryDirectory,
   FOLDERS_FILE_NAME,
@@ -92,26 +92,8 @@ function updateCachedUserMessageCheckpoints(conversationId: string, messages: Me
   }
 }
 
-async function readConversationFileExact(filePath: string) {
-  const raw = await fs.readFile(filePath, 'utf8')
-  return normalizeConversationRecord(JSON.parse(raw) as Partial<ConversationRecord> & { id: string })
-}
-
 export async function readConversationFile(conversationId: string) {
-  const primaryPath = getConversationFilePath(conversationId)
-
-  try {
-    return await readConversationFileExact(primaryPath)
-  } catch (error) {
-    const errno = error as NodeJS.ErrnoException
-    const shouldTryBackup = errno.code === 'ENOENT' || error instanceof SyntaxError
-    if (!shouldTryBackup) {
-      throw error
-    }
-
-    const backupPath = getBackupConversationFilePath(primaryPath)
-    return readConversationFileExact(backupPath)
-  }
+  return readConversationRecordFromPath(getConversationFilePath(conversationId))
 }
 
 async function safeUnlink(filePath: string) {
@@ -307,7 +289,7 @@ export async function listConversationRecords() {
   const conversations = await Promise.all(
     Array.from(conversationFileById.values()).map(async (fileName) => {
       try {
-        return await readConversationFileExact(path.join(getHistoryDirectoryPath(), fileName))
+        return await readConversationRecordFromPath(path.join(getHistoryDirectoryPath(), fileName))
       } catch (error) {
         console.error(`Failed to read conversation file: ${fileName}`, error)
         return null
