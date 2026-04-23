@@ -1,7 +1,7 @@
 import type { ChangeDiffToolResultItem, ToolInvocationTrace } from '../../types/chat'
 import { getRelativeDisplayPath } from '../../lib/pathPresentation'
 import { parseStructuredToolResultContent } from '../../lib/toolResultContent'
-import { isFileEditTool, isFileWriteTool } from './toolInvocationKinds'
+import { isFileEditTool, isFileMutationTool, isFileWriteTool } from './toolInvocationKinds'
 
 interface ToolArgumentsValue {
   absolute_path?: unknown
@@ -536,7 +536,7 @@ function getWholeFileChangeSingleChangeTarget(invocation: ToolInvocationTrace) {
 }
 
 export function getToolInvocationDisplayEntries(invocation: ToolInvocationTrace): ToolInvocationDisplayEntry[] {
-  if (invocation.toolName === 'apply_patch' && invocation.state === 'running') {
+  if (isFileMutationTool(invocation.toolName) && invocation.state === 'running') {
     return []
   }
 

@@ -272,6 +272,10 @@ function areComparableLinesEqual(left: string, right: string) {
   return normalizeUnicode(left.trim()) === normalizeUnicode(right.trim())
 }
 
+function compactComparableText(value: string) {
+  return normalizeUnicode(value).replace(/\s+/gu, '')
+}
+
 function tryMatchSequence(
   lines: readonly string[],
   pattern: readonly string[],
@@ -339,7 +343,41 @@ function seekSequence(
     return trimMatch
   }
 
-  return tryMatchSequence(lines, pattern, startIndex, (left, right) => normalizeUnicode(left.trim()) === normalizeUnicode(right.trim()), isEndOfFile)
+  const unicodeTrimMatch = tryMatchSequence(
+    lines,
+    pattern,
+    startIndex,
+    (left, right) => normalizeUnicode(left.trim()) === normalizeUnicode(right.trim()),
+    isEndOfFile,
+  )
+  if (unicodeTrimMatch !== -1) {
+    return unicodeTrimMatch
+  }
+
+  if (pattern.length < 2) {
+    return -1
+  }
+
+  const compactPatternText = compactComparableText(pattern.join('\n'))
+
+  if (isEndOfFile) {
+    const fromEnd = lines.length - pattern.length
+    if (fromEnd >= startIndex) {
+      const compactEndText = compactComparableText(lines.slice(fromEnd, fromEnd + pattern.length).join('\n'))
+      if (compactEndText === compactPatternText) {
+        return fromEnd
+      }
+    }
+  }
+
+  for (let lineIndex = startIndex; lineIndex <= lines.length - pattern.length; lineIndex += 1) {
+    const compactLineText = compactComparableText(lines.slice(lineIndex, lineIndex + pattern.length).join('\n'))
+    if (compactLineText === compactPatternText) {
+      return lineIndex
+    }
+  }
+
+  return -1
 }
 
 function comparableLineKey(value: string) {

@@ -131,7 +131,7 @@ test('write tool header labels keep mixed changes on the edit fallback', () => {
         schema: 'echosphere.tool_result/v1',
         semantics: {
           added_path_count: 1,
-          deleted_path_count: 0,XCcx 
+          deleted_path_count: 0,
           operation: 'edit',
           updated_path_count: 1,
         },
@@ -151,8 +151,8 @@ test('write tool header labels keep mixed changes on the edit fallback', () => {
   assert.equal(getToolInvocationHeaderLabel(invocation, undefined, WORKSPACE_ROOT_PATH), 'Edited example.ts')
 })
 
-test('running apply_patch invocations stay hidden until completion', () => {
-  const invocation: ToolInvocationTrace = {
+test('running file mutation invocations stay hidden until completion', () => {
+  const runningApplyPatchInvocation: ToolInvocationTrace = {
     argumentsText: JSON.stringify({
       patchText: [
         '*** Begin Patch',
@@ -169,7 +169,18 @@ test('running apply_patch invocations stay hidden until completion', () => {
     toolName: 'apply_patch',
   }
 
-  assert.deepEqual(getToolInvocationDisplayEntries(invocation), [])
+  const runningWriteInvocation: ToolInvocationTrace = {
+    argumentsText: JSON.stringify({
+      absolute_path: `${WORKSPACE_ROOT_PATH}/src/example.ts`,
+    }),
+    id: 'tool-write-running-single',
+    startedAt: 0,
+    state: 'running',
+    toolName: 'write',
+  }
+
+  assert.deepEqual(getToolInvocationDisplayEntries(runningApplyPatchInvocation), [])
+  assert.deepEqual(getToolInvocationDisplayEntries(runningWriteInvocation), [])
 })
 
 test('multi-file apply_patch invocations stay hidden until they complete', () => {

@@ -100,6 +100,46 @@ test('applyPatchInWorkspace can re-anchor an update when the file already has a 
   }
 })
 
+test('applyPatchInWorkspace tolerates accidental line-wrap differences in hunk context', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-patch-wrap-'))
+  const targetFilePath = path.join(workspaceRootPath, 'src', 'footer.tsx')
+  await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })
+  await fs.writeFile(
+    targetFilePath,
+    [
+      '<footer className="rounded-2xl border border-[#F0F2F6] bg-white p-6 shadow-sm">',
+      '<p className="mt-4 text-sm leading-6 text-[#606266]">',
+      'A simple landing page structure for products that need a',
+      'confident first impression.',
+      '</p>',
+      '</footer>',
+      '',
+    ].join('\n'),
+    'utf8',
+  )
+
+  try {
+    const result = await applyPatchInWorkspace(
+      workspaceRootPath,
+      `*** Begin Patch
+*** Update File: ${targetFilePath}
+@@
+ <footer className="rounded-2xl border border-[#F0F2F6] bg-white p-6 shadow-sm">
+ <p className="mt-4 text-sm leading-6 text-[#606266]">
+ A simple landing page structure for products that need a confident
+ first impression.
+ </p>
+*** End Patch`,
+    )
+
+    assert.equal(result.changes.length, 1)
+    const updatedContent = await fs.readFile(targetFilePath, 'utf8')
+    assert.match(updatedContent, /A simple landing page structure for products that need a confident\nfirst impression\./u)
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
+  }
+})
+
 test('applyPatchInWorkspace applies add, update, move, and delete operations', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-patch-'))
   await fs.mkdir(path.join(workspaceRootPath, 'src'), { recursive: true })

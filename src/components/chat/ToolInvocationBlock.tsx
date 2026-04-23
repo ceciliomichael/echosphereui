@@ -21,6 +21,10 @@ interface ToolInvocationBlockProps {
 
 const MIN_RUNNING_LABEL_DURATION_MS = 200
 
+function shouldHoldRunningLabel(invocation: ToolInvocationTrace) {
+  return !isFileWriteTool(invocation.toolName) && !isFileEditTool(invocation.toolName)
+}
+
 function renderDiffCountSummary(invocation: ToolInvocationTrace) {
   if (invocation.state !== 'completed') {
     return null
@@ -93,6 +97,11 @@ export const ToolInvocationBlock = memo(function ToolInvocationBlock({
   useEffect(() => {
     if (invocation.state === 'running') {
       setDisplayedState('running')
+      return undefined
+    }
+
+    if (!shouldHoldRunningLabel(invocation)) {
+      setDisplayedState(invocation.state)
       return undefined
     }
 
