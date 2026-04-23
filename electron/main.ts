@@ -46,6 +46,7 @@ import type {
   CreateConversationFolderInput,
   CreateConversationInput,
   ReplaceConversationMessagesInput,
+  ChatProviderId,
   SaveApiKeyProviderInput,
   SubmitToolDecisionInput,
   WorkspaceExplorerImportEntryInput,
@@ -383,7 +384,7 @@ function registerHistoryHandlers() {
     removeApiKeyProvider(providerId),
   )
   ipcMain.handle('models:custom:list', async () => listCustomModels())
-  ipcMain.handle('models:provider:list', async (_event, providerId: ApiKeyProviderId) => listProviderModels(providerId))
+  ipcMain.handle('models:provider:list', async (_event, providerId: ChatProviderId) => listProviderModels(providerId))
   ipcMain.handle('models:custom:save', async (_event, input: SaveCustomModelInput) => saveCustomModel(input))
   ipcMain.handle('models:custom:remove', async (_event, modelId: string) => removeCustomModel(modelId))
   ipcMain.handle('chat:stream:start', async (event, input: StartChatStreamInput) => {

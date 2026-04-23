@@ -5,6 +5,7 @@ import { ModelSelectorField, type ModelSelectorOption } from '../../chat/ModelSe
 import { SettingsPanelLayout, SettingsRow, SettingsSection } from '../shared/SettingsPanelPrimitives'
 import type { AppSettings, ChatProviderId, ProvidersState } from '../../../types/chat'
 import { useSettingsModelCatalog } from '../models/settingsModelCatalogStore'
+import { filterEnabledModelCatalogItems, readStoredModelToggleState } from '../models/modelStorage'
 
 interface ModelOption {
   label: string
@@ -124,9 +125,10 @@ export function TaskModelsSettingsPanel({
   const { customModels, customModelsLoading, providerModels, providerModelsLoading } = useSettingsModelCatalog(providersState)
 
   const configuredModelOptions = useMemo(() => {
+    const modelToggleState = readStoredModelToggleState()
     const providerSections = buildModelProviderSections('', providersState, customModels, providerModels)
     return providerSections.flatMap((section) =>
-      section.models.map((model) => ({
+      filterEnabledModelCatalogItems(section.models, modelToggleState).map((model) => ({
         label: model.label,
         modelId: model.id,
         providerId: section.provider.id,

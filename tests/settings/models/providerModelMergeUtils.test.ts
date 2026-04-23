@@ -4,15 +4,45 @@ import { mergeProviderModels } from '../../../src/components/settings/models/pro
 
 test('mergeProviderModels preserves existing models and appends new ones', () => {
   const existingModels = [
-    { id: 'alpha', label: 'Alpha', providerId: 'openai-compatible' as const, reasoningCapable: false },
+    {
+      enabledByDefault: true,
+      id: 'alpha',
+      label: 'Alpha',
+      providerId: 'openai-compatible' as const,
+      reasoningCapable: false,
+    },
   ]
   const incomingModels = [
-    { id: 'alpha', label: 'Alpha updated', providerId: 'openai-compatible' as const, reasoningCapable: false },
-    { id: 'beta', label: 'Beta', providerId: 'openai-compatible' as const, reasoningCapable: false },
+    {
+      enabledByDefault: true,
+      id: 'alpha',
+      label: 'Alpha updated',
+      providerId: 'openai-compatible' as const,
+      reasoningCapable: false,
+    },
+    {
+      enabledByDefault: false,
+      id: 'beta',
+      label: 'Beta',
+      providerId: 'openai-compatible' as const,
+      reasoningCapable: false,
+    },
   ]
 
   assert.deepEqual(mergeProviderModels(existingModels, incomingModels), [
-    { id: 'alpha', label: 'Alpha', providerId: 'openai-compatible', reasoningCapable: false },
-    { id: 'beta', label: 'Beta', providerId: 'openai-compatible', reasoningCapable: false },
+    {
+      enabledByDefault: true,
+      id: 'alpha',
+      label: 'Alpha',
+      providerId: 'openai-compatible',
+      reasoningCapable: false,
+    },
+    {
+      enabledByDefault: false,
+      id: 'beta',
+      label: 'Beta',
+      providerId: 'openai-compatible',
+      reasoningCapable: false,
+    },
   ])
 })

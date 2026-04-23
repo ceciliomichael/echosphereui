@@ -4,6 +4,7 @@ import type {
   AppendConversationMessagesInput,
   ApiKeyProviderId,
   AppSettings,
+  ChatProviderId,
   ChatStreamEvent,
   CompressChatHistoryInput,
   EstimateContextUsageInput,
@@ -138,7 +139,7 @@ const providersApi: EchosphereProvidersApi = {
 
 const modelsApi: EchosphereModelsApi = {
   listCustomModels: () => ipcRenderer.invoke('models:custom:list'),
-  listProviderModels: (providerId: ApiKeyProviderId) => ipcRenderer.invoke('models:provider:list', providerId),
+  listProviderModels: (providerId: ChatProviderId) => ipcRenderer.invoke('models:provider:list', providerId),
   saveCustomModel: (input: SaveCustomModelInput) => ipcRenderer.invoke('models:custom:save', input),
   removeCustomModel: (modelId: string) => ipcRenderer.invoke('models:custom:remove', modelId),
 }

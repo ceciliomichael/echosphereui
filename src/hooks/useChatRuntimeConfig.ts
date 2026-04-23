@@ -3,7 +3,7 @@ import { MODEL_CATALOG, PROVIDER_SECTIONS } from '../components/settings/models/
 import { useSettingsModelCatalog } from '../components/settings/models/settingsModelCatalogStore'
 import { toCustomModelCatalogItems } from '../components/settings/models/customModelUtils'
 import { toProviderModelCatalogItems } from '../components/settings/models/providerModelUtils'
-import { readStoredModelToggleState } from '../components/settings/models/modelStorage'
+import { filterEnabledModelCatalogItems, readStoredModelToggleState } from '../components/settings/models/modelStorage'
 import { isProviderConfigured } from '../components/settings/models/modelViewUtils'
 import {
   DEFAULT_REASONING_EFFORT_VALUES,
@@ -38,7 +38,11 @@ function buildChatModelOptions(
   providerModels: readonly ProviderModelConfig[],
 ): ChatModelOption[] {
   const modelToggleState = readStoredModelToggleState()
-  const modelCatalog = [...MODEL_CATALOG, ...toProviderModelCatalogItems(providerModels), ...toCustomModelCatalogItems(customModels)]
+  const modelCatalog = filterEnabledModelCatalogItems([
+    ...MODEL_CATALOG,
+    ...toProviderModelCatalogItems(providerModels),
+    ...toCustomModelCatalogItems(customModels),
+  ], modelToggleState)
 
   return PROVIDER_SECTIONS.flatMap((provider) => {
     if (!isProviderConfigured(provider.id, providersState)) {
@@ -196,7 +200,14 @@ export function useChatRuntimeConfig({
   updateSettings,
 }: UseChatRuntimeConfigInput) {
   const { customModels, customModelsLoading, providerModels, providerModelsLoading } = useSettingsModelCatalog(providersState)
-  const staticModelOptions = useMemo(() => MODEL_CATALOG.map(toStaticChatModelOption), [])
+  const allModelCatalog = useMemo(
+    () => [...MODEL_CATALOG, ...toProviderModelCatalogItems(providerModels), ...toCustomModelCatalogItems(customModels)],
+    [customModels, providerModels],
+  )
+  const enabledStaticModelOptions = useMemo(
+    () => filterEnabledModelCatalogItems(MODEL_CATALOG).map(toStaticChatModelOption),
+    [],
+  )
   const modelOptions = useMemo(
     () => buildChatModelOptions(providersState, customModels, providerModels),
     [customModels, providerModels, providersState],
@@ -205,9 +216,16 @@ export function useChatRuntimeConfig({
     () => getModeSelectionFields(activeChatMode, settings),
     [activeChatMode, settings],
   )
+  const selectedProviderConfigured = useMemo(() => {
+    if (modeSelection.providerId === null) {
+      return false
+    }
+
+    return isProviderConfigured(modeSelection.providerId, providersState)
+  }, [modeSelection.providerId, providersState])
   const missingSelectedModelOption = useMemo(() => {
     const normalizedSavedModelId = modeSelection.modelId.trim()
-    const hasExactCatalogMatch = modelOptions.some((option) => {
+    const hasExactEnabledCatalogMatch = modelOptions.some((option) => {
       if (option.id !== normalizedSavedModelId) {
         return false
       }
@@ -219,7 +237,23 @@ export function useChatRuntimeConfig({
       return option.providerId === modeSelection.providerId
     })
 
-    if (normalizedSavedModelId.length === 0 || hasExactCatalogMatch) {
+    const hasExactCatalogMatch = allModelCatalog.some((option) => {
+      if (option.id !== normalizedSavedModelId) {
+        return false
+      }
+
+      if (modeSelection.providerId === null) {
+        return true
+      }
+
+      return option.providerId === modeSelection.providerId
+    })
+
+    if (
+      normalizedSavedModelId.length === 0 ||
+      hasExactEnabledCatalogMatch ||
+      (hasExactCatalogMatch && selectedProviderConfigured)
+    ) {
       return null
     }
 
@@ -238,7 +272,14 @@ export function useChatRuntimeConfig({
       reasoningCapable: false,
       runtimeModelId: normalizedSavedModelId,
     } satisfies ChatModelOption
-  }, [modeSelection.modelId, modeSelection.modelLabel, modeSelection.providerId, modelOptions])
+  }, [
+    allModelCatalog,
+    modeSelection.modelId,
+    modeSelection.modelLabel,
+    modeSelection.providerId,
+    modelOptions,
+    selectedProviderConfigured,
+  ])
   const runtimeModelOptions = useMemo(
     () => (missingSelectedModelOption ? [missingSelectedModelOption, ...modelOptions] : modelOptions),
     [missingSelectedModelOption, modelOptions],
@@ -251,14 +292,14 @@ export function useChatRuntimeConfig({
     }
 
     const exactRuntimeModel = findExactSelectedModel(runtimeModelOptions, selectedModelSelection)
-    const exactStaticModel = findExactSelectedModel(staticModelOptions, selectedModelSelection)
+    const exactStaticModel = findExactSelectedModel(enabledStaticModelOptions, selectedModelSelection)
 
     if (exactStaticModel) {
       return exactStaticModel
     }
 
     return exactRuntimeModel ?? findSelectedModel(runtimeModelOptions, selectedModelSelection)
-  }, [modeSelection.modelId, modeSelection.providerId, runtimeModelOptions, staticModelOptions])
+  }, [enabledStaticModelOptions, modeSelection.modelId, modeSelection.providerId, runtimeModelOptions])
   const availableReasoningEfforts = useMemo(() => {
     if (!selectedModel?.reasoningCapable) {
       return [] as readonly ReasoningEffort[]
@@ -298,6 +339,69 @@ export function useChatRuntimeConfig({
     modeSelection.updateKeys.modelId,
     modeSelection.updateKeys.modelLabel,
     modeSelection.updateKeys.providerId,
+    updateSettings,
+  ])
+
+  useEffect(() => {
+    const normalizedSavedModelId = modeSelection.modelId.trim()
+    if (normalizedSavedModelId.length === 0) {
+      return
+    }
+
+    const hasEnabledSelection = modelOptions.some((option) => {
+      if (option.id !== normalizedSavedModelId) {
+        return false
+      }
+
+      if (modeSelection.providerId === null) {
+        return true
+      }
+
+      return option.providerId === modeSelection.providerId
+    })
+
+    if (hasEnabledSelection) {
+      return
+    }
+
+    const hasKnownSelection = selectedProviderConfigured && allModelCatalog.some((option) => {
+      if (option.id !== normalizedSavedModelId) {
+        return false
+      }
+
+      if (modeSelection.providerId === null) {
+        return true
+      }
+
+      return option.providerId === modeSelection.providerId
+    })
+
+    if (!hasKnownSelection) {
+      return
+    }
+
+    const nextModel = modelOptions[0]
+    if (!nextModel) {
+      return
+    }
+
+    void updateSettings({
+      [modeSelection.updateKeys.modelId]: nextModel.id,
+      [modeSelection.updateKeys.providerId]: nextModel.providerId,
+      [modeSelection.updateKeys.modelLabel]: nextModel.label,
+      chatModelId: nextModel.id,
+      chatModelProviderId: nextModel.providerId,
+      chatModelLabel: nextModel.label,
+    })
+  }, [
+    allModelCatalog,
+    modelOptions,
+    modeSelection.modelId,
+    modeSelection.providerId,
+    modeSelection.updateKeys.modelId,
+    modeSelection.updateKeys.modelLabel,
+    modeSelection.updateKeys.providerId,
+    selectedProviderConfigured,
     updateSettings,
   ])
 

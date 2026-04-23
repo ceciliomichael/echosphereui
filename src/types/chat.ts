@@ -360,9 +360,10 @@ export interface StartChatStreamResult {
 
 export interface ProviderModelConfig {
   apiModelId: string
+  enabledByDefault: boolean
   id: string
   label: string
-  providerId: ApiKeyProviderId
+  providerId: ChatProviderId
   reasoningCapable: boolean
 }
 
@@ -833,7 +834,7 @@ export interface EchosphereProvidersApi {
 
 export interface EchosphereModelsApi {
   listCustomModels: () => Promise<CustomModelConfig[]>
-  listProviderModels: (providerId: ApiKeyProviderId) => Promise<ProviderModelConfig[]>
+  listProviderModels: (providerId: ChatProviderId) => Promise<ProviderModelConfig[]>
   removeCustomModel: (modelId: string) => Promise<CustomModelConfig[]>
   saveCustomModel: (input: SaveCustomModelInput) => Promise<CustomModelConfig[]>
 }

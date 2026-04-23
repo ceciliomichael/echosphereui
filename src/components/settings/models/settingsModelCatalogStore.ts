@@ -1,6 +1,9 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { isProviderConfigured } from './modelViewUtils'
+import { PROVIDER_SECTIONS } from './modelCatalog'
+import { mergeProviderModels } from './providerModelMergeUtils'
 import type { CustomModelConfig, ProviderModelConfig, ProvidersState } from '../../../types/chat'
+import type { ModelProviderId } from './modelTypes'
 
 export interface SettingsModelCatalogState {
   customModels: CustomModelConfig[]
@@ -9,7 +12,6 @@ export interface SettingsModelCatalogState {
   customModelsLoading: boolean
   providerModels: ProviderModelConfig[]
   providerModelsErrorMessage: string | null
-  providerModelsHasLoaded: boolean
   providerModelsLoading: boolean
 }
 
@@ -20,14 +22,14 @@ const EMPTY_SETTINGS_MODEL_CATALOG_STATE: SettingsModelCatalogState = {
   customModelsLoading: false,
   providerModels: [],
   providerModelsErrorMessage: null,
-  providerModelsHasLoaded: false,
   providerModelsLoading: false,
 }
 
 const subscribers = new Set<() => void>()
 let state: SettingsModelCatalogState = EMPTY_SETTINGS_MODEL_CATALOG_STATE
 let customModelsRequest: Promise<CustomModelConfig[]> | null = null
-let providerModelsRequest: Promise<ProviderModelConfig[]> | null = null
+const loadedProviderModelIds = new Set<ModelProviderId>()
+const providerModelRequests = new Map<ModelProviderId, Promise<ProviderModelConfig[]>>()
 
 function mergeCustomModels(
   existingModels: readonly CustomModelConfig[],
@@ -67,6 +69,19 @@ export function replaceCustomModels(customModels: readonly CustomModelConfig[]) 
     customModelsHasLoaded: true,
     customModelsLoading: false,
   })
+}
+
+function setProviderModelsLoading() {
+  updateState({
+    ...state,
+    providerModelsLoading: providerModelRequests.size > 0,
+  })
+}
+
+function getConfiguredProviderIds(providersState: ProvidersState | null): ModelProviderId[] {
+  return PROVIDER_SECTIONS.filter((provider) => isProviderConfigured(provider.id, providersState)).map(
+    (provider) => provider.id,
+  )
 }
 
 function getLoadErrorMessage(error: unknown, fallbackMessage: string): string {
@@ -130,17 +145,14 @@ async function loadCustomModels() {
   return customModelsRequest
 }
 
-async function loadOpenAICompatibleModels() {
+function scheduleProviderModelsLoad(providerId: ModelProviderId) {
   if (typeof window === 'undefined') {
-    return state.providerModels
+    return Promise.resolve(state.providerModels)
   }
 
-  if (state.providerModelsHasLoaded) {
-    return state.providerModels
-  }
-
-  if (providerModelsRequest) {
-    return providerModelsRequest
+  const existingRequest = providerModelRequests.get(providerId)
+  if (existingRequest) {
+    return existingRequest
   }
 
   updateState({
@@ -149,32 +161,51 @@ async function loadOpenAICompatibleModels() {
     providerModelsLoading: true,
   })
 
-  providerModelsRequest = window.echosphereModels
-    .listProviderModels('openai-compatible')
+  const request = window.echosphereModels
+    .listProviderModels(providerId)
     .then((models) => {
+      loadedProviderModelIds.add(providerId)
       updateState({
         ...state,
-        providerModels: models,
+        providerModels: mergeProviderModels(state.providerModels, models),
         providerModelsErrorMessage: null,
-        providerModelsHasLoaded: true,
-        providerModelsLoading: false,
       })
       return models
     })
     .catch((error) => {
-      console.error('Failed to load OpenAI-compatible models', error)
+      console.error(`Failed to load ${providerId} models`, error)
       updateState({
         ...state,
         providerModelsErrorMessage: getLoadErrorMessage(error, 'Unable to load provider models.'),
-        providerModelsLoading: false,
       })
       return [] as ProviderModelConfig[]
     })
     .finally(() => {
-      providerModelsRequest = null
+      providerModelRequests.delete(providerId)
+      setProviderModelsLoading()
     })
 
-  return providerModelsRequest
+  providerModelRequests.set(providerId, request)
+  return request
+}
+
+async function loadConfiguredProviderModels(providersState: ProvidersState | null) {
+  if (typeof window === 'undefined') {
+    return state.providerModels
+  }
+
+  const configuredProviderIds = getConfiguredProviderIds(providersState)
+  const pendingProviderIds = configuredProviderIds.filter(
+    (providerId) => !loadedProviderModelIds.has(providerId) && !providerModelRequests.has(providerId),
+  )
+
+  if (pendingProviderIds.length === 0) {
+    return state.providerModels
+  }
+
+  const loadOperations = pendingProviderIds.map((providerId) => scheduleProviderModelsLoad(providerId))
+  await Promise.allSettled(loadOperations)
+  return state.providerModels
 }
 
 export function getSettingsModelCatalogState() {
@@ -191,9 +222,7 @@ export function subscribeSettingsModelCatalog(listener: () => void) {
 export async function preloadSettingsModelCatalog(providersState: ProvidersState | null) {
   const loadOperations: Promise<unknown>[] = [loadCustomModels()]
 
-  if (isProviderConfigured('openai-compatible', providersState)) {
-    loadOperations.push(loadOpenAICompatibleModels())
-  }
+  loadOperations.push(loadConfiguredProviderModels(providersState))
 
   await Promise.allSettled(loadOperations)
 }

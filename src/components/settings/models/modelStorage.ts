@@ -1,5 +1,5 @@
 import { MODEL_CATALOG } from './modelCatalog'
-import type { ModelToggleState } from './modelTypes'
+import type { ModelCatalogItem, ModelToggleState } from './modelTypes'
 
 const MODEL_TOGGLES_STORAGE_KEY = 'echosphere:model-toggles'
 
@@ -39,6 +39,13 @@ export function sanitizeModelToggleState(input: unknown): ModelToggleState {
   }
 
   return defaults
+}
+
+export function filterEnabledModelCatalogItems(
+  models: readonly ModelCatalogItem[],
+  toggleState: ModelToggleState = readStoredModelToggleState(),
+): ModelCatalogItem[] {
+  return models.filter((model) => toggleState[model.id] ?? model.enabledByDefault)
 }
 
 export function readStoredModelToggleState(): ModelToggleState {
