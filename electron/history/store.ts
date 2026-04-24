@@ -71,6 +71,7 @@ export async function listStoredConversations() {
   const conversations = await listConversationRecords()
   const hydratedConversations = await Promise.all(conversations.map((conversation) => ensureConversationAgentContext(conversation)))
   return hydratedConversations
+    .filter((conversation) => conversation.messages.length > 0)
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .map((conversation) => buildConversationSummary(conversation))
 }
@@ -371,5 +372,21 @@ export async function updateStoredConversationTitle(conversationId: string, titl
   return nextConversation
 }
 export async function deleteStoredConversation(conversationId: string) {
+  const conversation = await getStoredConversation(conversationId)
   await deleteConversationFile(conversationId)
+
+  if (!conversation || conversation.agentContextRootPath !== getConversationAgentContextPath(conversationId)) {
+    return
+  }
+
+  try {
+    await fs.rm(conversation.agentContextRootPath, { force: true, recursive: true })
+  } catch (error) {
+    const errorCode = (error as NodeJS.ErrnoException).code
+    if (errorCode === 'ENOENT') {
+      return
+    }
+
+    console.warn(`Failed to remove agent context for conversation ${conversationId}`, error)
+  }
 }

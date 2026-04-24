@@ -500,21 +500,51 @@ export function useChatMessages(input: UseChatMessagesInput) {
 
   const isActiveDraftSending = activeConversationId === null && pendingDraftSendCount > 0
 
+  const deleteAbandonedActiveConversation = useCallback(async () => {
+    const activeConversationState = sessionState.activeConversationState
+    if (
+      !activeConversationState ||
+      activeConversationState.isSending ||
+      activeConversationState.activeStreamId !== null ||
+      activeConversationState.conversation.messages.length > 0
+    ) {
+      return
+    }
+
+    try {
+      const conversation = activeConversationState.conversation
+      const { remainingSummaries } = sessionState.getDeletionContext(conversation.id)
+      await window.echosphereHistory.deleteConversation(conversation.id)
+      sessionState.removeConversationRuntime(conversation.id)
+      sessionState.replaceConversationSummaries(remainingSummaries)
+    } catch (caughtError) {
+      console.warn('Skipped cleanup for abandoned empty chat.', caughtError)
+    }
+  }, [sessionState])
+
   const createConversation = useCallback(
     async (folderId?: string | null) => {
       captureActiveEditDraftSession()
-      const resolvedFolderId = await conversationActions.createConversation(folderId)
+      await deleteAbandonedActiveConversation()
+      const createdConversation = await conversationActions.createConversation(folderId, draftChatMode)
       persistConversationLaunchPreference({
-        conversationId: null,
-        draftFolderId: resolvedFolderId,
-        openEmptyConversationOnLaunch: true,
+        conversationId: createdConversation.id,
+        draftFolderId: null,
+        openEmptyConversationOnLaunch: false,
       })
     },
-    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
+    [
+      captureActiveEditDraftSession,
+      conversationActions,
+      deleteAbandonedActiveConversation,
+      draftChatMode,
+      persistConversationLaunchPreference,
+    ],
   )
 
   const createFolder = useCallback(async () => {
     captureActiveEditDraftSession()
+    await deleteAbandonedActiveConversation()
     const createdFolderId = await conversationActions.createFolder()
     if (createdFolderId === undefined) {
       return
@@ -525,11 +555,12 @@ export function useChatMessages(input: UseChatMessagesInput) {
       draftFolderId: createdFolderId,
       openEmptyConversationOnLaunch: true,
     })
-  }, [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference])
+  }, [captureActiveEditDraftSession, conversationActions, deleteAbandonedActiveConversation, persistConversationLaunchPreference])
 
   const selectConversation = useCallback(
     async (conversationId: string) => {
       captureActiveEditDraftSession()
+      await deleteAbandonedActiveConversation()
       persistConversationLaunchPreference({
         conversationId,
         draftFolderId: null,
@@ -537,12 +568,13 @@ export function useChatMessages(input: UseChatMessagesInput) {
       })
       await conversationActions.selectConversation(conversationId)
     },
-    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
+    [captureActiveEditDraftSession, conversationActions, deleteAbandonedActiveConversation, persistConversationLaunchPreference],
   )
 
   const selectFolder = useCallback(
     async (folderId: string | null) => {
       captureActiveEditDraftSession()
+      await deleteAbandonedActiveConversation()
       const resolvedFolderId = await conversationActions.selectFolder(folderId)
       persistConversationLaunchPreference({
         conversationId: null,
@@ -550,7 +582,7 @@ export function useChatMessages(input: UseChatMessagesInput) {
         openEmptyConversationOnLaunch: true,
       })
     },
-    [captureActiveEditDraftSession, conversationActions, persistConversationLaunchPreference],
+    [captureActiveEditDraftSession, conversationActions, deleteAbandonedActiveConversation, persistConversationLaunchPreference],
   )
 
   return {

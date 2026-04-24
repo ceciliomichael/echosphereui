@@ -64,17 +64,28 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
   )
 
   const createConversation = useCallback(
-    (folderId?: string | null) => {
+    async (folderId?: string | null, chatMode: ConversationRecord['chatMode'] = 'agent') => {
       clearError()
       const nextFolderId =
         folderId !== undefined
           ? folderId
           : selectedFolderId ?? resolveFolderIdForWorkspacePath(activeWorkspacePath)
 
-      resetDraft(nextFolderId)
-      return nextFolderId
+      try {
+        const conversation = await window.echosphereHistory.createConversation({
+          chatMode,
+          folderId: nextFolderId,
+        })
+        applyConversation(conversation)
+        return conversation
+      } catch (caughtError) {
+        console.error(caughtError)
+        setError('Unable to create a new chat.')
+        resetDraft(nextFolderId)
+        throw caughtError
+      }
     },
-    [activeWorkspacePath, clearError, resolveFolderIdForWorkspacePath, resetDraft, selectedFolderId],
+    [activeWorkspacePath, applyConversation, clearError, resolveFolderIdForWorkspacePath, resetDraft, selectedFolderId, setError],
   )
 
   const createFolder = useCallback(async () => {
