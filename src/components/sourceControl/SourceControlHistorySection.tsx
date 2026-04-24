@@ -96,7 +96,7 @@ export function SourceControlHistorySection({
   return (
     <section
       className={[
-        isHistorySectionOpen ? 'border-b border-border min-h-0 shrink-0 flex flex-1 flex-col' : 'shrink-0',
+        isHistorySectionOpen ? 'min-h-0 shrink-0 flex flex-1 flex-col' : 'mt-auto shrink-0 border-t border-border',
       ].join(' ')}
       style={
         isHistorySectionOpen && historyHeight !== null

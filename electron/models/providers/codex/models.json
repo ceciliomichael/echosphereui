@@ -1,5 +1,12 @@
 [
   {
+    "apiModelId": "gpt-5.5",
+    "enabledByDefault": true,
+    "id": "gpt-5.5",
+    "label": "gpt-5.5",
+    "reasoningCapable": true
+  },
+  {
     "apiModelId": "gpt-5.4",
     "enabledByDefault": true,
     "id": "gpt-5.4",
