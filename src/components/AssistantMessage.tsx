@@ -1,7 +1,10 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { chatMessageContentWidthClassName } from "../lib/chatStyles";
-import { normalizeAssistantMessageContent } from "../lib/chatMessageContent";
+import {
+  getCopyableAssistantMessageText,
+  normalizeAssistantMessageContent,
+} from "../lib/chatMessageContent";
 import type {
   AssistantWaitingIndicatorVariant,
   ToolInvocationTrace,
@@ -119,12 +122,7 @@ export function AssistantMessage({
     toolInvocations,
     waitingIndicatorVariant,
   });
-  const copyableText = [
-    normalizedContent.reasoningContent.trim(),
-    normalizedContent.content.trim(),
-  ]
-    .filter((value) => value.length > 0)
-    .join("\n\n");
+  const copyableText = getCopyableAssistantMessageText({ content, reasoningContent });
   const canShowCopyButton =
     showCopyButton && !isStreaming && copyableText.length > 0;
   const messagePaddingClassName = canShowCopyButton ? "pb-5 pr-5" : "";

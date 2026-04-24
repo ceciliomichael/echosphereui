@@ -9,7 +9,7 @@ interface GitignoreMatcherEntry {
 
 export type WorkspaceEntryVisibility = 'explorer' | 'workspace'
 
-const WORKSPACE_IGNORED_ENTRY_NAMES = new Set(['node_modules', '.next', '.DS_Store', 'Thumbs.db'])
+const WORKSPACE_IGNORED_ENTRY_NAMES = new Set(['node_modules', '.next', '.echosphere', '.DS_Store', 'Thumbs.db'])
 const EXPLORER_IGNORED_ENTRY_NAMES = new Set(['.git'])
 const gitignoreMatcherCache = new Map<string, Promise<GitignoreMatcherEntry[]>>()
 

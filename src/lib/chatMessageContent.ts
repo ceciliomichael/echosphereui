@@ -202,6 +202,12 @@ export function normalizeAssistantMessageContent(message: Pick<Message, 'content
   }
 }
 
+export function getCopyableAssistantMessageText(
+  message: Pick<Message, 'content' | 'reasoningContent'>,
+) {
+  return normalizeAssistantMessageContent(message).content.trim()
+}
+
 export function hasMeaningfulAssistantContent(
   message: Pick<Message, 'content' | 'reasoningContent' | 'toolInvocations'>,
 ) {

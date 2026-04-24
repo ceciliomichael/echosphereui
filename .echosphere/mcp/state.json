@@ -1,3 +1,7 @@
 {
-  "servers": {}
+  "servers": {
+    "echosphere_mem": {
+      "autoConnect": true
+    }
+  }
 }

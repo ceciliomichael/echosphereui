@@ -55,10 +55,10 @@ test('createMcpToolSetForServer namespaces tools and filters disabled entries', 
     },
   ])
 
-  assert.ok('mcp_server-one_search' in tools)
-  assert.ok(!('mcp_server-one_hidden-tool' in tools))
+  assert.ok('mcp_search' in tools)
+  assert.ok(!('mcp_hidden-tool' in tools))
 
-  const tool = tools['mcp_server-one_search'] as {
+  const tool = tools['mcp_search'] as {
     execute: (input: { query: string }) => Promise<{ body?: string; status: string; summary: string }>
   }
   const result = await tool.execute({ query: 'atlas' })

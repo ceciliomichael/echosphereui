@@ -48,9 +48,9 @@ function toToolBody(content: CallToolResult['content']) {
   return lines.join('\n').trim()
 }
 
-function createNamespacedToolName(serverId: string, toolName: string) {
+function createNamespacedToolName(toolName: string) {
   const normalizedToolName = toolName.trim().replace(/[^a-zA-Z0-9_-]+/g, '_')
-  return `mcp_${serverId}_${normalizedToolName}`
+  return `mcp_${normalizedToolName}`
 }
 
 function createToolDescription(config: McpServerConfig, tool: McpTool) {
@@ -82,7 +82,7 @@ export function createMcpToolSetForServer(config: McpServerConfig, client: Clien
         return true
       })
       .map((mcpTool) => {
-        const toolName = createNamespacedToolName(config.id, mcpTool.name)
+        const toolName = createNamespacedToolName(mcpTool.name)
         return [
           toolName,
           tool({

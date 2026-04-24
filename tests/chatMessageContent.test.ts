@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeMarkdownText } from '../src/lib/chatMessageContent'
+import {
+  getCopyableAssistantMessageText,
+  normalizeMarkdownText,
+} from '../src/lib/chatMessageContent'
 
 test('normalizeMarkdownText repairs dangling double-backtick code fence endings', () => {
   const input = '```ts\nconst value = 1\n``'
@@ -17,5 +20,25 @@ test('normalizeMarkdownText inserts paragraph spacing between glued reasoning se
   assert.equal(
     normalizeMarkdownText(input),
     "Let's make it functional and easy to paste!\n\nDesigning the hero section\nNext line",
+  )
+})
+
+test('getCopyableAssistantMessageText excludes reasoning content and think tags', () => {
+  assert.equal(
+    getCopyableAssistantMessageText({
+      content: 'Visible answer\n\n<think>internal steps</think>',
+      reasoningContent: 'More internal steps',
+    }),
+    'Visible answer',
+  )
+})
+
+test('getCopyableAssistantMessageText does not copy reasoning-only messages', () => {
+  assert.equal(
+    getCopyableAssistantMessageText({
+      content: '',
+      reasoningContent: '<think>secret</think> reasoning only',
+    }),
+    '',
   )
 })
