@@ -1,6 +1,6 @@
 import { FolderPlus, Settings } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
-import type { ConversationGroupPreview } from '../../types/chat'
+import type { ConversationGroupPreview, ReorderConversationFolderInput } from '../../types/chat'
 import { ConversationHistoryList } from './ConversationHistoryList'
 
 interface SidebarPanelProps {
@@ -9,7 +9,7 @@ interface SidebarPanelProps {
   onCreateFolder: () => Promise<void>
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
-  onMoveFolder: (folderId: string, direction: 'up' | 'down') => Promise<void>
+  onReorderFolder: (input: ReorderConversationFolderInput) => Promise<void>
   onOpenSettings: () => void
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
@@ -22,7 +22,7 @@ export function SidebarPanel({
   onCreateConversation,
   onDeleteConversation,
   onDeleteFolder,
-  onMoveFolder,
+  onReorderFolder,
   onOpenSettings,
   onRenameFolder,
   onSelectConversation,
@@ -65,7 +65,7 @@ export function SidebarPanel({
           onCreateConversation={onCreateConversation}
           onDeleteConversation={onDeleteConversation}
           onDeleteFolder={onDeleteFolder}
-          onMoveFolder={onMoveFolder}
+          onReorderFolder={onReorderFolder}
           onRenameFolder={onRenameFolder}
           onSelectConversation={onSelectConversation}
           onSelectFolder={onSelectFolder}

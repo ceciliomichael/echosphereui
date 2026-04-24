@@ -9,6 +9,7 @@ import type {
   ReplaceConversationMessagesInput,
   CreateConversationInput,
   FolderMoveDirection,
+  ReorderConversationFolderInput,
 } from '../../src/types/chat'
 import {
   appendMessagesToLog,
@@ -98,6 +99,47 @@ export async function moveStoredFolder(folderId: string, direction: FolderMoveDi
     updatedAt: Date.now(),
   }
   nextFolders.splice(targetIndex, 0, updatedFolder)
+
+  await writeFolderStore(nextFolders)
+  return updatedFolder
+}
+
+export async function reorderStoredFolder(input: ReorderConversationFolderInput) {
+  const { folderId, targetFolderId, position } = input
+  const folders = await readFolderStore()
+
+  if (folderId === targetFolderId) {
+    const matchedFolder = folders.find((folder) => folder.id === folderId)
+    if (!matchedFolder) {
+      throw new Error(`Folder not found: ${folderId}`)
+    }
+
+    return matchedFolder
+  }
+
+  const currentIndex = folders.findIndex((folder) => folder.id === folderId)
+  const targetIndex = folders.findIndex((folder) => folder.id === targetFolderId)
+  if (currentIndex < 0) {
+    throw new Error(`Folder not found: ${folderId}`)
+  }
+  if (targetIndex < 0) {
+    throw new Error(`Target folder not found: ${targetFolderId}`)
+  }
+
+  const nextFolders = [...folders]
+  const [movedFolder] = nextFolders.splice(currentIndex, 1)
+  const updatedFolder = {
+    ...movedFolder,
+    updatedAt: Date.now(),
+  }
+
+  const nextTargetIndex = nextFolders.findIndex((folder) => folder.id === targetFolderId)
+  if (nextTargetIndex < 0) {
+    throw new Error(`Target folder not found after reorder prep: ${targetFolderId}`)
+  }
+
+  const insertIndex = position === 'after' ? nextTargetIndex + 1 : nextTargetIndex
+  nextFolders.splice(insertIndex, 0, updatedFolder)
 
   await writeFolderStore(nextFolders)
   return updatedFolder

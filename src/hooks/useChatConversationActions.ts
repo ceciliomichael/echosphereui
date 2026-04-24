@@ -3,7 +3,7 @@ import type {
   ConversationFolderSummary,
   ConversationRecord,
   ConversationSummary,
-  FolderMoveDirection,
+  ReorderConversationFolderInput,
 } from '../types/chat'
 import type { ConversationRuntimeSnapshot } from './chatMessageSendTypes'
 
@@ -22,7 +22,7 @@ interface UseChatConversationActionsInput {
   }
   removeFolder: (folderId: string, deletedConversationIds: readonly string[]) => void
   removeConversationRuntime: (conversationId: string) => void
-  moveFolder: (folderId: string, direction: FolderMoveDirection) => void
+  reorderFolder: (input: ReorderConversationFolderInput) => void
   renameFolder: (folderId: string, name: string) => void
   replaceConversationSummaries: (summaries: ConversationSummary[]) => void
   resetComposerState: () => void
@@ -45,7 +45,7 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
     getDeletionContext,
     removeFolder,
     removeConversationRuntime,
-    moveFolder,
+    reorderFolder: applyFolderReorder,
     renameFolder,
     replaceConversationSummaries,
     resetComposerState,
@@ -264,12 +264,12 @@ export function useChatConversationActions(input: UseChatConversationActionsInpu
         throw caughtError
       }
     },
-    moveFolder: async (folderId: string, direction: FolderMoveDirection) => {
+    reorderFolder: async (input: ReorderConversationFolderInput) => {
       clearError()
+      applyFolderReorder(input)
 
       try {
-        await window.echosphereHistory.moveFolder(folderId, direction)
-        moveFolder(folderId, direction)
+        await window.echosphereHistory.reorderFolder(input)
       } catch (caughtError) {
         console.error(caughtError)
         setError('Unable to reorder that project folder.')

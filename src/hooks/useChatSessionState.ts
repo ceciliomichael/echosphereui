@@ -4,6 +4,7 @@ import type {
   ChatMode,
   ConversationFolderSummary,
   ConversationRecord,
+  ReorderConversationFolderInput,
   ConversationSummary,
   Message,
 } from '../types/chat'
@@ -13,6 +14,7 @@ import {
   getSelectedFolderName,
   insertFolderSummary,
   moveFolderSummary,
+  reorderFolderSummary,
   removeConversationSummary,
   upsertConversationSummary,
 } from './chatHistoryViewModels'
@@ -146,6 +148,10 @@ export function useChatSessionState(language: AppLanguage) {
 
   const moveFolder = useCallback((folderId: string, direction: 'up' | 'down') => {
     setFolderSummaries((currentValue) => moveFolderSummary(currentValue, folderId, direction))
+  }, [])
+
+  const reorderFolder = useCallback((input: ReorderConversationFolderInput) => {
+    setFolderSummaries((currentValue) => reorderFolderSummary(currentValue, input))
   }, [])
 
   const removeFolder = useCallback(
@@ -363,6 +369,7 @@ export function useChatSessionState(language: AppLanguage) {
     removeFolder,
     removeConversationRuntime,
     moveFolder,
+    reorderFolder,
     renameFolder,
     replaceConversationSummaries: setConversationSummaries,
     runningConversationIds,

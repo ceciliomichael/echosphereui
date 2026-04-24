@@ -20,6 +20,7 @@ import type {
   SaveApiKeyProviderInput,
   SaveCustomModelInput,
   RenameConversationFolderInput,
+  ReorderConversationFolderInput,
   CreateConversationFolderInput,
   FolderMoveDirection,
   CreateConversationInput,
@@ -78,6 +79,7 @@ const historyApi: EchosphereHistoryApi = {
   createFolder: (input: CreateConversationFolderInput) => ipcRenderer.invoke('history:createFolder', input),
   moveFolder: (folderId: string, direction: FolderMoveDirection) =>
     ipcRenderer.invoke('history:moveFolder', folderId, direction),
+  reorderFolder: (input: ReorderConversationFolderInput) => ipcRenderer.invoke('history:reorderFolder', input),
   renameFolder: (input: RenameConversationFolderInput) => ipcRenderer.invoke('history:renameFolder', input),
   deleteFolder: (folderId: string) => ipcRenderer.invoke('history:deleteFolder', folderId),
   pickFolder: () => ipcRenderer.invoke('history:pickFolder'),

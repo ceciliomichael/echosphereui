@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react'
-import type { ConversationGroupPreview } from '../../types/chat'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
+import type {
+  ConversationGroupPreview,
+  FolderReorderPosition,
+  ReorderConversationFolderInput,
+} from '../../types/chat'
 import { FolderOpen } from 'lucide-react'
 import { ConversationFolderSection } from './ConversationFolderSection'
 
@@ -8,7 +12,7 @@ interface ConversationHistoryListProps {
   onCreateConversation: (folderId?: string | null) => void
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
-  onMoveFolder: (folderId: string, direction: 'up' | 'down') => Promise<void>
+  onReorderFolder: (input: ReorderConversationFolderInput) => Promise<void>
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectConversation: (conversationId: string) => void
   onSelectFolder: (folderId: string | null) => void
@@ -49,19 +53,27 @@ function readCollapsedFolderState(): Record<string, boolean> {
   }
 }
 
+function getDropPosition(event: DragEvent<HTMLElement>): FolderReorderPosition {
+  const rect = event.currentTarget.getBoundingClientRect()
+  return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+}
+
 export function ConversationHistoryList({
   conversationGroups,
   onCreateConversation,
   onSelectConversation,
   onDeleteConversation,
   onDeleteFolder,
-  onMoveFolder,
+  onReorderFolder,
   onRenameFolder,
   onSelectFolder,
 }: ConversationHistoryListProps) {
   const [collapsedFolderState, setCollapsedFolderState] = useState<Record<string, boolean>>(() =>
     readCollapsedFolderState(),
   )
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ folderId: string; position: FolderReorderPosition } | null>(null)
+  const reorderCommitPendingRef = useRef(false)
   const hasAnyConversations = conversationGroups.some((group) => group.conversations.length > 0)
 
   useEffect(() => {
@@ -84,6 +96,84 @@ export function ConversationHistoryList({
     }))
   }
 
+  function resetDragState() {
+    setDraggedFolderId(null)
+    setDropTarget(null)
+    reorderCommitPendingRef.current = false
+  }
+
+  function commitFolderReorder(input: ReorderConversationFolderInput) {
+    if (reorderCommitPendingRef.current) {
+      return
+    }
+
+    reorderCommitPendingRef.current = true
+    void onReorderFolder(input).finally(() => {
+      resetDragState()
+    })
+  }
+
+  function handleDragStart(event: DragEvent<HTMLElement>, folderId: string) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', folderId)
+    reorderCommitPendingRef.current = false
+    setDraggedFolderId(folderId)
+    setDropTarget(null)
+  }
+
+  function handleDragEnd() {
+    if (!draggedFolderId || !dropTarget || draggedFolderId === dropTarget.folderId) {
+      resetDragState()
+      return
+    }
+
+    commitFolderReorder({
+      folderId: draggedFolderId,
+      targetFolderId: dropTarget.folderId,
+      position: dropTarget.position,
+    })
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>, targetFolderId: string) {
+    const sourceFolderId = draggedFolderId ?? event.dataTransfer.getData('text/plain')
+    if (!sourceFolderId || sourceFolderId === targetFolderId) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const position = getDropPosition(event)
+    setDropTarget((currentValue) => {
+      if (currentValue?.folderId === targetFolderId && currentValue.position === position) {
+        return currentValue
+      }
+
+      return {
+        folderId: targetFolderId,
+        position,
+      }
+    })
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>, targetFolderId: string) {
+    event.preventDefault()
+
+    const sourceFolderId = draggedFolderId ?? event.dataTransfer.getData('text/plain')
+    if (!sourceFolderId || sourceFolderId === targetFolderId) {
+      resetDragState()
+      return
+    }
+
+    const position =
+      dropTarget?.folderId === targetFolderId ? dropTarget.position : getDropPosition(event)
+
+    commitFolderReorder({
+      folderId: sourceFolderId,
+      targetFolderId,
+      position,
+    })
+  }
+
   return (
     <div className="flex min-h-full flex-col pb-1">
       {!hasAnyConversations ? (
@@ -101,28 +191,51 @@ export function ConversationHistoryList({
           </div>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div>
           {conversationGroups.map((group) => {
             const stateKey = group.folder.id ?? 'unfiled'
-            const folderIndex = conversationGroups.findIndex((candidate) => candidate.folder.id === group.folder.id)
-            const canMoveUp = group.folder.id !== null && folderIndex > 1
-            const canMoveDown = group.folder.id !== null && folderIndex > 0 && folderIndex < conversationGroups.length - 1
+            const folderId = group.folder.id
+            const isDraggable = folderId !== null
+            const showDropIndicator =
+              isDraggable && dropTarget?.folderId === folderId && draggedFolderId !== null && draggedFolderId !== folderId
 
             return (
               <ConversationFolderSection
                 key={stateKey}
                 group={group}
                 isCollapsed={Boolean(collapsedFolderState[stateKey])}
+                isDragging={isDraggable && draggedFolderId === folderId}
+                isDraggable={isDraggable}
+                dropIndicatorPosition={showDropIndicator ? dropTarget.position : null}
                 onCreateConversation={onCreateConversation}
-                onMoveFolder={onMoveFolder}
+                onDragEnd={handleDragEnd}
+                onDragOver={
+                  folderId
+                    ? (event) => {
+                        handleDragOver(event, folderId)
+                      }
+                    : undefined
+                }
+                onDragStart={
+                  folderId
+                    ? (event) => {
+                        handleDragStart(event, folderId)
+                      }
+                    : undefined
+                }
+                onDrop={
+                  folderId
+                    ? (event) => {
+                        handleDrop(event, folderId)
+                      }
+                    : undefined
+                }
                 onToggleCollapsed={() => handleToggleFolder(group.folder.id)}
                 onDeleteFolder={onDeleteFolder}
                 onRenameFolder={onRenameFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectConversation={onSelectConversation}
                 onDeleteConversation={onDeleteConversation}
-                canMoveUp={canMoveUp}
-                canMoveDown={canMoveDown}
               />
             )
           })}

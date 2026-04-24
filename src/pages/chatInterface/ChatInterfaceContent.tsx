@@ -31,7 +31,7 @@ import { useChatMessageQueue } from './useChatMessageQueue'
 import { canInterruptStreamForSteer } from './chatSteerFollowUp'
 import { useChatCompression } from './useChatCompression'
 import type { ChatWorkspaceUiState } from './useChatWorkspaceUiState'
-import type { AppSettings, ChatAttachment, ToolInvocationTrace } from '../../types/chat'
+import type { AppSettings, ChatAttachment, ReorderConversationFolderInput, ToolInvocationTrace } from '../../types/chat'
 import type { ResolvedTheme } from '../../lib/theme'
 import { getNextChatMode, isChatModeToggleShortcut } from '../../components/chat/chatModeShortcut'
 import { resolveTaskModelSelection } from '../../lib/taskModelSelection'
@@ -257,10 +257,10 @@ export function ChatInterfaceContent({
     [chatMessages, clearQueuedMessages],
   )
 
-  const handleMoveFolder = useCallback(
-    async (folderId: string, direction: 'up' | 'down') => {
+  const handleReorderFolder = useCallback(
+    async (input: ReorderConversationFolderInput) => {
       clearQueuedMessages()
-      await chatMessages.moveFolder(folderId, direction)
+      await chatMessages.reorderFolder(input)
     },
     [chatMessages, clearQueuedMessages],
   )
@@ -412,7 +412,7 @@ export function ChatInterfaceContent({
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}
           onDeleteFolder={handleDeleteFolder}
-          onMoveFolder={handleMoveFolder}
+          onReorderFolder={handleReorderFolder}
           onOpenSettings={onOpenSettings}
           onRenameFolder={chatMessages.renameFolder}
           onSelectConversation={handleSelectConversation}

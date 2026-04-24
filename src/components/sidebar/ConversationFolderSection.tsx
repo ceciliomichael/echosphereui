@@ -1,11 +1,11 @@
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { ChevronDown, ChevronRight, Folder, FolderOpen, MoreHorizontal, SquarePen } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEventHandler } from 'react'
 import { createPortal } from 'react-dom'
 import type { ConversationGroupPreview } from '../../types/chat'
 import { Tooltip } from '../Tooltip'
 import { ConversationHistoryItem } from './ConversationHistoryItem'
 import { RemoveProjectFolderDialog } from './RemoveProjectFolderDialog'
-import type { FolderMoveDirection } from '../../types/chat'
+import type { FolderReorderPosition } from '../../types/chat'
 
 interface ConversationFolderSectionProps {
   group: ConversationGroupPreview
@@ -13,13 +13,17 @@ interface ConversationFolderSectionProps {
   onCreateConversation: (folderId?: string | null) => void
   onDeleteConversation: (conversationId: string) => void
   onDeleteFolder: (folderId: string) => Promise<void>
-  onMoveFolder: (folderId: string, direction: FolderMoveDirection) => Promise<void>
   onRenameFolder: (folderId: string, name: string) => Promise<void>
   onSelectFolder: (folderId: string | null) => void
   onSelectConversation: (conversationId: string) => void
   onToggleCollapsed: () => void
-  canMoveUp: boolean
-  canMoveDown: boolean
+  dropIndicatorPosition: FolderReorderPosition | null
+  isDraggable: boolean
+  isDragging: boolean
+  onDragEnd: DragEventHandler<HTMLElement>
+  onDragOver?: DragEventHandler<HTMLElement>
+  onDragStart?: DragEventHandler<HTMLElement>
+  onDrop?: DragEventHandler<HTMLElement>
 }
 
 const MAX_VISIBLE_PROJECT_FOLDER_THREADS = 5
@@ -31,12 +35,16 @@ export function ConversationFolderSection({
   onToggleCollapsed,
   onRenameFolder,
   onDeleteFolder,
-  onMoveFolder,
   onSelectFolder,
   onSelectConversation,
   onDeleteConversation,
-  canMoveUp,
-  canMoveDown,
+  dropIndicatorPosition,
+  isDraggable,
+  isDragging,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
+  onDrop,
 }: ConversationFolderSectionProps) {
   const FolderIcon = group.folder.isSelected ? FolderOpen : Folder
   const hasFolderActions = group.folder.id !== null
@@ -264,14 +272,6 @@ export function ConversationFolderSection({
     setIsRemoveDialogOpen(true)
   }
 
-  function handleMoveFolder(direction: FolderMoveDirection) {
-    if (!group.folder.id) {
-      return
-    }
-
-    void onMoveFolder(group.folder.id, direction)
-  }
-
   async function handleConfirmRemoveFolder() {
     if (!group.folder.id) {
       return
@@ -287,15 +287,25 @@ export function ConversationFolderSection({
   }
 
   return (
-    <section className="space-y-2">
-      <div
-        className={[
-          'group flex h-11 min-w-0 items-center gap-1 rounded-2xl border px-2 text-left transition-colors',
-          group.folder.isSelected
-            ? 'border-border bg-[var(--sidebar-raised-surface)]'
-            : 'border-transparent bg-[var(--sidebar-muted-surface-mix)] hover:border-border/60 hover:bg-[var(--sidebar-hover-surface)]',
-        ].join(' ')}
-      >
+    <section className="space-y-2 py-1.5" onDragOver={onDragOver} onDrop={onDrop}>
+      <div className="relative">
+        {dropIndicatorPosition === 'before' ? (
+          <div className="pointer-events-none absolute -top-1.5 left-2 right-2 h-0.5 rounded-full bg-border" />
+        ) : null}
+        <div
+          draggable={isDraggable}
+          onDragEnd={onDragEnd}
+          onDragStart={onDragStart}
+          className={[
+            'group flex h-11 min-w-0 items-center gap-1 rounded-2xl border px-2 text-left transition-colors',
+            isDraggable ? 'cursor-grab active:cursor-grabbing' : '',
+            isDragging ? 'opacity-60' : '',
+            group.folder.isSelected
+              ? 'border-border bg-[var(--sidebar-raised-surface)]'
+              : 'border-transparent bg-[var(--sidebar-muted-surface-mix)] hover:border-border/60 hover:bg-[var(--sidebar-hover-surface)]',
+          ].join(' ')}
+          aria-label={isDraggable ? `Reorder ${group.folder.name}` : undefined}
+        >
         <Tooltip content={isCollapsed ? `Expand ${group.folder.name}` : `Collapse ${group.folder.name}`}>
           <button
             type="button"
@@ -383,6 +393,10 @@ export function ConversationFolderSection({
             </button>
           </Tooltip>
         )}
+        </div>
+        {dropIndicatorPosition === 'after' ? (
+          <div className="pointer-events-none absolute -bottom-1.5 left-2 right-2 h-0.5 rounded-full bg-border" />
+        ) : null}
       </div>
 
       {isCollapsed ? (
@@ -478,28 +492,6 @@ export function ConversationFolderSection({
                 >
                   Rename project folder
                 </button>
-                {canMoveUp ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => handleMoveFolder('up')}
-                    className="flex h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
-                  >
-                    <ArrowUp size={15} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
-                    <span>Move up</span>
-                  </button>
-                ) : null}
-                {canMoveDown ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => handleMoveFolder('down')}
-                    className="flex h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm text-foreground transition-colors hover:bg-surface-muted"
-                  >
-                    <ArrowDown size={15} strokeWidth={2.2} className="shrink-0 text-muted-foreground" />
-                    <span>Move down</span>
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   role="menuitem"

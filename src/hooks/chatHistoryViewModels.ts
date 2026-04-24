@@ -7,6 +7,7 @@ import type {
   ConversationFolderSummary,
   ConversationGroupPreview,
   ConversationPreview,
+  ReorderConversationFolderInput,
   ConversationRecord,
   ConversationSummary,
 } from '../types/chat'
@@ -243,5 +244,32 @@ export function moveFolderSummary(
   const nextFolders = [...folderSummaries]
   const [movedFolder] = nextFolders.splice(currentIndex, 1)
   nextFolders.splice(targetIndex, 0, movedFolder)
+  return nextFolders
+}
+
+export function reorderFolderSummary(
+  folderSummaries: ConversationFolderSummary[],
+  input: ReorderConversationFolderInput,
+) {
+  const { folderId, position, targetFolderId } = input
+  if (folderId === targetFolderId) {
+    return folderSummaries
+  }
+
+  const currentIndex = folderSummaries.findIndex((folder) => folder.id === folderId)
+  const targetIndex = folderSummaries.findIndex((folder) => folder.id === targetFolderId)
+  if (currentIndex < 0 || targetIndex < 0) {
+    return folderSummaries
+  }
+
+  const nextFolders = [...folderSummaries]
+  const [movedFolder] = nextFolders.splice(currentIndex, 1)
+  const nextTargetIndex = nextFolders.findIndex((folder) => folder.id === targetFolderId)
+  if (nextTargetIndex < 0) {
+    return folderSummaries
+  }
+
+  const insertIndex = position === 'after' ? nextTargetIndex + 1 : nextTargetIndex
+  nextFolders.splice(insertIndex, 0, movedFolder)
   return nextFolders
 }

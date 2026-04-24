@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ConversationFolderSummary } from '../src/types/chat'
-import { getFolderIdForWorkspacePath, insertFolderSummary, moveFolderSummary } from '../src/hooks/chatHistoryViewModels'
+import {
+  getFolderIdForWorkspacePath,
+  insertFolderSummary,
+  moveFolderSummary,
+  reorderFolderSummary,
+} from '../src/hooks/chatHistoryViewModels'
 
 const folderSummaries: ConversationFolderSummary[] = [
   {
@@ -51,4 +56,43 @@ test('moveFolderSummary reorders folders by moving a folder up or down', () => {
 
   const movedUp = moveFolderSummary(folderSummaries, 'folder-b', 'up')
   assert.deepEqual(movedUp.map((folder) => folder.id), ['folder-b', 'folder-a'])
+})
+
+test('reorderFolderSummary places a folder before or after the target folder', () => {
+  const movedBefore = reorderFolderSummary(folderSummaries, {
+    folderId: 'folder-b',
+    position: 'before',
+    targetFolderId: 'folder-a',
+  })
+  assert.deepEqual(movedBefore.map((folder) => folder.id), ['folder-b', 'folder-a'])
+
+  const movedAfter = reorderFolderSummary(folderSummaries, {
+    folderId: 'folder-a',
+    position: 'after',
+    targetFolderId: 'folder-b',
+  })
+  assert.deepEqual(movedAfter.map((folder) => folder.id), ['folder-b', 'folder-a'])
+})
+
+test('reorderFolderSummary ignores invalid moves', () => {
+  const sameFolderMove = reorderFolderSummary(folderSummaries, {
+    folderId: 'folder-a',
+    position: 'before',
+    targetFolderId: 'folder-a',
+  })
+  assert.deepEqual(sameFolderMove.map((folder) => folder.id), ['folder-a', 'folder-b'])
+
+  const invalidSourceMove = reorderFolderSummary(folderSummaries, {
+    folderId: 'missing',
+    position: 'before',
+    targetFolderId: 'folder-a',
+  })
+  assert.deepEqual(invalidSourceMove.map((folder) => folder.id), ['folder-a', 'folder-b'])
+
+  const invalidTargetMove = reorderFolderSummary(folderSummaries, {
+    folderId: 'folder-a',
+    position: 'after',
+    targetFolderId: 'missing',
+  })
+  assert.deepEqual(invalidTargetMove.map((folder) => folder.id), ['folder-a', 'folder-b'])
 })

@@ -23,6 +23,7 @@ import type {
   CreateTerminalSessionInput,
   CreateWorkspaceCheckpointInput,
   FolderMoveDirection,
+  ReorderConversationFolderInput,
   WorkspaceExplorerCreateEntryInput,
   WorkspaceExplorerDeleteEntryInput,
   WorkspaceExplorerListDirectoryInput,
@@ -65,6 +66,7 @@ import {
   listStoredConversations,
   listStoredFolders,
   moveStoredFolder,
+  reorderStoredFolder,
   renameStoredFolder,
   replaceStoredMessages,
   updateStoredConversationTitle,
@@ -324,6 +326,9 @@ function registerHistoryHandlers() {
   )
   ipcMain.handle('history:moveFolder', async (_event, folderId: string, direction: FolderMoveDirection) =>
     moveStoredFolder(folderId, direction),
+  )
+  ipcMain.handle('history:reorderFolder', async (_event, input: ReorderConversationFolderInput) =>
+    reorderStoredFolder(input),
   )
   ipcMain.handle('history:renameFolder', async (_event, input: RenameConversationFolderInput) =>
     renameStoredFolder(input),

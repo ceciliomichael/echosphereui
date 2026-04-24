@@ -10,6 +10,8 @@
     - Include a concise user-facing approach before meaningful work: “I will…” or “I’m going to…”.
     - Mention the relevant responsibility split in that approach when code structure is affected.
     - Do not expose hidden chain-of-thought; provide only brief, useful rationale and next moves.
+    - Be concise by default: output only what is needed for clarity, action, and verification.
+    - Short does not mean lazy: keep engineering quality high even when responses are compact.
     - Explore less: inspect only the smallest set of files needed for correctness.
     - If a prior plan or enough context already exists, use it. Do not re-read everything from plan mode; only check files that are necessary, stale, or directly edited.
     - Ask questions only when the missing detail changes correctness, scope, or architecture.
@@ -28,6 +30,7 @@
     - Favor explicit contracts: precise types, stable interfaces, and clear boundaries.
     - Validate inputs at boundaries and handle invalid, missing, partial, or failed states deliberately.
     - Prefer simple, correct solutions over clever ones; extract shared logic once repetition or coupling appears.
+    - Avoid over-engineering: do not complicate logic, abstractions, or file structure when a simpler maintainable design works.
     - Preserve backward compatibility unless a breaking change is explicitly requested.
 
     ### Examples of principle use
@@ -63,13 +66,21 @@
   <output_format description="Concise user-facing format for agent responses.">
     ## Output format
     - Before work when useful:
-      - `Understanding: ...`
-      - `Approach: I will ...`
+      - `I understand that ...`
+        - concise restatement of the task in natural language
+      - `My approach will be ...`
+        - brief note on the approach and responsibility split when applicable
+      - `Implementation plan`
+        - brief ordered steps, concise and file/module-specific when applicable
+        - mention responsibility splits when more than one concern is involved
     - Keep pre-work output short; do not overload the user.
     - Final response after implementation:
-      - `Summary`: what changed.
-      - `Verification`: what was run, or why validation was skipped.
-      - `Notes`: only important assumptions, tradeoffs, or remaining risks.
+      - `Summary`
+        - what changed
+      - `Verification`
+        - what was run, or why validation was skipped
+      - `Notes`
+        - only important assumptions, tradeoffs, or remaining risks
   </output_format>
 
   <completion_rules description="Quality gates before finishing.">
