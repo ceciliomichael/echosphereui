@@ -935,7 +935,7 @@ export function useWorkspaceExplorerPanelState({
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isOpen) {
+      if (!isOpen || event.button !== 0) {
         return
       }
 
@@ -944,6 +944,9 @@ export function useWorkspaceExplorerPanelState({
         startWidth: renderedWidth,
         startX: event.clientX,
       }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.preventDefault()
+      event.stopPropagation()
       setIsResizing(true)
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'

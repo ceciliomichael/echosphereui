@@ -259,11 +259,18 @@ export function WorkspaceFileTabsPanel({
   }
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return
+    }
+
     resizeDragStateRef.current = {
       pointerId: event.pointerId,
       startWidth: renderedWidthRef.current,
       startX: event.clientX,
     }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+    event.stopPropagation()
     setIsResizing(true)
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'

@@ -58,6 +58,7 @@ function ConversationDiffPanelContent({
   const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false)
   const [highlightedScope, setHighlightedScope] = useState<DiffPanelScope>('unstaged')
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+  const resizeAnimationFrameRef = useRef<number | null>(null)
   const widthRef = useRef(width)
   const onWidthChangeRef = useRef(onWidthChange)
   const onWidthCommitRef = useRef(onWidthCommit)
@@ -189,7 +190,17 @@ function ConversationDiffPanelContent({
         Math.max(MIN_DIFF_PANEL_WIDTH, Math.round(nextWidth)),
       )
       widthRef.current = clampedWidth
-      setRenderedWidth(clampedWidth)
+      if (resizeAnimationFrameRef.current !== null) {
+        return
+      }
+
+      resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        resizeAnimationFrameRef.current = null
+        setRenderedWidth(widthRef.current)
+        if (panelRef.current) {
+          panelRef.current.style.width = `${widthRef.current}px`
+        }
+      })
     }
 
     function handlePointerUp(event: PointerEvent) {
@@ -198,6 +209,11 @@ function ConversationDiffPanelContent({
       }
 
       dragStateRef.current = null
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      setRenderedWidth(widthRef.current)
       setIsResizing(false)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
@@ -211,6 +227,10 @@ function ConversationDiffPanelContent({
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
       dragStateRef.current = null
       setIsResizing(false)
       document.body.style.userSelect = ''
@@ -255,12 +275,19 @@ function ConversationDiffPanelContent({
   }, [expandedFilePaths, fileDiffs, onExpandedFilePathsChange])
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return
+    }
+
     dragStateRef.current = {
       pointerId: event.pointerId,
       startWidth: renderedWidth,
       startX: event.clientX,
     }
 
+    event.currentTarget.setPointerCapture(event.pointerId)
+    event.preventDefault()
+    event.stopPropagation()
     setIsResizing(true)
     document.body.style.userSelect = 'none'
     document.body.style.cursor = 'col-resize'

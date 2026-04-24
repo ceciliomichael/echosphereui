@@ -186,7 +186,9 @@ export function useWorkspaceTerminalPanelSizing({
       setIsResizing(true);
       document.body.style.cursor = "row-resize";
       document.body.style.userSelect = "none";
+      event.currentTarget.setPointerCapture(event.pointerId);
       event.preventDefault();
+      event.stopPropagation();
     },
     [isOpen, panelHeight],
   );
