@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { jsonSchema, tool } from 'ai'
 import { getDiffSummary } from '../../../../src/lib/textDiff'
+import type { AppTerminalExecutionMode } from '../../../../src/types/chat'
 import type { ChangeDiffToolResultItem } from '../../../../src/types/chat'
 import { loadGitignoreMatchers, isGitignored, shouldAlwaysShowEntry, shouldIgnoreWorkspaceEntry } from '../../../workspace/gitignoreMatcher'
 import {
@@ -25,7 +26,7 @@ const MAX_READ_BYTES_LABEL = `${MAX_READ_BYTES / 1024} KB`
 const RIPGREP_EXCLUDE_GLOBS = ['!**/.git', '!**/.git/**', '!**/node_modules', '!**/node_modules/**', '!**/.next', '!**/.next/**']
 const RIPGREP_ALL_FILES_GLOBS = new Set(['**/*', '**/{*,.*}', '**'])
 
-type WorkspaceToolContext = Pick<AgentToolContext, 'checkpointId' | 'workspaceRootPath'>
+type WorkspaceToolContext = Pick<AgentToolContext, 'checkpointId' | 'terminalExecutionMode' | 'workspaceRootPath'>
 type GitignoreMatchers = Awaited<ReturnType<typeof loadGitignoreMatchers>>
 
 export function resolveWorkspaceTargetPath(workspaceRootPath: string, candidatePath: string | undefined) {
@@ -41,6 +42,46 @@ export function resolveWorkspaceTargetPath(workspaceRootPath: string, candidateP
   }
 
   return getSafeWorkspaceTargetPath(workspaceRootPath, candidatePath)
+}
+
+function isPathWithinWorkspace(workspaceRootPath: string, targetPath: string) {
+  const relativePath = path.relative(workspaceRootPath, targetPath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+export function resolveReadableTargetPath(
+  workspaceRootPath: string,
+  candidatePath: string | undefined,
+  terminalExecutionMode: AppTerminalExecutionMode = 'sandbox',
+) {
+  if (terminalExecutionMode === 'sandbox') {
+    const target = resolveWorkspaceTargetPath(workspaceRootPath, candidatePath)
+    return {
+      absolutePath: target.absolutePath,
+      displayPath: target.relativePath,
+    }
+  }
+
+  if (!candidatePath || candidatePath.trim().length === 0) {
+    return {
+      absolutePath: workspaceRootPath,
+      displayPath: DEFAULT_WORKSPACE_RELATIVE_PATH,
+    }
+  }
+
+  const absolutePath = path.isAbsolute(candidatePath)
+    ? path.resolve(candidatePath)
+    : path.resolve(workspaceRootPath, candidatePath)
+  const relativePath = path.relative(workspaceRootPath, absolutePath)
+
+  return {
+    absolutePath,
+    displayPath: isPathWithinWorkspace(workspaceRootPath, absolutePath)
+      ? relativePath === ''
+        ? DEFAULT_WORKSPACE_RELATIVE_PATH
+        : relativePath
+      : absolutePath,
+  }
 }
 
 function createSuccessResult(input: Omit<AgentToolExecutionResult, 'status'>): AgentToolExecutionResult {
@@ -310,7 +351,7 @@ export async function createListToolResult(workspaceRootPath: string, absolutePa
 
 export async function createReadToolResult(
   absolutePath: string,
-  relativePath: string,
+  displayPath: string,
   offset: number | undefined,
   limit: number | undefined,
 ) {
@@ -332,9 +373,9 @@ export async function createReadToolResult(
       },
       subject: {
         kind: 'directory',
-        path: relativePath,
+        path: displayPath,
       },
-      summary: `Read directory ${relativePath}`,
+      summary: `Read directory ${displayPath}`,
       truncated: start + sliced.length < lines.length,
     })
   }
@@ -350,11 +391,11 @@ export async function createReadToolResult(
   }
 
   if (hasBinaryContent(probe)) {
-    return createErrorResult(`Cannot read binary file ${relativePath}`, {
+    return createErrorResult(`Cannot read binary file ${displayPath}`, {
       body: `Binary files are not supported by the read tool: ${absolutePath}`,
       subject: {
         kind: 'file',
-        path: relativePath,
+        path: displayPath,
       },
     })
   }
@@ -403,10 +444,10 @@ export async function createReadToolResult(
   }
 
   if (lineCount < startLine && !(lineCount === 0 && startLine === 1)) {
-    return createErrorResult(`Offset ${startLine} is out of range for ${relativePath}`, {
+    return createErrorResult(`Offset ${startLine} is out of range for ${displayPath}`, {
       subject: {
         kind: 'file',
-        path: relativePath,
+        path: displayPath,
       },
     })
   }
@@ -433,9 +474,9 @@ export async function createReadToolResult(
     },
     subject: {
       kind: 'file',
-      path: relativePath,
+      path: displayPath,
     },
-    summary: `Read ${relativePath}`,
+    summary: `Read ${displayPath}`,
     truncated: truncatedByBytes || hasMoreLines,
   })
 }
@@ -598,13 +639,17 @@ async function createWholeFileWriteToolResult(
   const fileChanges: ChangeDiffToolResultItem[] = []
 
   for (const change of input.changes) {
-    const target = resolveWorkspaceTargetPath(context.workspaceRootPath, change.absolute_path)
+    const target = resolveReadableTargetPath(
+      context.workspaceRootPath,
+      change.absolute_path,
+      context.terminalExecutionMode,
+    )
     const previousContent = await fs.readFile(target.absolutePath, 'utf8').catch(() => null)
     await captureCheckpointFileStateIfNeeded(context.checkpointId, target.absolutePath)
     await fs.mkdir(path.dirname(target.absolutePath), { recursive: true })
     await fs.writeFile(target.absolutePath, change.content, 'utf8')
     fileChanges.push(
-      toFileChangeItem(target.relativePath, previousContent === null ? 'add' : 'update', previousContent, change.content),
+      toFileChangeItem(target.displayPath, previousContent === null ? 'add' : 'update', previousContent, change.content),
     )
   }
 
@@ -625,6 +670,16 @@ export async function createApplyPatchToolResult(context: WorkspaceToolContext, 
         await captureCheckpointFileStateIfNeeded(context.checkpointId, nextAbsolutePath)
       }
     },
+    resolveTargetPath:
+      context.terminalExecutionMode === 'full'
+        ? (candidatePath) => {
+            const target = resolveReadableTargetPath(context.workspaceRootPath, candidatePath, context.terminalExecutionMode)
+            return {
+              absolutePath: target.absolutePath,
+              relativePath: target.displayPath,
+            }
+          }
+        : undefined,
   })
   const changes = appliedPatch.changes.map((change) =>
     toFileChangeItem(change.relativePath, change.type, change.oldContent, change.newContent),
@@ -644,6 +699,7 @@ export async function createToolContext(input: AgentToolContext) {
   await assertWorkspaceDirectory(workspaceRootPath)
   return {
     checkpointId: input.checkpointId?.trim() || null,
+    terminalExecutionMode: input.terminalExecutionMode ?? 'sandbox',
     workspaceRootPath,
   }
 }
@@ -651,7 +707,9 @@ export async function createToolContext(input: AgentToolContext) {
 export function createWholeFileWriteTool(context: WorkspaceToolContext) {
   return tool({
     description:
-      'Create a new file or replace a whole file. Use this when you want to write the full final content. For small edits to an existing file, use `apply_patch` instead. Do not guess `absolute_path`; use an exact workspace path. Example: `write({ changes: [{ absolute_path: "/repo/src/new.ts", content: "..." }] })`.',
+      context.terminalExecutionMode === 'full'
+        ? 'Create a new file or replace a whole file. Use this when you want to write the full final content. For small edits to an existing file, use `apply_patch` instead. Do not guess `absolute_path`. In Full Access, `absolute_path` may be an exact external path if the user provided it. Example: `write({ changes: [{ absolute_path: "/repo/src/new.ts", content: "..." }] })`.'
+        : 'Create a new file or replace a whole file. Use this when you want to write the full final content. For small edits to an existing file, use `apply_patch` instead. Do not guess `absolute_path`. In Sandbox mode, `absolute_path` must be an exact workspace path. Example: `write({ changes: [{ absolute_path: "/repo/src/new.ts", content: "..." }] })`.',
     inputSchema: jsonSchema({
       additionalProperties: false,
       properties: {

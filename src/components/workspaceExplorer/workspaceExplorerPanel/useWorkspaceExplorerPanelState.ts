@@ -30,6 +30,8 @@ interface ExternalFileDropItem {
   path: string
 }
 
+const ACTIVE_EXPLORER_SYNC_INTERVAL_MS = 1000
+
 function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
   const items = Array.from(event.dataTransfer.items)
   const filePaths: string[] = []
@@ -51,7 +53,65 @@ function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
 }
 
 function getSelectionDirectoryPath(entry: WorkspaceExplorerEntry) {
-  return entry.isDirectory ? normalizeEntryPath(entry.relativePath) : toDirectoryKey(getPathDirname(entry.relativePath))
+  return toDirectoryKey(getPathDirname(entry.relativePath))
+}
+
+function getDirectoryEntriesForSelection(
+  directoryEntriesByPath: Record<string, WorkspaceExplorerEntry[]>,
+  rootEntries: WorkspaceExplorerEntry[],
+  directoryPath: string,
+) {
+  return directoryPath === ROOT_DIRECTORY_KEY ? rootEntries : directoryEntriesByPath[directoryPath] ?? []
+}
+
+function collectLoadedExplorerEntryPaths(
+  entries: readonly WorkspaceExplorerEntry[],
+  directoryEntriesByPath: Record<string, WorkspaceExplorerEntry[]>,
+) {
+  const relativePaths: string[] = []
+
+  for (const entry of entries) {
+    relativePaths.push(entry.relativePath)
+    if (!entry.isDirectory) {
+      continue
+    }
+
+    relativePaths.push(
+      ...collectLoadedExplorerEntryPaths(
+        directoryEntriesByPath[normalizeEntryPath(entry.relativePath)] ?? [],
+        directoryEntriesByPath,
+      ),
+    )
+  }
+
+  return relativePaths
+}
+
+function findLoadedExplorerEntry(
+  entries: readonly WorkspaceExplorerEntry[],
+  directoryEntriesByPath: Record<string, WorkspaceExplorerEntry[]>,
+  relativePath: string,
+): WorkspaceExplorerEntry | null {
+  for (const entry of entries) {
+    if (entry.relativePath === relativePath) {
+      return entry
+    }
+
+    if (!entry.isDirectory) {
+      continue
+    }
+
+    const nestedEntry = findLoadedExplorerEntry(
+      directoryEntriesByPath[normalizeEntryPath(entry.relativePath)] ?? [],
+      directoryEntriesByPath,
+      relativePath,
+    )
+    if (nestedEntry) {
+      return nestedEntry
+    }
+  }
+
+  return null
 }
 
 function isTreeShortcutTarget(target: EventTarget | null) {
@@ -94,12 +154,21 @@ export function useWorkspaceExplorerPanelState({
   const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set())
   const [selectionDirectoryPath, setSelectionDirectoryPath] = useState<string>(ROOT_DIRECTORY_KEY)
   const dragStateRef = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(null)
+  const onWidthChangeRef = useRef(onWidthChange)
+  const onWidthCommitRef = useRef(onWidthCommit)
   const draggedEntryRef = useRef<WorkspaceExplorerEntry | null>(null)
+  const selectionAnchorEntryPathRef = useRef<string | null>(null)
+  const isActiveSyncReloadingRef = useRef(false)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const creationInputRef = useRef<HTMLInputElement | null>(null)
   const treeContainerRef = useRef<HTMLDivElement | null>(null)
   const isSubmittingCreationRef = useRef(false)
   const isWorkspaceConfigured = typeof workspaceRootPath === 'string' && workspaceRootPath.trim().length > 0
+
+  useEffect(() => {
+    onWidthChangeRef.current = onWidthChange
+    onWidthCommitRef.current = onWidthCommit
+  }, [onWidthChange, onWidthCommit])
 
   const contextMenuStyle = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -208,10 +277,31 @@ export function useWorkspaceExplorerPanelState({
     setContextMenuState(null)
   }, [])
 
+  const preserveTreeScrollDuring = useCallback(async (operation: () => Promise<void>) => {
+    const treeContainer = treeContainerRef.current
+    const previousScrollTop = treeContainer?.scrollTop ?? 0
+
+    await operation()
+
+    window.requestAnimationFrame(() => {
+      const currentTreeContainer = treeContainerRef.current
+      if (!currentTreeContainer) {
+        return
+      }
+
+      currentTreeContainer.scrollTop = Math.min(
+        previousScrollTop,
+        Math.max(0, currentTreeContainer.scrollHeight - currentTreeContainer.clientHeight),
+      )
+    })
+  }, [])
+
   const reloadExplorerTree = useCallback(() => {
     const directoriesToReload = [ROOT_DIRECTORY_KEY, ...expandedDirectories]
-    void Promise.all(directoriesToReload.map((directoryPath) => loadDirectory(directoryPath)))
-  }, [expandedDirectories, loadDirectory])
+    return preserveTreeScrollDuring(async () => {
+      await Promise.all(directoriesToReload.map((directoryPath) => loadDirectory(directoryPath)))
+    })
+  }, [expandedDirectories, loadDirectory, preserveTreeScrollDuring])
   const reloadExplorerTreeRef = useRef(reloadExplorerTree)
 
   useEffect(() => {
@@ -225,7 +315,7 @@ export function useWorkspaceExplorerPanelState({
         await action()
         setErrorMessage(null)
         if (shouldReload) {
-          reloadExplorerTree()
+          await reloadExplorerTree()
         }
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Explorer action failed.')
@@ -324,8 +414,8 @@ export function useWorkspaceExplorerPanelState({
         window.innerWidth,
       )
       setRenderedWidth(committedWidth)
-      onWidthChange(committedWidth)
-      onWidthCommit(committedWidth)
+      onWidthChangeRef.current(committedWidth)
+      onWidthCommitRef.current(committedWidth)
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -338,7 +428,7 @@ export function useWorkspaceExplorerPanelState({
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [onWidthChange, onWidthCommit])
+  }, [])
 
   useEffect(() => {
     if (!isOpen || !workspaceRootPath) {
@@ -371,6 +461,29 @@ export function useWorkspaceExplorerPanelState({
       })
     }
   }, [isOpen, loadDirectory, workspaceRootPath])
+
+  useEffect(() => {
+    if (!isOpen || !workspaceRootPath) {
+      return
+    }
+
+    const reloadIfIdle = () => {
+      if (isActiveSyncReloadingRef.current) {
+        return
+      }
+
+      isActiveSyncReloadingRef.current = true
+      Promise.resolve(reloadExplorerTreeRef.current()).finally(() => {
+        isActiveSyncReloadingRef.current = false
+      })
+    }
+
+    const intervalId = window.setInterval(reloadIfIdle, ACTIVE_EXPLORER_SYNC_INTERVAL_MS)
+    return () => {
+      window.clearInterval(intervalId)
+      isActiveSyncReloadingRef.current = false
+    }
+  }, [isOpen, workspaceRootPath])
 
   useEffect(() => {
     if (!isOpen || !workspaceRootPath || !activeFilePath) {
@@ -467,11 +580,15 @@ export function useWorkspaceExplorerPanelState({
       event.stopPropagation()
       if (targetEntry) {
         const nextSelectionDirectoryPath = getSelectionDirectoryPath(targetEntry)
-        setSelectionDirectoryPath(nextSelectionDirectoryPath)
-        setSelectedEntryPaths(new Set([targetEntry.relativePath]))
+        if (!selectedEntryPaths.has(targetEntry.relativePath)) {
+          setSelectionDirectoryPath(nextSelectionDirectoryPath)
+          setSelectedEntryPaths(new Set([targetEntry.relativePath]))
+          selectionAnchorEntryPathRef.current = targetEntry.relativePath
+        }
       } else {
         setSelectionDirectoryPath(ROOT_DIRECTORY_KEY)
         setSelectedEntryPaths(new Set())
+        selectionAnchorEntryPathRef.current = null
       }
       setContextMenuState({
         position: {
@@ -481,7 +598,7 @@ export function useWorkspaceExplorerPanelState({
         targetEntry,
       })
     },
-    [isWorkspaceConfigured],
+    [isWorkspaceConfigured, selectedEntryPaths],
   )
 
   const startCreateEntry = useCallback(
@@ -779,16 +896,23 @@ export function useWorkspaceExplorerPanelState({
       return
     }
 
-    const confirmed = window.confirm(`Delete ${targetEntry.isDirectory ? 'folder' : 'file'} "${targetEntry.name}"?`)
+    const targetRelativePaths = selectedEntryPaths.has(targetEntry.relativePath)
+      ? Array.from(selectedEntryPaths)
+      : [targetEntry.relativePath]
+    const confirmed = window.confirm(
+      targetRelativePaths.length === 1
+        ? `Delete ${targetEntry.isDirectory ? 'folder' : 'file'} "${targetEntry.name}"?`
+        : `Delete ${targetRelativePaths.length} selected items?`,
+    )
     if (!confirmed) {
       closeContextMenu()
       return
     }
 
     void runContextAction(async () => {
-      await onDeleteEntry(targetEntry.relativePath)
+      await onDeleteEntry(targetRelativePaths)
     })
-  }, [closeContextMenu, contextMenuState, onDeleteEntry, runContextAction])
+  }, [closeContextMenu, contextMenuState, onDeleteEntry, runContextAction, selectedEntryPaths])
 
   const requestCopyOrCutEntries = useCallback(
     (relativePaths: readonly string[], mode: 'copy' | 'cut') => {
@@ -822,32 +946,118 @@ export function useWorkspaceExplorerPanelState({
         return
       }
 
-      requestCopyOrCutEntries([targetEntry.relativePath], mode)
+      requestCopyOrCutEntries(
+        selectedEntryPaths.has(targetEntry.relativePath) ? Array.from(selectedEntryPaths) : [targetEntry.relativePath],
+        mode,
+      )
     },
-    [closeContextMenu, contextMenuState, requestCopyOrCutEntries],
+    [closeContextMenu, contextMenuState, requestCopyOrCutEntries, selectedEntryPaths],
   )
 
   const selectEntry = useCallback((entry: WorkspaceExplorerEntry) => {
     setSelectionDirectoryPath(getSelectionDirectoryPath(entry))
     setSelectedEntryPaths(new Set([entry.relativePath]))
+    selectionAnchorEntryPathRef.current = entry.relativePath
   }, [])
 
-  const selectAllEntriesInCurrentDirectory = useCallback(() => {
-    const currentDirectoryEntries =
-      selectionDirectoryPath === ROOT_DIRECTORY_KEY
-        ? rootEntries
-        : directoryEntriesByPath[selectionDirectoryPath] ?? []
-    if (currentDirectoryEntries.length === 0) {
+  const clearEntrySelection = useCallback(() => {
+    setSelectionDirectoryPath(ROOT_DIRECTORY_KEY)
+    setSelectedEntryPaths(new Set())
+    selectionAnchorEntryPathRef.current = null
+  }, [])
+
+  const toggleEntrySelection = useCallback((entry: WorkspaceExplorerEntry) => {
+    const nextSelectionDirectoryPath = getSelectionDirectoryPath(entry)
+    setSelectionDirectoryPath(nextSelectionDirectoryPath)
+    selectionAnchorEntryPathRef.current = entry.relativePath
+    setSelectedEntryPaths((currentPaths) => {
+      if (selectionDirectoryPath !== nextSelectionDirectoryPath) {
+        return new Set([entry.relativePath])
+      }
+
+      const nextPaths = new Set(currentPaths)
+      if (nextPaths.has(entry.relativePath)) {
+        nextPaths.delete(entry.relativePath)
+      } else {
+        nextPaths.add(entry.relativePath)
+      }
+      return nextPaths
+    })
+  }, [selectionDirectoryPath])
+
+  const selectEntryRange = useCallback((entry: WorkspaceExplorerEntry) => {
+    const nextSelectionDirectoryPath = getSelectionDirectoryPath(entry)
+    const directoryEntries = getDirectoryEntriesForSelection(
+      directoryEntriesByPath,
+      rootEntries,
+      nextSelectionDirectoryPath,
+    )
+    const anchorEntryPath = selectionDirectoryPath === nextSelectionDirectoryPath
+      ? selectionAnchorEntryPathRef.current
+      : null
+    const anchorIndex = anchorEntryPath
+      ? directoryEntries.findIndex((candidateEntry) => candidateEntry.relativePath === anchorEntryPath)
+      : -1
+    const targetIndex = directoryEntries.findIndex((candidateEntry) => candidateEntry.relativePath === entry.relativePath)
+
+    if (anchorIndex === -1 || targetIndex === -1) {
+      selectEntry(entry)
+      return
+    }
+
+    const startIndex = Math.min(anchorIndex, targetIndex)
+    const endIndex = Math.max(anchorIndex, targetIndex)
+    setSelectionDirectoryPath(nextSelectionDirectoryPath)
+    setSelectedEntryPaths(new Set(directoryEntries.slice(startIndex, endIndex + 1).map((candidateEntry) => candidateEntry.relativePath)))
+  }, [directoryEntriesByPath, rootEntries, selectEntry, selectionDirectoryPath])
+
+  const selectAllLoadedEntriesInSelectionDirectory = useCallback(() => {
+    const anchorEntryPath = selectionAnchorEntryPathRef.current
+    const selectedDirectoryEntry =
+      selectedEntryPaths.size === 1 && anchorEntryPath && selectedEntryPaths.has(anchorEntryPath)
+        ? findLoadedExplorerEntry(rootEntries, directoryEntriesByPath, anchorEntryPath)
+        : null
+    const selectionDirectoryEntries = getDirectoryEntriesForSelection(
+      directoryEntriesByPath,
+      rootEntries,
+      selectionDirectoryPath,
+    )
+    const loadedEntryPaths =
+      selectedDirectoryEntry?.isDirectory === true
+        ? collectLoadedExplorerEntryPaths([selectedDirectoryEntry], directoryEntriesByPath)
+        : collectLoadedExplorerEntryPaths(selectionDirectoryEntries, directoryEntriesByPath)
+    if (loadedEntryPaths.length === 0) {
       return false
     }
 
-    setSelectedEntryPaths(new Set(currentDirectoryEntries.map((entry) => entry.relativePath)))
+    setSelectedEntryPaths(new Set(loadedEntryPaths))
+    selectionAnchorEntryPathRef.current = loadedEntryPaths[0] ?? null
     return true
-  }, [directoryEntriesByPath, rootEntries, selectionDirectoryPath])
+  }, [directoryEntriesByPath, rootEntries, selectedEntryPaths, selectionDirectoryPath])
 
   const handleTreeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (!isTreeShortcutTarget(event.target)) {
+        return
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.key === 'Delete') {
+        if (selectedEntryPaths.size === 0) {
+          return
+        }
+        const selectedRelativePaths = Array.from(selectedEntryPaths)
+        const confirmed = window.confirm(
+          selectedRelativePaths.length === 1
+            ? `Delete selected item?`
+            : `Delete ${selectedRelativePaths.length} selected items?`,
+        )
+        if (!confirmed) {
+          return
+        }
+        event.preventDefault()
+        void runContextAction(async () => {
+          await onDeleteEntry(selectedRelativePaths)
+        })
         return
       }
 
@@ -862,7 +1072,7 @@ export function useWorkspaceExplorerPanelState({
 
       if (key === 'a') {
         event.preventDefault()
-        selectAllEntriesInCurrentDirectory()
+        selectAllLoadedEntriesInSelectionDirectory()
         return
       }
 
@@ -893,7 +1103,9 @@ export function useWorkspaceExplorerPanelState({
     [
       activeFilePath,
       requestCopyOrCutEntries,
-      selectAllEntriesInCurrentDirectory,
+      onDeleteEntry,
+      runContextAction,
+      selectAllLoadedEntriesInSelectionDirectory,
       selectedEntryPaths,
       selectionDirectoryPath,
       submitPasteEntry,
@@ -921,7 +1133,17 @@ export function useWorkspaceExplorerPanelState({
   )
 
   const handleEntryClick = useCallback(
-    (entry: WorkspaceExplorerEntry) => {
+    (entry: WorkspaceExplorerEntry, event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (event.shiftKey) {
+        selectEntryRange(entry)
+        return
+      }
+
+      if (event.ctrlKey || event.metaKey) {
+        toggleEntrySelection(entry)
+        return
+      }
+
       selectEntry(entry)
       if (entry.isDirectory) {
         toggleDirectory(entry)
@@ -930,8 +1152,16 @@ export function useWorkspaceExplorerPanelState({
 
       onOpenFile(entry.relativePath)
     },
-    [onOpenFile, selectEntry, toggleDirectory],
+    [onOpenFile, selectEntry, selectEntryRange, toggleDirectory, toggleEntrySelection],
   )
+
+  const handleExplorerBackgroundClick = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+    if (event.button !== 0 || event.target !== event.currentTarget) {
+      return
+    }
+
+    clearEntrySelection()
+  }, [clearEntrySelection])
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -975,6 +1205,7 @@ export function useWorkspaceExplorerPanelState({
     handleEntryDragEnd,
     handleEntryDragStart,
     handleEntryClick,
+    handleExplorerBackgroundClick,
     handleResizePointerDown,
     isResizing,
     isSubmittingCreationRef,

@@ -221,6 +221,7 @@ export async function runToolEnabledChatStream(input: {
         checkpointId: resolveActiveCheckpointId(input.startInput.messages),
         conversationId: input.startInput.conversationId ?? null,
         workspaceRootPath: input.startInput.agentContextRootPath,
+        terminalExecutionMode: input.startInput.terminalExecutionMode,
         webContents: input.webContents,
       },
       {

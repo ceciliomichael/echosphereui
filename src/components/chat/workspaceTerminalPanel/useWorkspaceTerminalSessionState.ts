@@ -774,7 +774,6 @@ export function useWorkspaceTerminalSessionState({
       activeSessionIdRef.current = null;
       lastSyncedSizeRef.current = null;
       terminalRef.current?.reset();
-      onClose();
       return;
     }
 
@@ -802,7 +801,7 @@ export function useWorkspaceTerminalSessionState({
     } else if (isOpen) {
       terminalRef.current?.focus();
     }
-  }, [activeTerminalTabKey, isOpen, onClose, renderActiveTerminalTab, terminalTabs, workspaceKey]);
+  }, [activeTerminalTabKey, isOpen, renderActiveTerminalTab, terminalTabs, workspaceKey]);
 
   return {
     activeTerminalTab,

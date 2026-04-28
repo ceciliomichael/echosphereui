@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useHighlightedCodeLines } from '../../../hooks/useHighlightedCodeLines'
 import {
   buildSearchRegularExpression,
@@ -48,6 +48,9 @@ export function useWorkspaceFileEditorState({
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
+  const previousFileNameRef = useRef(fileName)
+  const previousValueRef = useRef(value)
+  const scrollPositionRef = useRef({ scrollLeft: 0, scrollTop: 0 })
   const highlightedLines = useHighlightedCodeLines(value, { fileName, stripTrailingNewline: false })
   const totalLineCount = useMemo(() => countLines(value), [value])
   const [searchValue, setSearchValue] = useState('')
@@ -141,6 +144,12 @@ export function useWorkspaceFileEditorState({
     if (!textAreaElement) {
       return
     }
+
+    scrollPositionRef.current = {
+      scrollLeft: textAreaElement.scrollLeft,
+      scrollTop: textAreaElement.scrollTop,
+    }
+
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textAreaElement.scrollTop
     }
@@ -173,6 +182,33 @@ export function useWorkspaceFileEditorState({
       }
     })
   }, [shouldVirtualize, totalLineCount, wordWrapEnabled])
+
+  useLayoutEffect(() => {
+    const textAreaElement = textAreaRef.current
+    if (!textAreaElement) {
+      previousFileNameRef.current = fileName
+      previousValueRef.current = value
+      return
+    }
+
+    const isSameFileContentUpdate = previousFileNameRef.current === fileName && previousValueRef.current !== value
+    previousFileNameRef.current = fileName
+    previousValueRef.current = value
+
+    if (!isSameFileContentUpdate) {
+      scrollPositionRef.current = {
+        scrollLeft: textAreaElement.scrollLeft,
+        scrollTop: textAreaElement.scrollTop,
+      }
+      return
+    }
+
+    const maxScrollTop = Math.max(0, textAreaElement.scrollHeight - textAreaElement.clientHeight)
+    const maxScrollLeft = Math.max(0, textAreaElement.scrollWidth - textAreaElement.clientWidth)
+    textAreaElement.scrollTop = Math.min(scrollPositionRef.current.scrollTop, maxScrollTop)
+    textAreaElement.scrollLeft = wordWrapEnabled ? 0 : Math.min(scrollPositionRef.current.scrollLeft, maxScrollLeft)
+    handleScroll()
+  }, [fileName, handleScroll, value, wordWrapEnabled])
 
   const closeSearchPanel = useCallback(() => {
     setIsSearchOpen(false)

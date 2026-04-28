@@ -84,18 +84,21 @@ export function createWorkspaceEntryHandlers({
     closeWorkspaceTabsByPathPrefix(relativePath);
   };
 
-  const handleDeleteWorkspaceEntry = async (relativePath: string) => {
+  const handleDeleteWorkspaceEntry = async (relativePaths: string[]) => {
     const workspaceRootPath = activeWorkspacePathRef.current;
     if (!workspaceRootPath) {
       throw new Error("Select a workspace folder first.");
     }
 
-    await window.echosphereWorkspace.deleteEntry({
-      relativePath,
-      workspaceRootPath,
-    });
-    clearWorkspaceClipboardByPathPrefix(relativePath);
-    closeWorkspaceTabsByPathPrefix(relativePath);
+    const normalizedRelativePaths = uniqueRelativePaths(relativePaths);
+    for (const relativePath of normalizedRelativePaths) {
+      await window.echosphereWorkspace.deleteEntry({
+        relativePath,
+        workspaceRootPath,
+      });
+      clearWorkspaceClipboardByPathPrefix(relativePath);
+      closeWorkspaceTabsByPathPrefix(relativePath);
+    }
   };
 
   const handleImportWorkspaceEntry = async (

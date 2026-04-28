@@ -36,6 +36,16 @@ export type {
   WorkspaceClipboardEntry,
 } from "./chatWorkspaceUiState.types";
 
+function isMissingWorkspaceFileError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes("File does not exist:");
+}
+
+const ACTIVE_WORKSPACE_TAB_SYNC_INTERVAL_MS = 1000;
+
 export function useChatWorkspaceUiState({
   activeConversationId,
   activeWorkspacePath,
@@ -80,6 +90,7 @@ export function useChatWorkspaceUiState({
   const previousWorkspaceUiKeyRef = useRef(activeWorkspaceUiKey);
   const activeWorkspacePathRef = useRef<string | null>(activeWorkspacePath);
   const workspaceAutosaveTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const isWorkspaceFileTabsRefreshInFlightRef = useRef(false);
   const [workspaceClipboard, setWorkspaceClipboard] =
     useState<WorkspaceClipboardEntry | null>(null);
   const sidebarPanelRestoreRef = useRef<{
@@ -233,6 +244,9 @@ export function useChatWorkspaceUiState({
     });
 
     setWorkspaceFileTabs((currentTabs) => {
+      const firstClosingIndex = currentTabs.findIndex((tab) =>
+        isWorkspacePathWithinTarget(tab.relativePath, normalizedTargetPath),
+      );
       const nextTabs = currentTabs.filter(
         (tab) =>
           !isWorkspacePathWithinTarget(tab.relativePath, normalizedTargetPath),
@@ -240,34 +254,42 @@ export function useChatWorkspaceUiState({
       if (nextTabs.length === 0) {
         setIsWorkspaceTabsPanelVisible(false);
       }
+
+      if (firstClosingIndex !== -1) {
+        const fallbackTab =
+          nextTabs[firstClosingIndex] ?? nextTabs[firstClosingIndex - 1] ?? null;
+
+        setActiveWorkspaceFilePath((currentActivePath) => {
+          if (
+            !currentActivePath ||
+            !isWorkspacePathWithinTarget(currentActivePath, normalizedTargetPath)
+          ) {
+            return currentActivePath;
+          }
+
+          return fallbackTab?.relativePath ?? null;
+        });
+        setActiveWorkspaceTabKey((currentActiveTabKey) => {
+          if (!currentActiveTabKey) {
+            return currentActiveTabKey;
+          }
+
+          const currentActiveTab =
+            currentTabs.find((tab) => tab.tabKey === currentActiveTabKey) ?? null;
+          if (
+            !currentActiveTab ||
+            !isWorkspacePathWithinTarget(currentActiveTab.relativePath, normalizedTargetPath)
+          ) {
+            return currentActiveTabKey;
+          }
+
+          return fallbackTab?.tabKey ?? null;
+        });
+      }
+
       return nextTabs;
     });
-
-    setActiveWorkspaceFilePath((currentActivePath) => {
-      if (
-        !currentActivePath ||
-        !isWorkspacePathWithinTarget(currentActivePath, normalizedTargetPath)
-      ) {
-        return currentActivePath;
-      }
-      return null;
-    });
-    setActiveWorkspaceTabKey((currentActiveTabKey) => {
-      if (!currentActiveTabKey) {
-        return currentActiveTabKey;
-      }
-
-      const currentActiveTab =
-        workspaceFileTabs.find((tab) => tab.tabKey === currentActiveTabKey) ?? null;
-      if (
-        !currentActiveTab ||
-        !isWorkspacePathWithinTarget(currentActiveTab.relativePath, normalizedTargetPath)
-      ) {
-        return currentActiveTabKey;
-      }
-      return null;
-    });
-  }, [workspaceFileTabs]);
+  }, []);
 
   const handleRefreshWorkspaceFileTabs = useCallback(async () => {
     const workspaceRootPath = activeWorkspacePathRef.current;
@@ -331,6 +353,20 @@ export function useChatWorkspaceUiState({
       return
     }
 
+    const missingRelativePaths = Array.from(refreshByPath.values())
+      .filter((refresh): refresh is { error: unknown; relativePath: string } => "error" in refresh)
+      .filter((refresh) => isMissingWorkspaceFileError(refresh.error))
+      .map((refresh) => refresh.relativePath)
+
+    for (const missingRelativePath of missingRelativePaths) {
+      refreshByPath.delete(missingRelativePath)
+      closeWorkspaceTabsByPathPrefix(missingRelativePath)
+    }
+
+    if (refreshByPath.size === 0) {
+      return
+    }
+
     setWorkspaceFileTabs((currentTabs) =>
       currentTabs.map((tab) => {
         if (tab.kind !== "file") {
@@ -368,7 +404,7 @@ export function useChatWorkspaceUiState({
         }
       }),
     )
-  }, [activeWorkspacePathRef, workspaceAutosaveTimeoutsRef])
+  }, [activeWorkspacePathRef, closeWorkspaceTabsByPathPrefix, workspaceAutosaveTimeoutsRef])
 
   useEffect(() => {
     const workspaceRootPath = activeWorkspacePath?.trim() ?? ""
@@ -386,6 +422,19 @@ export function useChatWorkspaceUiState({
       void handleRefreshWorkspaceFileTabs()
     })
 
+    const refreshTabsIfIdle = () => {
+      if (isWorkspaceFileTabsRefreshInFlightRef.current) {
+        return
+      }
+
+      isWorkspaceFileTabsRefreshInFlightRef.current = true
+      void handleRefreshWorkspaceFileTabs().finally(() => {
+        isWorkspaceFileTabsRefreshInFlightRef.current = false
+      })
+    }
+
+    const refreshIntervalId = window.setInterval(refreshTabsIfIdle, ACTIVE_WORKSPACE_TAB_SYNC_INTERVAL_MS)
+
     void window.echosphereWorkspace.watchExplorerChanges({
       workspaceRootPath,
     }).catch((error) => {
@@ -394,6 +443,8 @@ export function useChatWorkspaceUiState({
 
     return () => {
       isDisposed = true
+      window.clearInterval(refreshIntervalId)
+      isWorkspaceFileTabsRefreshInFlightRef.current = false
       unsubscribeWorkspaceChanges()
       void window.echosphereWorkspace.unwatchExplorerChanges({
         workspaceRootPath,

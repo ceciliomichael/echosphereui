@@ -53,7 +53,7 @@ export interface ChatWorkspaceUiState {
     isDirectory: boolean,
   ) => Promise<void>;
   handleCutWorkspaceEntry: (relativePaths: string[]) => Promise<void>;
-  handleDeleteWorkspaceEntry: (relativePath: string) => Promise<void>;
+  handleDeleteWorkspaceEntry: (relativePaths: string[]) => Promise<void>;
   handleImportWorkspaceEntry: (
     sourcePath: string,
     targetDirectoryRelativePath: string,

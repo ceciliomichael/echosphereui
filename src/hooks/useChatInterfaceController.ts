@@ -311,18 +311,35 @@ export function useChatInterfaceController(input: UseChatInterfaceControllerInpu
   const handleTerminalPanelHeightCommit = useCallback(
     (nextHeight: number) => {
       const currentHeightsByWorkspace = settings.terminalPanelHeightsByWorkspace
-      if (currentHeightsByWorkspace[activeTerminalWorkspaceKey] === nextHeight) {
+      const currentOpenByWorkspace = settings.terminalOpenByWorkspace
+      const nextOpenByWorkspace =
+        currentOpenByWorkspace[activeTerminalWorkspaceKey] === true
+          ? currentOpenByWorkspace
+          : {
+              ...currentOpenByWorkspace,
+              [activeTerminalWorkspaceKey]: true,
+            }
+      if (
+        currentHeightsByWorkspace[activeTerminalWorkspaceKey] === nextHeight &&
+        nextOpenByWorkspace === currentOpenByWorkspace
+      ) {
         return
       }
 
       void onUpdateSettings({
+        terminalOpenByWorkspace: nextOpenByWorkspace,
         terminalPanelHeightsByWorkspace: {
           ...currentHeightsByWorkspace,
           [activeTerminalWorkspaceKey]: nextHeight,
         },
       })
     },
-    [activeTerminalWorkspaceKey, onUpdateSettings, settings.terminalPanelHeightsByWorkspace],
+    [
+      activeTerminalWorkspaceKey,
+      onUpdateSettings,
+      settings.terminalOpenByWorkspace,
+      settings.terminalPanelHeightsByWorkspace,
+    ],
   )
 
   return {

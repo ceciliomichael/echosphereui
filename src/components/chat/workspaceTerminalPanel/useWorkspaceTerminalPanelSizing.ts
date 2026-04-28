@@ -39,10 +39,15 @@ export function useWorkspaceTerminalPanelSizing({
   } | null>(null);
   const resizeAnimationFrameRef = useRef<number | null>(null);
   const pendingResizeHeightRef = useRef<number | null>(null);
+  const onHeightCommitRef = useRef(onHeightCommit);
   const panelHeightRef = useRef(clampStoredTerminalPanelHeight(storedHeight));
   const isResizingRef = useRef(false);
   const [panelHeight, setPanelHeight] = useState(panelHeightRef.current);
   const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    onHeightCommitRef.current = onHeightCommit;
+  }, [onHeightCommit]);
 
   useEffect(() => {
     panelHeightRef.current = panelHeight;
@@ -102,10 +107,6 @@ export function useWorkspaceTerminalPanelSizing({
   }, [getMaxPanelHeight, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !isResizing || !resizeStateRef.current) {
-      return;
-    }
-
     const handlePointerMove = (event: PointerEvent) => {
       const resizeState = resizeStateRef.current;
       if (!resizeState) {
@@ -152,7 +153,7 @@ export function useWorkspaceTerminalPanelSizing({
       resizeStateRef.current = null;
       isResizingRef.current = false;
       setIsResizing(false);
-      onHeightCommit(committedHeight);
+      onHeightCommitRef.current(committedHeight);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -170,7 +171,7 @@ export function useWorkspaceTerminalPanelSizing({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [getMaxPanelHeight, isOpen, isResizing, onHeightCommit]);
+  }, [getMaxPanelHeight]);
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {

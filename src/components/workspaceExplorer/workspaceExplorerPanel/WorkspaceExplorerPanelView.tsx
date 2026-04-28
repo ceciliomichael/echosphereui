@@ -97,7 +97,7 @@ export function WorkspaceExplorerPanelView({
           <button
             type="button"
             draggable
-            onClick={() => panelState.handleEntryClick(entry)}
+            onClick={(event) => panelState.handleEntryClick(entry, event)}
             onContextMenu={(event) => panelState.openContextMenu(event, entry)}
             onDragStart={(event) => panelState.handleEntryDragStart(event, entry)}
             onDragEnd={panelState.handleEntryDragEnd}
@@ -195,6 +195,7 @@ export function WorkspaceExplorerPanelView({
           panelState.dropTargetDirectoryPath === ROOT_DIRECTORY_KEY ? 'bg-surface/60' : '',
         ].join(' ')}
         tabIndex={0}
+        onClick={panelState.handleExplorerBackgroundClick}
         onContextMenu={(event) => panelState.openContextMenu(event, null)}
         onKeyDownCapture={panelState.handleTreeKeyDown}
         onDragOver={(event) => {
@@ -286,6 +287,7 @@ export function WorkspaceExplorerPanelView({
         ) : (
           <ul
             className="py-2"
+            onClick={panelState.handleExplorerBackgroundClick}
             onDragOver={(event) => {
               if (event.target !== event.currentTarget) {
                 return

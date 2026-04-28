@@ -1,3 +1,4 @@
+import type { AppTerminalExecutionMode } from '../../../src/types/chat'
 import type { WebContents } from 'electron'
 import type { ToolInvocationResultPresentation } from '../../../src/types/chat'
 
@@ -19,6 +20,7 @@ export interface AgentToolExecutionResult {
 export interface AgentToolContext {
   checkpointId?: string | null
   conversationId?: string | null
+  terminalExecutionMode?: AppTerminalExecutionMode
   workspaceRootPath: string
   webContents?: WebContents | null
 }

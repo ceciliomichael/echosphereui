@@ -44,6 +44,12 @@ export interface ApplyPatchWorkspaceOptions {
     absolutePath: string
     nextAbsolutePath?: string
   }) => Promise<void> | void
+  resolveTargetPath?: (candidatePath: string) => ApplyPatchTargetPath
+}
+
+interface ApplyPatchTargetPath {
+  absolutePath: string
+  relativePath: string
 }
 
 function normalizePatchInput(patchText: string) {
@@ -567,7 +573,15 @@ function applyUpdateChunks(filePath: string, originalContent: string, chunks: re
   return nextLines.join('\n') + (originalContent.endsWith('\n') || nextLines.length > 0 ? '\n' : '')
 }
 
-function resolvePatchTargetPath(workspaceRootPath: string, candidatePath: string) {
+function resolvePatchTargetPath(
+  workspaceRootPath: string,
+  candidatePath: string,
+  customResolver: ApplyPatchWorkspaceOptions['resolveTargetPath'],
+) {
+  if (customResolver) {
+    return customResolver(candidatePath)
+  }
+
   if (path.isAbsolute(candidatePath)) {
     const relativePath = path.relative(workspaceRootPath, candidatePath)
     return getSafeWorkspaceTargetPath(workspaceRootPath, relativePath)
@@ -583,10 +597,12 @@ export async function applyPatchInWorkspace(
 ) {
   const parsedPatch = parseApplyPatch(patchText)
   const changes: ApplyPatchChange[] = []
+  const resolveTargetPath = (candidatePath: string) =>
+    resolvePatchTargetPath(workspaceRootPath, candidatePath, options?.resolveTargetPath)
 
   for (const hunk of parsedPatch.hunks) {
     if (hunk.type === 'add') {
-      const target = resolvePatchTargetPath(workspaceRootPath, hunk.path)
+      const target = resolveTargetPath(hunk.path)
       await options?.onBeforeChange?.({
         absolutePath: target.absolutePath,
       })
@@ -604,7 +620,7 @@ export async function applyPatchInWorkspace(
     }
 
     if (hunk.type === 'delete') {
-      const target = resolvePatchTargetPath(workspaceRootPath, hunk.path)
+      const target = resolveTargetPath(hunk.path)
       const existingContent = await fs.readFile(target.absolutePath, 'utf8').catch((error: unknown) => {
         throw new Error(`Failed to read file for deletion ${target.relativePath}: ${(error as Error).message}`)
       })
@@ -622,8 +638,8 @@ export async function applyPatchInWorkspace(
       continue
     }
 
-    const sourceTarget = resolvePatchTargetPath(workspaceRootPath, hunk.path)
-    const nextTarget = hunk.movePath ? resolvePatchTargetPath(workspaceRootPath, hunk.movePath) : undefined
+    const sourceTarget = resolveTargetPath(hunk.path)
+    const nextTarget = hunk.movePath ? resolveTargetPath(hunk.movePath) : undefined
     const existingContent = await fs.readFile(sourceTarget.absolutePath, 'utf8').catch((error: unknown) => {
       throw new Error(`Failed to read file for update ${sourceTarget.relativePath}: ${(error as Error).message}`)
     })
