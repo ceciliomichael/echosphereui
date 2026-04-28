@@ -227,14 +227,14 @@ function buildMarkedCommand(command: string, shellLabel: string, marker: string)
   const trimmedCommand = command.trimEnd()
 
   if (normalizedShellLabel.includes('powershell') || normalizedShellLabel.includes('pwsh')) {
-    return `${trimmedCommand}\r\n$__echosphereExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }; Write-Output "${marker}:$__echosphereExitCode"\r`
+    return `${trimmedCommand}; $__echosphereExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }; Write-Output "${marker}:$__echosphereExitCode"\r`
   }
 
   if (normalizedShellLabel.includes('command prompt') || normalizedShellLabel === 'cmd' || normalizedShellLabel.includes('cmd.exe')) {
-    return `${trimmedCommand}\r\necho ${marker}:%ERRORLEVEL%\r`
+    return `${trimmedCommand} & echo ${marker}:%ERRORLEVEL%\r`
   }
 
-  return `${trimmedCommand}\nprintf '\\n${marker}:%s\\n' "$?"\r`
+  return `${trimmedCommand}; printf '\\n${marker}:%s\\n' "$?"\r`
 }
 
 function parseCompletionMarker(output: string, marker: string) {

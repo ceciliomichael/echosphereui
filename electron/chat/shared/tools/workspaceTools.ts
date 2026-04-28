@@ -13,7 +13,7 @@ import {
   normalizeWorkspacePath,
 } from '../../../workspace/paths'
 import { captureWorkspaceCheckpointFileState } from '../../../workspace/checkpoints'
-import { applyPatchInWorkspace } from '../applyPatch'
+import { applyPatchInWorkspace, type ApplyPatchChange } from '../applyPatch'
 import type { AgentToolContext, AgentToolExecutionResult } from '../toolTypes'
 import { runRipgrep } from './ripgrep'
 
@@ -169,6 +169,74 @@ interface GrepMatch {
   filePath: string
   lineNumber: number
   lineText: string
+}
+
+function getFileChangeKind(
+  oldContent: string | null,
+  explicitKind: ChangeDiffToolResultItem['kind'] | undefined,
+): ChangeDiffToolResultItem['kind'] {
+  if (explicitKind === 'delete') {
+    return 'delete'
+  }
+
+  return oldContent === null ? 'add' : 'update'
+}
+
+function aggregateFileChangeItems(
+  changes: Array<{
+    fileName: string
+    kind?: ChangeDiffToolResultItem['kind']
+    newContent: string
+    oldContent: string | null
+  }>,
+): ChangeDiffToolResultItem[] {
+  const orderedFileNames: string[] = []
+  const aggregatedByFileName = new Map<
+    string,
+    {
+      kind?: ChangeDiffToolResultItem['kind']
+      newContent: string
+      oldContent: string | null
+    }
+  >()
+
+  for (const change of changes) {
+    const existingChange = aggregatedByFileName.get(change.fileName)
+    if (!existingChange) {
+      orderedFileNames.push(change.fileName)
+      aggregatedByFileName.set(change.fileName, {
+        ...(change.kind ? { kind: change.kind } : {}),
+        newContent: change.newContent,
+        oldContent: change.oldContent,
+      })
+      continue
+    }
+
+    existingChange.newContent = change.newContent
+    if (change.kind) {
+      existingChange.kind = change.kind
+    }
+  }
+
+  return orderedFileNames.map((fileName) => {
+    const change = aggregatedByFileName.get(fileName)
+    if (!change) {
+      throw new Error(`Missing aggregated file change for ${fileName}`)
+    }
+
+    return toFileChangeItem(fileName, getFileChangeKind(change.oldContent, change.kind), change.oldContent, change.newContent)
+  })
+}
+
+function aggregateAppliedPatchChanges(changes: ApplyPatchChange[]): ChangeDiffToolResultItem[] {
+  return aggregateFileChangeItems(
+    changes.map((change) => ({
+      fileName: change.relativePath,
+      kind: change.type,
+      newContent: change.newContent,
+      oldContent: change.oldContent,
+    })),
+  )
 }
 
 function parseRipgrepOutputLine(line: string) {
@@ -636,22 +704,38 @@ async function createWholeFileWriteToolResult(
     }>
   },
 ) {
-  const fileChanges: ChangeDiffToolResultItem[] = []
-
-  for (const change of input.changes) {
-    const target = resolveReadableTargetPath(
+  const resolvedChanges = input.changes.map((change) => ({
+    content: change.content,
+    target: resolveReadableTargetPath(
       context.workspaceRootPath,
       change.absolute_path,
       context.terminalExecutionMode,
-    )
-    const previousContent = await fs.readFile(target.absolutePath, 'utf8').catch(() => null)
-    await captureCheckpointFileStateIfNeeded(context.checkpointId, target.absolutePath)
-    await fs.mkdir(path.dirname(target.absolutePath), { recursive: true })
-    await fs.writeFile(target.absolutePath, change.content, 'utf8')
-    fileChanges.push(
-      toFileChangeItem(target.displayPath, previousContent === null ? 'add' : 'update', previousContent, change.content),
-    )
+    ),
+  }))
+  const originalContentByPath = new Map<string, string | null>()
+
+  for (const change of resolvedChanges) {
+    if (originalContentByPath.has(change.target.absolutePath)) {
+      continue
+    }
+
+    originalContentByPath.set(change.target.absolutePath, await fs.readFile(change.target.absolutePath, 'utf8').catch(() => null))
   }
+  const rawFileChanges: Array<{ fileName: string; newContent: string; oldContent: string | null }> = []
+
+  for (const change of resolvedChanges) {
+    const previousContent = originalContentByPath.get(change.target.absolutePath) ?? null
+    await captureCheckpointFileStateIfNeeded(context.checkpointId, change.target.absolutePath)
+    await fs.mkdir(path.dirname(change.target.absolutePath), { recursive: true })
+    await fs.writeFile(change.target.absolutePath, change.content, 'utf8')
+    rawFileChanges.push({
+      fileName: change.target.displayPath,
+      newContent: change.content,
+      oldContent: previousContent,
+    })
+  }
+
+  const fileChanges = aggregateFileChangeItems(rawFileChanges)
 
   const subjectPath = fileChanges.length === 1 ? fileChanges[0].fileName : DEFAULT_WORKSPACE_RELATIVE_PATH
   return buildFileChangeResult(
@@ -681,9 +765,7 @@ export async function createApplyPatchToolResult(context: WorkspaceToolContext, 
           }
         : undefined,
   })
-  const changes = appliedPatch.changes.map((change) =>
-    toFileChangeItem(change.relativePath, change.type, change.oldContent, change.newContent),
-  )
+  const changes = aggregateAppliedPatchChanges(appliedPatch.changes)
   const subjectPath = changes.length === 1 ? changes[0].fileName : DEFAULT_WORKSPACE_RELATIVE_PATH
 
   return buildFileChangeResult(

@@ -112,6 +112,7 @@ test('run_terminal queues a command, waits for completion, and returns cleaned o
     assert.equal(writeCalls.length, 1)
     assert.equal(writeCalls[0].sessionId, 7)
     assert.match(writeCalls[0].data, /npm test/u)
+    assert.doesNotMatch(writeCalls[0].data, /\r\n/u)
     assert.match(writeCalls[0].data, /__ECHOSPHERE_COMMAND_DONE_/u)
     assert.deepEqual(getSessionOutputCalls, [
       {

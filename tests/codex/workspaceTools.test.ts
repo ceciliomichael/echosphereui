@@ -5,6 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { createAgentTools } from '../../electron/chat/shared/tools'
 import {
+  createApplyPatchToolResult,
   createGlobToolResult,
   createGrepToolResult,
   createListToolResult,
@@ -378,5 +379,42 @@ test('createAgentTools write and apply_patch allow explicit external files in Fu
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
     await fs.rm(outsideDirectoryPath, { force: true, recursive: true })
+  }
+})
+
+test('createApplyPatchToolResult diffs against the original file snapshot for repeated file edits', async () => {
+  const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-workspace-tools-'))
+
+  try {
+    await fs.writeFile(path.join(workspaceRootPath, 'sample.txt'), 'one\ntwo\nthree\n', 'utf8')
+
+    const result = await createApplyPatchToolResult(
+      {
+        checkpointId: null,
+        terminalExecutionMode: 'sandbox',
+        workspaceRootPath,
+      },
+      `*** Begin Patch
+*** Update File: sample.txt
+@@
+-one
++ONE
+*** Update File: sample.txt
+@@
+-two
++TWO
+*** End Patch`,
+    )
+
+    assert.equal(result.resultPresentation?.kind, 'change_diff')
+    assert.equal(result.resultPresentation.changes.length, 1)
+
+    const [change] = result.resultPresentation.changes
+    assert.equal(change.fileName, 'sample.txt')
+    assert.equal(change.oldContent, 'one\ntwo\nthree\n')
+    assert.equal(change.newContent, 'ONE\nTWO\nthree\n')
+    assert.equal(change.kind, 'update')
+  } finally {
+    await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
