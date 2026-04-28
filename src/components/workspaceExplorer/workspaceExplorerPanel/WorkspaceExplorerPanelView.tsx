@@ -198,6 +198,8 @@ export function WorkspaceExplorerPanelView({
         onClick={panelState.handleExplorerBackgroundClick}
         onContextMenu={(event) => panelState.openContextMenu(event, null)}
         onKeyDownCapture={panelState.handleTreeKeyDown}
+        onDragOverCapture={panelState.handleExplorerDragOver}
+        onDragLeave={panelState.handleExplorerDragLeave}
         onDragOver={(event) => {
           if (event.target !== event.currentTarget) {
             return
@@ -207,16 +209,6 @@ export function WorkspaceExplorerPanelView({
             return
           }
           panelState.handleDirectoryDragOver(event, ROOT_DIRECTORY_KEY)
-        }}
-        onDragLeave={(event) => {
-          if (event.target !== event.currentTarget) {
-            return
-          }
-          if (isExternalFileDrag(event)) {
-            panelState.handleExternalDragLeave(event, ROOT_DIRECTORY_KEY)
-            return
-          }
-          panelState.handleDirectoryDragLeave(event, ROOT_DIRECTORY_KEY)
         }}
         onDrop={(event) => {
           if (event.target !== event.currentTarget) {
@@ -326,6 +318,17 @@ export function WorkspaceExplorerPanelView({
           </ul>
         )}
       </div>
+      {panelState.isDraggingExplorerEntry ? (
+        <div
+          aria-hidden="true"
+          className="absolute bottom-0 right-0 top-11 z-40 w-6 cursor-ns-resize border-l border-border/70 bg-surface-muted/80"
+          onDragOver={panelState.handleExplorerScrollbarDragOver}
+          onDrop={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        />
+      ) : null}
       {panelState.contextMenuState
         ? createPortal(
             <div

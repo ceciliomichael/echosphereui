@@ -487,7 +487,7 @@ function assertSessionOwnershipForRead(
 }
 
 function clampTerminalPollingMs(pollingMs: number | undefined) {
-  return clampInteger(pollingMs ?? 0, 0, 30_000, 0);
+  return clampInteger(pollingMs ?? 0, 0, 300_000, 0);
 }
 
 function waitForTerminalSessionExitOrTimeout(

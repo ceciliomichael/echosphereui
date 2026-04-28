@@ -13,7 +13,35 @@ const webContentsStub = {
   once: () => undefined,
 } as unknown as WebContents
 
-test('run_terminal queues a command and returns the created session metadata', async () => {
+type RunTerminalResult = {
+  body?: string
+  semantics?: Record<string, unknown>
+}
+
+type RunTerminalTool = {
+  execute: (
+    input: {
+      cols: number
+      command?: string
+      cwd?: string
+      rows: number
+      session_key?: string
+    },
+    options?: { abortSignal?: AbortSignal },
+  ) => Promise<RunTerminalResult>
+}
+
+function getRunTerminalTool(tools: ReturnType<typeof createTerminalToolSet>) {
+  return tools.run_terminal as unknown as RunTerminalTool
+}
+
+function readCompletionMarker(writtenCommand: string) {
+  const markerMatch = writtenCommand.match(/__ECHOSPHERE_COMMAND_DONE_[A-Za-z0-9_]+__/u)
+  assert.ok(markerMatch, 'expected run_terminal to append a completion marker')
+  return markerMatch[0]
+}
+
+test('run_terminal queues a command, waits for completion, and returns cleaned output', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-terminal-tools-workspace-'))
   const nestedPath = path.join(workspaceRootPath, 'nested')
   await fs.mkdir(nestedPath, { recursive: true })
@@ -25,6 +53,8 @@ test('run_terminal queues a command and returns the created session metadata', a
     workspaceRootPath?: string | null
   }> = []
   const writeCalls: Array<{ data: string; sessionId: number }> = []
+  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
+
   try {
     const tools = createTerminalToolSet(
       {
@@ -43,8 +73,18 @@ test('run_terminal queues a command and returns the created session metadata', a
             shell: 'pwsh',
           }
         },
-        getSessionOutput: async () => {
-          throw new Error('unexpected getSessionOutput call')
+        getSessionOutput: async (_owner, input) => {
+          getSessionOutputCalls.push(input)
+          const marker = readCompletionMarker(writeCalls[0]?.data ?? '')
+          return {
+            cwd: nestedPath,
+            exitCode: null,
+            hasExited: false,
+            outputBuffer: `\u001B[32mline 1\u001B[0m\r\nline 2\r\n${marker}:0\r\n`,
+            shellLabel: 'pwsh',
+            signal: null,
+            sessionId: input.sessionId,
+          }
         },
         writeToSession: async (_owner, input) => {
           writeCalls.push(input)
@@ -52,17 +92,7 @@ test('run_terminal queues a command and returns the created session metadata', a
       },
     )
 
-    const result = await (
-      tools.run_terminal as unknown as {
-        execute: (input: {
-          cols: number
-          command: string
-          cwd?: string
-          rows: number
-          session_key?: string
-        }) => Promise<{ body?: string }>
-      }
-    ).execute({
+    const result = await getRunTerminalTool(tools).execute({
       cols: 120,
       command: 'npm test',
       cwd: 'nested',
@@ -79,24 +109,35 @@ test('run_terminal queues a command and returns the created session metadata', a
         workspaceRootPath,
       },
     ])
-    assert.deepEqual(writeCalls, [
+    assert.equal(writeCalls.length, 1)
+    assert.equal(writeCalls[0].sessionId, 7)
+    assert.match(writeCalls[0].data, /npm test/u)
+    assert.match(writeCalls[0].data, /__ECHOSPHERE_COMMAND_DONE_/u)
+    assert.deepEqual(getSessionOutputCalls, [
       {
-        data: 'npm test\r',
+        pollingMs: 500,
         sessionId: 7,
+        workspaceRootPath,
       },
     ])
     assert.match(result.body ?? '', /Started session 1/u)
     assert.match(result.body ?? '', /Command queued: npm test/u)
-    assert.doesNotMatch(result.body ?? '', /CWD:/u)
-    assert.doesNotMatch(result.body ?? '', /Shell:/u)
-    assert.doesNotMatch(result.body ?? '', /Reused:/u)
+    assert.match(result.body ?? '', /line 1/u)
+    assert.match(result.body ?? '', /line 2/u)
+    assert.ok(!(result.body ?? '').includes('\u001B'))
+    assert.doesNotMatch(result.body ?? '', /__ECHOSPHERE_COMMAND_DONE_/u)
+    assert.equal(result.semantics?.command_completed, true)
+    assert.equal(result.semantics?.command_exit_code, 0)
+    assert.equal(result.semantics?.timed_out, false)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
 })
 
-test('run_terminal starts at session 1 in a different conversation thread', async () => {
+test('run_terminal starts at session 1 in a different conversation thread without polling when no command is provided', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-terminal-tools-thread-'))
+  let getSessionOutputCalled = false
+
   try {
     const tools = createTerminalToolSet(
       {
@@ -113,31 +154,23 @@ test('run_terminal starts at session 1 in a different conversation thread', asyn
           shell: 'pwsh',
         }),
         getSessionOutput: async () => {
+          getSessionOutputCalled = true
           throw new Error('unexpected getSessionOutput call')
         },
         writeToSession: async () => undefined,
       },
     )
 
-    const result = await (
-      tools.run_terminal as unknown as {
-        execute: (input: {
-          cols: number
-          command: string
-          cwd?: string
-          rows: number
-          session_key?: string
-        }) => Promise<{ body?: string }>
-      }
-    ).execute({
+    const result = await getRunTerminalTool(tools).execute({
       cols: 120,
-      command: 'npm test',
       cwd: '.',
       rows: 30,
       session_key: 'build',
     })
 
     assert.match(result.body ?? '', /Started session 1/u)
+    assert.equal(result.semantics?.command, null)
+    assert.equal(getSessionOutputCalled, false)
   } finally {
     await fs.rm(workspaceRootPath, { force: true, recursive: true })
   }
@@ -145,7 +178,6 @@ test('run_terminal starts at session 1 in a different conversation thread', asyn
 
 test('run_terminal increments local session ids sequentially', async () => {
   let nextGlobalSessionId = 30
-  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
   const tools = createTerminalToolSet(
     {
       conversationId: 'conversation-sequential',
@@ -160,380 +192,39 @@ test('run_terminal increments local session ids sequentially', async () => {
         sessionId: nextGlobalSessionId++,
         shell: 'pwsh',
       }),
-      getSessionOutput: async (_owner, input) => {
-        getSessionOutputCalls.push(input)
-        return {
-          cwd: '/workspace',
-          exitCode: null,
-          hasExited: false,
-          outputBuffer: 'global session ' + input.sessionId + '\n',
-          shellLabel: 'pwsh',
-          signal: null,
-          sessionId: input.sessionId,
-        }
+      getSessionOutput: async () => {
+        throw new Error('unexpected getSessionOutput call')
       },
       writeToSession: async () => undefined,
     },
   )
 
-  const firstRunResult = await (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
+  const firstRunResult = await getRunTerminalTool(tools).execute({
     cols: 120,
-    command: '',
     cwd: '.',
     rows: 30,
     session_key: 'first',
   })
 
-  const secondRunResult = await (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
+  const secondRunResult = await getRunTerminalTool(tools).execute({
     cols: 120,
-    command: '',
     cwd: '.',
     rows: 30,
     session_key: 'second',
   })
 
-  const secondOutputResult = await (
-    tools.get_terminal_output as unknown as {
-      execute: (input: { session_id: number }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    session_id: 2,
-  })
-
   assert.match(firstRunResult.body ?? '', /Started session 1/u)
   assert.match(secondRunResult.body ?? '', /Started session 2/u)
-  assert.match(secondOutputResult.body ?? '', /global session 31/u)
-  assert.deepEqual(getSessionOutputCalls, [
-    {
-      pollingMs: 15000,
-      sessionId: 31,
-      workspaceRootPath: '/workspace',
-    },
-  ])
 })
 
-test('get_terminal_output uses the fixed polling window and returns cleaned output', async () => {
-  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
-  const tools = createTerminalToolSet(
-    {
-      conversationId: 'conversation-c',
-      webContents: webContentsStub,
-      workspaceRootPath: '/workspace',
-    },
-    {
-      createSession: async () => ({
-        bufferedOutput: '',
-        cwd: '/workspace',
-        isReused: false,
-        sessionId: 7,
-        shell: 'pwsh',
-      }),
-      getSessionOutput: async (_owner, input) => {
-        getSessionOutputCalls.push(input)
-        return {
-          cwd: '/workspace',
-          exitCode: null,
-          hasExited: false,
-          outputBuffer: '\u001B[?2004hline 1\u001B[0m\r\n\u001B[32mline 2\u001B[0m\r\n',
-          shellLabel: 'pwsh',
-          signal: null,
-          sessionId: input.sessionId,
-        }
-      },
-      writeToSession: async () => undefined,
-    },
-  )
-
-  await (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    cols: 120,
-    command: '',
-    cwd: '.',
-    rows: 30,
-    session_key: 'build',
-  })
-
-  const result = await (
-    tools.get_terminal_output as unknown as {
-      execute: (input: { session_id: number }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    session_id: 1,
-  })
-
-  assert.deepEqual(getSessionOutputCalls, [
-    {
-      pollingMs: 15000,
-      sessionId: 7,
-      workspaceRootPath: '/workspace',
-    },
-  ])
-  assert.match(result.body ?? '', /line 1/u)
-  assert.match(result.body ?? '', /line 2/u)
-  assert.ok(!(result.body ?? '').includes('\u001B'))
-  assert.doesNotMatch(result.body ?? '', /CWD:/u)
-  assert.doesNotMatch(result.body ?? '', /Shell:/u)
-  assert.doesNotMatch(result.body ?? '', /Polling:/u)
-})
-
-test('get_terminal_output returns a plain empty-output status', async () => {
-  const tools = createTerminalToolSet(
-    {
-      conversationId: 'conversation-d',
-      webContents: webContentsStub,
-      workspaceRootPath: '/workspace',
-    },
-    {
-      createSession: async () => ({
-        bufferedOutput: '',
-        cwd: '/workspace',
-        isReused: false,
-        sessionId: 11,
-        shell: 'pwsh',
-      }),
-      getSessionOutput: async (_owner, input) => ({
-        cwd: '/workspace',
-        exitCode: null,
-        hasExited: false,
-        outputBuffer: '',
-        shellLabel: 'pwsh',
-        signal: null,
-        sessionId: input.sessionId,
-      }),
-      writeToSession: async () => undefined,
-    },
-  )
-
-  await (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    cols: 120,
-    command: '',
-    cwd: '.',
-    rows: 30,
-    session_key: 'build',
-  })
-
-  const result = await (
-    tools.get_terminal_output as unknown as {
-      execute: (input: { session_id: number }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    session_id: 1,
-  })
-
-  assert.match(result.body ?? '', /No terminal output yet\./u)
-})
-
-test('get_terminal_output waits for a parallel run_terminal session creation', async () => {
-  let allowSessionCreation: (() => void) | null = null
-  const allowSessionCreationPromise = new Promise<void>((resolve) => {
-    allowSessionCreation = resolve
-  })
-  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
-  const tools = createTerminalToolSet(
-    {
-      conversationId: 'conversation-e',
-      webContents: webContentsStub,
-      workspaceRootPath: '/workspace',
-    },
-    {
-      createSession: async () => {
-        await allowSessionCreationPromise
-        return {
-          bufferedOutput: '',
-          cwd: '/workspace',
-          isReused: false,
-          sessionId: 19,
-          shell: 'pwsh',
-        }
-      },
-      getSessionOutput: async (_owner, input) => {
-        getSessionOutputCalls.push(input)
-        return {
-          cwd: '/workspace',
-          exitCode: null,
-          hasExited: false,
-          outputBuffer: 'parallel output\n',
-          shellLabel: 'pwsh',
-          signal: null,
-          sessionId: input.sessionId,
-        }
-      },
-      writeToSession: async () => undefined,
-    },
-  )
-
-  const runPromise = (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    cols: 120,
-    command: '',
-    cwd: '.',
-    rows: 30,
-    session_key: 'parallel-build',
-  })
-
-  const outputPromise = (
-    tools.get_terminal_output as unknown as {
-      execute: (input: { session_id: number }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    session_id: 1,
-  })
-
-  allowSessionCreation?.()
-
-  const [runResult, outputResult] = await Promise.all([runPromise, outputPromise])
-
-  assert.match(runResult.body ?? '', /Started session 1/u)
-  assert.match(outputResult.body ?? '', /parallel output/u)
-  assert.deepEqual(getSessionOutputCalls, [
-    {
-      pollingMs: 15000,
-      sessionId: 19,
-      workspaceRootPath: '/workspace',
-    },
-  ])
-})
-
-test('get_terminal_output waits when invoked before run_terminal reserves the local session id', async () => {
-  let allowSessionCreation: (() => void) | null = null
-  const allowSessionCreationPromise = new Promise<void>((resolve) => {
-    allowSessionCreation = resolve
-  })
-  const getSessionOutputCalls: Array<{ pollingMs?: number; sessionId: number; workspaceRootPath?: string | null }> = []
-  const tools = createTerminalToolSet(
-    {
-      conversationId: 'conversation-f',
-      webContents: webContentsStub,
-      workspaceRootPath: '/workspace',
-    },
-    {
-      createSession: async () => {
-        await allowSessionCreationPromise
-        return {
-          bufferedOutput: '',
-          cwd: '/workspace',
-          isReused: false,
-          sessionId: 21,
-          shell: 'pwsh',
-        }
-      },
-      getSessionOutput: async (_owner, input) => {
-        getSessionOutputCalls.push(input)
-        return {
-          cwd: '/workspace',
-          exitCode: null,
-          hasExited: false,
-          outputBuffer: 'pre-registered output\n',
-          shellLabel: 'pwsh',
-          signal: null,
-          sessionId: input.sessionId,
-        }
-      },
-      writeToSession: async () => undefined,
-    },
-  )
-
-  const outputPromise = (
-    tools.get_terminal_output as unknown as {
-      execute: (input: { session_id: number }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    session_id: 1,
-  })
-
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 50)
-  })
-
-  const runPromise = (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    cols: 120,
-    command: '',
-    cwd: '.',
-    rows: 30,
-    session_key: 'late-start',
-  })
-
-  allowSessionCreation?.()
-
-  const [outputResult, runResult] = await Promise.all([outputPromise, runPromise])
-
-  assert.match(runResult.body ?? '', /Started session 1/u)
-  assert.match(outputResult.body ?? '', /pre-registered output/u)
-  assert.deepEqual(getSessionOutputCalls, [
-    {
-      pollingMs: 15000,
-      sessionId: 21,
-      workspaceRootPath: '/workspace',
-    },
-  ])
-})
-
-test('get_terminal_output aborts promptly when the request is canceled', async () => {
+test('run_terminal aborts promptly while waiting for command output', async () => {
   let releaseOutput: (() => void) | null = null
   const outputPromiseGate = new Promise<void>((resolve) => {
     releaseOutput = resolve
   })
   const tools = createTerminalToolSet(
     {
-      conversationId: 'conversation-g',
+      conversationId: 'conversation-abort',
       webContents: webContentsStub,
       workspaceRootPath: '/workspace',
     },
@@ -561,35 +252,14 @@ test('get_terminal_output aborts promptly when the request is canceled', async (
     },
   )
 
-  await (
-    tools.run_terminal as unknown as {
-      execute: (input: {
-        cols: number
-        command: string
-        cwd?: string
-        rows: number
-        session_key?: string
-      }) => Promise<{ body?: string }>
-    }
-  ).execute({
-    cols: 120,
-    command: '',
-    cwd: '.',
-    rows: 30,
-    session_key: 'abortable-poll',
-  })
-
   const abortController = new AbortController()
-  const outputPromise = (
-    tools.get_terminal_output as unknown as {
-      execute: (
-        input: { session_id: number },
-        options?: { abortSignal?: AbortSignal },
-      ) => Promise<{ body?: string }>
-    }
-  ).execute(
+  const outputPromise = getRunTerminalTool(tools).execute(
     {
-      session_id: 1,
+      cols: 120,
+      command: 'npm test',
+      cwd: '.',
+      rows: 30,
+      session_key: 'abortable-poll',
     },
     {
       abortSignal: abortController.signal,
@@ -602,7 +272,7 @@ test('get_terminal_output aborts promptly when the request is canceled', async (
   releaseOutput?.()
 })
 
-test('createAgentTools exposes terminal tools only in agent mode when a webContents owner is available', async () => {
+test('createAgentTools exposes only run_terminal in agent mode when a webContents owner is available', async () => {
   const workspaceRootPath = await fs.mkdtemp(path.join(tmpdir(), 'echosphere-terminal-tools-'))
 
   try {
@@ -626,7 +296,7 @@ test('createAgentTools exposes terminal tools only in agent mode when a webConte
     )
 
     assert.ok('run_terminal' in agentTools)
-    assert.ok('get_terminal_output' in agentTools)
+    assert.ok(!('get_terminal_output' in agentTools))
     assert.ok(!('run_terminal' in planTools))
     assert.ok(!('get_terminal_output' in planTools))
   } finally {

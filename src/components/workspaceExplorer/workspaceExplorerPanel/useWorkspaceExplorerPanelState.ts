@@ -31,6 +31,9 @@ interface ExternalFileDropItem {
 }
 
 const ACTIVE_EXPLORER_SYNC_INTERVAL_MS = 1000
+const DRAG_SCROLL_EDGE_THRESHOLD_PX = 72
+const DRAG_SCROLL_MAX_SPEED_PX = 22
+const MIN_SCROLLBAR_GUTTER_WIDTH_PX = 12
 
 function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
   const items = Array.from(event.dataTransfer.items)
@@ -54,6 +57,49 @@ function getExternalFilePaths(event: ReactDragEvent<HTMLElement>) {
 
 function getSelectionDirectoryPath(entry: WorkspaceExplorerEntry) {
   return toDirectoryKey(getPathDirname(entry.relativePath))
+}
+
+function getDragScrollVelocity(containerElement: HTMLElement, clientY: number) {
+  const { bottom, top } = containerElement.getBoundingClientRect()
+  const distanceFromTop = clientY - top
+  const distanceFromBottom = bottom - clientY
+
+  if (distanceFromTop < DRAG_SCROLL_EDGE_THRESHOLD_PX) {
+    const intensity = 1 - Math.max(distanceFromTop, 0) / DRAG_SCROLL_EDGE_THRESHOLD_PX
+    return -Math.ceil(intensity * DRAG_SCROLL_MAX_SPEED_PX)
+  }
+
+  if (distanceFromBottom < DRAG_SCROLL_EDGE_THRESHOLD_PX) {
+    const intensity = 1 - Math.max(distanceFromBottom, 0) / DRAG_SCROLL_EDGE_THRESHOLD_PX
+    return Math.ceil(intensity * DRAG_SCROLL_MAX_SPEED_PX)
+  }
+
+  return 0
+}
+
+function isPointerInVerticalScrollbarGutter(containerElement: HTMLElement, clientX: number) {
+  if (containerElement.scrollHeight <= containerElement.clientHeight) {
+    return false
+  }
+
+  const { left, right } = containerElement.getBoundingClientRect()
+  const scrollbarWidth = Math.max(MIN_SCROLLBAR_GUTTER_WIDTH_PX, containerElement.offsetWidth - containerElement.clientWidth)
+  const isRtl = window.getComputedStyle(containerElement).direction === 'rtl'
+
+  return isRtl
+    ? clientX >= left && clientX <= left + scrollbarWidth
+    : clientX <= right && clientX >= right - scrollbarWidth
+}
+
+function scrollToDragScrollbarPosition(containerElement: HTMLElement, clientY: number) {
+  const { height, top } = containerElement.getBoundingClientRect()
+  const maxScrollTop = containerElement.scrollHeight - containerElement.clientHeight
+  if (height <= 0 || maxScrollTop <= 0) {
+    return
+  }
+
+  const scrollRatio = Math.min(Math.max((clientY - top) / height, 0), 1)
+  containerElement.scrollTop = Math.round(maxScrollTop * scrollRatio)
 }
 
 function getDirectoryEntriesForSelection(
@@ -153,10 +199,13 @@ export function useWorkspaceExplorerPanelState({
   const [contextMenuDimensions, setContextMenuDimensions] = useState<WorkspaceExplorerContextMenuDimensions | null>(null)
   const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set())
   const [selectionDirectoryPath, setSelectionDirectoryPath] = useState<string>(ROOT_DIRECTORY_KEY)
+  const [isDraggingExplorerEntry, setIsDraggingExplorerEntry] = useState(false)
   const dragStateRef = useRef<{ pointerId: number; startWidth: number; startX: number } | null>(null)
   const onWidthChangeRef = useRef(onWidthChange)
   const onWidthCommitRef = useRef(onWidthCommit)
   const draggedEntryRef = useRef<WorkspaceExplorerEntry | null>(null)
+  const dragScrollAnimationFrameRef = useRef<number | null>(null)
+  const dragScrollVelocityRef = useRef(0)
   const selectionAnchorEntryPathRef = useRef<string | null>(null)
   const isActiveSyncReloadingRef = useRef(false)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
@@ -164,6 +213,93 @@ export function useWorkspaceExplorerPanelState({
   const treeContainerRef = useRef<HTMLDivElement | null>(null)
   const isSubmittingCreationRef = useRef(false)
   const isWorkspaceConfigured = typeof workspaceRootPath === 'string' && workspaceRootPath.trim().length > 0
+
+  const stopDragScroll = useCallback(() => {
+    dragScrollVelocityRef.current = 0
+    if (dragScrollAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragScrollAnimationFrameRef.current)
+      dragScrollAnimationFrameRef.current = null
+    }
+  }, [])
+
+  const runDragScrollFrame = useCallback(() => {
+    const containerElement = treeContainerRef.current
+    const velocity = dragScrollVelocityRef.current
+
+    if (!containerElement || velocity === 0) {
+      dragScrollAnimationFrameRef.current = null
+      return
+    }
+
+    containerElement.scrollTop += velocity
+    dragScrollAnimationFrameRef.current = window.requestAnimationFrame(runDragScrollFrame)
+  }, [])
+
+  const updateDragScroll = useCallback((event: ReactDragEvent<HTMLElement>) => {
+    const containerElement = treeContainerRef.current
+    if (!containerElement) {
+      stopDragScroll()
+      return
+    }
+
+    dragScrollVelocityRef.current = getDragScrollVelocity(containerElement, event.clientY)
+    if (dragScrollVelocityRef.current === 0) {
+      stopDragScroll()
+      return
+    }
+
+    if (dragScrollAnimationFrameRef.current === null) {
+      dragScrollAnimationFrameRef.current = window.requestAnimationFrame(runDragScrollFrame)
+    }
+  }, [runDragScrollFrame, stopDragScroll])
+
+  const handleExplorerDragOver = useCallback((event: ReactDragEvent<HTMLElement>) => {
+    if (!draggedEntryRef.current && !Array.from(event.dataTransfer.types).includes('Files')) {
+      return
+    }
+
+    const containerElement = treeContainerRef.current
+    if (containerElement && isPointerInVerticalScrollbarGutter(containerElement, event.clientX)) {
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'none'
+      stopDragScroll()
+      scrollToDragScrollbarPosition(containerElement, event.clientY)
+      return
+    }
+
+    updateDragScroll(event)
+  }, [stopDragScroll, updateDragScroll])
+
+  const handleExplorerDragLeave = useCallback((event: ReactDragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return
+    }
+
+    stopDragScroll()
+  }, [stopDragScroll])
+
+  const handleExplorerScrollbarDragOver = useCallback((event: ReactDragEvent<HTMLElement>) => {
+    if (!draggedEntryRef.current) {
+      return
+    }
+
+    const containerElement = treeContainerRef.current
+    if (!containerElement) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'none'
+    stopDragScroll()
+    scrollToDragScrollbarPosition(containerElement, event.clientY)
+  }, [stopDragScroll])
+
+  useEffect(() => {
+    return () => {
+      stopDragScroll()
+    }
+  }, [stopDragScroll])
 
   useEffect(() => {
     onWidthChangeRef.current = onWidthChange
@@ -740,14 +876,17 @@ export function useWorkspaceExplorerPanelState({
 
   const handleEntryDragStart = useCallback((event: ReactDragEvent<HTMLButtonElement>, entry: WorkspaceExplorerEntry) => {
     draggedEntryRef.current = entry
+    setIsDraggingExplorerEntry(true)
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', entry.relativePath)
   }, [])
 
   const handleEntryDragEnd = useCallback(() => {
     draggedEntryRef.current = null
+    setIsDraggingExplorerEntry(false)
     setDropTargetDirectoryPath(null)
-  }, [])
+    stopDragScroll()
+  }, [stopDragScroll])
 
   const handleDirectoryDragOver = useCallback(
     (event: ReactDragEvent<HTMLElement>, targetDirectoryRelativePath: string) => {
@@ -756,12 +895,13 @@ export function useWorkspaceExplorerPanelState({
       }
       event.preventDefault()
       event.stopPropagation()
+      updateDragScroll(event)
       event.dataTransfer.dropEffect = 'move'
       if (dropTargetDirectoryPath !== targetDirectoryRelativePath) {
         setDropTargetDirectoryPath(targetDirectoryRelativePath)
       }
     },
-    [dropTargetDirectoryPath],
+    [dropTargetDirectoryPath, updateDragScroll],
   )
 
   const handleDirectoryDrop = useCallback(
@@ -772,10 +912,12 @@ export function useWorkspaceExplorerPanelState({
       }
       event.preventDefault()
       event.stopPropagation()
+      stopDragScroll()
       draggedEntryRef.current = null
+      setIsDraggingExplorerEntry(false)
       void submitMoveEntry(draggedEntry.relativePath, targetDirectoryRelativePath)
     },
-    [submitMoveEntry],
+    [stopDragScroll, submitMoveEntry],
   )
 
   const handleDirectoryDragLeave = useCallback(
@@ -804,12 +946,13 @@ export function useWorkspaceExplorerPanelState({
 
       event.preventDefault()
       event.stopPropagation()
+      updateDragScroll(event)
       event.dataTransfer.dropEffect = 'copy'
       if (dropTargetDirectoryPath !== targetDirectoryRelativePath) {
         setDropTargetDirectoryPath(targetDirectoryRelativePath)
       }
     },
-    [dropTargetDirectoryPath, workspaceRootPath],
+    [dropTargetDirectoryPath, updateDragScroll, workspaceRootPath],
   )
 
   const handleExternalDragLeave = useCallback(
@@ -841,6 +984,7 @@ export function useWorkspaceExplorerPanelState({
 
       event.preventDefault()
       event.stopPropagation()
+      stopDragScroll()
       setDropTargetDirectoryPath(null)
 
       try {
@@ -851,7 +995,7 @@ export function useWorkspaceExplorerPanelState({
         setDropTargetDirectoryPath(null)
       }
     },
-    [submitImportEntry, workspaceRootPath],
+    [stopDragScroll, submitImportEntry, workspaceRootPath],
   )
 
   const requestRenameEntry = useCallback(() => {
@@ -1206,7 +1350,11 @@ export function useWorkspaceExplorerPanelState({
     handleEntryDragStart,
     handleEntryClick,
     handleExplorerBackgroundClick,
+    handleExplorerDragLeave,
+    handleExplorerDragOver,
+    handleExplorerScrollbarDragOver,
     handleResizePointerDown,
+    isDraggingExplorerEntry,
     isResizing,
     isSubmittingCreationRef,
     isWorkspaceConfigured,

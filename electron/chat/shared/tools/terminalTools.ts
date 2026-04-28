@@ -11,18 +11,23 @@ import type { TerminalSessionSnapshot } from '../../../terminal/service'
 import { resolveWorkspaceTargetPath } from './workspaceTools'
 
 const MAX_TERMINAL_OUTPUT_BODY_LENGTH = 100_000
-const DEFAULT_TERMINAL_POLLING_MS = 15_000
-const TERMINAL_SESSION_LOOKUP_RETRY_MS = 25
-const TERMINAL_SESSION_LOOKUP_TIMEOUT_MS = 1_500
+const RUN_TERMINAL_MAX_POLLING_MS = 300_000
+const RUN_TERMINAL_POLLING_INTERVAL_MS = 500
 const ANSI_ESCAPE = '\\u001B'
 const TERMINAL_BELL = '\\u0007'
 const ANSI_CSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-?]*[ -/]*[@-~]`, 'g')
 const ANSI_OSC_PATTERN = new RegExp(`${ANSI_ESCAPE}\\][^${TERMINAL_BELL}${ANSI_ESCAPE}]*(?:${TERMINAL_BELL}|${ANSI_ESCAPE}\\\\)`, 'g')
 const ANSI_SINGLE_ESCAPE_PATTERN = new RegExp(`${ANSI_ESCAPE}[@-Z\\-_]`, 'g')
+
 interface TerminalThreadSessionState {
-  localToGlobalSessionId: Map<number, number>
-  pendingLocalToGlobalSessionId: Map<number, Promise<number>>
   nextSessionId: number
+}
+
+interface TerminalCommandPollResult {
+  commandExitCode: number | null
+  completedByMarker: boolean
+  snapshot: TerminalSessionSnapshot
+  timedOut: boolean
 }
 
 const terminalThreadSessionStates = new Map<string, TerminalThreadSessionState>()
@@ -40,27 +45,6 @@ interface TerminalToolDependencies {
     ownerWebContents: WebContents,
     input: WriteTerminalSessionInput,
   ) => Promise<void>
-}
-
-interface DeferredValue<T> {
-  promise: Promise<T>
-  reject: (reason?: unknown) => void
-  resolve: (value: T) => void
-}
-
-function createDeferredValue<T>(): DeferredValue<T> {
-  let resolveValue!: (value: T) => void
-  let rejectValue!: (reason?: unknown) => void
-  const promise = new Promise<T>((resolve, reject) => {
-    resolveValue = resolve
-    rejectValue = reject
-  })
-
-  return {
-    promise,
-    reject: rejectValue,
-    resolve: resolveValue,
-  }
 }
 
 function toAbortError(abortSignal: AbortSignal | undefined) {
@@ -221,17 +205,10 @@ function getTerminalThreadSessionState(namespace: string): TerminalThreadSession
   }
 
   const nextState: TerminalThreadSessionState = {
-    localToGlobalSessionId: new Map(),
-    pendingLocalToGlobalSessionId: new Map(),
     nextSessionId: 1,
   }
   terminalThreadSessionStates.set(namespace, nextState)
   return nextState
-}
-
-function setThreadGlobalSessionId(namespace: string, localSessionId: number, globalSessionId: number) {
-  const state = getTerminalThreadSessionState(namespace)
-  state.localToGlobalSessionId.set(localSessionId, globalSessionId)
 }
 
 function reserveThreadLocalSessionId(namespace: string) {
@@ -241,101 +218,160 @@ function reserveThreadLocalSessionId(namespace: string) {
   return localSessionId
 }
 
-function setPendingThreadGlobalSessionId(
-  namespace: string,
-  localSessionId: number,
-  promise: Promise<number>,
-) {
-  const state = getTerminalThreadSessionState(namespace)
-  state.pendingLocalToGlobalSessionId.set(localSessionId, promise)
+function createCompletionMarker(localSessionId: number) {
+  return `__ECHOSPHERE_COMMAND_DONE_${localSessionId}_${Date.now()}__`
 }
 
-function clearPendingThreadGlobalSessionId(namespace: string, localSessionId: number) {
-  const state = getTerminalThreadSessionState(namespace)
-  state.pendingLocalToGlobalSessionId.delete(localSessionId)
+function buildMarkedCommand(command: string, shellLabel: string, marker: string) {
+  const normalizedShellLabel = shellLabel.toLowerCase()
+  const trimmedCommand = command.trimEnd()
+
+  if (normalizedShellLabel.includes('powershell') || normalizedShellLabel.includes('pwsh')) {
+    return `${trimmedCommand}\r\n$__echosphereExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }; Write-Output "${marker}:$__echosphereExitCode"\r`
+  }
+
+  if (normalizedShellLabel.includes('command prompt') || normalizedShellLabel === 'cmd' || normalizedShellLabel.includes('cmd.exe')) {
+    return `${trimmedCommand}\r\necho ${marker}:%ERRORLEVEL%\r`
+  }
+
+  return `${trimmedCommand}\nprintf '\\n${marker}:%s\\n' "$?"\r`
 }
 
-function delayMilliseconds(durationMs: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, durationMs)
-  })
+function parseCompletionMarker(output: string, marker: string) {
+  const markerPattern = new RegExp(`${marker}:(-?\\d+)`)
+  const match = output.match(markerPattern)
+  if (!match) {
+    return {
+      commandExitCode: null,
+      completedByMarker: false,
+    }
+  }
+
+  const parsedExitCode = Number.parseInt(match[1], 10)
+  return {
+    commandExitCode: Number.isFinite(parsedExitCode) ? parsedExitCode : null,
+    completedByMarker: true,
+  }
 }
 
-async function resolveThreadGlobalSessionIdWithPending(namespace: string, localSessionId: number) {
-  const deadlineMs = Date.now() + TERMINAL_SESSION_LOOKUP_TIMEOUT_MS
+function removeCompletionMarkerLines(output: string, marker: string) {
+  return output
+    .split('\n')
+    .filter((line) => !line.includes(marker))
+    .join('\n')
+    .trimEnd()
+}
+
+async function waitForCommandOutput(input: {
+  abortSignal: AbortSignal | undefined
+  dependencies: TerminalToolDependencies
+  marker: string
+  ownerWebContents: WebContents
+  sessionId: number
+  workspaceRootPath: string
+}): Promise<TerminalCommandPollResult> {
+  const deadlineMs = Date.now() + RUN_TERMINAL_MAX_POLLING_MS
+  let latestSnapshot: TerminalSessionSnapshot | null = null
 
   while (Date.now() <= deadlineMs) {
-    const state = getTerminalThreadSessionState(namespace)
-    const immediateGlobalSessionId = state.localToGlobalSessionId.get(localSessionId)
-    if (immediateGlobalSessionId !== undefined) {
-      return immediateGlobalSessionId
-    }
+    throwIfAborted(input.abortSignal)
+    const remainingMs = Math.max(0, deadlineMs - Date.now())
+    const pollingMs = Math.min(RUN_TERMINAL_POLLING_INTERVAL_MS, remainingMs)
+    const snapshot = await raceWithAbort(
+      input.dependencies.getSessionOutput(input.ownerWebContents, {
+        pollingMs,
+        sessionId: input.sessionId,
+        workspaceRootPath: input.workspaceRootPath,
+      }),
+      input.abortSignal,
+    )
+    latestSnapshot = snapshot
+    const sanitizedOutput = sanitizeTerminalOutput(snapshot.outputBuffer)
+    const markerState = parseCompletionMarker(sanitizedOutput, input.marker)
 
-    const pendingGlobalSessionId = state.pendingLocalToGlobalSessionId.get(localSessionId)
-    if (pendingGlobalSessionId) {
-      return pendingGlobalSessionId
+    if (markerState.completedByMarker || snapshot.hasExited) {
+      return {
+        ...markerState,
+        snapshot,
+        timedOut: false,
+      }
     }
-
-    await delayMilliseconds(TERMINAL_SESSION_LOOKUP_RETRY_MS)
   }
 
-  return null
+  if (!latestSnapshot) {
+    latestSnapshot = await raceWithAbort(
+      input.dependencies.getSessionOutput(input.ownerWebContents, {
+        pollingMs: 0,
+        sessionId: input.sessionId,
+        workspaceRootPath: input.workspaceRootPath,
+      }),
+      input.abortSignal,
+    )
+  }
+
+  const markerState = parseCompletionMarker(sanitizeTerminalOutput(latestSnapshot.outputBuffer), input.marker)
+  return {
+    ...markerState,
+    snapshot: latestSnapshot,
+    timedOut: !markerState.completedByMarker && !latestSnapshot.hasExited,
+  }
 }
 
-function buildRunTerminalResult(snapshot: CreateTerminalSessionResult, command: string | null) {
-  const sanitizedBufferedOutput = sanitizeTerminalOutput(snapshot.bufferedOutput)
-  const bodyLines = [`Started ${getSessionIdLabel(snapshot.sessionId)}`]
+function buildRunTerminalResult(input: {
+  command: string | null
+  commandExitCode?: number | null
+  completedByMarker?: boolean
+  initialSession: CreateTerminalSessionResult
+  localSessionId: number
+  outputMarker?: string
+  snapshot?: TerminalSessionSnapshot
+  timedOut?: boolean
+}) {
+  const bodyLines = [`Started ${getSessionIdLabel(input.localSessionId)}`]
+  const outputSource = input.snapshot?.outputBuffer ?? input.initialSession.bufferedOutput
+  const sanitizedOutput = sanitizeTerminalOutput(outputSource)
+  const outputWithoutMarker = input.outputMarker
+    ? removeCompletionMarkerLines(sanitizedOutput, input.outputMarker)
+    : sanitizedOutput
+  const truncatedOutput = truncateTerminalOutput(outputWithoutMarker)
 
-  if (command) {
-    bodyLines.push(`Command queued: ${command.trimEnd()}`)
+  if (input.command) {
+    bodyLines.push(`Command queued: ${input.command.trimEnd()}`)
   }
-
-  if (sanitizedBufferedOutput.trim().length > 0) {
-    const output = truncateTerminalOutput(sanitizedBufferedOutput).body
-    bodyLines.push('', output)
-  }
-
-  return createSuccessResult({
-    body: formatTerminalOutputBody(bodyLines),
-    semantics: {
-      command,
-      session_id: snapshot.sessionId,
-    },
-    subject: {
-      kind: 'session',
-      path: String(snapshot.sessionId),
-    },
-    summary: `Started terminal ${getSessionIdLabel(snapshot.sessionId)}`,
-  })
-}
-
-function buildGetTerminalOutputResult(snapshot: TerminalSessionSnapshot) {
-  const sanitizedOutput = sanitizeTerminalOutput(snapshot.outputBuffer)
-  const truncatedOutput = truncateTerminalOutput(sanitizedOutput)
-  const bodyLines: string[] = []
 
   if (truncatedOutput.body.trim().length > 0) {
-    bodyLines.push(truncatedOutput.body)
+    bodyLines.push('', truncatedOutput.body)
+  } else if (input.command) {
+    bodyLines.push('', input.snapshot?.hasExited ? 'Terminal process exited with no output.' : 'No terminal output yet.')
   }
 
-  if (bodyLines.length === 0) {
-    bodyLines.push(snapshot.hasExited ? 'Terminal process exited with no output.' : 'No terminal output yet.')
+  if (input.timedOut) {
+    bodyLines.push('', 'Terminal command is still running after 5 minutes. Returning output collected so far.')
   }
+
+  const hasExited = input.snapshot?.hasExited ?? false
+  const commandCompleted = input.completedByMarker === true || hasExited
 
   return createSuccessResult({
     body: formatTerminalOutputBody(bodyLines),
     semantics: {
-      exit_code: snapshot.exitCode,
-      has_exited: snapshot.hasExited,
-      session_id: snapshot.sessionId,
-      signal: snapshot.signal,
+      command: input.command,
+      command_completed: input.command ? commandCompleted : null,
+      command_exit_code: input.commandExitCode ?? null,
+      exit_code: input.snapshot?.exitCode ?? null,
+      has_exited: hasExited,
+      session_id: input.localSessionId,
+      signal: input.snapshot?.signal ?? null,
+      timed_out: input.timedOut ?? false,
       truncated_output: truncatedOutput.truncated,
     },
     subject: {
       kind: 'session',
-      path: String(snapshot.sessionId),
+      path: String(input.localSessionId),
     },
-    summary: `Fetched output for ${getSessionIdLabel(snapshot.sessionId)}`,
+    summary: input.command
+      ? `Ran terminal ${getSessionIdLabel(input.localSessionId)}`
+      : `Started terminal ${getSessionIdLabel(input.localSessionId)}`,
     truncated: truncatedOutput.truncated,
   })
 }
@@ -366,72 +402,9 @@ export function createTerminalToolSet(
   }
 
   return {
-    get_terminal_output: tool({
-      description:
-        'Get new buffered output from an existing terminal session. Input `session_id` must be a session id returned by `run_terminal` in this thread. Empty output is valid and does not mean failure.',
-      inputSchema: jsonSchema({
-        additionalProperties: false,
-        properties: {
-          session_id: {
-            minimum: 1,
-            type: 'number',
-          },
-        },
-        required: ['session_id'],
-        type: 'object',
-      }),
-      execute: async (rawInput, options) => {
-        const inputValue = rawInput as {
-          session_id: number
-        }
-        const abortSignal = options?.abortSignal
-        const localSessionId = clampInteger(inputValue.session_id, 1, Number.MAX_SAFE_INTEGER, 1)
-        const pollingMs = DEFAULT_TERMINAL_POLLING_MS
-        const namespace = resolveTerminalThreadNamespace(context)
-
-        try {
-          throwIfAborted(abortSignal)
-          const globalSessionId = await raceWithAbort(
-            resolveThreadGlobalSessionIdWithPending(namespace, localSessionId),
-            abortSignal,
-          )
-          if (globalSessionId === null) {
-            return createErrorResult(
-              `Unknown terminal session id: ${localSessionId}`,
-              `No terminal session with local id ${localSessionId} exists in this thread.`,
-            )
-          }
-          const resolvedDependencies = await getResolvedDependencies()
-          throwIfAborted(abortSignal)
-          const snapshot = await raceWithAbort(
-            resolvedDependencies.getSessionOutput(ownerWebContents, {
-              pollingMs,
-              sessionId: globalSessionId,
-              workspaceRootPath: context.workspaceRootPath,
-            }),
-            abortSignal,
-          )
-          throwIfAborted(abortSignal)
-          return buildGetTerminalOutputResult(
-            {
-              ...snapshot,
-              sessionId: localSessionId,
-            },
-          )
-        } catch (error) {
-          if (abortSignal?.aborted) {
-            throw toAbortError(abortSignal)
-          }
-
-          return createErrorResult(
-            error instanceof Error && error.message.trim().length > 0 ? error.message : 'Terminal output fetch failed.',
-          )
-        }
-      },
-    }),
     run_terminal: tool({
       description:
-        'Start or reuse a terminal session in the active workspace, then optionally run one command. Use `cwd` only for a real path inside the workspace. Save the returned `session_id` and pass it to `get_terminal_output` for more output.',
+        'Start or reuse a terminal session in the active workspace, then optionally run one command. Use `cwd` only for a real path inside the workspace. When a command is provided, this waits up to 5 minutes for the command to finish and returns available output automatically; it returns earlier when the command finishes.',
       inputSchema: jsonSchema({
         additionalProperties: false,
         properties: {
@@ -472,9 +445,6 @@ export function createTerminalToolSet(
         const command = normalizeCommand(inputValue.command)
         const namespace = resolveTerminalThreadNamespace(context)
         const reservedLocalSessionId = reserveThreadLocalSessionId(namespace)
-        const pendingGlobalSessionId = createDeferredValue<number>()
-        pendingGlobalSessionId.promise.catch(() => undefined)
-        setPendingThreadGlobalSessionId(namespace, reservedLocalSessionId, pendingGlobalSessionId.promise)
 
         try {
           const cwd = resolveTerminalWorkspaceCwd(context, inputValue.cwd)
@@ -490,29 +460,48 @@ export function createTerminalToolSet(
             }),
             abortSignal,
           )
-          setThreadGlobalSessionId(namespace, reservedLocalSessionId, session.sessionId)
-          clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
-          pendingGlobalSessionId.resolve(session.sessionId)
-          const displaySession = {
-            ...session,
-            sessionId: reservedLocalSessionId,
+
+          if (!command) {
+            return buildRunTerminalResult({
+              command,
+              initialSession: session,
+              localSessionId: reservedLocalSessionId,
+            })
           }
 
-          if (command) {
-            throwIfAborted(abortSignal)
-            await raceWithAbort(
-              resolvedDependencies.writeToSession(ownerWebContents, {
-                data: command.endsWith('\n') || command.endsWith('\r') ? command : `${command}\r`,
-                sessionId: session.sessionId,
-              }),
-              abortSignal,
-            )
-          }
+          const completionMarker = createCompletionMarker(reservedLocalSessionId)
+          throwIfAborted(abortSignal)
+          await raceWithAbort(
+            resolvedDependencies.writeToSession(ownerWebContents, {
+              data: buildMarkedCommand(command, session.shell, completionMarker),
+              sessionId: session.sessionId,
+            }),
+            abortSignal,
+          )
 
-          return buildRunTerminalResult(displaySession, command)
+          const pollResult = await waitForCommandOutput({
+            abortSignal,
+            dependencies: resolvedDependencies,
+            marker: completionMarker,
+            ownerWebContents,
+            sessionId: session.sessionId,
+            workspaceRootPath: context.workspaceRootPath,
+          })
+
+          return buildRunTerminalResult({
+            command,
+            commandExitCode: pollResult.commandExitCode,
+            completedByMarker: pollResult.completedByMarker,
+            initialSession: session,
+            localSessionId: reservedLocalSessionId,
+            outputMarker: completionMarker,
+            snapshot: {
+              ...pollResult.snapshot,
+              sessionId: reservedLocalSessionId,
+            },
+            timedOut: pollResult.timedOut,
+          })
         } catch (error) {
-          clearPendingThreadGlobalSessionId(namespace, reservedLocalSessionId)
-          pendingGlobalSessionId.reject(error)
           if (abortSignal?.aborted) {
             throw toAbortError(abortSignal)
           }
