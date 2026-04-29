@@ -22,12 +22,20 @@ export function useAutoScroll(
 ): void {
   const shouldAutoScroll = options?.shouldAutoScroll ?? true
   const resetKey = options?.resetKey ?? null
-  const userHasScrolledRef = useRef(false)
-  const isAutoScrolling = useRef(false)
+  const shouldStickToBottomRef = useRef(true)
   const userMessageCount = useMemo(() => getUserMessageCount(messages), [messages])
 
+  const scrollToBottom = () => {
+    const element = containerRef.current
+    if (!element) {
+      return
+    }
+
+    element.scrollTop = element.scrollHeight
+  }
+
   useEffect(() => {
-    userHasScrolledRef.current = false
+    shouldStickToBottomRef.current = true
   }, [userMessageCount])
 
   useLayoutEffect(() => {
@@ -36,17 +44,8 @@ export function useAutoScroll(
       return
     }
 
-    userHasScrolledRef.current = false
-    isAutoScrolling.current = true
-    element.scrollTop = element.scrollHeight
-
-    const timeoutId = window.setTimeout(() => {
-      isAutoScrolling.current = false
-    }, 50)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
+    shouldStickToBottomRef.current = true
+    scrollToBottom()
   }, [containerRef, resetKey])
 
   useEffect(() => {
@@ -56,35 +55,26 @@ export function useAutoScroll(
     }
 
     const handleScroll = () => {
-      if (isAutoScrolling.current || !shouldAutoScroll) {
+      if (!shouldAutoScroll) {
         return
       }
 
-      userHasScrolledRef.current = !isAtBottom(element)
+      shouldStickToBottomRef.current = isAtBottom(element)
     }
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (!element || userHasScrolledRef.current || !shouldAutoScroll) {
-        return
-      }
-
-      isAutoScrolling.current = true
-      element.scrollTop = element.scrollHeight
-
-      window.setTimeout(() => {
-        isAutoScrolling.current = false
-      }, 50)
-    })
 
     element.addEventListener('scroll', handleScroll, { passive: true })
-    resizeObserver.observe(element)
-    Array.from(element.children).forEach((child) => {
-      resizeObserver.observe(child)
-    })
 
     return () => {
-      resizeObserver.disconnect()
       element.removeEventListener('scroll', handleScroll)
     }
-  }, [containerRef, shouldAutoScroll, messages.length])
+  }, [containerRef, shouldAutoScroll])
+
+  useLayoutEffect(() => {
+    if (!shouldAutoScroll || !shouldStickToBottomRef.current) {
+      return
+    }
+
+    scrollToBottom()
+  }, [messages, shouldAutoScroll])
+
 }
