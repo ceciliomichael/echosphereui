@@ -16,6 +16,7 @@ import { clampWorkspaceExplorerWidth } from '../../../lib/workspaceExplorerSizin
 import { getPathBasename, getPathDirname } from '../../../lib/pathPresentation'
 import type { WorkspaceExplorerPanelProps } from './workspaceExplorerPanelTypes'
 import type { WorkspaceExplorerContextMenuDimensions } from './workspaceExplorerPanelTypes'
+import type { WorkspaceExplorerDeleteDialogState } from './workspaceExplorerPanelTypes'
 import {
   ROOT_DIRECTORY_KEY,
   getAncestorDirectoryPaths,
@@ -197,6 +198,8 @@ export function useWorkspaceExplorerPanelState({
   const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
   const [contextMenuState, setContextMenuState] = useState<WorkspaceExplorerContextMenuState | null>(null)
   const [contextMenuDimensions, setContextMenuDimensions] = useState<WorkspaceExplorerContextMenuDimensions | null>(null)
+  const [deleteDialogState, setDeleteDialogState] = useState<WorkspaceExplorerDeleteDialogState | null>(null)
+  const [isSubmittingDeleteEntry, setIsSubmittingDeleteEntry] = useState(false)
   const [selectedEntryPaths, setSelectedEntryPaths] = useState<Set<string>>(() => new Set())
   const [selectionDirectoryPath, setSelectionDirectoryPath] = useState<string>(ROOT_DIRECTORY_KEY)
   const [isDraggingExplorerEntry, setIsDraggingExplorerEntry] = useState(false)
@@ -453,12 +456,67 @@ export function useWorkspaceExplorerPanelState({
         if (shouldReload) {
           await reloadExplorerTree()
         }
+        return true
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Explorer action failed.')
+        return false
       }
     },
     [closeContextMenu, reloadExplorerTree],
   )
+
+  const closeDeleteDialog = useCallback(() => {
+    if (isSubmittingDeleteEntry) {
+      return
+    }
+
+    setDeleteDialogState(null)
+  }, [isSubmittingDeleteEntry])
+
+  const openDeleteDialog = useCallback(
+    (targetRelativePaths: readonly string[], targetEntry: WorkspaceExplorerEntry | null) => {
+      const normalizedRelativePaths = Array.from(
+        new Set(targetRelativePaths.map((relativePath) => relativePath.trim()).filter((relativePath) => relativePath.length > 0)),
+      )
+
+      if (normalizedRelativePaths.length === 0) {
+        closeContextMenu()
+        return
+      }
+
+      const primaryEntry =
+        targetEntry ??
+        findLoadedExplorerEntry(directoryEntriesByPath[ROOT_DIRECTORY_KEY] ?? [], directoryEntriesByPath, normalizedRelativePaths[0]) ??
+        null
+
+      setDeleteDialogState({
+        primaryEntryKind: primaryEntry?.isDirectory ? 'folder' : 'file',
+        primaryEntryName: primaryEntry?.name ?? getPathBasename(normalizedRelativePaths[0]),
+        targetRelativePaths: normalizedRelativePaths,
+      })
+      closeContextMenu()
+    },
+    [closeContextMenu, directoryEntriesByPath],
+  )
+
+  const confirmDeleteEntry = useCallback(async () => {
+    if (!deleteDialogState) {
+      return
+    }
+
+    setIsSubmittingDeleteEntry(true)
+    try {
+      const didDelete = await runContextAction(async () => {
+        await onDeleteEntry(deleteDialogState.targetRelativePaths)
+      })
+
+      if (didDelete) {
+        setDeleteDialogState(null)
+      }
+    } finally {
+      setIsSubmittingDeleteEntry(false)
+    }
+  }, [deleteDialogState, onDeleteEntry, runContextAction])
 
   const rootEntries = useMemo(() => directoryEntriesByPath[ROOT_DIRECTORY_KEY] ?? [], [directoryEntriesByPath])
 
@@ -469,6 +527,8 @@ export function useWorkspaceExplorerPanelState({
     setCreationDraft(null)
     setCreationName('')
     setErrorMessage(null)
+    setDeleteDialogState(null)
+    setIsSubmittingDeleteEntry(false)
     setSelectedEntryPaths(new Set())
     setSelectionDirectoryPath(ROOT_DIRECTORY_KEY)
     closeContextMenu()
@@ -1043,20 +1103,9 @@ export function useWorkspaceExplorerPanelState({
     const targetRelativePaths = selectedEntryPaths.has(targetEntry.relativePath)
       ? Array.from(selectedEntryPaths)
       : [targetEntry.relativePath]
-    const confirmed = window.confirm(
-      targetRelativePaths.length === 1
-        ? `Delete ${targetEntry.isDirectory ? 'folder' : 'file'} "${targetEntry.name}"?`
-        : `Delete ${targetRelativePaths.length} selected items?`,
-    )
-    if (!confirmed) {
-      closeContextMenu()
-      return
-    }
 
-    void runContextAction(async () => {
-      await onDeleteEntry(targetRelativePaths)
-    })
-  }, [closeContextMenu, contextMenuState, onDeleteEntry, runContextAction, selectedEntryPaths])
+    openDeleteDialog(targetRelativePaths, targetEntry)
+  }, [closeContextMenu, contextMenuState, openDeleteDialog, selectedEntryPaths])
 
   const requestCopyOrCutEntries = useCallback(
     (relativePaths: readonly string[], mode: 'copy' | 'cut') => {
@@ -1189,19 +1238,8 @@ export function useWorkspaceExplorerPanelState({
         if (selectedEntryPaths.size === 0) {
           return
         }
-        const selectedRelativePaths = Array.from(selectedEntryPaths)
-        const confirmed = window.confirm(
-          selectedRelativePaths.length === 1
-            ? `Delete selected item?`
-            : `Delete ${selectedRelativePaths.length} selected items?`,
-        )
-        if (!confirmed) {
-          return
-        }
         event.preventDefault()
-        void runContextAction(async () => {
-          await onDeleteEntry(selectedRelativePaths)
-        })
+        openDeleteDialog(Array.from(selectedEntryPaths), findLoadedExplorerEntry(rootEntries, directoryEntriesByPath, Array.from(selectedEntryPaths)[0]) ?? null)
         return
       }
 
@@ -1246,9 +1284,10 @@ export function useWorkspaceExplorerPanelState({
     },
     [
       activeFilePath,
+      directoryEntriesByPath,
+      openDeleteDialog,
       requestCopyOrCutEntries,
-      onDeleteEntry,
-      runContextAction,
+      rootEntries,
       selectAllLoadedEntriesInSelectionDirectory,
       selectedEntryPaths,
       selectionDirectoryPath,
@@ -1340,6 +1379,7 @@ export function useWorkspaceExplorerPanelState({
     dropTargetDirectoryPath,
     errorMessage,
     expandedDirectories,
+    closeDeleteDialog,
     handleDirectoryDragLeave,
     handleDirectoryDragOver,
     handleDirectoryDrop,
@@ -1356,12 +1396,15 @@ export function useWorkspaceExplorerPanelState({
     handleResizePointerDown,
     isDraggingExplorerEntry,
     isResizing,
+    isSubmittingDeleteEntry,
     isSubmittingCreationRef,
     isWorkspaceConfigured,
     loadingDirectories,
     onCreationNameChange,
+    deleteDialogState,
     openContextMenu,
     renderedWidth,
+    confirmDeleteEntry,
     requestCopyOrCutEntry,
     requestDeleteEntry,
     requestRenameEntry,

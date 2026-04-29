@@ -5,6 +5,7 @@ import { resolveFileIconConfig } from '../../../lib/fileIconResolver'
 import type { WorkspaceExplorerEntry } from '../../../types/chat'
 import type { WorkspaceExplorerPanelProps } from './workspaceExplorerPanelTypes'
 import type { WorkspaceExplorerPanelState } from './useWorkspaceExplorerPanelState'
+import { WorkspaceExplorerDeleteDialog } from './WorkspaceExplorerDeleteDialog'
 import { ROOT_DIRECTORY_KEY, isPathWithinTarget, normalizeEntryPath } from './workspaceExplorerPanelUtils'
 
 interface WorkspaceExplorerPanelViewProps extends WorkspaceExplorerPanelProps {
@@ -16,6 +17,21 @@ export function WorkspaceExplorerPanelView({
   clipboardEntry,
   panelState,
 }: WorkspaceExplorerPanelViewProps) {
+  function getDeleteActionLabel() {
+    const targetEntry = panelState.contextMenuState?.targetEntry
+    if (!targetEntry) {
+      return 'Delete'
+    }
+
+    const selectedCount = panelState.selectedEntryPaths.size
+    const isTargetSelected = panelState.selectedEntryPaths.has(targetEntry.relativePath)
+    if (selectedCount > 1 && isTargetSelected) {
+      return `Delete ${selectedCount} items`
+    }
+
+    return targetEntry.isDirectory ? 'Delete Folder' : 'Delete'
+  }
+
   function isExternalFileDrag(event: ReactDragEvent<HTMLElement>) {
     const items = Array.from(event.dataTransfer.items)
     return Array.from(event.dataTransfer.types).includes('Files') || items.some((item) => item.kind === 'file')
@@ -387,7 +403,7 @@ export function WorkspaceExplorerPanelView({
                     onClick={panelState.requestDeleteEntry}
                     className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
                   >
-                    Delete Folder
+                    {getDeleteActionLabel()}
                   </button>
                   <button
                     type="button"
@@ -407,7 +423,7 @@ export function WorkspaceExplorerPanelView({
                     onClick={panelState.requestDeleteEntry}
                     className="flex h-10 w-full items-center rounded-lg px-2.5 text-left text-sm text-danger-foreground transition-colors hover:bg-danger-surface"
                   >
-                    Delete
+                    {getDeleteActionLabel()}
                   </button>
                   <button
                     type="button"
@@ -439,6 +455,14 @@ export function WorkspaceExplorerPanelView({
             document.body,
           )
         : null}
+      {panelState.deleteDialogState ? (
+        <WorkspaceExplorerDeleteDialog
+          isSubmitting={panelState.isSubmittingDeleteEntry}
+          onClose={panelState.closeDeleteDialog}
+          onConfirm={() => void panelState.confirmDeleteEntry()}
+          state={panelState.deleteDialogState}
+        />
+      ) : null}
       <div
         role="separator"
         aria-orientation="vertical"

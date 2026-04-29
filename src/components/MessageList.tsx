@@ -1,7 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { isVisibleTranscriptMessage } from "../lib/chatMessageMetadata";
 import { normalizeAssistantMessageContent } from "../lib/chatMessageContent";
-import { useAutoScroll } from "../hooks/useAutoScroll";
 import type {
   AssistantWaitingIndicatorVariant,
   ChatAttachment,
@@ -333,11 +332,6 @@ export function MessageList({
 
     return map;
   }, [visibleMessages]);
-
-  useAutoScroll(scrollContainerRef, visibleMessages, {
-    resetKey: conversationId,
-    shouldAutoScroll: true,
-  });
 
   useLayoutEffect(() => {
     if (!editingMessageId) {
